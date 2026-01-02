@@ -1,7 +1,7 @@
 /**
  * ============================================
- * SUZI VOICE ASSISTANT v7.0 - FAST & RESPONSIVE
- * Local intent matching + reduced delays
+ * SUZI VOICE ASSISTANT v7.1 - CONVERSATIONAL
+ * Typing animation + continuous conversation
  * ============================================
  */
 
@@ -39,6 +39,8 @@ class AdvancedVoiceAssistant {
         this.restartTimeout = null;
         this.apiTimeout = null;
         this.speakTimeout = null;
+        this.typingTimeout = null;
+        this.typingIntervals = [];
 
         // Anti-duplicate
         this.lastTranscript = '';
@@ -546,6 +548,10 @@ class AdvancedVoiceAssistant {
             clearTimeout(this.speakTimeout);
             this.speakTimeout = null;
         }
+        if (this.typingTimeout) {
+            clearTimeout(this.typingTimeout);
+            this.typingTimeout = null;
+        }
     }
 
     // ==================== MODAL ====================
@@ -602,6 +608,7 @@ class AdvancedVoiceAssistant {
         // Stop everything first
         this.stopListening();
         this.stopSpeaking();
+        this.stopTyping();
         this.clearAllTimeouts();
 
         if (this.dom.voiceModal) {
@@ -633,13 +640,29 @@ class AdvancedVoiceAssistant {
         // Stop listening while processing
         this.stopListening();
 
-        // Stop words close the conversation
-        const stopWords = ['stop', 'bye', 'goodbye', 'cancel', 'exit', 'quit', 'close', 'nevermind', 'never mind'];
+        // Stop words and closing phrases - these close the conversation
+        const closeWords = [
+            'stop', 'bye', 'goodbye', 'cancel', 'exit', 'quit', 'close',
+            'nevermind', 'never mind', 'no', 'nope', 'nothing', 'no thanks',
+            "that's all", "that's it", "all done", "i'm good", "i'm done",
+            "no thank you", "nothing else", "that'll be all"
+        ];
         const lower = transcript.toLowerCase().trim();
-        
-        if (stopWords.some(w => lower === w || lower === w + ' suzi' || lower === 'hey ' + w)) {
+
+        // Check for closing phrases
+        const isClosingPhrase = closeWords.some(w =>
+            lower === w ||
+            lower === w + ' suzi' ||
+            lower === 'hey ' + w ||
+            lower.startsWith(w + ' ') ||
+            lower.endsWith(' ' + w)
+        );
+
+        if (isClosingPhrase) {
             this.updateTranscript(transcript);
-            this.speak('Goodbye!', () => this.closeModal(), 1.3);
+            const farewells = ['Goodbye!', 'Bye for now!', 'Talk soon!', 'See you later!'];
+            const farewell = farewells[Math.floor(Math.random() * farewells.length)];
+            this.speak(farewell, () => this.closeModal(), 1.3);
             return;
         }
 
@@ -790,12 +813,13 @@ class AdvancedVoiceAssistant {
         
         const willNavigate = navigationIntents.includes(intent);
 
-        // Speak the response
+        // Speak the response, then ask follow-up for non-navigation intents
         this.speak(response_text, () => {
             this.processingCommand = false;
 
+            // For non-navigation intents, ask "anything else?" and keep listening
             if (!willNavigate && this.modalOpen) {
-                this.scheduleRestart(300); // Reduced from 800
+                this.askFollowUp();
             }
         }, 1.1); // Slightly faster speech
 
@@ -1162,6 +1186,9 @@ class AdvancedVoiceAssistant {
             return;
         }
 
+        // Start typing animation alongside speech
+        this.typeText(text);
+
         // Native app TTS
         if (window.AndroidVoice && typeof window.AndroidVoice.speak === 'function') {
             try {
@@ -1260,6 +1287,84 @@ class AdvancedVoiceAssistant {
         if (this.dom.voiceTranscript) {
             this.dom.voiceTranscript.textContent = text || 'Listening...';
         }
+    }
+
+    /**
+     * Typing animation - displays words one by one
+     */
+    typeText(text, onComplete = null) {
+        if (!text || !this.dom.voiceTranscript) {
+            if (onComplete) onComplete();
+            return;
+        }
+
+        // Clear any existing typing animation
+        this.stopTyping();
+
+        const words = text.split(' ');
+        let currentIndex = 0;
+        this.dom.voiceTranscript.textContent = '';
+
+        // Calculate delay per word based on speech rate
+        // Average speaking rate is about 150 words per minute = 400ms per word
+        // We use slightly faster typing to finish before speech ends
+        const delayPerWord = Math.max(80, Math.min(200, (text.length * 60) / words.length));
+
+        const typeNextWord = () => {
+            if (currentIndex < words.length && this.modalOpen) {
+                this.dom.voiceTranscript.textContent = words.slice(0, currentIndex + 1).join(' ');
+                currentIndex++;
+                this.typingTimeout = setTimeout(typeNextWord, delayPerWord);
+            } else {
+                // Done typing
+                this.stopTyping();
+                if (onComplete) onComplete();
+            }
+        };
+
+        // Start typing
+        typeNextWord();
+    }
+
+    stopTyping() {
+        if (this.typingTimeout) {
+            clearTimeout(this.typingTimeout);
+            this.typingTimeout = null;
+        }
+        // Clear any intervals
+        this.typingIntervals.forEach(id => clearInterval(id));
+        this.typingIntervals = [];
+    }
+
+    /**
+     * Ask follow-up question to continue the conversation
+     */
+    askFollowUp() {
+        if (!this.modalOpen) return;
+
+        // Small delay before asking follow-up
+        setTimeout(() => {
+            if (!this.modalOpen || this.processingCommand) return;
+
+            // Randomize follow-up phrases
+            const followUps = [
+                'Anything else?',
+                'What else can I help with?',
+                'Need anything else?',
+                'Is there more?'
+            ];
+            const followUp = followUps[Math.floor(Math.random() * followUps.length)];
+
+            this.updateStatus('🎤', 'Ready', followUp);
+
+            // Speak the follow-up and start listening
+            this.speak(followUp, () => {
+                if (this.modalOpen && !this.processingCommand) {
+                    // Start listening for the next command
+                    this.scheduleRestart(200);
+                }
+            }, 1.2);
+        }, 400);
     }
 
     executeSuggestion(command) {
