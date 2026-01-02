@@ -1,0 +1,9 @@
+# Protect sensitive files
+<FilesMatch "(config\.php|instruction\.txt|\.log)$">
+    Require all denied
+</FilesMatch>
+
+# Allow API access
+<Files "ask.php">
+    Require all granted
+</Files>
