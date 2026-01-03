@@ -69,38 +69,10 @@ try {
             
             $startsAt = $date . ' ' . $startTime . ':00';
             $endsAt = $date . ' ' . $endTime . ':00';
-            
-            // Check for conflicts
-            $stmt = $db->prepare("
-                SELECT id, title, starts_at, ends_at 
-                FROM schedule_events 
-                WHERE family_id = ? 
-                AND user_id = ?
-                AND status != 'cancelled'
-                AND (
-                    (starts_at < ? AND ends_at > ?) OR
-                    (starts_at >= ? AND starts_at < ?)
-                )
-                LIMIT 1
-            ");
-            $stmt->execute([
-                $user['family_id'],
-                $assignedTo ?? $user['id'],
-                $endsAt,
-                $startsAt,
-                $startsAt,
-                $endsAt
-            ]);
-            
-            if ($conflict = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                echo json_encode([
-                    'success' => false,
-                    'error' => 'Time conflict detected',
-                    'conflict' => $conflict
-                ]);
-                exit;
-            }
-            
+
+            // NOTE: Conflict detection removed - users can overlap events if they want
+            // Events should always be allowed to be created
+
             $stmt = $db->prepare("
                 INSERT INTO schedule_events 
                 (family_id, user_id, added_by, assigned_to, title, kind, notes, 
