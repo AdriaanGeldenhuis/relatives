@@ -355,16 +355,23 @@ require_once __DIR__ . '/../shared/components/header.php';
                                         </div>
 
                                         <div class="item-actions">
-                                            <button onclick="editItem(<?php echo $item['id']; ?>)" 
-                                                    class="item-action-btn" 
-                                                    title="Edit">
-                                                ✏️
-                                            </button>
-                                            <button onclick="deleteItem(<?php echo $item['id']; ?>)" 
-                                                    class="item-action-btn item-delete" 
-                                                    title="Delete">
-                                                🗑️
-                                            </button>
+                                            <div class="item-gear-menu">
+                                                <button class="item-action-btn gear-btn"
+                                                        onclick="toggleGearMenu(event, <?php echo $item['id']; ?>)"
+                                                        title="Options">
+                                                    ⚙️
+                                                </button>
+                                                <div class="gear-dropdown" id="gearMenu_<?php echo $item['id']; ?>">
+                                                    <button onclick="editItem(<?php echo $item['id']; ?>); closeAllGearMenus();" class="gear-option">
+                                                        <span class="gear-icon">✏️</span>
+                                                        <span>Edit</span>
+                                                    </button>
+                                                    <button onclick="deleteItem(<?php echo $item['id']; ?>); closeAllGearMenus();" class="gear-option gear-delete">
+                                                        <span class="gear-icon">🗑️</span>
+                                                        <span>Delete</span>
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 <?php endforeach; ?>

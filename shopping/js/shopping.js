@@ -495,8 +495,19 @@ function addItemToDOM(item) {
             <div class="item-meta">${metaHTML}</div>
         </div>
         <div class="item-actions">
-            <button onclick="editItem(${item.id})" class="item-action-btn" title="Edit">✏️</button>
-            <button onclick="deleteItem(${item.id})" class="item-action-btn item-delete" title="Delete">🗑️</button>
+            <div class="item-gear-menu">
+                <button class="item-action-btn gear-btn" onclick="toggleGearMenu(event, ${item.id})" title="Options">⚙️</button>
+                <div class="gear-dropdown" id="gearMenu_${item.id}">
+                    <button onclick="editItem(${item.id}); closeAllGearMenus();" class="gear-option">
+                        <span class="gear-icon">✏️</span>
+                        <span>Edit</span>
+                    </button>
+                    <button onclick="deleteItem(${item.id}); closeAllGearMenus();" class="gear-option gear-delete">
+                        <span class="gear-icon">🗑️</span>
+                        <span>Delete</span>
+                    </button>
+                </div>
+            </div>
         </div>
     `;
     
@@ -1819,6 +1830,210 @@ function updateClearBoughtButton() {
 }
 
 // ============================================
+// GEAR MENU FUNCTIONS
+// ============================================
+
+/**
+ * Toggle gear dropdown menu
+ */
+function toggleGearMenu(event, itemId) {
+    event.stopPropagation();
+
+    const menu = document.getElementById(`gearMenu_${itemId}`);
+    if (!menu) return;
+
+    // Close all other menus first
+    closeAllGearMenus();
+
+    // Toggle this menu
+    menu.classList.toggle('active');
+
+    // Position the menu
+    const btn = event.currentTarget;
+    const rect = btn.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+
+    // Check if menu would go off-screen
+    if (rect.right + menuRect.width > window.innerWidth) {
+        menu.style.right = '0';
+        menu.style.left = 'auto';
+    }
+}
+
+/**
+ * Close all gear dropdown menus
+ */
+function closeAllGearMenus() {
+    document.querySelectorAll('.gear-dropdown.active').forEach(menu => {
+        menu.classList.remove('active');
+    });
+}
+
+// Close gear menus when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.item-gear-menu')) {
+        closeAllGearMenus();
+    }
+});
+
+// ============================================
+// REAL-TIME UPDATES SYSTEM
+// ============================================
+
+const RealTimeUpdates = {
+    pollInterval: 3000, // Poll every 3 seconds
+    lastUpdate: Date.now(),
+    isPolling: false,
+    pollTimer: null,
+
+    /**
+     * Start real-time polling
+     */
+    start() {
+        if (this.isPolling) return;
+        this.isPolling = true;
+        this.poll();
+        console.log('%c🔄 Real-time updates started', 'color: #43e97b;');
+    },
+
+    /**
+     * Stop polling
+     */
+    stop() {
+        this.isPolling = false;
+        if (this.pollTimer) {
+            clearTimeout(this.pollTimer);
+            this.pollTimer = null;
+        }
+    },
+
+    /**
+     * Poll for updates
+     */
+    async poll() {
+        if (!this.isPolling) return;
+
+        try {
+            const result = await apiCall(ShoppingApp.API.items, {
+                action: 'poll',
+                list_id: ShoppingApp.currentListId,
+                since: this.lastUpdate
+            }, 'GET');
+
+            if (result.success && result.updates) {
+                this.processUpdates(result.updates);
+                this.lastUpdate = result.timestamp || Date.now();
+            }
+        } catch (error) {
+            // Silently fail on poll errors
+            console.warn('Poll error:', error.message);
+        }
+
+        // Schedule next poll
+        this.pollTimer = setTimeout(() => this.poll(), this.pollInterval);
+    },
+
+    /**
+     * Process updates from server
+     */
+    processUpdates(updates) {
+        if (!updates || updates.length === 0) return;
+
+        updates.forEach(update => {
+            switch (update.type) {
+                case 'item_added':
+                    if (!document.querySelector(`[data-item-id="${update.item.id}"]`)) {
+                        addItemToDOM(update.item);
+                        showToast(`${update.user} added "${update.item.name}"`, 'info');
+                    }
+                    break;
+
+                case 'item_updated':
+                    updateItemInDOM(update.item.id, update.item);
+                    break;
+
+                case 'item_toggled':
+                    this.handleItemToggled(update.item);
+                    break;
+
+                case 'item_deleted':
+                    this.handleItemDeleted(update.item_id);
+                    break;
+
+                case 'items_cleared':
+                    this.handleItemsCleared();
+                    break;
+
+                case 'list_updated':
+                    // Refresh the page for list-level changes
+                    location.reload();
+                    break;
+            }
+        });
+
+        // Update UI
+        updateProgressBar();
+        updateClearBoughtButton();
+    },
+
+    /**
+     * Handle item toggled
+     */
+    handleItemToggled(item) {
+        const itemCard = document.querySelector(`[data-item-id="${item.id}"]`);
+        if (!itemCard) return;
+
+        const checkbox = itemCard.querySelector('.item-checkbox input[type="checkbox"]');
+
+        if (item.status === 'bought') {
+            itemCard.classList.add('bought');
+            if (checkbox) checkbox.checked = true;
+        } else {
+            itemCard.classList.remove('bought');
+            if (checkbox) checkbox.checked = false;
+        }
+    },
+
+    /**
+     * Handle item deleted
+     */
+    handleItemDeleted(itemId) {
+        const itemCard = document.querySelector(`[data-item-id="${itemId}"]`);
+        if (!itemCard) return;
+
+        const category = itemCard.closest('.category-section')?.getAttribute('data-category');
+
+        itemCard.style.opacity = '0';
+        itemCard.style.transform = 'scale(0.8)';
+
+        setTimeout(() => {
+            itemCard.remove();
+            if (category) updateCategoryCount(category);
+
+            // Check for empty state
+            if (document.querySelectorAll('.item-card').length === 0) {
+                showEmptyState();
+            }
+        }, 300);
+    },
+
+    /**
+     * Handle items cleared
+     */
+    handleItemsCleared() {
+        document.querySelectorAll('.item-card.bought').forEach(card => {
+            const category = card.closest('.category-section')?.getAttribute('data-category');
+            card.remove();
+            if (category) updateCategoryCount(category);
+        });
+
+        if (document.querySelectorAll('.item-card').length === 0) {
+            showEmptyState();
+        }
+    }
+};
+
+// ============================================
 // KEYBOARD SHORTCUTS
 // ============================================
 function initKeyboardShortcuts() {
@@ -1923,11 +2138,24 @@ document.addEventListener('DOMContentLoaded', () => {
         editItemForm.addEventListener('submit', saveEditedItem);
     }
     
+    // Start real-time updates
+    RealTimeUpdates.start();
+
+    // Stop polling when page is hidden
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            RealTimeUpdates.stop();
+        } else {
+            RealTimeUpdates.start();
+        }
+    });
+
     console.log('%c💡 Tips:', 'font-size: 12px; color: #43e97b;');
     console.log('  • Ctrl+N to add new item');
     console.log('  • Ctrl+B to toggle bulk mode');
     console.log('  • ESC to close modals');
     console.log('  • Type "2L Milk" for smart qty parsing');
+    console.log('  • Real-time sync enabled');
 });
 
 // ============================================
@@ -2051,5 +2279,12 @@ window.submitAddItem = submitAddItem;
 window.quickAddFromModal = quickAddFromModal;
 window.editList = editList;
 window.updateClearBoughtButton = updateClearBoughtButton;
+
+// Gear menu functions
+window.toggleGearMenu = toggleGearMenu;
+window.closeAllGearMenus = closeAllGearMenus;
+
+// Real-time updates
+window.RealTimeUpdates = RealTimeUpdates;
 
 console.log('%c✅ Real-Time Shopping Ready!', 'font-size: 16px; font-weight: bold; color: #43e97b;');
