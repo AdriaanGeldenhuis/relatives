@@ -546,6 +546,16 @@ require_once __DIR__ . '/../shared/components/header.php';
                         required>
                 </div>
 
+                <div class="form-group">
+                    <label>Date</label>
+                    <input
+                        type="date"
+                        id="eventDate"
+                        class="form-control"
+                        value="<?php echo $selectedDate; ?>"
+                        required>
+                </div>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label>Start Time</label>

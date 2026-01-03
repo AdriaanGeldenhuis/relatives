@@ -389,6 +389,7 @@ async function addEvent(event) {
     if (event) event.preventDefault();
     
     const titleInput = document.getElementById('eventTitle');
+    const dateInput = document.getElementById('eventDate');
     const startInput = document.getElementById('eventStart');
     const endInput = document.getElementById('eventEnd');
     const typeSelect = document.getElementById('eventType');
@@ -397,20 +398,21 @@ async function addEvent(event) {
     const recurringCheckbox = document.getElementById('enableRecurring');
     const repeatRuleSelect = document.getElementById('repeatRule');
     const focusModeCheckbox = document.getElementById('focusMode');
-    
+
     const title = titleInput.value.trim();
+    const eventDate = dateInput.value;
     const start = startInput.value;
     const end = endInput.value;
     const type = typeSelect.value;
     const reminderMinutes = reminderCheckbox.checked ? parseInt(reminderMinutesInput.value || 15) : 0;
     const repeatRule = recurringCheckbox.checked ? repeatRuleSelect.value : null;
     const focusMode = focusModeCheckbox.checked ? 1 : 0;
-    
-    if (!title || !start || !end) {
+
+    if (!title || !eventDate || !start || !end) {
         showToast('Please fill all required fields', 'error');
         return;
     }
-    
+
     // Validate times
     if (start >= end) {
         showToast('End time must be after start time', 'error');
@@ -426,7 +428,7 @@ async function addEvent(event) {
         const result = await apiCall(window.ScheduleApp.API.events, {
             action: 'add',
             title: title,
-            date: window.ScheduleApp.selectedDate,
+            date: eventDate,
             start_time: start,
             end_time: end,
             kind: type,
