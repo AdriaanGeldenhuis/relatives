@@ -319,11 +319,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <div class="note-voice">
                                     <div class="voice-icon">🎤</div>
                                     <div class="voice-label">Voice Note</div>
-                                    <?php if ($note['audio_path']): ?>
+                                    <?php
+                                    $audioExists = $note['audio_path'] && file_exists(__DIR__ . '/..' . $note['audio_path']);
+                                    if ($audioExists): ?>
                                         <audio controls>
                                             <source src="<?php echo htmlspecialchars($note['audio_path']); ?>" type="audio/webm">
                                             Your browser does not support audio playback.
                                         </audio>
+                                    <?php elseif ($note['audio_path']): ?>
+                                        <div class="voice-missing">Audio file not available</div>
                                     <?php endif; ?>
                                 </div>
                             <?php endif; ?>
@@ -422,11 +426,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <div class="note-voice">
                                     <div class="voice-icon">🎤</div>
                                     <div class="voice-label">Voice Note</div>
-                                    <?php if ($note['audio_path']): ?>
+                                    <?php
+                                    $audioExists = $note['audio_path'] && file_exists(__DIR__ . '/..' . $note['audio_path']);
+                                    if ($audioExists): ?>
                                         <audio controls>
                                             <source src="<?php echo htmlspecialchars($note['audio_path']); ?>" type="audio/webm">
                                             Your browser does not support audio playback.
                                         </audio>
+                                    <?php elseif ($note['audio_path']): ?>
+                                        <div class="voice-missing">Audio file not available</div>
                                     <?php endif; ?>
                                 </div>
                             <?php endif; ?>

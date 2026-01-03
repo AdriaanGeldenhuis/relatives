@@ -27,11 +27,15 @@ $noteColor = $note['color'] ?: '#ffeb3b';
             <!-- Voice Note -->
             <div class="voice-note-player">
                 <div class="voice-icon">🎤</div>
-                <?php if ($note['audio_path']): ?>
+                <?php
+                $audioExists = $note['audio_path'] && file_exists(__DIR__ . '/..' . $note['audio_path']);
+                if ($audioExists): ?>
                     <audio controls class="audio-player">
                         <source src="<?php echo htmlspecialchars($note['audio_path']); ?>" type="audio/webm">
                         Your browser does not support audio playback.
                     </audio>
+                <?php elseif ($note['audio_path']): ?>
+                    <div class="voice-missing">Audio file not available</div>
                 <?php else: ?>
                     <div class="voice-placeholder">No audio recorded</div>
                 <?php endif; ?>

@@ -720,6 +720,22 @@ body {
     flex-shrink: 0;
 }
 
+.voice-missing,
+.voice-placeholder {
+    font-size: 0.75rem;
+    color: rgba(0, 0, 0, 0.5);
+    font-style: italic;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: var(--radius-sm);
+    text-align: center;
+}
+
+.voice-missing {
+    color: rgba(180, 0, 0, 0.7);
+    background: rgba(255, 0, 0, 0.08);
+}
+
 /* ============================================
    NOTE FOOTER
    ============================================ */
