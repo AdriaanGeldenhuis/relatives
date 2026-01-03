@@ -247,13 +247,16 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         .mobile-nav-link:hover {
             background: rgba(255, 255, 255, 0.1);
         }
-        
+
         .mobile-nav-link.active {
-            background: rgba(255, 255, 255, 0.2);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.15));
             padding-left: 30px;
             color: white;
+            font-weight: 700;
+            border-radius: 0 12px 12px 0;
+            box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.1);
         }
-        
+
         .mobile-nav-link.active::before {
             content: '';
             position: absolute;
@@ -261,8 +264,14 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             top: 0;
             bottom: 0;
             width: 4px;
-            background: white;
+            background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.7));
             border-radius: 0 4px 4px 0;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .mobile-nav-link.active .nav-icon {
+            transform: scale(1.15);
+            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
         }
         
         .nav-icon {
@@ -271,6 +280,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             text-align: center;
             flex-shrink: 0;
             filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+            transition: transform 0.3s ease, filter 0.3s ease;
         }
         
         .nav-text {
