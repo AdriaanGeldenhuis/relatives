@@ -534,16 +534,16 @@ try {
             $stmt = $db->prepare("
                 SELECT si.*,
                        u.full_name as added_by_name,
-                       au.full_name as assigned_to_name
+                       au.full_name as assigned_to_name,
+                       GREATEST(si.created_at, COALESCE(si.bought_at, si.created_at)) as last_modified
                 FROM shopping_items si
                 LEFT JOIN users u ON si.added_by = u.id
                 LEFT JOIN users au ON si.assigned_to = au.id
                 WHERE si.list_id = ?
-                  AND si.updated_at > ?
-                  AND NOT (si.added_by = ? AND si.updated_at > DATE_SUB(NOW(), INTERVAL 2 SECOND))
-                ORDER BY si.updated_at DESC
+                  AND GREATEST(si.created_at, COALESCE(si.bought_at, si.created_at)) > ?
+                ORDER BY GREATEST(si.created_at, COALESCE(si.bought_at, si.created_at)) DESC
             ");
-            $stmt->execute([$listId, $sinceDate, $user['id']]);
+            $stmt->execute([$listId, $sinceDate]);
             $updatedItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Build updates array
