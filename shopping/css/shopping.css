@@ -540,9 +540,7 @@ body {
 }
 
 .list-gear-dropdown {
-    position: absolute;
-    top: 100%;
-    right: 0;
+    position: fixed;
     min-width: 110px;
     background: var(--shopping-glass-heavy);
     backdrop-filter: blur(40px) saturate(180%);
@@ -552,11 +550,10 @@ body {
     box-shadow: var(--shopping-shadow-lg);
     opacity: 0;
     visibility: hidden;
-    transform: translateY(-10px) scale(0.95);
+    transform: scale(0.95);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1000;
+    z-index: 9999;
     overflow: hidden;
-    margin-top: 4px;
 }
 
 .list-gear-dropdown.active {

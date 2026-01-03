@@ -1877,11 +1877,17 @@ function toggleListGearMenu(event, listId) {
     event.stopPropagation();
 
     const menu = document.getElementById(`listGearMenu_${listId}`);
-    if (!menu) return;
+    const btn = event.currentTarget;
+    if (!menu || !btn) return;
 
     // Close all other menus first
     closeAllGearMenus();
     closeAllListGearMenus();
+
+    // Position the dropdown using fixed positioning
+    const rect = btn.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.left = Math.max(10, rect.right - 110) + 'px';
 
     // Toggle this menu
     menu.classList.toggle('active');
