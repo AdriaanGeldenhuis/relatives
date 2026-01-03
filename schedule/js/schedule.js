@@ -389,6 +389,7 @@ async function addEvent(event) {
     if (event) event.preventDefault();
     
     const titleInput = document.getElementById('eventTitle');
+    const dateInput = document.getElementById('eventDate');
     const startInput = document.getElementById('eventStart');
     const endInput = document.getElementById('eventEnd');
     const typeSelect = document.getElementById('eventType');
@@ -397,20 +398,21 @@ async function addEvent(event) {
     const recurringCheckbox = document.getElementById('enableRecurring');
     const repeatRuleSelect = document.getElementById('repeatRule');
     const focusModeCheckbox = document.getElementById('focusMode');
-    
+
     const title = titleInput.value.trim();
+    const eventDate = dateInput.value;
     const start = startInput.value;
     const end = endInput.value;
     const type = typeSelect.value;
     const reminderMinutes = reminderCheckbox.checked ? parseInt(reminderMinutesInput.value || 15) : 0;
     const repeatRule = recurringCheckbox.checked ? repeatRuleSelect.value : null;
     const focusMode = focusModeCheckbox.checked ? 1 : 0;
-    
-    if (!title || !start || !end) {
+
+    if (!title || !eventDate || !start || !end) {
         showToast('Please fill all required fields', 'error');
         return;
     }
-    
+
     // Validate times
     if (start >= end) {
         showToast('End time must be after start time', 'error');
@@ -426,7 +428,7 @@ async function addEvent(event) {
         const result = await apiCall(window.ScheduleApp.API.events, {
             action: 'add',
             title: title,
-            date: window.ScheduleApp.selectedDate,
+            date: eventDate,
             start_time: start,
             end_time: end,
             kind: type,
@@ -604,75 +606,119 @@ function editEvent(eventId) {
         return;
     }
     
-    // Parse times
+    // Parse date and times
     const startTime = new Date(eventData.starts_at);
     const endTime = new Date(eventData.ends_at);
-    
+    const eventDate = startTime.toISOString().split('T')[0];
+
     // Populate form
     document.getElementById('editEventId').value = eventId;
     document.getElementById('editEventTitle').value = eventData.title || '';
+    document.getElementById('editEventDate').value = eventDate;
     document.getElementById('editEventStart').value = startTime.toTimeString().slice(0, 5);
     document.getElementById('editEventEnd').value = endTime.toTimeString().slice(0, 5);
     document.getElementById('editEventType').value = eventData.kind || 'todo';
     document.getElementById('editEventNotes').value = eventData.notes || '';
     document.getElementById('editEventAssign').value = eventData.assigned_to || '';
-    
+
+    // Populate reminder fields
+    const hasReminder = eventData.reminder_minutes && eventData.reminder_minutes > 0;
+    document.getElementById('editEnableReminder').checked = hasReminder;
+    document.getElementById('editReminderMinutes').value = eventData.reminder_minutes || 15;
+    document.getElementById('editReminderMinutes').style.display = hasReminder ? 'block' : 'none';
+
+    // Populate recurring fields
+    const hasRecurring = eventData.repeat_rule && eventData.repeat_rule !== '';
+    document.getElementById('editEnableRecurring').checked = hasRecurring;
+    document.getElementById('editRepeatRule').value = eventData.repeat_rule || 'weekly';
+    document.getElementById('editRepeatRule').style.display = hasRecurring ? 'block' : 'none';
+
+    // Populate focus mode
+    document.getElementById('editFocusMode').checked = eventData.focus_mode == 1;
+
     showModal('editEventModal');
 }
 
 async function saveEditedEvent(event) {
     if (event) event.preventDefault();
-    
+
     const eventId = document.getElementById('editEventId').value;
     const title = document.getElementById('editEventTitle').value.trim();
+    const eventDate = document.getElementById('editEventDate').value;
     const start = document.getElementById('editEventStart').value;
     const end = document.getElementById('editEventEnd').value;
     const type = document.getElementById('editEventType').value;
     const notes = document.getElementById('editEventNotes').value.trim();
     const assignedTo = document.getElementById('editEventAssign').value;
-    
-    if (!title || !start || !end) {
+
+    // Get new fields
+    const reminderCheckbox = document.getElementById('editEnableReminder');
+    const reminderMinutesInput = document.getElementById('editReminderMinutes');
+    const recurringCheckbox = document.getElementById('editEnableRecurring');
+    const repeatRuleSelect = document.getElementById('editRepeatRule');
+    const focusModeCheckbox = document.getElementById('editFocusMode');
+
+    const reminderMinutes = reminderCheckbox.checked ? parseInt(reminderMinutesInput.value || 15) : 0;
+    const repeatRule = recurringCheckbox.checked ? repeatRuleSelect.value : null;
+    const focusMode = focusModeCheckbox.checked ? 1 : 0;
+
+    if (!title || !eventDate || !start || !end) {
         showToast('Please fill all required fields', 'error');
         return;
     }
-    
+
     // Validate times
     if (start >= end) {
         showToast('End time must be after start time', 'error');
         return;
     }
-    
+
     // Show loading
     const submitBtn = event.target.querySelector('button[type="submit"]');
     const originalText = submitBtn.textContent;
     submitBtn.disabled = true;
     submitBtn.textContent = 'Saving...';
-    
+
     try {
         await apiCall(window.ScheduleApp.API.events, {
             action: 'update',
             event_id: eventId,
             title: title,
-            date: window.ScheduleApp.selectedDate,
+            date: eventDate,
             start_time: start,
             end_time: end,
             kind: type,
             notes: notes || null,
-            assigned_to: assignedTo || null
+            assigned_to: assignedTo || null,
+            reminder_minutes: reminderMinutes,
+            repeat_rule: repeatRule,
+            focus_mode: focusMode
         });
-        
+
         showToast('Event updated!', 'success');
         closeModal('editEventModal');
-        
-        // Update DOM
-        updateEventInDOM(eventId, { 
-            title, 
-            start, 
-            end, 
-            kind: type, 
-            notes, 
-            assigned_to: assignedTo 
-        });
+
+        // If date changed, remove from current view and reload
+        if (eventDate !== window.ScheduleApp.selectedDate) {
+            const eventCard = document.querySelector(`[data-event-id="${eventId}"]`);
+            if (eventCard) {
+                eventCard.remove();
+            }
+            // Remove from allEvents array
+            window.ScheduleApp.allEvents = window.ScheduleApp.allEvents.filter(e => e.id != eventId);
+            updateStats();
+            showToast(`Event moved to ${eventDate}`, 'info');
+        } else {
+            // Update DOM if staying on same date
+            updateEventInDOM(eventId, {
+                title,
+                start,
+                end,
+                kind: type,
+                notes,
+                assigned_to: assignedTo
+            });
+        }
         
     } catch (error) {
         showToast(error.message || 'Failed to update event', 'error');
@@ -1216,7 +1262,105 @@ function goToPickedDate() {
 }
 
 function changeView(view) {
-    window.location.href = `?date=${window.ScheduleApp.selectedDate}&view=${view}`;
+    if (view === 'week') {
+        showWeekView();
+    } else if (view === 'timeline') {
+        showTimelineView();
+    } else {
+        window.location.href = `?date=${window.ScheduleApp.selectedDate}&view=${view}`;
+    }
+}
+
+// Show week view modal
+async function showWeekView() {
+    showModal('weekViewModal');
+    const contentEl = document.getElementById('weekViewContent');
+    contentEl.innerHTML = '<div class="week-loading">Loading week view...</div>';
+
+    try {
+        // Get week dates
+        const selectedDate = new Date(window.ScheduleApp.selectedDate);
+        const dayOfWeek = selectedDate.getDay();
+        const monday = new Date(selectedDate);
+        monday.setDate(selectedDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+
+        const weekDays = [];
+        for (let i = 0; i < 7; i++) {
+            const day = new Date(monday);
+            day.setDate(monday.getDate() + i);
+            weekDays.push(day);
+        }
+
+        // Fetch events for the week
+        const startDate = weekDays[0].toISOString().split('T')[0];
+        const endDate = weekDays[6].toISOString().split('T')[0];
+
+        const result = await apiCall(window.ScheduleApp.API.events, {
+            action: 'get_week',
+            start_date: startDate,
+            end_date: endDate
+        }, 'GET');
+
+        const events = result.events || [];
+        const eventsByDate = {};
+
+        events.forEach(event => {
+            const date = event.starts_at.split(' ')[0];
+            if (!eventsByDate[date]) eventsByDate[date] = [];
+            eventsByDate[date].push(event);
+        });
+
+        // Render week view
+        let html = '<div class="week-view-grid">';
+
+        weekDays.forEach(day => {
+            const dateStr = day.toISOString().split('T')[0];
+            const isToday = dateStr === new Date().toISOString().split('T')[0];
+            const isSelected = dateStr === window.ScheduleApp.selectedDate;
+            const dayEvents = eventsByDate[dateStr] || [];
+
+            html += `
+                <div class="week-day ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}"
+                     onclick="goToDate('${dateStr}')">
+                    <div class="week-day-header">
+                        <span class="week-day-name">${day.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                        <span class="week-day-number">${day.getDate()}</span>
+                    </div>
+                    <div class="week-day-events">
+                        ${dayEvents.length === 0 ? '<span class="no-events">No events</span>' :
+                            dayEvents.slice(0, 4).map(event => {
+                                const startTime = new Date(event.starts_at);
+                                const typeColor = window.ScheduleApp.types[event.kind]?.color || '#667eea';
+                                return `
+                                    <div class="week-event ${event.status}" style="border-left-color: ${typeColor}">
+                                        <span class="event-time">${startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                                        <span class="event-name">${escapeHtml(event.title)}</span>
+                                    </div>
+                                `;
+                            }).join('')}
+                        ${dayEvents.length > 4 ? `<span class="more-events">+${dayEvents.length - 4} more</span>` : ''}
+                    </div>
+                    <div class="week-day-count">${dayEvents.length} events</div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        contentEl.innerHTML = html;
+
+    } catch (error) {
+        contentEl.innerHTML = '<div class="error-state">Failed to load week view. Please try again.</div>';
+        console.error('Week view error:', error);
+    }
+}
+
+function goToDate(dateStr) {
+    closeModal('weekViewModal');
+    window.location.href = `?date=${dateStr}&view=day`;
+}
+
+function showTimelineView() {
+    showToast('Timeline view coming soon!', 'info');
 }
 
 // ============================================
@@ -1952,7 +2096,10 @@ function showToast(message, type = 'info') {
 }
 
 function showQuickAdd() {
-    document.getElementById('eventTitle').focus();
+    showModal('addEventModal');
+    setTimeout(() => {
+        document.getElementById('eventTitle').focus();
+    }, 100);
 }
 
 function toggleReminderInput() {
@@ -1967,6 +2114,22 @@ function toggleReminderInput() {
 function toggleRecurringInput() {
     const checkbox = document.getElementById('enableRecurring');
     const select = document.getElementById('repeatRule');
+    select.style.display = checkbox.checked ? 'inline-block' : 'none';
+}
+
+// Edit modal toggle functions
+function toggleEditReminderInput() {
+    const checkbox = document.getElementById('editEnableReminder');
+    const input = document.getElementById('editReminderMinutes');
+    input.style.display = checkbox.checked ? 'inline-block' : 'none';
+    if (checkbox.checked && !input.value) {
+        input.value = '15';
+    }
+}
+
+function toggleEditRecurringInput() {
+    const checkbox = document.getElementById('editEnableRecurring');
+    const select = document.getElementById('editRepeatRule');
     select.style.display = checkbox.checked ? 'inline-block' : 'none';
 }
 
@@ -2077,6 +2240,8 @@ window.showModal = showModal;
 window.closeModal = closeModal;
 window.toggleReminderInput = toggleReminderInput;
 window.toggleRecurringInput = toggleRecurringInput;
+window.toggleEditReminderInput = toggleEditReminderInput;
+window.toggleEditRecurringInput = toggleEditRecurringInput;
 window.startFocusMode = startFocusMode;
 window.createFocusSession = createFocusSession;
 window.startFocusSession = startFocusSession;
@@ -2087,5 +2252,8 @@ window.showAnalytics = showAnalytics;
 window.showTemplates = showTemplates;
 window.applyTemplate = applyTemplate;
 window.createNewTemplate = createNewTemplate;
+window.showWeekView = showWeekView;
+window.showTimelineView = showTimelineView;
+window.goToDate = goToDate;
 
 console.log('%c✅ Enhanced Schedule with Focus Mode Ready!', 'font-size: 16px; font-weight: bold; color: #43e97b;');

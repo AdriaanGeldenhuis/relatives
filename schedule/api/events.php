@@ -325,7 +325,7 @@ try {
         case 'get_productivity':
             $startDate = $_GET['start_date'] ?? date('Y-m-d', strtotime('-7 days'));
             $endDate = $_GET['end_date'] ?? date('Y-m-d');
-            
+
             $stmt = $db->prepare("
                 SELECT * FROM schedule_productivity
                 WHERE user_id = ?
@@ -334,10 +334,36 @@ try {
             ");
             $stmt->execute([$user['id'], $startDate, $endDate]);
             $productivity = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
+
             echo json_encode([
                 'success' => true,
                 'productivity' => $productivity
+            ]);
+            break;
+
+        case 'get_week':
+            $startDate = $_GET['start_date'] ?? date('Y-m-d', strtotime('monday this week'));
+            $endDate = $_GET['end_date'] ?? date('Y-m-d', strtotime('sunday this week'));
+
+            $stmt = $db->prepare("
+                SELECT
+                    e.*,
+                    u.full_name as added_by_name, u.avatar_color,
+                    a.full_name as assigned_to_name, a.avatar_color as assigned_color
+                FROM schedule_events e
+                LEFT JOIN users u ON e.added_by = u.id
+                LEFT JOIN users a ON e.assigned_to = a.id
+                WHERE e.family_id = ?
+                AND DATE(e.starts_at) BETWEEN ? AND ?
+                AND e.status != 'cancelled'
+                ORDER BY e.starts_at ASC
+            ");
+            $stmt->execute([$user['family_id'], $startDate, $endDate]);
+            $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            echo json_encode([
+                'success' => true,
+                'events' => $events
             ]);
             break;
             
@@ -363,18 +389,33 @@ try {
             $kind = $_POST['kind'] ?? 'todo';
             $notes = trim($_POST['notes'] ?? '');
             $assignedTo = $_POST['assigned_to'] ?? null;
-            
+            $reminderMinutes = (int)($_POST['reminder_minutes'] ?? 0);
+            $repeatRule = $_POST['repeat_rule'] ?? null;
+            $focusMode = (int)($_POST['focus_mode'] ?? 0);
+
             if (!$title || !$startTime || !$endTime) {
                 throw new Exception('Missing required fields');
             }
-            
+
+            // Get the original event to check for date changes
+            $stmt = $db->prepare("SELECT starts_at, ends_at FROM schedule_events WHERE id = ? AND family_id = ?");
+            $stmt->execute([$eventId, $user['family_id']]);
+            $originalEvent = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$originalEvent) {
+                throw new Exception('Event not found');
+            }
+
+            $originalDate = date('Y-m-d', strtotime($originalEvent['starts_at']));
             $startsAt = $date . ' ' . $startTime . ':00';
             $endsAt = $date . ' ' . $endTime . ':00';
-            
+
+            // Update the main event
             $stmt = $db->prepare("
-                UPDATE schedule_events 
-                SET title = ?, kind = ?, starts_at = ?, ends_at = ?, 
-                    notes = ?, assigned_to = ?, updated_at = NOW()
+                UPDATE schedule_events
+                SET title = ?, kind = ?, starts_at = ?, ends_at = ?,
+                    notes = ?, assigned_to = ?, reminder_minutes = ?,
+                    repeat_rule = ?, focus_mode = ?, updated_at = NOW()
                 WHERE id = ? AND family_id = ?
             ");
             $stmt->execute([
@@ -384,10 +425,42 @@ try {
                 $endsAt,
                 $notes ?: null,
                 $assignedTo ?: null,
+                $reminderMinutes > 0 ? $reminderMinutes : null,
+                $repeatRule ?: null,
+                $focusMode,
                 $eventId,
                 $user['family_id']
             ]);
-            
+
+            // If date changed, update all child recurring events
+            if ($originalDate !== $date) {
+                $daysDiff = (strtotime($date) - strtotime($originalDate)) / 86400;
+
+                $stmt = $db->prepare("
+                    UPDATE schedule_events
+                    SET starts_at = DATE_ADD(starts_at, INTERVAL ? DAY),
+                        ends_at = DATE_ADD(ends_at, INTERVAL ? DAY),
+                        updated_at = NOW()
+                    WHERE parent_event_id = ? AND family_id = ?
+                ");
+                $stmt->execute([$daysDiff, $daysDiff, $eventId, $user['family_id']]);
+            }
+
+            // Also update title/kind/reminder/focus on child events
+            $stmt = $db->prepare("
+                UPDATE schedule_events
+                SET title = ?, kind = ?, reminder_minutes = ?, focus_mode = ?, updated_at = NOW()
+                WHERE parent_event_id = ? AND family_id = ?
+            ");
+            $stmt->execute([
+                $title,
+                $kind,
+                $reminderMinutes > 0 ? $reminderMinutes : null,
+                $focusMode,
+                $eventId,
+                $user['family_id']
+            ]);
+
             echo json_encode(['success' => true]);
             break;
             

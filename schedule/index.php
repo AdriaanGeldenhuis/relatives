@@ -176,7 +176,7 @@ try {
 
 $pageTitle = 'Schedule';
 $activePage = 'schedule';
-$cacheVersion = '9.1.1';
+$cacheVersion = '9.2.0';
 $pageCSS = ['/schedule/css/schedule.css?v=' . $cacheVersion];
 $pageJS = ['/schedule/js/schedule.js?v=' . $cacheVersion];
 
@@ -272,127 +272,48 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
         </div>
 
-        <!-- Date Navigator (Styled like notes) -->
-        <div class="notes-stats-bar">
-            <div class="stat-item" onclick="changeDate(-1)" style="cursor:pointer;" title="Previous Day">
-                <span class="stat-icon">←</span>
-                <span class="stat-label">Previous</span>
+        <!-- Date Navigator (Responsive with prev/next on sides) -->
+        <div class="date-navigator">
+            <button class="nav-arrow nav-prev" onclick="changeDate(-1)" title="Previous Day">
+                <span class="arrow-icon">←</span>
+                <span class="arrow-text">Prev</span>
+            </button>
+
+            <div class="date-center" onclick="goToToday()">
+                <div class="date-display <?php echo $selectedDate === date('Y-m-d') ? 'today' : ''; ?>">
+                    <span class="date-icon">📅</span>
+                    <span class="date-value"><?php echo date('M j', strtotime($selectedDate)); ?></span>
+                    <span class="date-day"><?php echo date('l', strtotime($selectedDate)); ?></span>
+                </div>
+                <span class="date-events"><?php echo $totalEvents; ?> events</span>
             </div>
-            
-            <div class="stat-item <?php echo $selectedDate === date('Y-m-d') ? 'active' : ''; ?>" onclick="goToToday()" style="cursor:pointer;">
-                <span class="stat-icon">📅</span>
-                <span class="stat-value"><?php echo date('M j', strtotime($selectedDate)); ?></span>
-                <span class="stat-label"><?php echo $totalEvents; ?> events</span>
-            </div>
-            
-            <div class="stat-item" onclick="changeDate(1)" style="cursor:pointer;" title="Next Day">
-                <span class="stat-icon">→</span>
-                <span class="stat-label">Next</span>
-            </div>
-            
-            <div class="stat-item" onclick="showDatePicker()" style="cursor:pointer;" title="Pick Date">
-                <span class="stat-icon">🗓️</span>
-                <span class="stat-label">Pick Date</span>
-            </div>
+
+            <button class="nav-arrow nav-next" onclick="changeDate(1)" title="Next Day">
+                <span class="arrow-text">Next</span>
+                <span class="arrow-icon">→</span>
+            </button>
         </div>
 
-        <!-- Quick Add Form -->
-        <div class="quick-add-section">
-            <div class="quick-add-card glass-card">
-                <form id="quickAddForm" onsubmit="addEvent(event)">
-                    <div class="quick-add-content">
-                        <input 
-                            type="text" 
-                            id="eventTitle" 
-                            class="form-control" 
-                            placeholder="What do you want to work on?"
-                            autocomplete="off"
-                            required
-                            style="flex: 1; min-width: 200px;">
-                        
-                        <input 
-                            type="time" 
-                            id="eventStart" 
-                            class="form-control" 
-                            value="<?php echo date('H:00'); ?>"
-                            required
-                            style="width: 120px;">
-                        
-                        <input 
-                            type="time" 
-                            id="eventEnd" 
-                            class="form-control" 
-                            value="<?php echo date('H:00', strtotime('+1 hour')); ?>"
-                            required
-                            style="width: 120px;">
-                        
-                        <select id="eventType" class="form-control" style="min-width: 140px;">
-                            <option value="study">📚 Study</option>
-                            <option value="work">💼 Work</option>
-                            <option value="todo">✅ To-Do</option>
-                            <option value="focus">🎯 Focus</option>
-                            <option value="break">☕ Break</option>
-                        </select>
-                        
-                        <button type="submit" class="btn btn-primary">
-                            <span class="btn-icon">+</span>
-                            <span class="btn-text">Add</span>
-                        </button>
-                    </div>
-                    
-                    <div class="quick-add-options">
-                        <label class="option-label">
-                            <input type="checkbox" id="enableReminder" onchange="toggleReminderInput()">
-                            <span>🔔 Reminder</span>
-                        </label>
-                        <input type="number" id="reminderMinutes" placeholder="Minutes" 
-                               style="display:none; width: 100px;" min="5" max="1440" step="5"
-                               class="form-control">
-                        
-                        <label class="option-label">
-                            <input type="checkbox" id="enableRecurring" onchange="toggleRecurringInput()">
-                            <span>🔁 Repeat</span>
-                        </label>
-                        <select id="repeatRule" style="display:none; width: 120px;" class="form-control">
-                            <option value="daily">Daily</option>
-                            <option value="weekdays">Weekdays</option>
-                            <option value="weekly">Weekly</option>
-                            <option value="monthly">Monthly</option>
-                        </select>
-                        
-                        <label class="option-label">
-                            <input type="checkbox" id="focusMode">
-                            <span>🎯 Focus Mode</span>
-                        </label>
-                    </div>
-                </form>
+        <!-- Date Picker Button (Separate) -->
+        <div class="date-picker-row">
+            <button class="date-picker-btn" onclick="showDatePicker()">
+                <span>🗓️</span>
+                <span>Pick Date</span>
+            </button>
+        </div>
 
-                <!-- Week Stats -->
-                <div class="frequent-items">
-                    <div class="frequent-title">This Week's Progress:</div>
-                    <div class="frequent-chips">
-                        <div class="frequent-chip study-chip">
-                            📚 Study: <?php echo $studyStats['done']; ?>/<?php echo $studyStats['total']; ?> 
-                            (<?php echo floor($studyStats['minutes'] / 60); ?>h <?php echo $studyStats['minutes'] % 60; ?>m)
-                            <?php if ($studyStats['rating']): ?>
-                                <span class="chip-rating">⭐ <?php echo $studyStats['rating']; ?></span>
-                            <?php endif; ?>
-                        </div>
-                        <div class="frequent-chip work-chip">
-                            💼 Work: <?php echo $workStats['done']; ?>/<?php echo $workStats['total']; ?> 
-                            (<?php echo floor($workStats['minutes'] / 60); ?>h <?php echo $workStats['minutes'] % 60; ?>m)
-                            <?php if ($workStats['rating']): ?>
-                                <span class="chip-rating">⭐ <?php echo $workStats['rating']; ?></span>
-                            <?php endif; ?>
-                        </div>
-                        <div class="frequent-chip focus-chip">
-                            🎯 Focus: <?php echo $focusStats['done']; ?>/<?php echo $focusStats['total']; ?> 
-                            (<?php echo floor($focusStats['minutes'] / 60); ?>h <?php echo $focusStats['minutes'] % 60; ?>m)
-                            <?php if ($focusStats['rating']): ?>
-                                <span class="chip-rating">⭐ <?php echo $focusStats['rating']; ?></span>
-                            <?php endif; ?>
-                        </div>
-                    </div>
+        <!-- Week Stats Bar (Compact) -->
+        <div class="week-stats-bar glass-card">
+            <div class="week-stats-title">This Week:</div>
+            <div class="week-stats-chips">
+                <div class="stat-chip study-chip">
+                    📚 <?php echo $studyStats['done']; ?>/<?php echo $studyStats['total']; ?>
+                </div>
+                <div class="stat-chip work-chip">
+                    💼 <?php echo $workStats['done']; ?>/<?php echo $workStats['total']; ?>
+                </div>
+                <div class="stat-chip focus-chip">
+                    🎯 <?php echo $focusStats['done']; ?>/<?php echo $focusStats['total']; ?>
                 </div>
             </div>
         </div>
@@ -605,8 +526,386 @@ require_once __DIR__ . '/../shared/components/header.php';
     </div>
 </main>
 
-<!-- ALL MODALS GO HERE - keeping existing modal code -->
-<!-- ... (keep all existing modals: editEventModal, focusSessionModal, etc.) ... -->
+<!-- Add Event Modal -->
+<div id="addEventModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>➕ Add Event</h2>
+            <button onclick="closeModal('addEventModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="quickAddForm" onsubmit="addEvent(event)">
+                <div class="form-group">
+                    <label>What do you want to work on?</label>
+                    <input
+                        type="text"
+                        id="eventTitle"
+                        class="form-control"
+                        placeholder="e.g., Study math, Work on project..."
+                        autocomplete="off"
+                        required>
+                </div>
+
+                <div class="form-group">
+                    <label>Date</label>
+                    <input
+                        type="date"
+                        id="eventDate"
+                        class="form-control"
+                        value="<?php echo $selectedDate; ?>"
+                        required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Start Time</label>
+                        <input
+                            type="time"
+                            id="eventStart"
+                            class="form-control"
+                            value="<?php echo date('H:00'); ?>"
+                            required>
+                    </div>
+                    <div class="form-group">
+                        <label>End Time</label>
+                        <input
+                            type="time"
+                            id="eventEnd"
+                            class="form-control"
+                            value="<?php echo date('H:00', strtotime('+1 hour')); ?>"
+                            required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Event Type</label>
+                    <select id="eventType" class="form-control">
+                        <option value="study">📚 Study</option>
+                        <option value="work">💼 Work</option>
+                        <option value="todo">✅ To-Do</option>
+                        <option value="focus">🎯 Focus</option>
+                        <option value="break">☕ Break</option>
+                    </select>
+                </div>
+
+                <div class="form-options-group">
+                    <label class="option-toggle">
+                        <input type="checkbox" id="enableReminder" onchange="toggleReminderInput()">
+                        <span class="toggle-label">🔔 Reminder</span>
+                    </label>
+                    <input type="number" id="reminderMinutes" placeholder="Minutes before"
+                           style="display:none;" min="5" max="1440" step="5"
+                           class="form-control form-control-inline">
+                </div>
+
+                <div class="form-options-group">
+                    <label class="option-toggle">
+                        <input type="checkbox" id="enableRecurring" onchange="toggleRecurringInput()">
+                        <span class="toggle-label">🔁 Repeat</span>
+                    </label>
+                    <select id="repeatRule" style="display:none;" class="form-control form-control-inline">
+                        <option value="daily">Daily</option>
+                        <option value="weekdays">Weekdays</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+
+                <div class="form-options-group">
+                    <label class="option-toggle">
+                        <input type="checkbox" id="focusMode">
+                        <span class="toggle-label">🎯 Focus Mode</span>
+                    </label>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary">Add Event</button>
+                    <button type="button" onclick="closeModal('addEventModal')" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Event Modal -->
+<div id="editEventModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>✏️ Edit Event</h2>
+            <button onclick="closeModal('editEventModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="editEventForm" onsubmit="saveEditedEvent(event)">
+                <input type="hidden" id="editEventId">
+
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" id="editEventTitle" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="editEventDate" class="form-control" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Start Time</label>
+                        <input type="time" id="editEventStart" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>End Time</label>
+                        <input type="time" id="editEventEnd" class="form-control" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Type</label>
+                    <select id="editEventType" class="form-control">
+                        <option value="study">📚 Study</option>
+                        <option value="work">💼 Work</option>
+                        <option value="todo">✅ To-Do</option>
+                        <option value="focus">🎯 Focus</option>
+                        <option value="break">☕ Break</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Assign To</label>
+                    <select id="editEventAssign" class="form-control">
+                        <option value="">Unassigned</option>
+                        <?php foreach ($familyMembers as $member): ?>
+                            <option value="<?php echo $member['id']; ?>">
+                                <?php echo htmlspecialchars($member['full_name']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="editEventNotes" class="form-control" rows="3" placeholder="Optional notes..."></textarea>
+                </div>
+
+                <div class="form-options-group">
+                    <label class="option-toggle">
+                        <input type="checkbox" id="editEnableReminder" onchange="toggleEditReminderInput()">
+                        <span class="toggle-label">🔔 Reminder</span>
+                    </label>
+                    <input type="number" id="editReminderMinutes" placeholder="Minutes before"
+                           style="display:none;" min="5" max="1440" step="5"
+                           class="form-control form-control-inline">
+                </div>
+
+                <div class="form-options-group">
+                    <label class="option-toggle">
+                        <input type="checkbox" id="editEnableRecurring" onchange="toggleEditRecurringInput()">
+                        <span class="toggle-label">🔁 Repeat</span>
+                    </label>
+                    <select id="editRepeatRule" style="display:none;" class="form-control form-control-inline">
+                        <option value="daily">Daily</option>
+                        <option value="weekdays">Weekdays</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+
+                <div class="form-options-group">
+                    <label class="option-toggle">
+                        <input type="checkbox" id="editFocusMode">
+                        <span class="toggle-label">🎯 Focus Mode</span>
+                    </label>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <button type="button" onclick="closeModal('editEventModal')" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Date Picker Modal -->
+<div id="datePickerModal" class="modal">
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h2>🗓️ Pick Date</h2>
+            <button onclick="closeModal('datePickerModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Select Date</label>
+                <input type="date" id="datePickerInput" class="form-control" value="<?php echo $selectedDate; ?>">
+            </div>
+            <div class="modal-actions">
+                <button onclick="goToPickedDate()" class="btn btn-primary">Go to Date</button>
+                <button onclick="closeModal('datePickerModal')" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Focus Session Modal -->
+<div id="focusSessionModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>🎯 Start Focus Session</h2>
+            <button onclick="closeModal('focusSessionModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form onsubmit="createFocusSession(event)">
+                <div class="form-group">
+                    <label>What will you focus on?</label>
+                    <input type="text" id="focusTitle" class="form-control"
+                           placeholder="e.g., Deep work on project" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Duration (minutes)</label>
+                        <select id="focusDuration" class="form-control">
+                            <option value="25">25 min (Pomodoro)</option>
+                            <option value="45">45 min</option>
+                            <option value="60" selected>60 min</option>
+                            <option value="90">90 min</option>
+                            <option value="120">120 min</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Time</label>
+                        <input type="time" id="focusStart" class="form-control"
+                               value="<?php echo date('H:i'); ?>">
+                    </div>
+                </div>
+
+                <div class="form-options-group">
+                    <label class="option-toggle">
+                        <input type="checkbox" id="focusBlockNotifications" checked>
+                        <span class="toggle-label">🔕 Block Notifications</span>
+                    </label>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary">Start Focus</button>
+                    <button type="button" onclick="closeModal('focusSessionModal')" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Rating Modal -->
+<div id="ratingModal" class="modal">
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h2>⭐ Rate Your Session</h2>
+            <button onclick="closeModal('ratingModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="ratingEventId">
+            <input type="hidden" id="selectedRating">
+            <p style="text-align: center; margin-bottom: 20px; color: rgba(255,255,255,0.8);">
+                How productive was this session?
+            </p>
+            <div class="rating-stars">
+                <button type="button" onclick="selectRating(1)" class="star-btn">⭐</button>
+                <button type="button" onclick="selectRating(2)" class="star-btn">⭐</button>
+                <button type="button" onclick="selectRating(3)" class="star-btn">⭐</button>
+                <button type="button" onclick="selectRating(4)" class="star-btn">⭐</button>
+                <button type="button" onclick="selectRating(5)" class="star-btn">⭐</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Analytics Modal -->
+<div id="analyticsModal" class="modal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2>📊 Productivity Analytics</h2>
+            <button onclick="closeModal('analyticsModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="analyticsContent">
+                <div class="analytics-loading">Loading analytics...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Templates Modal -->
+<div id="templatesModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>📋 Schedule Templates</h2>
+            <button onclick="closeModal('templatesModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="templatesContent">
+                <div class="templates-loading">Loading templates...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Type Modal -->
+<div id="bulkTypeModal" class="modal">
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h2>📁 Change Type</h2>
+            <button onclick="closeModal('bulkTypeModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom: 16px;">Select new type for selected events:</p>
+            <div class="type-grid">
+                <button onclick="applyBulkType('study')" class="type-btn study">📚 Study</button>
+                <button onclick="applyBulkType('work')" class="type-btn work">💼 Work</button>
+                <button onclick="applyBulkType('todo')" class="type-btn todo">✅ To-Do</button>
+                <button onclick="applyBulkType('focus')" class="type-btn focus">🎯 Focus</button>
+                <button onclick="applyBulkType('break')" class="type-btn break">☕ Break</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Assign Modal -->
+<div id="bulkAssignModal" class="modal">
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h2>👤 Assign To</h2>
+            <button onclick="closeModal('bulkAssignModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom: 16px;">Assign selected events to:</p>
+            <div class="assign-grid">
+                <?php foreach ($familyMembers as $member): ?>
+                    <button onclick="applyBulkAssign(<?php echo $member['id']; ?>)" class="assign-btn">
+                        <div class="assign-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
+                            <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                        </div>
+                        <span><?php echo htmlspecialchars($member['full_name']); ?></span>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Week View Modal -->
+<div id="weekViewModal" class="modal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2>🗓️ Week View</h2>
+            <button onclick="closeModal('weekViewModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="weekViewContent">
+                <div class="week-loading">Loading week view...</div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 window.ScheduleApp = {
