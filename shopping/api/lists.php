@@ -126,18 +126,71 @@ try {
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
                 throw new Exception('POST required');
             }
-            
+
             $listId = (int)($_POST['list_id'] ?? 0);
-            
+
             if (!$listId) {
                 throw new Exception('List ID required');
             }
-            
+
             $listManager->deleteList($listId);
-            
+
             echo json_encode([
                 'success' => true,
                 'message' => 'List deleted'
+            ]);
+            break;
+
+        // GET LIST ITEMS (for AJAX switching)
+        case 'get_items':
+            $listId = (int)($_GET['list_id'] ?? 0);
+
+            if (!$listId) {
+                throw new Exception('List ID required');
+            }
+
+            // Verify list belongs to family
+            $stmt = $db->prepare("SELECT id FROM shopping_lists WHERE id = ? AND family_id = ?");
+            $stmt->execute([$listId, $user['family_id']]);
+            if (!$stmt->fetch()) {
+                throw new Exception('List not found or access denied');
+            }
+
+            // Get items with user info
+            $stmt = $db->prepare("
+                SELECT si.*,
+                       u.full_name as added_by_name,
+                       au.full_name as assigned_to_name
+                FROM shopping_items si
+                LEFT JOIN users u ON si.added_by = u.id
+                LEFT JOIN users au ON si.assigned_to = au.id
+                WHERE si.list_id = ?
+                ORDER BY si.status ASC, si.sort_order ASC, si.created_at DESC
+            ");
+            $stmt->execute([$listId]);
+            $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Calculate stats
+            $total = count($items);
+            $pending = 0;
+            $bought = 0;
+
+            foreach ($items as $item) {
+                if ($item['status'] === 'pending') {
+                    $pending++;
+                } else {
+                    $bought++;
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'items' => $items,
+                'stats' => [
+                    'total' => $total,
+                    'pending' => $pending,
+                    'bought' => $bought
+                ]
             ]);
             break;
         

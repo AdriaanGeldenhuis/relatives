@@ -155,28 +155,36 @@ require_once __DIR__ . '/../shared/components/header.php';
         <div class="lists-section">
             <div class="lists-tabs">
                 <?php foreach ($lists as $list): ?>
-                    <div class="list-tab-wrapper <?php echo $list['id'] == $currentListId ? 'active' : ''; ?>">
-                        <a href="?list=<?php echo $list['id']; ?>"
-                           class="list-tab <?php echo $list['id'] == $currentListId ? 'active' : ''; ?>">
+                    <div class="list-tab-wrapper <?php echo $list['id'] == $currentListId ? 'active' : ''; ?>" data-list-id="<?php echo $list['id']; ?>">
+                        <button onclick="switchList(<?php echo $list['id']; ?>)"
+                           class="list-tab <?php echo $list['id'] == $currentListId ? 'active' : ''; ?>"
+                           data-list-id="<?php echo $list['id']; ?>"
+                           data-list-name="<?php echo htmlspecialchars($list['name']); ?>"
+                           data-list-icon="<?php echo htmlspecialchars($list['icon']); ?>">
                             <span class="list-icon"><?php echo htmlspecialchars($list['icon']); ?></span>
                             <span class="list-name"><?php echo htmlspecialchars($list['name']); ?></span>
                             <span class="list-count"><?php echo $list['pending_count']; ?></span>
                             <?php if ($list['total_price'] > 0): ?>
                                 <span class="list-price">R<?php echo number_format($list['total_price'], 2); ?></span>
                             <?php endif; ?>
-                        </a>
-                        <?php if ($list['id'] == $currentListId): ?>
-                            <div class="list-tab-actions">
-                                <button onclick="editList(<?php echo $list['id']; ?>, '<?php echo htmlspecialchars($list['name']); ?>', '<?php echo htmlspecialchars($list['icon']); ?>')" class="list-action-btn" title="Edit List">
-                                    ✏️
+                        </button>
+                        <div class="list-gear-menu">
+                            <button class="list-action-btn gear-btn" onclick="toggleListGearMenu(event, <?php echo $list['id']; ?>)" title="Options">
+                                ⚙️
+                            </button>
+                            <div class="list-gear-dropdown" id="listGearMenu_<?php echo $list['id']; ?>">
+                                <button onclick="editList(<?php echo $list['id']; ?>, '<?php echo htmlspecialchars($list['name']); ?>', '<?php echo htmlspecialchars($list['icon']); ?>'); closeAllListGearMenus();" class="gear-option">
+                                    <span class="gear-icon">✏️</span>
+                                    <span>Edit</span>
                                 </button>
                                 <?php if (count($lists) > 1): ?>
-                                    <button onclick="deleteList(<?php echo $list['id']; ?>, '<?php echo htmlspecialchars($list['name']); ?>')" class="list-action-btn list-delete-btn" title="Delete List">
-                                        🗑️
-                                    </button>
+                                <button onclick="deleteList(<?php echo $list['id']; ?>, '<?php echo htmlspecialchars($list['name']); ?>'); closeAllListGearMenus();" class="gear-option gear-delete">
+                                    <span class="gear-icon">🗑️</span>
+                                    <span>Delete</span>
+                                </button>
                                 <?php endif; ?>
                             </div>
-                        <?php endif; ?>
+                        </div>
                     </div>
                 <?php endforeach; ?>
                 <button onclick="showCreateListModal()" class="list-tab-add">

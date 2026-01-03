@@ -1834,7 +1834,7 @@ function updateClearBoughtButton() {
 // ============================================
 
 /**
- * Toggle gear dropdown menu
+ * Toggle gear dropdown menu (for items)
  */
 function toggleGearMenu(event, itemId) {
     event.stopPropagation();
@@ -1844,6 +1844,7 @@ function toggleGearMenu(event, itemId) {
 
     // Close all other menus first
     closeAllGearMenus();
+    closeAllListGearMenus();
 
     // Toggle this menu
     menu.classList.toggle('active');
@@ -1861,7 +1862,7 @@ function toggleGearMenu(event, itemId) {
 }
 
 /**
- * Close all gear dropdown menus
+ * Close all gear dropdown menus (items)
  */
 function closeAllGearMenus() {
     document.querySelectorAll('.gear-dropdown.active').forEach(menu => {
@@ -1869,10 +1870,249 @@ function closeAllGearMenus() {
     });
 }
 
-// Close gear menus when clicking outside
+/**
+ * Toggle list gear dropdown menu
+ */
+function toggleListGearMenu(event, listId) {
+    event.stopPropagation();
+
+    const menu = document.getElementById(`listGearMenu_${listId}`);
+    if (!menu) return;
+
+    // Close all other menus first
+    closeAllGearMenus();
+    closeAllListGearMenus();
+
+    // Toggle this menu
+    menu.classList.toggle('active');
+}
+
+/**
+ * Close all list gear dropdown menus
+ */
+function closeAllListGearMenus() {
+    document.querySelectorAll('.list-gear-dropdown.active').forEach(menu => {
+        menu.classList.remove('active');
+    });
+}
+
+// Close all gear menus when clicking outside
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.item-gear-menu')) {
         closeAllGearMenus();
+    }
+    if (!e.target.closest('.list-gear-menu')) {
+        closeAllListGearMenus();
+    }
+});
+
+// ============================================
+// AJAX LIST SWITCHING
+// ============================================
+
+/**
+ * Switch to a different list without page refresh
+ */
+async function switchList(listId) {
+    if (listId === ShoppingApp.currentListId) return;
+
+    // Update UI immediately for responsiveness
+    document.querySelectorAll('.list-tab-wrapper').forEach(wrapper => {
+        wrapper.classList.remove('active');
+        wrapper.querySelector('.list-tab').classList.remove('active');
+    });
+
+    const newWrapper = document.querySelector(`.list-tab-wrapper[data-list-id="${listId}"]`);
+    if (newWrapper) {
+        newWrapper.classList.add('active');
+        newWrapper.querySelector('.list-tab').classList.add('active');
+    }
+
+    // Show loading state
+    const categoriesGrid = document.querySelector('.categories-grid');
+    if (categoriesGrid) {
+        categoriesGrid.style.opacity = '0.5';
+    }
+
+    try {
+        // Fetch list data via AJAX
+        const result = await apiCall(ShoppingApp.API.lists, {
+            action: 'get_items',
+            list_id: listId
+        }, 'GET');
+
+        if (result.success) {
+            // Update current list ID
+            ShoppingApp.currentListId = listId;
+
+            // Update URL without refresh
+            const newUrl = `${window.location.pathname}?list=${listId}`;
+            window.history.pushState({ listId: listId }, '', newUrl);
+
+            // Render new items
+            renderListItems(result.items, result.categories);
+
+            // Update stats
+            updateListStats(result.stats);
+
+            // Update progress bar
+            updateProgressBar();
+
+            // Reset real-time updates timestamp
+            RealTimeUpdates.lastUpdate = Date.now();
+        }
+    } catch (error) {
+        console.error('Error switching list:', error);
+        showToast('Failed to load list', 'error');
+        // Fallback to page refresh
+        window.location.href = `?list=${listId}`;
+    }
+
+    if (categoriesGrid) {
+        categoriesGrid.style.opacity = '1';
+    }
+}
+
+/**
+ * Render list items in the DOM
+ */
+function renderListItems(items, categories) {
+    const categoriesGrid = document.querySelector('.categories-grid');
+    if (!categoriesGrid) return;
+
+    // Group items by category
+    const itemsByCategory = {};
+    const categoryInfo = {
+        'dairy': { icon: '🥛', name: 'Dairy' },
+        'meat': { icon: '🥩', name: 'Meat & Seafood' },
+        'produce': { icon: '🥬', name: 'Produce' },
+        'bakery': { icon: '🍞', name: 'Bakery' },
+        'pantry': { icon: '🥫', name: 'Pantry' },
+        'frozen': { icon: '🧊', name: 'Frozen' },
+        'snacks': { icon: '🍿', name: 'Snacks' },
+        'beverages': { icon: '🥤', name: 'Beverages' },
+        'household': { icon: '🧹', name: 'Household' },
+        'other': { icon: '📦', name: 'Other' }
+    };
+
+    items.forEach(item => {
+        const cat = item.category || 'other';
+        if (!itemsByCategory[cat]) {
+            itemsByCategory[cat] = [];
+        }
+        itemsByCategory[cat].push(item);
+    });
+
+    // Check if empty
+    if (items.length === 0) {
+        categoriesGrid.innerHTML = `
+            <div class="glass-card empty-state">
+                <div class="empty-icon">🛒</div>
+                <h2>List is empty</h2>
+                <p>Add your first item above!</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Build HTML
+    let html = '';
+    for (const [category, catItems] of Object.entries(itemsByCategory)) {
+        const info = categoryInfo[category] || categoryInfo['other'];
+        html += `
+            <div class="category-section glass-card" data-category="${category}">
+                <div class="category-header">
+                    <span class="category-icon">${info.icon}</span>
+                    <span class="category-name">${info.name}</span>
+                    <span class="category-count">${catItems.length}</span>
+                </div>
+                <div class="items-list">
+        `;
+
+        catItems.forEach(item => {
+            const isBought = item.status === 'bought';
+            html += buildItemCardHTML(item, isBought);
+        });
+
+        html += `
+                </div>
+            </div>
+        `;
+    }
+
+    categoriesGrid.innerHTML = html;
+}
+
+/**
+ * Build item card HTML
+ */
+function buildItemCardHTML(item, isBought) {
+    let detailsHTML = '';
+    if (item.qty) detailsHTML += `<span class="item-qty">${escapeHtml(item.qty)}</span>`;
+    if (item.price) detailsHTML += `<span class="item-price" onclick="showPriceHistory('${escapeHtml(item.name)}')">R${parseFloat(item.price).toFixed(2)}</span>`;
+    if (item.store) detailsHTML += `<span class="item-store">${escapeHtml(item.store)}</span>`;
+
+    let metaHTML = '';
+    if (item.added_by_name) metaHTML += `<span class="item-added-by">Added by ${escapeHtml(item.added_by_name)}</span>`;
+    if (item.assigned_to_name) metaHTML += `<span class="item-assigned">• For ${escapeHtml(item.assigned_to_name)}</span>`;
+
+    return `
+        <div class="item-card ${isBought ? 'bought' : ''}" data-item-id="${item.id}">
+            <div class="item-bulk-select">
+                <input type="checkbox" class="bulk-checkbox" data-item-id="${item.id}">
+            </div>
+            <div class="item-checkbox">
+                <input type="checkbox" id="item_${item.id}" ${isBought ? 'checked' : ''} onchange="toggleItem(${item.id})">
+                <label for="item_${item.id}" class="checkbox-label"></label>
+            </div>
+            <div class="item-content">
+                <div class="item-name">${escapeHtml(item.name)}</div>
+                ${detailsHTML ? `<div class="item-details">${detailsHTML}</div>` : ''}
+                <div class="item-meta">${metaHTML}</div>
+            </div>
+            <div class="item-actions">
+                <div class="item-gear-menu">
+                    <button class="item-action-btn gear-btn" onclick="toggleGearMenu(event, ${item.id})" title="Options">⚙️</button>
+                    <div class="gear-dropdown" id="gearMenu_${item.id}">
+                        <button onclick="editItem(${item.id}); closeAllGearMenus();" class="gear-option">
+                            <span class="gear-icon">✏️</span>
+                            <span>Edit</span>
+                        </button>
+                        <button onclick="deleteItem(${item.id}); closeAllGearMenus();" class="gear-option gear-delete">
+                            <span class="gear-icon">🗑️</span>
+                            <span>Delete</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Update list stats in the DOM
+ */
+function updateListStats(stats) {
+    if (!stats) return;
+
+    const statItems = document.querySelectorAll('.stat-item');
+    if (statItems.length >= 3) {
+        const totalEl = statItems[0].querySelector('.stat-value');
+        const pendingEl = statItems[1].querySelector('.stat-value');
+        const boughtEl = statItems[2].querySelector('.stat-value');
+
+        if (totalEl) totalEl.textContent = stats.total || 0;
+        if (pendingEl) pendingEl.textContent = stats.pending || 0;
+        if (boughtEl) boughtEl.textContent = stats.bought || 0;
+    }
+
+    updateClearBoughtButton();
+}
+
+// Handle browser back/forward
+window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.listId) {
+        switchList(e.state.listId);
     }
 });
 
@@ -2283,6 +2523,16 @@ window.updateClearBoughtButton = updateClearBoughtButton;
 // Gear menu functions
 window.toggleGearMenu = toggleGearMenu;
 window.closeAllGearMenus = closeAllGearMenus;
+
+// List gear menu functions
+window.toggleListGearMenu = toggleListGearMenu;
+window.closeAllListGearMenus = closeAllListGearMenus;
+
+// List switching
+window.switchList = switchList;
+window.renderListItems = renderListItems;
+window.buildItemCardHTML = buildItemCardHTML;
+window.updateListStats = updateListStats;
 
 // Real-time updates
 window.RealTimeUpdates = RealTimeUpdates;
