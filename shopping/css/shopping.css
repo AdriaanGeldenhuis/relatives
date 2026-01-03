@@ -833,7 +833,7 @@ body {
     padding: var(--shopping-space-lg);
     margin-bottom: var(--shopping-space-lg);
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--shopping-space-md);
 }
 
@@ -1752,7 +1752,18 @@ body {
     }
     
     .list-stats {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(3, 1fr);
+        padding: var(--shopping-space-sm);
+        gap: var(--shopping-space-xs);
+    }
+
+    .stat-label {
+        font-size: 0.65rem;
+        letter-spacing: 0.3px;
+    }
+
+    .stat-value {
+        font-size: 1.4rem;
     }
     
     .category-grid,
