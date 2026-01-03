@@ -183,66 +183,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             case 'get_events_for_month':
                 $requestedYear = (int)$_POST['year'];
                 $requestedMonth = (int)$_POST['month'];
-                
+
                 $startDate = "$requestedYear-" . str_pad($requestedMonth, 2, '0', STR_PAD_LEFT) . "-01";
                 $endDate = date('Y-m-t', strtotime($startDate));
-                
+
                 $stmt = $db->prepare("
-                    SELECT e.*, u.full_name, u.avatar_color
+                    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes,
+                           e.starts_at, e.ends_at, e.all_day, e.color, e.status,
+                           e.reminder_minutes, e.created_at, e.updated_at,
+                           u.full_name, u.avatar_color, 'calendar' as source
                     FROM events e
                     LEFT JOIN users u ON e.user_id = u.id
                     WHERE e.family_id = ?
                       AND DATE(e.starts_at) >= ?
                       AND DATE(e.starts_at) <= ?
-                    ORDER BY e.starts_at ASC
+                    UNION ALL
+                    SELECT s.id, s.family_id, s.user_id, s.kind, s.title, s.notes,
+                           s.starts_at, s.ends_at, 0 as all_day, s.color, s.status,
+                           s.reminder_minutes, s.created_at, s.updated_at,
+                           u.full_name, u.avatar_color, 'schedule' as source
+                    FROM schedule_events s
+                    LEFT JOIN users u ON s.user_id = u.id
+                    WHERE s.family_id = ?
+                      AND DATE(s.starts_at) >= ?
+                      AND DATE(s.starts_at) <= ?
+                      AND s.status != 'cancelled'
+                    ORDER BY starts_at ASC
                 ");
-                $stmt->execute([$user['family_id'], $startDate, $endDate]);
+                $stmt->execute([$user['family_id'], $startDate, $endDate, $user['family_id'], $startDate, $endDate]);
                 $events = $stmt->fetchAll();
-                
+
                 echo json_encode(['success' => true, 'events' => $events]);
                 exit;
                 
             case 'get_events_for_range':
                 $startDate = $_POST['start_date'] ?? '';
                 $endDate = $_POST['end_date'] ?? '';
-                
+
                 if (empty($startDate) || empty($endDate)) {
                     throw new Exception('Date range required');
                 }
-                
+
                 $stmt = $db->prepare("
-                    SELECT e.*, u.full_name, u.avatar_color
+                    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes,
+                           e.starts_at, e.ends_at, e.all_day, e.color, e.status,
+                           e.reminder_minutes, e.created_at, e.updated_at,
+                           u.full_name, u.avatar_color, 'calendar' as source
                     FROM events e
                     LEFT JOIN users u ON e.user_id = u.id
                     WHERE e.family_id = ?
                       AND DATE(e.starts_at) >= ?
                       AND DATE(e.starts_at) <= ?
-                    ORDER BY e.starts_at ASC
+                    UNION ALL
+                    SELECT s.id, s.family_id, s.user_id, s.kind, s.title, s.notes,
+                           s.starts_at, s.ends_at, 0 as all_day, s.color, s.status,
+                           s.reminder_minutes, s.created_at, s.updated_at,
+                           u.full_name, u.avatar_color, 'schedule' as source
+                    FROM schedule_events s
+                    LEFT JOIN users u ON s.user_id = u.id
+                    WHERE s.family_id = ?
+                      AND DATE(s.starts_at) >= ?
+                      AND DATE(s.starts_at) <= ?
+                      AND s.status != 'cancelled'
+                    ORDER BY starts_at ASC
                 ");
-                $stmt->execute([$user['family_id'], $startDate, $endDate]);
+                $stmt->execute([$user['family_id'], $startDate, $endDate, $user['family_id'], $startDate, $endDate]);
                 $events = $stmt->fetchAll();
-                
+
                 echo json_encode(['success' => true, 'events' => $events]);
                 exit;
                 
             case 'get_events_for_day':
                 $date = $_POST['date'] ?? '';
-                
+
                 if (empty($date)) {
                     throw new Exception('Date required');
                 }
-                
+
                 $stmt = $db->prepare("
-                    SELECT e.*, u.full_name, u.avatar_color
+                    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes,
+                           e.starts_at, e.ends_at, e.all_day, e.color, e.status,
+                           e.reminder_minutes, e.created_at, e.updated_at,
+                           u.full_name, u.avatar_color, 'calendar' as source
                     FROM events e
                     LEFT JOIN users u ON e.user_id = u.id
                     WHERE e.family_id = ?
                       AND DATE(e.starts_at) = ?
-                    ORDER BY e.starts_at ASC
+                    UNION ALL
+                    SELECT s.id, s.family_id, s.user_id, s.kind, s.title, s.notes,
+                           s.starts_at, s.ends_at, 0 as all_day, s.color, s.status,
+                           s.reminder_minutes, s.created_at, s.updated_at,
+                           u.full_name, u.avatar_color, 'schedule' as source
+                    FROM schedule_events s
+                    LEFT JOIN users u ON s.user_id = u.id
+                    WHERE s.family_id = ?
+                      AND DATE(s.starts_at) = ?
+                      AND s.status != 'cancelled'
+                    ORDER BY starts_at ASC
                 ");
-                $stmt->execute([$user['family_id'], $date]);
+                $stmt->execute([$user['family_id'], $date, $user['family_id'], $date]);
                 $events = $stmt->fetchAll();
-                
+
                 echo json_encode(['success' => true, 'events' => $events]);
                 exit;
                 
@@ -290,35 +331,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-// Get events for current month
+// Get events for current month (includes both calendar and schedule events)
 $startDate = date('Y-m-01', strtotime($currentDate));
 $endDate = date('Y-m-t', strtotime($currentDate));
 
 $stmt = $db->prepare("
-    SELECT e.*, u.full_name, u.avatar_color
+    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes,
+           e.starts_at, e.ends_at, e.all_day, e.color, e.status,
+           e.reminder_minutes, e.created_at, e.updated_at,
+           u.full_name, u.avatar_color, 'calendar' as source
     FROM events e
     LEFT JOIN users u ON e.user_id = u.id
     WHERE e.family_id = ?
       AND DATE(e.starts_at) >= ?
       AND DATE(e.starts_at) <= ?
-    ORDER BY e.starts_at ASC
+    UNION ALL
+    SELECT s.id, s.family_id, s.user_id, s.kind, s.title, s.notes,
+           s.starts_at, s.ends_at, 0 as all_day, s.color, s.status,
+           s.reminder_minutes, s.created_at, s.updated_at,
+           u.full_name, u.avatar_color, 'schedule' as source
+    FROM schedule_events s
+    LEFT JOIN users u ON s.user_id = u.id
+    WHERE s.family_id = ?
+      AND DATE(s.starts_at) >= ?
+      AND DATE(s.starts_at) <= ?
+      AND s.status != 'cancelled'
+    ORDER BY starts_at ASC
 ");
-$stmt->execute([$user['family_id'], $startDate, $endDate]);
+$stmt->execute([$user['family_id'], $startDate, $endDate, $user['family_id'], $startDate, $endDate]);
 $events = $stmt->fetchAll();
 
-// Get upcoming events (next 7 days)
+// Get upcoming events (next 7 days - includes both calendar and schedule events)
 $stmt = $db->prepare("
-    SELECT e.*, u.full_name, u.avatar_color
+    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes,
+           e.starts_at, e.ends_at, e.all_day, e.color, e.status,
+           e.reminder_minutes, u.full_name, u.avatar_color, 'calendar' as source
     FROM events e
     LEFT JOIN users u ON e.user_id = u.id
     WHERE e.family_id = ?
       AND e.starts_at >= NOW()
       AND e.starts_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)
       AND e.status = 'pending'
-    ORDER BY e.starts_at ASC
+    UNION ALL
+    SELECT s.id, s.family_id, s.user_id, s.kind, s.title, s.notes,
+           s.starts_at, s.ends_at, 0 as all_day, s.color, s.status,
+           s.reminder_minutes, u.full_name, u.avatar_color, 'schedule' as source
+    FROM schedule_events s
+    LEFT JOIN users u ON s.user_id = u.id
+    WHERE s.family_id = ?
+      AND s.starts_at >= NOW()
+      AND s.starts_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)
+      AND s.status != 'cancelled'
+    ORDER BY starts_at ASC
     LIMIT 10
 ");
-$stmt->execute([$user['family_id']]);
+$stmt->execute([$user['family_id'], $user['family_id']]);
 $upcomingEvents = $stmt->fetchAll();
 
 // Calendar helpers
