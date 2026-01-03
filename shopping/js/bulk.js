@@ -273,6 +273,9 @@ async function bulkMarkBought() {
         setTimeout(() => {
             toggleBulkMode();
             updateProgressBar();
+            if (typeof updateClearBoughtButton === 'function') {
+                updateClearBoughtButton();
+            }
         }, itemIds.length * 50 + 300);
         
     } catch (error) {

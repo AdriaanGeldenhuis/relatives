@@ -129,15 +129,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <span class="greeting-name">Shopping Lists</span>
                 </h1>
                 <p class="greeting-subtitle">Smart family shopping with AI</p>
-                
+
                 <div class="quick-actions">
-                    <button onclick="document.getElementById('itemName').focus()" class="quick-action-btn">
+                    <button onclick="showAddItemModal()" class="quick-action-btn">
                         <span class="qa-icon">➕</span>
-                        <span>Quick Add</span>
+                        <span>Add Item</span>
                     </button>
                     <button onclick="toggleBulkMode()" class="quick-action-btn" id="bulkModeBtn">
                         <span class="qa-icon">☑️</span>
-                        <span>Bulk Select</span>
+                        <span>Bulk</span>
                     </button>
                     <button onclick="showAnalytics()" class="quick-action-btn">
                         <span class="qa-icon">📊</span>
@@ -155,94 +155,37 @@ require_once __DIR__ . '/../shared/components/header.php';
         <div class="lists-section">
             <div class="lists-tabs">
                 <?php foreach ($lists as $list): ?>
-                    <a href="?list=<?php echo $list['id']; ?>" 
-                       class="list-tab <?php echo $list['id'] == $currentListId ? 'active' : ''; ?>"
-                       data-tilt>
-                        <span class="list-icon"><?php echo htmlspecialchars($list['icon']); ?></span>
-                        <span class="list-name"><?php echo htmlspecialchars($list['name']); ?></span>
-                        <span class="list-count"><?php echo $list['pending_count']; ?></span>
-                        <?php if ($list['total_price'] > 0): ?>
-                            <span class="list-price">R<?php echo number_format($list['total_price'], 2); ?></span>
+                    <div class="list-tab-wrapper <?php echo $list['id'] == $currentListId ? 'active' : ''; ?>">
+                        <a href="?list=<?php echo $list['id']; ?>"
+                           class="list-tab <?php echo $list['id'] == $currentListId ? 'active' : ''; ?>">
+                            <span class="list-icon"><?php echo htmlspecialchars($list['icon']); ?></span>
+                            <span class="list-name"><?php echo htmlspecialchars($list['name']); ?></span>
+                            <span class="list-count"><?php echo $list['pending_count']; ?></span>
+                            <?php if ($list['total_price'] > 0): ?>
+                                <span class="list-price">R<?php echo number_format($list['total_price'], 2); ?></span>
+                            <?php endif; ?>
+                        </a>
+                        <?php if ($list['id'] == $currentListId): ?>
+                            <div class="list-tab-actions">
+                                <button onclick="editList(<?php echo $list['id']; ?>, '<?php echo htmlspecialchars($list['name']); ?>', '<?php echo htmlspecialchars($list['icon']); ?>')" class="list-action-btn" title="Edit List">
+                                    ✏️
+                                </button>
+                                <?php if (count($lists) > 1): ?>
+                                    <button onclick="deleteList(<?php echo $list['id']; ?>, '<?php echo htmlspecialchars($list['name']); ?>')" class="list-action-btn list-delete-btn" title="Delete List">
+                                        🗑️
+                                    </button>
+                                <?php endif; ?>
+                            </div>
                         <?php endif; ?>
-                    </a>
+                    </div>
                 <?php endforeach; ?>
-                <button onclick="showCreateListModal()" class="list-tab-add" data-tilt>
+                <button onclick="showCreateListModal()" class="list-tab-add">
                     <span class="list-icon">+</span>
-                    <span class="list-name">New List</span>
+                    <span class="list-name">New</span>
                 </button>
             </div>
         </div>
 
-        <!-- Quick Add Form -->
-        <div class="quick-add-section">
-            <div class="quick-add-card glass-card">
-                <form id="quickAddForm">
-                    <div class="quick-add-content">
-                        <input 
-                            type="text" 
-                            id="itemName" 
-                            class="quick-add-input" 
-                            placeholder="Add item... (e.g., 2L Milk, 1kg Potatoes)"
-                            autocomplete="off"
-                            value="<?php echo htmlspecialchars($voicePrefillContent); ?>"
-                            required>
-                        
-                        <input 
-                            type="text" 
-                            id="itemQty" 
-                            class="quick-add-qty" 
-                            placeholder="Qty"
-                            autocomplete="off">
-                        
-                        <input 
-                            type="number" 
-                            id="itemPrice" 
-                            class="quick-add-price" 
-                            placeholder="Price"
-                            step="0.01"
-                            min="0"
-                            autocomplete="off">
-                        
-                        <select id="itemCategory" class="quick-add-category">
-                            <option value="other">Category</option>
-                            <?php foreach ($categories as $key => $cat): ?>
-                                <option value="<?php echo $key; ?>">
-                                    <?php echo $cat['icon'] . ' ' . $cat['name']; ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                        
-                        <button type="submit" class="btn btn-primary">
-                            <span class="btn-icon">+</span>
-                            <span class="btn-text">Add</span>
-                        </button>
-                    </div>
-                </form>
-
-                <!-- Frequent Items Quick Add -->
-                <?php if (!empty($frequentItems)): ?>
-                    <div class="frequent-items">
-                        <div class="frequent-title">Frequently Bought:</div>
-                        <div class="frequent-chips">
-                            <?php foreach ($frequentItems as $item): ?>
-                                <button 
-                                    onclick="quickAddFrequent('<?php echo htmlspecialchars($item['item_name']); ?>', '<?php echo $item['category']; ?>')"
-                                    class="frequent-chip"
-                                    title="Bought <?php echo $item['frequency']; ?> times">
-                                    <?php echo htmlspecialchars($item['item_name']); ?>
-                                </button>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                <?php endif; ?>
-
-                <!-- Smart Suggestions -->
-                <div class="suggestions" id="suggestions" style="display: none;">
-                    <div class="suggestions-title">Suggestions:</div>
-                    <div class="suggestions-list" id="suggestionsList"></div>
-                </div>
-            </div>
-        </div>
 
         <!-- Bulk Actions Bar (Hidden by default) -->
         <div id="bulkActionsBar" class="bulk-actions-bar glass-card" style="display: none;">
@@ -324,12 +267,13 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </div>
                     
                     <div class="action-buttons">
-                        <?php if ($boughtItems > 0): ?>
-                            <button onclick="clearBought()" class="btn btn-secondary btn-sm">
-                                <span class="btn-icon">🗑️</span>
-                                <span>Clear Bought</span>
-                            </button>
-                        <?php endif; ?>
+                        <button onclick="clearBought()" class="btn btn-secondary btn-sm" id="clearBoughtBtn" <?php echo $boughtItems === 0 ? 'disabled' : ''; ?>>
+                            <span class="btn-icon">🗑️</span>
+                            <span>Clear Bought</span>
+                            <?php if ($boughtItems > 0): ?>
+                                <span class="badge"><?php echo $boughtItems; ?></span>
+                            <?php endif; ?>
+                        </button>
                         <button onclick="exportList()" class="btn btn-secondary btn-sm">
                             <span class="btn-icon">📥</span>
                             <span>Export</span>
@@ -435,6 +379,71 @@ require_once __DIR__ . '/../shared/components/header.php';
 </main>
 
 <!-- MODALS START -->
+
+<!-- Add Item Modal -->
+<div id="addItemModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>➕ Add Item</h2>
+            <button onclick="closeModal('addItemModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="addItemForm" onsubmit="submitAddItem(event)">
+                <div class="form-group">
+                    <label>Item Name</label>
+                    <input type="text" id="itemName" class="form-control"
+                           placeholder="e.g., 2L Milk, 1kg Potatoes"
+                           autocomplete="off"
+                           required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Quantity</label>
+                        <input type="text" id="itemQty" class="form-control" placeholder="e.g., 2L, 500g">
+                    </div>
+                    <div class="form-group">
+                        <label>Price (R)</label>
+                        <input type="number" id="itemPrice" class="form-control" step="0.01" min="0">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="itemCategory" class="form-control">
+                        <option value="other">Other</option>
+                        <?php foreach ($categories as $key => $cat): ?>
+                            <option value="<?php echo $key; ?>">
+                                <?php echo $cat['icon'] . ' ' . $cat['name']; ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- Frequent Items Quick Add -->
+                <?php if (!empty($frequentItems)): ?>
+                <div class="frequent-items-modal">
+                    <div class="frequent-title">Quick add:</div>
+                    <div class="frequent-chips">
+                        <?php foreach (array_slice($frequentItems, 0, 6) as $item): ?>
+                            <button type="button"
+                                onclick="quickAddFromModal('<?php echo htmlspecialchars($item['item_name']); ?>', '<?php echo $item['category']; ?>')"
+                                class="frequent-chip">
+                                <?php echo htmlspecialchars($item['item_name']); ?>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary">Add Item</button>
+                    <button type="button" onclick="closeModal('addItemModal')" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <!-- Create/Edit List Modal -->
 <div id="listModal" class="modal">
@@ -668,6 +677,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </button>
                     <button onclick="exportListAs('text')" class="btn btn-secondary btn-sm">
                         📝 Text
+                    </button>
+                </div>
+            </div>
+
+            <div class="analytics-link">
+                <p class="share-methods-title">Insights:</p>
+                <div class="share-buttons">
+                    <button onclick="closeModal('shareModal'); showAnalytics();" class="btn btn-primary btn-sm">
+                        📊 View Analytics
                     </button>
                 </div>
             </div>
