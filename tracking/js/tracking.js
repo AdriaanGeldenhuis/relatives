@@ -756,6 +756,11 @@ class TrackingMapProfessional {
                             <span style="font-size: ${isMobile ? '12px' : '13px'}; font-weight: 700; color: ${member.status === 'online' ? '#43e97b' : member.status === 'stale' ? '#ffa502' : '#6c757d'};">
                                 ${member.status === 'online' ? 'Tracking' : member.status === 'stale' ? `Stale (${Math.floor((member.seconds_ago || 0) / 60)}m ago)` : member.status === 'no_location' ? 'No location yet' : 'Offline'}
                             </span>
+                            ${member.status === 'stale' ? `
+                                <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">
+                                    Device not sending updates
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -998,9 +1003,10 @@ class TrackingMapProfessional {
                     if (isTracking) {
                         statusText.textContent = 'Tracking';
                     } else if (isStale) {
-                        // Show how long ago with seconds_ago
+                        // Show how long ago with seconds_ago - clearer message
                         const mins = Math.floor((member.seconds_ago || 0) / 60);
-                        statusText.textContent = `Last update: ${mins}m ago`;
+                        statusText.textContent = `Stale (${mins}m ago)`;
+                        statusText.title = 'Device not sending updates - check app permissions or network';
                     } else if (hasNoLocation) {
                         statusText.textContent = 'No location yet';
                     } else {
