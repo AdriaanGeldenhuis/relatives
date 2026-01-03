@@ -389,17 +389,28 @@ try {
             $kind = $_POST['kind'] ?? 'todo';
             $notes = trim($_POST['notes'] ?? '');
             $assignedTo = $_POST['assigned_to'] ?? null;
-            
+
             if (!$title || !$startTime || !$endTime) {
                 throw new Exception('Missing required fields');
             }
-            
+
+            // Get the original event to check for date changes
+            $stmt = $db->prepare("SELECT starts_at, ends_at FROM schedule_events WHERE id = ? AND family_id = ?");
+            $stmt->execute([$eventId, $user['family_id']]);
+            $originalEvent = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$originalEvent) {
+                throw new Exception('Event not found');
+            }
+
+            $originalDate = date('Y-m-d', strtotime($originalEvent['starts_at']));
             $startsAt = $date . ' ' . $startTime . ':00';
             $endsAt = $date . ' ' . $endTime . ':00';
-            
+
+            // Update the main event
             $stmt = $db->prepare("
-                UPDATE schedule_events 
-                SET title = ?, kind = ?, starts_at = ?, ends_at = ?, 
+                UPDATE schedule_events
+                SET title = ?, kind = ?, starts_at = ?, ends_at = ?,
                     notes = ?, assigned_to = ?, updated_at = NOW()
                 WHERE id = ? AND family_id = ?
             ");
@@ -413,7 +424,29 @@ try {
                 $eventId,
                 $user['family_id']
             ]);
-            
+
+            // If date changed, update all child recurring events
+            if ($originalDate !== $date) {
+                $daysDiff = (strtotime($date) - strtotime($originalDate)) / 86400;
+
+                $stmt = $db->prepare("
+                    UPDATE schedule_events
+                    SET starts_at = DATE_ADD(starts_at, INTERVAL ? DAY),
+                        ends_at = DATE_ADD(ends_at, INTERVAL ? DAY),
+                        updated_at = NOW()
+                    WHERE parent_event_id = ? AND family_id = ?
+                ");
+                $stmt->execute([$daysDiff, $daysDiff, $eventId, $user['family_id']]);
+            }
+
+            // Also update title/kind on child events
+            $stmt = $db->prepare("
+                UPDATE schedule_events
+                SET title = ?, kind = ?, updated_at = NOW()
+                WHERE parent_event_id = ? AND family_id = ?
+            ");
+            $stmt->execute([$title, $kind, $eventId, $user['family_id']]);
+
             echo json_encode(['success' => true]);
             break;
             
