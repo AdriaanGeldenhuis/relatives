@@ -478,22 +478,22 @@ try {
         
         case 'search':
             $query = trim($_GET['q'] ?? '');
-            
+
             if (empty($query)) {
                 throw new Exception('Search query required');
             }
-            
+
             if (strlen($query) < 2) {
                 throw new Exception('Search query must be at least 2 characters');
             }
-            
+
             $limit = min((int)($_GET['limit'] ?? 20), 100);
-            
+
             $stmt = $db->prepare("
                 SELECT si.*, sl.name as list_name
                 FROM shopping_items si
                 JOIN shopping_lists sl ON si.list_id = sl.id
-                WHERE sl.family_id = ? 
+                WHERE sl.family_id = ?
                   AND si.name LIKE ?
                   AND si.status = 'pending'
                 ORDER BY si.created_at DESC
@@ -501,7 +501,7 @@ try {
             ");
             $stmt->execute([$user['family_id'], "%$query%", $limit]);
             $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
+
             echo json_encode([
                 'success' => true,
                 'query' => $query,
@@ -509,7 +509,60 @@ try {
                 'count' => count($items)
             ]);
             break;
-        
+
+        case 'poll':
+            // Real-time polling - returns items updated since timestamp
+            $listId = (int)($_GET['list_id'] ?? 0);
+            $since = (int)($_GET['since'] ?? 0);
+
+            if (!$listId) {
+                throw new Exception('List ID required');
+            }
+
+            // Verify list access
+            $stmt = $db->prepare("SELECT id FROM shopping_lists WHERE id = ? AND family_id = ?");
+            $stmt->execute([$listId, $user['family_id']]);
+
+            if (!$stmt->fetch()) {
+                throw new Exception('List not found or access denied');
+            }
+
+            // Convert timestamp to datetime
+            $sinceDate = date('Y-m-d H:i:s', $since / 1000);
+
+            // Get items updated since timestamp (but not by current user in last 2 seconds to avoid echo)
+            $stmt = $db->prepare("
+                SELECT si.*,
+                       u.full_name as added_by_name,
+                       au.full_name as assigned_to_name
+                FROM shopping_items si
+                LEFT JOIN users u ON si.added_by = u.id
+                LEFT JOIN users au ON si.assigned_to = au.id
+                WHERE si.list_id = ?
+                  AND si.updated_at > ?
+                  AND NOT (si.added_by = ? AND si.updated_at > DATE_SUB(NOW(), INTERVAL 2 SECOND))
+                ORDER BY si.updated_at DESC
+            ");
+            $stmt->execute([$listId, $sinceDate, $user['id']]);
+            $updatedItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Build updates array
+            $updates = [];
+            foreach ($updatedItems as $item) {
+                $updates[] = [
+                    'type' => 'item_updated',
+                    'item' => $item,
+                    'user' => $item['added_by_name'] ?: 'Someone'
+                ];
+            }
+
+            echo json_encode([
+                'success' => true,
+                'updates' => $updates,
+                'timestamp' => round(microtime(true) * 1000)
+            ]);
+            break;
+
         default:
             throw new Exception('Invalid action: ' . $action);
     }
