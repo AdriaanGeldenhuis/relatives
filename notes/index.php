@@ -163,8 +163,9 @@ function timeAgo($timestamp) {
 }
 
 $pageTitle = 'Notes';
-$pageCSS = ['/notes/css/notes.css'];
-$pageJS = ['/notes/js/notes.js'];
+$cacheVersion = '10.0.0';
+$pageCSS = ['/notes/css/notes.css?v=' . $cacheVersion];
+$pageJS = ['/notes/js/notes.js?v=' . $cacheVersion];
 $shoppingCount = 0;
 
 require_once __DIR__ . '/../shared/components/header.php';

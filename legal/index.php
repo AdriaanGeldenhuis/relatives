@@ -36,8 +36,9 @@ if (!file_exists($tabFile)) {
 }
 
 $pageTitle = 'Legal Documents';
-$pageCSS = ['/legal/css/legal.css'];
-$pageJS = ['/legal/js/legal.js'];
+$cacheVersion = '10.0.0';
+$pageCSS = ['/legal/css/legal.css?v=' . $cacheVersion];
+$pageJS = ['/legal/js/legal.js?v=' . $cacheVersion];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>

@@ -221,8 +221,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Set page metadata
 $pageTitle = 'Admin Panel';
-$pageCSS = ['/admin/css/admin.css'];
-$pageJS = ['/admin/js/admin.js'];
+$cacheVersion = '3.1.0';
+$pageCSS = ['/admin/css/admin.css?v=' . $cacheVersion];
+$pageJS = ['/admin/js/admin.js?v=' . $cacheVersion];
 
 // Include header
 require_once __DIR__ . '/../shared/components/header.php';

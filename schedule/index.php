@@ -173,7 +173,7 @@ try {
 
 $pageTitle = 'Schedule';
 $activePage = 'schedule';
-$cacheVersion = '9.2.0';
+$cacheVersion = '10.0.0';
 $pageCSS = ['/schedule/css/schedule.css?v=' . $cacheVersion];
 $pageJS = ['/schedule/js/schedule.js?v=' . $cacheVersion];
 

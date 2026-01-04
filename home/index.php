@@ -240,7 +240,7 @@ $showWelcome = isset($_GET['welcome']) || isset($_GET['joined']);
 
 $pageTitle = 'Home';
 $activePage = 'home';
-$cacheVersion = '9.1.1';
+$cacheVersion = '10.0.0';
 $pageCSS = ['/home/css/home.css?v=' . $cacheVersion];
 $pageJS = ['/home/js/home.js?v=' . $cacheVersion];
 
