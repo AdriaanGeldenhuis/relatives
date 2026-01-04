@@ -880,7 +880,7 @@ class WeatherWidget {
                 <div class="weather-feels">Feels like ${this.currentWeather.feels_like}°C</div>
                 <div class="weather-location">
                     <span>📍</span>
-                    <span>${this.location?.name || 'Current Location'}</span>
+                    <span>${this.location?.city || 'Current Location'}</span>
                 </div>
             </div>
         `;
@@ -960,7 +960,7 @@ class WeatherWidget {
     shareWeather() {
         if (!this.currentWeather || !this.location) return;
 
-        const text = `Weather in ${this.location.name}: ${this.currentWeather.temperature}°C, ${this.currentWeather.description}`;
+        const text = `Weather in ${this.location.city || 'your location'}: ${this.currentWeather.temperature}°C, ${this.currentWeather.description}`;
 
         if (navigator.share) {
             navigator.share({ title: 'Weather', text });
