@@ -24,11 +24,22 @@ echo "[" . date('Y-m-d H:i:s') . "] Starting weather notification cron...\n";
 
 try {
     $triggers = new NotificationTriggers($db);
-    $currentTime = date('H:i:00');
-    
+    $currentHour = (int)date('H');
+    $currentMinute = (int)date('i');
+
+    // Build time patterns to match (handles different storage formats)
+    // Match: "07:30", "07:30:00", "7:30:00", etc.
+    $timePatterns = [
+        sprintf('%02d:%02d:00', $currentHour, $currentMinute),  // 07:30:00
+        sprintf('%02d:%02d', $currentHour, $currentMinute),      // 07:30
+        sprintf('%d:%02d:00', $currentHour, $currentMinute),     // 7:30:00
+        sprintf('%d:%02d', $currentHour, $currentMinute)         // 7:30
+    ];
+
     // Get users who need weather notification at this time
+    // Use TIME() function for more flexible matching
     $stmt = $db->prepare("
-        SELECT 
+        SELECT
             wns.user_id,
             wns.notification_time,
             wns.voice_enabled,
@@ -37,15 +48,25 @@ try {
         FROM weather_notification_schedule wns
         JOIN users u ON wns.user_id = u.id
         WHERE wns.enabled = 1
-          AND wns.notification_time = ?
+          AND (
+              TIME(wns.notification_time) = TIME(?)
+              OR wns.notification_time IN (?, ?, ?, ?)
+              OR TIME_FORMAT(wns.notification_time, '%H:%i') = ?
+          )
           AND (wns.last_sent IS NULL OR DATE(wns.last_sent) < CURDATE())
           AND u.status = 'active'
     ");
-    $stmt->execute([$currentTime]);
+    $timeFormatted = sprintf('%02d:%02d:00', $currentHour, $currentMinute);
+    $timeShort = sprintf('%02d:%02d', $currentHour, $currentMinute);
+    $stmt->execute([
+        $timeFormatted,
+        $timePatterns[0], $timePatterns[1], $timePatterns[2], $timePatterns[3],
+        $timeShort
+    ]);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
+
     if (empty($users)) {
-        echo "No users scheduled for $currentTime\n";
+        echo "No users scheduled for $timeShort\n";
         exit(0);
     }
     
