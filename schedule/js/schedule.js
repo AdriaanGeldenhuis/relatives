@@ -408,6 +408,10 @@ async function addEvent(event) {
     const repeatRule = recurringCheckbox.checked ? repeatRuleSelect.value : null;
     const focusMode = focusModeCheckbox.checked ? 1 : 0;
 
+    // Get selected color
+    const colorRadio = document.querySelector('input[name="eventColor"]:checked');
+    const color = colorRadio ? colorRadio.value : '#667eea';
+
     if (!title || !eventDate || !start || !end) {
         showToast('Please fill all required fields', 'error');
         return;
@@ -434,7 +438,8 @@ async function addEvent(event) {
             kind: type,
             reminder_minutes: reminderMinutes,
             repeat_rule: repeatRule,
-            focus_mode: focusMode
+            focus_mode: focusMode,
+            color: color
         });
         
         if (result.conflict) {
@@ -636,6 +641,13 @@ function editEvent(eventId) {
     // Populate focus mode
     document.getElementById('editFocusMode').checked = eventData.focus_mode == 1;
 
+    // Populate color picker
+    const eventColor = eventData.color || '#667eea';
+    const colorRadios = document.querySelectorAll('input[name="editEventColor"]');
+    colorRadios.forEach(radio => {
+        radio.checked = (radio.value === eventColor);
+    });
+
     showModal('editEventModal');
 }
 
@@ -661,6 +673,10 @@ async function saveEditedEvent(event) {
     const reminderMinutes = reminderCheckbox.checked ? parseInt(reminderMinutesInput.value || 15) : 0;
     const repeatRule = recurringCheckbox.checked ? repeatRuleSelect.value : null;
     const focusMode = focusModeCheckbox.checked ? 1 : 0;
+
+    // Get selected color
+    const colorRadio = document.querySelector('input[name="editEventColor"]:checked');
+    const color = colorRadio ? colorRadio.value : '#667eea';
 
     if (!title || !eventDate || !start || !end) {
         showToast('Please fill all required fields', 'error');
@@ -692,7 +708,8 @@ async function saveEditedEvent(event) {
             assigned_to: assignedTo || null,
             reminder_minutes: reminderMinutes,
             repeat_rule: repeatRule,
-            focus_mode: focusMode
+            focus_mode: focusMode,
+            color: color
         });
 
         showToast('Event updated!', 'success');

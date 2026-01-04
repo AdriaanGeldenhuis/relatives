@@ -42,19 +42,17 @@ try {
     $familyMembers = [];
 }
 
-// Get events for selected date
+// Get events for selected date - USING UNIFIED EVENTS TABLE
 $events = [];
 try {
-    // Debug: Log what we're querying
-    error_log("Schedule PAGE - Loading events for family_id={$user['family_id']}, date=$selectedDate");
-
     $stmt = $db->prepare("
         SELECT
             e.*,
+            e.recurrence_rule as repeat_rule,
             u.full_name as added_by_name, u.avatar_color,
             a.full_name as assigned_to_name, a.avatar_color as assigned_color
-        FROM schedule_events e
-        LEFT JOIN users u ON e.added_by = u.id
+        FROM events e
+        LEFT JOIN users u ON e.created_by = u.id
         LEFT JOIN users a ON e.assigned_to = a.id
         WHERE e.family_id = ?
         AND DATE(e.starts_at) = ?
@@ -63,15 +61,8 @@ try {
     ");
     $stmt->execute([$user['family_id'], $selectedDate]);
     $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    // Debug: Log result count
-    error_log("Schedule PAGE - Found " . count($events) . " events");
 } catch (PDOException $e) {
     error_log("Schedule - Get events error: " . $e->getMessage());
-    // If table doesn't exist, show helpful error
-    if (strpos($e->getMessage(), "doesn't exist") !== false) {
-        die("<h1 style='color:red;text-align:center;margin-top:100px;'>⚠️ Database Error: schedule_events table missing!<br><br>Please run /schedule/setup/create_tables.sql first</h1>");
-    }
     $events = [];
 }
 
@@ -117,13 +108,13 @@ $focusStats = ['total' => 0, 'done' => 0, 'minutes' => 0, 'rating' => 0];
 
 try {
     $stmt = $db->prepare("
-        SELECT 
+        SELECT
             kind,
             COUNT(*) as total,
             SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done,
             SUM(TIMESTAMPDIFF(MINUTE, starts_at, ends_at)) as total_minutes,
             AVG(productivity_rating) as avg_rating
-        FROM schedule_events
+        FROM events
         WHERE family_id = ?
         AND DATE(starts_at) BETWEEN ? AND ?
         AND status != 'cancelled'
@@ -167,7 +158,7 @@ try {
 $activeFocusSession = null;
 try {
     $stmt = $db->prepare("
-        SELECT * FROM schedule_events
+        SELECT * FROM events
         WHERE user_id = ?
         AND status = 'in_progress'
         AND focus_mode = 1
@@ -591,7 +582,31 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <option value="todo">✅ To-Do</option>
                         <option value="focus">🎯 Focus</option>
                         <option value="break">☕ Break</option>
+                        <option value="birthday">🎂 Birthday</option>
                     </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Color</label>
+                    <div class="color-picker">
+                        <input type="radio" name="eventColor" value="#667eea" id="add_color1" checked>
+                        <label for="add_color1" class="color-option" style="background: #667eea;" title="Purple"></label>
+
+                        <input type="radio" name="eventColor" value="#43e97b" id="add_color2">
+                        <label for="add_color2" class="color-option" style="background: #43e97b;" title="Green"></label>
+
+                        <input type="radio" name="eventColor" value="#f093fb" id="add_color3">
+                        <label for="add_color3" class="color-option" style="background: #f093fb;" title="Pink"></label>
+
+                        <input type="radio" name="eventColor" value="#feca57" id="add_color4">
+                        <label for="add_color4" class="color-option" style="background: #feca57;" title="Yellow"></label>
+
+                        <input type="radio" name="eventColor" value="#4facfe" id="add_color5">
+                        <label for="add_color5" class="color-option" style="background: #4facfe;" title="Blue"></label>
+
+                        <input type="radio" name="eventColor" value="#e74c3c" id="add_color6">
+                        <label for="add_color6" class="color-option" style="background: #e74c3c;" title="Red"></label>
+                    </div>
                 </div>
 
                 <div class="form-options-group">
@@ -691,6 +706,29 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <div class="form-group">
                     <label>Notes</label>
                     <textarea id="editEventNotes" class="form-control" rows="3" placeholder="Optional notes..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Color</label>
+                    <div class="color-picker">
+                        <input type="radio" name="editEventColor" value="#667eea" id="edit_color1" checked>
+                        <label for="edit_color1" class="color-option" style="background: #667eea;" title="Purple"></label>
+
+                        <input type="radio" name="editEventColor" value="#43e97b" id="edit_color2">
+                        <label for="edit_color2" class="color-option" style="background: #43e97b;" title="Green"></label>
+
+                        <input type="radio" name="editEventColor" value="#f093fb" id="edit_color3">
+                        <label for="edit_color3" class="color-option" style="background: #f093fb;" title="Pink"></label>
+
+                        <input type="radio" name="editEventColor" value="#feca57" id="edit_color4">
+                        <label for="edit_color4" class="color-option" style="background: #feca57;" title="Yellow"></label>
+
+                        <input type="radio" name="editEventColor" value="#4facfe" id="edit_color5">
+                        <label for="edit_color5" class="color-option" style="background: #4facfe;" title="Blue"></label>
+
+                        <input type="radio" name="editEventColor" value="#e74c3c" id="edit_color6">
+                        <label for="edit_color6" class="color-option" style="background: #e74c3c;" title="Red"></label>
+                    </div>
                 </div>
 
                 <div class="form-options-group">
