@@ -1292,15 +1292,17 @@ class WeatherWidget {
                                 <div class="dhc-icon">${this.getWeatherEmoji(hour.condition)}</div>
                                 <div class="dhc-temp">${hour.temperature}°</div>
                                 <div class="dhc-details">
-                                    <div class="dhc-detail"><span>Feels Like</span><span>${hour.feels_like}°</span></div>
+                                    <div class="dhc-detail"><span>🌡️ Feels Like</span><span>${hour.feels_like}°</span></div>
                                     <div class="dhc-detail"><span>💧 Humidity</span><span>${hour.humidity}%</span></div>
-                                    <div class="dhc-detail"><span>💨 Wind</span><span>${hour.wind_speed} km/h</span></div>
-                                    <div class="dhc-detail"><span>🧭 Direction</span><span>${this.getWindDirection(hour.wind_direction)}</span></div>
+                                    <div class="dhc-detail"><span>💨 Wind</span><span>${hour.wind_speed} km/h ${this.getWindDirection(hour.wind_direction)}</span></div>
                                     ${hour.wind_gust ? `<div class="dhc-detail"><span>💨 Gusts</span><span>${hour.wind_gust} km/h</span></div>` : ''}
-                                    <div class="dhc-detail"><span>🌧️ Rain</span><span>${hour.precipitation}%</span></div>
+                                    <div class="dhc-detail"><span>🌧️ Rain Chance</span><span>${hour.precipitation}%</span></div>
+                                    ${hour.rain_mm > 0 ? `<div class="dhc-detail"><span>☔ Rain</span><span>${hour.rain_mm} mm</span></div>` : ''}
+                                    ${hour.snow_mm > 0 ? `<div class="dhc-detail"><span>❄️ Snow</span><span>${hour.snow_mm} mm</span></div>` : ''}
                                     <div class="dhc-detail"><span>☁️ Clouds</span><span>${hour.clouds}%</span></div>
                                     <div class="dhc-detail"><span>👁️ Visibility</span><span>${hour.visibility} km</span></div>
                                     <div class="dhc-detail"><span>🌡️ Pressure</span><span>${hour.pressure} hPa</span></div>
+                                    ${hour.dew_point !== undefined ? `<div class="dhc-detail"><span>💦 Dew Point</span><span>${hour.dew_point}°</span></div>` : ''}
                                 </div>
                             </div>
                         `).join('')}

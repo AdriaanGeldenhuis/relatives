@@ -357,6 +357,25 @@ function getDetailedForecast($db) {
     
     foreach ($apiData['list'] as $item) {
         if (date('Y-m-d', $item['dt']) === $date) {
+            // Get rain/snow amounts if available
+            $rainMm = 0;
+            $snowMm = 0;
+            if (isset($item['rain']['3h'])) {
+                $rainMm = round($item['rain']['3h'], 1);
+            } elseif (isset($item['rain']['1h'])) {
+                $rainMm = round($item['rain']['1h'], 1);
+            }
+            if (isset($item['snow']['3h'])) {
+                $snowMm = round($item['snow']['3h'], 1);
+            } elseif (isset($item['snow']['1h'])) {
+                $snowMm = round($item['snow']['1h'], 1);
+            }
+
+            // Calculate dew point
+            $temp = $item['main']['temp'];
+            $humidity = $item['main']['humidity'];
+            $dewPoint = round($temp - ((100 - $humidity) / 5));
+
             $hourlyData[] = [
                 'time' => date('H:i', $item['dt']),
                 'timestamp' => $item['dt'],
@@ -373,8 +392,11 @@ function getDetailedForecast($db) {
                 'wind_direction' => $item['wind']['deg'],
                 'wind_gust' => isset($item['wind']['gust']) ? round($item['wind']['gust'] * 3.6) : null,
                 'precipitation' => round(($item['pop'] ?? 0) * 100),
+                'rain_mm' => $rainMm,
+                'snow_mm' => $snowMm,
                 'clouds' => $item['clouds']['all'],
-                'visibility' => isset($item['visibility']) ? round($item['visibility'] / 1000, 1) : 10
+                'visibility' => isset($item['visibility']) ? round($item['visibility'] / 1000, 1) : 10,
+                'dew_point' => $dewPoint
             ];
         }
     }

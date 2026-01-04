@@ -974,17 +974,17 @@ body {
 .dhc-details {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-xs) var(--space-md);
+    gap: var(--space-sm) var(--space-lg);
 }
 
 .dhc-detail {
     display: flex;
     gap: var(--space-xs);
-    font-size: 0.7rem;
+    font-size: 0.85rem;
 }
 
 .dhc-detail span:first-child { color: rgba(255, 255, 255, 0.6); }
-.dhc-detail span:last-child { font-weight: 700; }
+.dhc-detail span:last-child { font-weight: 700; color: white; }
 
 /* ============================================
    AI INSIGHTS
@@ -1106,13 +1106,13 @@ body {
 
     .dhc-details {
         justify-content: center;
-        gap: var(--space-xs);
+        gap: var(--space-sm) var(--space-md);
         margin-top: var(--space-xs);
         padding-top: var(--space-xs);
         border-top: 1px solid var(--glass-border);
     }
 
-    .dhc-detail { font-size: 0.65rem; }
+    .dhc-detail { font-size: 0.8rem; }
 
     /* Forecast cards smaller */
     .forecast-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: var(--space-sm); }
