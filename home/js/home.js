@@ -241,24 +241,37 @@ class HomeWeatherWidget {
     
     async loadWeather() {
         if (!this.location) return;
-        
+
         try {
-            const url = `/weather/api/api.php?action=current&lat=${this.location.lat}&lon=${this.location.lng}`;
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+            // Fetch current weather and forecast in parallel
+            const [currentRes, forecastRes] = await Promise.all([
+                fetch(`/weather/api/api.php?action=current&lat=${this.location.lat}&lon=${this.location.lng}`),
+                fetch(`/weather/api/api.php?action=forecast&lat=${this.location.lat}&lon=${this.location.lng}`)
+            ]);
+
+            if (!currentRes.ok) {
+                throw new Error(`HTTP ${currentRes.status}`);
             }
-            
-            const data = await response.json();
-            
+
+            const data = await currentRes.json();
+
             if (data.error) {
                 throw new Error(data.error);
             }
-            
+
             this.weatherData = data;
+
+            // Get today's high/low from forecast
+            if (forecastRes.ok) {
+                const forecastData = await forecastRes.json();
+                if (forecastData.forecast && forecastData.forecast[0]) {
+                    this.weatherData.temp_high = forecastData.forecast[0].temp_max;
+                    this.weatherData.temp_low = forecastData.forecast[0].temp_min;
+                }
+            }
+
             this.render();
-            
+
             console.log('✅ Weather loaded:', data);
         } catch (error) {
             console.error('Weather load error:', error);
@@ -299,9 +312,15 @@ class HomeWeatherWidget {
                         <div class="wwc-temp-group">
                             <div class="wwc-temp">${weather.temperature}°</div>
                             <div class="wwc-feels">Feels like ${weather.feels_like}°</div>
+                            ${weather.temp_high !== undefined ? `
+                            <div class="wwc-hilo">
+                                <span class="wwc-hi">H: ${weather.temp_high}°</span>
+                                <span class="wwc-lo">L: ${weather.temp_low}°</span>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
-                    
+
                     <div class="wwc-description">${weather.description}</div>
                     
                     <div class="wwc-details-grid">

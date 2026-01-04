@@ -508,6 +508,25 @@ body {
     color: rgba(255, 255, 255, 0.6);
 }
 
+.wwc-hilo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-top: 0.25rem;
+}
+
+.wwc-hi {
+    color: #ff8a65;
+    text-shadow: 0 0 8px rgba(255, 138, 101, 0.4);
+}
+
+.wwc-lo {
+    color: #64b5f6;
+    text-shadow: 0 0 8px rgba(100, 181, 246, 0.4);
+}
+
 .wwc-description {
     font-size: 1.25rem;
     font-weight: 500;
