@@ -52,7 +52,7 @@ body {
 }
 
 /* ============================================
-   BACKGROUND - FIXED
+   STATIC BACKGROUND
    ============================================ */
 
 .bg-animation {
@@ -63,72 +63,15 @@ body {
     height: 100%;
     z-index: 0;
     pointer-events: none;
+    background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
 }
 
 .bg-gradient {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    background:
-        radial-gradient(ellipse at 20% 20%, rgba(102, 126, 234, 0.4) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 80%, rgba(118, 75, 162, 0.4) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 50%, rgba(240, 147, 251, 0.3) 0%, transparent 50%),
-        linear-gradient(180deg, #0f0c29 0%, #000000 50%, #24243e 100%);
-    background-size: 200% 200%;
-    animation: auroraFlow 20s ease infinite;
-}
-
-@keyframes auroraFlow {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
+    display: none;
 }
 
 #particles {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    opacity: 0.4;
-}
-
-/* Floating Orbs */
-.bg-animation::before,
-.bg-animation::after {
-    content: '';
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.3;
-    animation: floatOrb 15s ease-in-out infinite;
-}
-
-.bg-animation::before {
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(circle, #667eea, transparent);
-    top: -250px;
-    left: -250px;
-    animation-delay: -7s;
-}
-
-.bg-animation::after {
-    width: 400px;
-    height: 400px;
-    background: radial-gradient(circle, #f093fb, transparent);
-    bottom: -200px;
-    right: -200px;
-    animation-delay: -3s;
-}
-
-@keyframes floatOrb {
-    0%, 100% {
-        transform: translate(0, 0) scale(1);
-    }
-    33% {
-        transform: translate(100px, -100px) scale(1.1);
-    }
-    66% {
-        transform: translate(-100px, 100px) scale(0.9);
-    }
+    display: none;
 }
 
 /* ============================================
@@ -154,8 +97,8 @@ body {
 
 .glass-card {
     background: var(--shopping-glass-medium);
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--shopping-glass-border);
     border-radius: var(--shopping-radius-lg);
     box-shadow: var(--shopping-shadow-md);
@@ -173,26 +116,14 @@ body {
 
 .hero-section {
     margin-bottom: var(--shopping-space-xl);
-    animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     z-index: 1;
 }
 
-@keyframes fadeInUp {
-    from {
-        transform: translateY(40px);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
-
 .greeting-card {
     background: var(--shopping-glass-medium);
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--shopping-glass-border);
     border-radius: var(--shopping-radius-lg);
     padding: var(--shopping-space-xl);
@@ -200,28 +131,6 @@ body {
     box-shadow: var(--shopping-shadow-lg);
     position: relative;
     overflow: hidden;
-    animation: heroFloat 6s ease-in-out infinite;
-}
-
-@keyframes heroFloat {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-}
-
-.greeting-card::before {
-    content: '';
-    position: absolute;
-    inset: -200%;
-    background: conic-gradient(
-        from 0deg,
-        transparent 0deg 330deg,
-        rgba(255, 255, 255, 0.15) 330deg 360deg
-    );
-    animation: heroShine 6s linear infinite;
-}
-
-@keyframes heroShine {
-    to { transform: rotate(360deg); }
 }
 
 .greeting-time {
@@ -253,13 +162,6 @@ body {
     font-size: 1.2em;
     margin-right: var(--shopping-space-sm);
     filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.3));
-    animation: greetingIconBounce 2s ease-in-out infinite;
-}
-
-@keyframes greetingIconBounce {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    25% { transform: translateY(-10px) rotate(-5deg); }
-    75% { transform: translateY(-5px) rotate(5deg); }
 }
 
 .greeting-name {
@@ -268,12 +170,6 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    background-size: 200% auto;
-    animation: nameShimmer 4s linear infinite;
-}
-
-@keyframes nameShimmer {
-    to { background-position: 200% center; }
 }
 
 .greeting-subtitle {
@@ -301,14 +197,12 @@ body {
 
 .quick-action-btn {
     background: var(--shopping-glass-medium);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--shopping-glass-border);
     border-radius: var(--shopping-radius-md);
     padding: var(--shopping-space-sm) var(--shopping-space-md);
     color: white;
     cursor: pointer;
-    transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    transition: var(--shopping-transition);
     display: flex;
     align-items: center;
     gap: var(--shopping-space-xs);
@@ -336,17 +230,11 @@ body {
 .quick-action-btn.has-bought {
     background: linear-gradient(135deg, rgba(67, 233, 123, 0.25), rgba(56, 249, 215, 0.25));
     border-color: rgba(67, 233, 123, 0.5);
-    animation: pulse-bought 2s infinite;
 }
 
 .quick-action-btn.has-bought:hover {
     background: linear-gradient(135deg, rgba(67, 233, 123, 0.4), rgba(56, 249, 215, 0.4));
     border-color: var(--shopping-success);
-}
-
-@keyframes pulse-bought {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(67, 233, 123, 0.4); }
-    50% { box-shadow: 0 0 0 8px rgba(67, 233, 123, 0); }
 }
 
 .quick-action-btn:disabled {
@@ -417,8 +305,6 @@ body {
 .list-tab,
 .list-tab-add {
     background: var(--shopping-glass-medium);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--shopping-glass-border);
     border-radius: var(--shopping-radius-md);
     padding: var(--shopping-space-xs) var(--shopping-space-sm);
@@ -915,22 +801,7 @@ body {
 }
 
 .progress-fill::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(90deg, 
-        transparent, 
-        rgba(255, 255, 255, 0.3), 
-        transparent);
-    animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
+    display: none;
 }
 
 .action-buttons {
@@ -1236,30 +1107,18 @@ body {
 
 .modal-content {
     background: var(--shopping-glass-heavy);
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--shopping-glass-border);
     border-radius: var(--shopping-radius-lg);
     width: 100%;
     max-width: 500px;
     max-height: 90vh;
     overflow-y: auto;
-    animation: modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modal-content.modal-large {
     max-width: 800px;
-}
-
-@keyframes modalSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(30px) scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
 }
 
 .modal-header {
@@ -1645,8 +1504,8 @@ body {
     right: 20px;
     left: 20px;
     background: var(--shopping-glass-heavy);
-    backdrop-filter: blur(40px);
-    -webkit-backdrop-filter: blur(40px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--shopping-glass-border);
     border-radius: var(--shopping-radius-sm);
     padding: var(--shopping-space-md);
@@ -1655,7 +1514,7 @@ body {
     z-index: 10001;
     transform: translateY(100px);
     opacity: 0;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s ease;
     max-width: 400px;
     margin: 0 auto;
     box-shadow: var(--shopping-shadow-lg);

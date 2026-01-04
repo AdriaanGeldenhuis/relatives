@@ -70,71 +70,22 @@ html, body {
 }
 
 /* ============================================
-   ANIMATED BACKGROUND
+   STATIC BACKGROUND - Performance optimized
    ============================================ */
 .bg-animation {
     position: fixed;
     inset: 0;
     z-index: -1;
-    overflow: hidden;
     pointer-events: none;
+    background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
 }
 
 .bg-gradient {
-    position: absolute;
-    inset: 0;
-    background: 
-        radial-gradient(ellipse at 20% 20%, rgba(102, 126, 234, 0.4) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 80%, rgba(118, 75, 162, 0.4) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 50%, rgba(240, 147, 251, 0.3) 0%, transparent 50%),
-        linear-gradient(180deg, #0f0c29 0%, #000000 50%, #24243e 100%);
-    background-size: 200% 200%;
-    animation: auroraFlow 20s ease infinite;
-}
-
-@keyframes auroraFlow {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
+    display: none;
 }
 
 #particles {
-    position: absolute;
-    inset: 0;
-    opacity: 0.4;
-}
-
-.bg-animation::before,
-.bg-animation::after {
-    content: '';
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.3;
-    animation: floatOrb 15s ease-in-out infinite;
-}
-
-.bg-animation::before {
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(circle, #667eea, transparent);
-    top: -250px;
-    left: -250px;
-    animation-delay: -7s;
-}
-
-.bg-animation::after {
-    width: 400px;
-    height: 400px;
-    background: radial-gradient(circle, #f093fb, transparent);
-    bottom: -200px;
-    right: -200px;
-    animation-delay: -3s;
-}
-
-@keyframes floatOrb {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(100px, -100px) scale(1.1); }
-    66% { transform: translate(-100px, 100px) scale(0.9); }
+    display: none;
 }
 
 /* ============================================
@@ -165,8 +116,8 @@ html, body {
    ============================================ */
 .messages-container {
     background: var(--glass-medium);
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-xl);
@@ -232,12 +183,6 @@ html, body {
     border-radius: var(--radius-full);
     background: #43e97b;
     box-shadow: 0 0 12px #43e97b;
-    animation: statusPulse 2s ease-in-out infinite;
-}
-
-@keyframes statusPulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
 }
 
 .status-indicator.offline {
@@ -687,7 +632,7 @@ html, body {
 
 .message-action-btn {
     background: var(--glass-heavy);
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     width: 32px;
@@ -696,7 +641,7 @@ html, body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all var(--transition-bounce);
+    transition: all var(--transition-base);
     font-size: 1rem;
     color: white;
     box-shadow: var(--shadow-md);
@@ -734,16 +679,6 @@ html, body {
     height: 8px;
     background: rgba(255, 255, 255, 0.6);
     border-radius: var(--radius-full);
-    animation: typingDot 1.4s ease-in-out infinite;
-}
-
-.typing-dots span:nth-child(1) { animation-delay: 0s; }
-.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes typingDot {
-    0%, 60%, 100% { transform: translateY(0); }
-    30% { transform: translateY(-10px); }
 }
 
 /* ============================================
@@ -916,26 +851,14 @@ html, body {
     right: var(--space-xl);
     margin-bottom: var(--space-sm);
     background: var(--glass-heavy);
-    backdrop-filter: blur(40px);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     padding: var(--space-md);
     box-shadow: var(--shadow-xl);
     z-index: 100;
-    animation: popIn 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     max-height: 350px;
     overflow-y: auto;
-}
-
-@keyframes popIn {
-    from {
-        transform: scale(0.8) translateY(20px);
-        opacity: 0;
-    }
-    to {
-        transform: scale(1) translateY(0);
-        opacity: 1;
-    }
 }
 
 .emoji-grid {
@@ -1013,14 +936,13 @@ html, body {
 .context-menu {
     position: fixed;
     background: var(--glass-heavy);
-    backdrop-filter: blur(40px);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     padding: var(--space-xs);
     box-shadow: var(--shadow-xl);
     z-index: 1000;
     min-width: 160px;
-    animation: popIn 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
 .context-menu button {
@@ -1153,7 +1075,6 @@ html, body {
     height: 10px;
     border-radius: 50%;
     background: #ff9800;
-    animation: statusPulse 1.5s ease-in-out infinite;
 }
 
 .connection-status.connected {

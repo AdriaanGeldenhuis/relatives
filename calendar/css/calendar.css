@@ -71,77 +71,23 @@ body {
 }
 
 /* ============================================
-   ANIMATED BACKGROUND
+   STATIC BACKGROUND - Performance optimized
    ============================================ */
 
 .bg-animation {
     position: fixed;
     inset: 0;
     z-index: -1;
-    overflow: hidden;
+    pointer-events: none;
+    background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
 }
 
 .bg-gradient {
-    position: absolute;
-    inset: 0;
-    background: 
-        radial-gradient(ellipse at 20% 20%, rgba(102, 126, 234, 0.4) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 80%, rgba(118, 75, 162, 0.4) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 50%, rgba(240, 147, 251, 0.3) 0%, transparent 50%),
-        linear-gradient(180deg, #0f0c29 0%, #000000 50%, #24243e 100%);
-    background-size: 200% 200%;
-    animation: auroraFlow 20s ease infinite;
-}
-
-@keyframes auroraFlow {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
+    display: none;
 }
 
 #particles {
-    position: absolute;
-    inset: 0;
-    opacity: 0.4;
-}
-
-.bg-animation::before,
-.bg-animation::after {
-    content: '';
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.3;
-    animation: floatOrb 15s ease-in-out infinite;
-}
-
-.bg-animation::before {
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(circle, #667eea, transparent);
-    top: -250px;
-    left: -250px;
-    animation-delay: -7s;
-}
-
-.bg-animation::after {
-    width: 400px;
-    height: 400px;
-    background: radial-gradient(circle, #f093fb, transparent);
-    bottom: -200px;
-    right: -200px;
-    animation-delay: -3s;
-}
-
-@keyframes floatOrb {
-    0%, 100% {
-        transform: translate(0, 0) scale(1);
-    }
-    33% {
-        transform: translate(100px, -100px) scale(1.1);
-    }
-    66% {
-        transform: translate(-100px, 100px) scale(0.9);
-    }
+    display: none;
 }
 
 /* ============================================
@@ -181,8 +127,8 @@ body {
 
 .greeting-card {
     background: var(--glass-medium);
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     padding: var(--space-xl) var(--space-lg);
@@ -190,28 +136,6 @@ body {
     box-shadow: var(--shadow-xl);
     position: relative;
     overflow: hidden;
-    animation: heroFloat 6s ease-in-out infinite;
-}
-
-@keyframes heroFloat {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-}
-
-.greeting-card::before {
-    content: '';
-    position: absolute;
-    inset: -200%;
-    background: conic-gradient(
-        from 0deg,
-        transparent 0deg 330deg,
-        rgba(255, 255, 255, 0.15) 330deg 360deg
-    );
-    animation: heroShine 6s linear infinite;
-}
-
-@keyframes heroShine {
-    to { transform: rotate(360deg); }
 }
 
 /* Schedule-like Hero Styling */
@@ -244,13 +168,6 @@ body {
     font-size: 1.2em;
     margin-right: var(--space-sm);
     filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.3));
-    animation: greetingIconBounce 2s ease-in-out infinite;
-}
-
-@keyframes greetingIconBounce {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    25% { transform: translateY(-10px) rotate(-5deg); }
-    75% { transform: translateY(-5px) rotate(5deg); }
 }
 
 .greeting-name {
@@ -259,12 +176,6 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    background-size: 200% auto;
-    animation: nameShimmer 4s linear infinite;
-}
-
-@keyframes nameShimmer {
-    to { background-position: 200% center; }
 }
 
 .greeting-subtitle {
@@ -283,16 +194,6 @@ body {
     font-size: 3rem;
     margin-bottom: var(--space-md);
     filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.3));
-    animation: iconFloat 4s ease-in-out infinite;
-}
-
-@keyframes iconFloat {
-    0%, 100% {
-        transform: translateY(0) rotate(0deg);
-    }
-    50% {
-        transform: translateY(-10px) rotate(5deg);
-    }
 }
 
 .hero-title {
@@ -314,8 +215,6 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    background-size: 200% auto;
-    animation: nameShimmer 4s linear infinite;
 }
 
 .hero-subtitle {
@@ -1102,8 +1001,8 @@ body {
 
 .glass-card {
     background: var(--glass-medium);
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
@@ -1141,7 +1040,7 @@ body {
 
 .modal-content {
     background: var(--glass-heavy);
-    backdrop-filter: blur(40px) saturate(180%);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     width: 100%;
@@ -1181,7 +1080,7 @@ body {
     position: sticky;
     top: 0;
     background: var(--glass-heavy);
-    backdrop-filter: blur(40px);
+    backdrop-filter: blur(12px);
     z-index: 10;
 }
 
@@ -1345,7 +1244,7 @@ textarea.form-control {
     left: 20px;
     right: 20px;
     background: var(--glass-heavy);
-    backdrop-filter: blur(40px);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     padding: var(--space-md) var(--space-lg);
@@ -1355,7 +1254,7 @@ textarea.form-control {
     z-index: 10001;
     transform: translateY(200px);
     opacity: 0;
-    transition: all var(--transition-bounce);
+    transition: all var(--transition-base);
 }
 
 .calendar-toast.show {

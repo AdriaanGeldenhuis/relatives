@@ -8,145 +8,14 @@
 console.log('%c⏰ Enhanced Schedule Loading v3.0...', 'font-size: 16px; font-weight: bold; color: #667eea;');
 
 // ============================================
-// PARTICLE SYSTEM (Same as notes)
+// PARTICLE SYSTEM - DISABLED FOR PERFORMANCE
+// Canvas hidden via CSS, class is a no-op stub
 // ============================================
 class ParticleSystem {
     constructor(canvasId) {
-        this.canvas = document.getElementById(canvasId);
-        if (!this.canvas) return;
-        
-        this.ctx = this.canvas.getContext('2d');
-        this.particles = [];
-        this.particleCount = Math.min(150, Math.floor(window.innerWidth / 8));
-        this.mouse = { x: null, y: null, radius: 180 };
-        this.connectionDistance = 120;
-        this.animationId = null;
-        this.isDestroyed = false;
-        
-        this.resize();
-        this.init();
-        this.animate();
-        
-        this.resizeHandler = () => this.resize();
-        this.mouseMoveHandler = (e) => {
-            this.mouse.x = e.clientX;
-            this.mouse.y = e.clientY;
-        };
-        this.mouseLeaveHandler = () => {
-            this.mouse.x = null;
-            this.mouse.y = null;
-        };
-        
-        window.addEventListener('resize', this.resizeHandler);
-        window.addEventListener('mousemove', this.mouseMoveHandler);
-        document.addEventListener('mouseleave', this.mouseLeaveHandler);
+        // Disabled - canvas hidden via CSS for performance
     }
-    
-    resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-        this.particleCount = Math.min(150, Math.floor(window.innerWidth / 8));
-    }
-    
-    init() {
-        this.particles = [];
-        const colors = [
-            'rgba(102, 126, 234, ',
-            'rgba(118, 75, 162, ',
-            'rgba(240, 147, 251, ',
-            'rgba(79, 172, 254, '
-        ];
-        
-        for (let i = 0; i < this.particleCount; i++) {
-            const baseColor = colors[Math.floor(Math.random() * colors.length)];
-            this.particles.push({
-                x: Math.random() * this.canvas.width,
-                y: Math.random() * this.canvas.height,
-                size: Math.random() * 3 + 1,
-                baseSize: Math.random() * 3 + 1,
-                speedX: (Math.random() - 0.5) * 0.8,
-                speedY: (Math.random() - 0.5) * 0.8,
-                baseColor: baseColor,
-                opacity: Math.random() * 0.5 + 0.3
-            });
-        }
-    }
-    
-    animate() {
-        if (this.isDestroyed) return;
-        
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        this.particles.forEach((particle, index) => {
-            particle.x += particle.speedX;
-            particle.y += particle.speedY;
-            
-            if (particle.x > this.canvas.width || particle.x < 0) particle.speedX *= -1;
-            if (particle.y > this.canvas.height || particle.y < 0) particle.speedY *= -1;
-            
-            if (this.mouse.x !== null && this.mouse.y !== null) {
-                const dx = this.mouse.x - particle.x;
-                const dy = this.mouse.y - particle.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance < this.mouse.radius) {
-                    const force = (this.mouse.radius - distance) / this.mouse.radius;
-                    const angle = Math.atan2(dy, dx);
-                    particle.x -= Math.cos(angle) * force * 3;
-                    particle.y -= Math.sin(angle) * force * 3;
-                    particle.size = particle.baseSize * (1 + force * 0.5);
-                } else {
-                    particle.size += (particle.baseSize - particle.size) * 0.1;
-                }
-            } else {
-                particle.size = particle.baseSize;
-            }
-            
-            this.ctx.beginPath();
-            this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-            
-            const gradient = this.ctx.createRadialGradient(
-                particle.x, particle.y, 0,
-                particle.x, particle.y, particle.size * 3
-            );
-            gradient.addColorStop(0, particle.baseColor + particle.opacity + ')');
-            gradient.addColorStop(1, particle.baseColor + '0)');
-            
-            this.ctx.fillStyle = gradient;
-            this.ctx.fill();
-            
-            for (let j = index + 1; j < this.particles.length; j++) {
-                const other = this.particles[j];
-                const dx2 = other.x - particle.x;
-                const dy2 = other.y - particle.y;
-                const distance2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-                
-                if (distance2 < this.connectionDistance) {
-                    const opacity = (1 - distance2 / this.connectionDistance) * 0.3;
-                    this.ctx.beginPath();
-                    this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
-                    this.ctx.lineWidth = 1;
-                    this.ctx.moveTo(particle.x, particle.y);
-                    this.ctx.lineTo(other.x, other.y);
-                    this.ctx.stroke();
-                }
-            }
-        });
-        
-        this.animationId = requestAnimationFrame(() => this.animate());
-    }
-    
-    destroy() {
-        this.isDestroyed = true;
-        if (this.animationId) {
-            cancelAnimationFrame(this.animationId);
-        }
-        window.removeEventListener('resize', this.resizeHandler);
-        window.removeEventListener('mousemove', this.mouseMoveHandler);
-        document.removeEventListener('mouseleave', this.mouseLeaveHandler);
-        this.particles = [];
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    }
+    destroy() {}
 }
 
 // ============================================
