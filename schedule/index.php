@@ -45,21 +45,27 @@ try {
 // Get events for selected date
 $events = [];
 try {
+    // Debug: Log what we're querying
+    error_log("Schedule PAGE - Loading events for family_id={$user['family_id']}, date=$selectedDate");
+
     $stmt = $db->prepare("
-        SELECT 
+        SELECT
             e.*,
             u.full_name as added_by_name, u.avatar_color,
             a.full_name as assigned_to_name, a.avatar_color as assigned_color
         FROM schedule_events e
         LEFT JOIN users u ON e.added_by = u.id
         LEFT JOIN users a ON e.assigned_to = a.id
-        WHERE e.family_id = ? 
+        WHERE e.family_id = ?
         AND DATE(e.starts_at) = ?
         AND e.status != 'cancelled'
         ORDER BY e.starts_at ASC
     ");
     $stmt->execute([$user['family_id'], $selectedDate]);
     $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Debug: Log result count
+    error_log("Schedule PAGE - Found " . count($events) . " events");
 } catch (PDOException $e) {
     error_log("Schedule - Get events error: " . $e->getMessage());
     // If table doesn't exist, show helpful error
