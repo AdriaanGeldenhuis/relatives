@@ -1,7 +1,10 @@
 <?php
 /**
- * Schedule Events API - Enhanced Version
+ * Schedule Events API - UNIFIED VERSION
+ * Uses the single 'events' table as source of truth
  * Handles all event operations with productivity tracking
+ *
+ * FIXED: No longer uses schedule_events - everything goes to events table
  */
 
 session_start();
@@ -44,7 +47,7 @@ $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 try {
     switch ($action) {
-        
+
         case 'add':
             $title = trim($_POST['title'] ?? '');
             $date = $_POST['date'] ?? date('Y-m-d');
@@ -57,31 +60,28 @@ try {
             $repeatRule = $_POST['repeat_rule'] ?? null;
             $color = $_POST['color'] ?? '#667eea';
             $focusMode = (int)($_POST['focus_mode'] ?? 0);
-
-            // Debug logging
-            error_log("Schedule API ADD - Title: $title, Date: $date, Start: $startTime, End: $endTime, Kind: $kind, FamilyID: {$user['family_id']}, UserID: {$user['id']}");
+            $allDay = (int)($_POST['all_day'] ?? 0);
 
             if (!$title || !$startTime || !$endTime) {
                 throw new Exception('Missing required fields');
             }
 
-            // Validate kind
-            if (!in_array($kind, ['study', 'work', 'todo', 'break', 'focus'])) {
-                throw new Exception('Invalid event type');
+            // Validate kind - expanded to include all types
+            $validKinds = ['study', 'work', 'todo', 'break', 'focus', 'birthday', 'event', 'other'];
+            if (!in_array($kind, $validKinds)) {
+                $kind = 'todo'; // Default fallback
             }
 
             $startsAt = $date . ' ' . $startTime . ':00';
             $endsAt = $date . ' ' . $endTime . ':00';
 
-            // NOTE: Conflict detection removed - users can overlap events if they want
-            // Events should always be allowed to be created
-
+            // Insert into unified events table
             $stmt = $db->prepare("
-                INSERT INTO schedule_events
-                (family_id, user_id, added_by, assigned_to, title, kind, notes,
-                 starts_at, ends_at, color, status, reminder_minutes, repeat_rule,
-                 focus_mode, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NOW())
+                INSERT INTO events
+                (family_id, user_id, created_by, assigned_to, title, kind, notes,
+                 starts_at, ends_at, all_day, color, status, reminder_minutes,
+                 recurrence_rule, focus_mode, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NOW(), NOW())
             ");
 
             $insertResult = $stmt->execute([
@@ -94,6 +94,7 @@ try {
                 $notes ?: null,
                 $startsAt,
                 $endsAt,
+                $allDay,
                 $color,
                 $reminderMinutes > 0 ? $reminderMinutes : null,
                 $repeatRule,
@@ -101,68 +102,20 @@ try {
             ]);
 
             if (!$insertResult) {
-                error_log("Schedule API ADD - INSERT FAILED: " . print_r($stmt->errorInfo(), true));
                 throw new Exception('Failed to insert event into database');
             }
 
             $eventId = $db->lastInsertId();
-            error_log("Schedule API ADD - Success! EventID: $eventId");
-
-            // VERIFY: Check if data actually persisted
-            if (!$eventId || $eventId == 0) {
-                error_log("Schedule API ADD - ERROR: lastInsertId returned 0!");
-                throw new Exception('Insert failed - no ID returned');
-            }
-
-            // Double-check by selecting the inserted row
-            $verifyStmt = $db->prepare("SELECT id, title, starts_at FROM schedule_events WHERE id = ?");
-            $verifyStmt->execute([$eventId]);
-            $verifyRow = $verifyStmt->fetch(PDO::FETCH_ASSOC);
-            if (!$verifyRow) {
-                error_log("Schedule API ADD - ERROR: Could not find inserted row with ID $eventId!");
-                throw new Exception('Insert verification failed - row not found');
-            }
-            error_log("Schedule API ADD - Verified! Row exists: " . json_encode($verifyRow));
-
-            // SYNC: Also insert into the unified 'events' table for calendar view
-            try {
-                $syncStmt = $db->prepare("
-                    INSERT INTO events
-                    (family_id, user_id, created_by, assigned_to, title, notes,
-                     starts_at, ends_at, kind, color, status, reminder_minutes,
-                     recurrence_rule, focus_mode, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NOW(), NOW())
-                ");
-                $syncStmt->execute([
-                    $user['family_id'],
-                    $assignedTo ?? $user['id'],
-                    $user['id'],
-                    $assignedTo,
-                    $title,
-                    $notes ?: null,
-                    $startsAt,
-                    $endsAt,
-                    $kind,
-                    $color,
-                    $reminderMinutes > 0 ? $reminderMinutes : null,
-                    $repeatRule,
-                    $focusMode
-                ]);
-                error_log("Schedule API ADD - Synced to events table, ID: " . $db->lastInsertId());
-            } catch (PDOException $e) {
-                // Don't fail if sync fails, just log it
-                error_log("Schedule API ADD - Sync to events table failed: " . $e->getMessage());
-            }
 
             // Handle recurring events
-            if ($repeatRule && in_array($repeatRule, ['daily', 'weekly', 'weekdays', 'monthly'])) {
-                $occurrences = 10; // Create next 10 occurrences
+            if ($repeatRule && in_array($repeatRule, ['daily', 'weekly', 'weekdays', 'monthly', 'yearly'])) {
+                $occurrences = $repeatRule === 'yearly' ? 5 : 10; // Less occurrences for yearly
                 $baseDate = new DateTime($startsAt);
                 $duration = (new DateTime($endsAt))->getTimestamp() - $baseDate->getTimestamp();
-                
+
                 for ($i = 1; $i <= $occurrences; $i++) {
                     $nextDate = clone $baseDate;
-                    
+
                     switch ($repeatRule) {
                         case 'daily':
                             $nextDate->modify("+{$i} day");
@@ -184,17 +137,20 @@ try {
                         case 'monthly':
                             $nextDate->modify("+{$i} month");
                             break;
+                        case 'yearly':
+                            $nextDate->modify("+{$i} year");
+                            break;
                     }
-                    
+
                     $newStartsAt = $nextDate->format('Y-m-d H:i:s');
                     $newEndsAt = (clone $nextDate)->modify("+{$duration} seconds")->format('Y-m-d H:i:s');
-                    
+
                     $stmt = $db->prepare("
-                        INSERT INTO schedule_events 
-                        (family_id, user_id, added_by, assigned_to, title, kind, notes,
-                         starts_at, ends_at, color, status, reminder_minutes, repeat_rule,
-                         parent_event_id, focus_mode, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, NOW())
+                        INSERT INTO events
+                        (family_id, user_id, created_by, assigned_to, title, kind, notes,
+                         starts_at, ends_at, all_day, color, status, reminder_minutes,
+                         recurrence_rule, recurrence_parent_id, focus_mode, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, NOW(), NOW())
                     ");
                     $stmt->execute([
                         $user['family_id'],
@@ -206,6 +162,7 @@ try {
                         $notes ?: null,
                         $newStartsAt,
                         $newEndsAt,
+                        $allDay,
                         $color,
                         $reminderMinutes > 0 ? $reminderMinutes : null,
                         $repeatRule,
@@ -214,32 +171,32 @@ try {
                     ]);
                 }
             }
-            
+
             // Get full event data
             $stmt = $db->prepare("
-                SELECT e.*, 
+                SELECT e.*,
                        u.full_name as added_by_name, u.avatar_color,
-                       a.full_name as assigned_to_name
-                FROM schedule_events e
-                LEFT JOIN users u ON e.added_by = u.id
+                       a.full_name as assigned_to_name, a.avatar_color as assigned_color
+                FROM events e
+                LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN users a ON e.assigned_to = a.id
                 WHERE e.id = ?
             ");
             $stmt->execute([$eventId]);
             $event = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             echo json_encode([
                 'success' => true,
                 'event' => $event
             ]);
             break;
-            
+
         case 'toggle':
             $eventId = $_POST['event_id'] ?? 0;
 
             $stmt = $db->prepare("
                 SELECT id, status, kind, title, starts_at, ends_at, user_id
-                FROM schedule_events
+                FROM events
                 WHERE id = ? AND family_id = ?
             ");
             $stmt->execute([$eventId, $user['family_id']]);
@@ -253,23 +210,11 @@ try {
             $actualEnd = $newStatus === 'done' ? date('Y-m-d H:i:s') : null;
 
             $stmt = $db->prepare("
-                UPDATE schedule_events
+                UPDATE events
                 SET status = ?, actual_end = ?, updated_at = NOW()
                 WHERE id = ?
             ");
             $stmt->execute([$newStatus, $actualEnd, $eventId]);
-
-            // SYNC: Also update status in events table
-            try {
-                $syncStmt = $db->prepare("
-                    UPDATE events
-                    SET status = ?, updated_at = NOW()
-                    WHERE title = ? AND starts_at = ? AND family_id = ?
-                ");
-                $syncStmt->execute([$newStatus, $event['title'], $event['starts_at'], $user['family_id']]);
-            } catch (PDOException $e) {
-                error_log("Schedule API TOGGLE - Sync to events table failed: " . $e->getMessage());
-            }
 
             // Update productivity stats if marking as done
             if ($newStatus === 'done') {
@@ -301,29 +246,29 @@ try {
                 'status' => $newStatus
             ]);
             break;
-            
+
         case 'start_focus':
             $eventId = $_POST['event_id'] ?? 0;
-            
+
             $stmt = $db->prepare("
-                UPDATE schedule_events 
-                SET status = 'in_progress', 
+                UPDATE events
+                SET status = 'in_progress',
                     actual_start = NOW(),
                     updated_at = NOW()
                 WHERE id = ? AND family_id = ? AND status = 'pending'
             ");
             $stmt->execute([$eventId, $user['family_id']]);
-            
+
             echo json_encode(['success' => true, 'status' => 'in_progress']);
             break;
-            
+
         case 'end_focus':
             $eventId = $_POST['event_id'] ?? 0;
             $rating = (int)($_POST['rating'] ?? 0);
-            
+
             $stmt = $db->prepare("
-                UPDATE schedule_events 
-                SET status = 'done', 
+                UPDATE events
+                SET status = 'done',
                     actual_end = NOW(),
                     productivity_rating = ?,
                     pomodoro_count = pomodoro_count + 1,
@@ -331,21 +276,21 @@ try {
                 WHERE id = ? AND family_id = ?
             ");
             $stmt->execute([$rating, $eventId, $user['family_id']]);
-            
+
             echo json_encode(['success' => true, 'status' => 'done']);
             break;
-            
+
         case 'get_suggestions':
             $date = $_GET['date'] ?? date('Y-m-d');
-            
+
             // Get user's typical patterns
             $stmt = $db->prepare("
-                SELECT 
+                SELECT
                     kind,
                     HOUR(starts_at) as typical_hour,
                     COUNT(*) as frequency,
                     AVG(TIMESTAMPDIFF(MINUTE, starts_at, ends_at)) as avg_duration
-                FROM schedule_events
+                FROM events
                 WHERE user_id = ?
                 AND status = 'done'
                 AND starts_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
@@ -355,13 +300,13 @@ try {
             ");
             $stmt->execute([$user['id']]);
             $patterns = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
+
             echo json_encode([
                 'success' => true,
                 'suggestions' => $patterns
             ]);
             break;
-            
+
         case 'get_productivity':
             $startDate = $_GET['start_date'] ?? date('Y-m-d', strtotime('-7 days'));
             $endDate = $_GET['end_date'] ?? date('Y-m-d');
@@ -390,8 +335,8 @@ try {
                     e.*,
                     u.full_name as added_by_name, u.avatar_color,
                     a.full_name as assigned_to_name, a.avatar_color as assigned_color
-                FROM schedule_events e
-                LEFT JOIN users u ON e.added_by = u.id
+                FROM events e
+                LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN users a ON e.assigned_to = a.id
                 WHERE e.family_id = ?
                 AND DATE(e.starts_at) BETWEEN ? AND ?
@@ -406,39 +351,20 @@ try {
                 'events' => $events
             ]);
             break;
-            
+
         case 'delete':
             $eventId = $_POST['event_id'] ?? 0;
 
-            // Get event details for syncing to events table
-            $getStmt = $db->prepare("SELECT title, starts_at FROM schedule_events WHERE id = ? AND family_id = ?");
-            $getStmt->execute([$eventId, $user['family_id']]);
-            $eventToDelete = $getStmt->fetch(PDO::FETCH_ASSOC);
-
             $stmt = $db->prepare("
-                UPDATE schedule_events
+                UPDATE events
                 SET status = 'cancelled', updated_at = NOW()
                 WHERE id = ? AND family_id = ?
             ");
             $stmt->execute([$eventId, $user['family_id']]);
 
-            // SYNC: Also cancel in events table (match by title + starts_at + family_id)
-            if ($eventToDelete) {
-                try {
-                    $syncStmt = $db->prepare("
-                        UPDATE events
-                        SET status = 'cancelled', updated_at = NOW()
-                        WHERE title = ? AND starts_at = ? AND family_id = ?
-                    ");
-                    $syncStmt->execute([$eventToDelete['title'], $eventToDelete['starts_at'], $user['family_id']]);
-                } catch (PDOException $e) {
-                    error_log("Schedule API DELETE - Sync to events table failed: " . $e->getMessage());
-                }
-            }
-
             echo json_encode(['success' => true]);
             break;
-            
+
         case 'update':
             $eventId = $_POST['event_id'] ?? 0;
             $title = trim($_POST['title'] ?? '');
@@ -448,16 +374,18 @@ try {
             $kind = $_POST['kind'] ?? 'todo';
             $notes = trim($_POST['notes'] ?? '');
             $assignedTo = $_POST['assigned_to'] ?? null;
-            $reminderMinutes = (int)($_POST['reminder_minutes'] ?? 0);
+            $reminderMinutes = isset($_POST['reminder_minutes']) ? (int)$_POST['reminder_minutes'] : null;
             $repeatRule = $_POST['repeat_rule'] ?? null;
             $focusMode = (int)($_POST['focus_mode'] ?? 0);
+            $color = $_POST['color'] ?? null;
+            $allDay = isset($_POST['all_day']) ? (int)$_POST['all_day'] : null;
 
             if (!$title || !$startTime || !$endTime) {
                 throw new Exception('Missing required fields');
             }
 
-            // Get the original event to check for date changes
-            $stmt = $db->prepare("SELECT starts_at, ends_at FROM schedule_events WHERE id = ? AND family_id = ?");
+            // Get the original event
+            $stmt = $db->prepare("SELECT starts_at, ends_at, color FROM events WHERE id = ? AND family_id = ?");
             $stmt->execute([$eventId, $user['family_id']]);
             $originalEvent = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -469,12 +397,26 @@ try {
             $startsAt = $date . ' ' . $startTime . ':00';
             $endsAt = $date . ' ' . $endTime . ':00';
 
-            // Update the main event
+            // Use original color if not provided
+            if ($color === null) {
+                $color = $originalEvent['color'];
+            }
+
+            // Update the main event with ALL fields
             $stmt = $db->prepare("
-                UPDATE schedule_events
-                SET title = ?, kind = ?, starts_at = ?, ends_at = ?,
-                    notes = ?, assigned_to = ?, reminder_minutes = ?,
-                    repeat_rule = ?, focus_mode = ?, updated_at = NOW()
+                UPDATE events
+                SET title = ?,
+                    kind = ?,
+                    starts_at = ?,
+                    ends_at = ?,
+                    notes = ?,
+                    assigned_to = ?,
+                    reminder_minutes = ?,
+                    recurrence_rule = ?,
+                    focus_mode = ?,
+                    color = ?,
+                    all_day = COALESCE(?, all_day),
+                    updated_at = NOW()
                 WHERE id = ? AND family_id = ?
             ");
             $stmt->execute([
@@ -487,6 +429,8 @@ try {
                 $reminderMinutes > 0 ? $reminderMinutes : null,
                 $repeatRule ?: null,
                 $focusMode,
+                $color,
+                $allDay,
                 $eventId,
                 $user['family_id']
             ]);
@@ -496,146 +440,254 @@ try {
                 $daysDiff = (strtotime($date) - strtotime($originalDate)) / 86400;
 
                 $stmt = $db->prepare("
-                    UPDATE schedule_events
+                    UPDATE events
                     SET starts_at = DATE_ADD(starts_at, INTERVAL ? DAY),
                         ends_at = DATE_ADD(ends_at, INTERVAL ? DAY),
                         updated_at = NOW()
-                    WHERE parent_event_id = ? AND family_id = ?
+                    WHERE recurrence_parent_id = ? AND family_id = ?
                 ");
                 $stmt->execute([$daysDiff, $daysDiff, $eventId, $user['family_id']]);
             }
 
-            // Also update title/kind/reminder/focus on child events
+            // Also update title/kind/reminder/focus/color on child events
             $stmt = $db->prepare("
-                UPDATE schedule_events
-                SET title = ?, kind = ?, reminder_minutes = ?, focus_mode = ?, updated_at = NOW()
-                WHERE parent_event_id = ? AND family_id = ?
+                UPDATE events
+                SET title = ?, kind = ?, reminder_minutes = ?, focus_mode = ?, color = ?, updated_at = NOW()
+                WHERE recurrence_parent_id = ? AND family_id = ?
             ");
             $stmt->execute([
                 $title,
                 $kind,
                 $reminderMinutes > 0 ? $reminderMinutes : null,
                 $focusMode,
+                $color,
                 $eventId,
                 $user['family_id']
             ]);
 
             echo json_encode(['success' => true]);
             break;
-            
+
         case 'clear_done':
             $date = $_POST['date'] ?? date('Y-m-d');
-            
+
             $stmt = $db->prepare("
-                UPDATE schedule_events 
+                UPDATE events
                 SET status = 'cancelled', updated_at = NOW()
-                WHERE family_id = ? 
-                AND DATE(starts_at) = ? 
+                WHERE family_id = ?
+                AND DATE(starts_at) = ?
                 AND status = 'done'
             ");
             $stmt->execute([$user['family_id'], $date]);
-            
+
             echo json_encode(['success' => true, 'count' => $stmt->rowCount()]);
             break;
-            
+
         case 'bulk_mark_done':
             $eventIds = json_decode($_POST['event_ids'] ?? '[]', true);
-            
+
             if (empty($eventIds)) {
                 throw new Exception('No events selected');
             }
-            
+
             $placeholders = rtrim(str_repeat('?,', count($eventIds)), ',');
-            
+
             $stmt = $db->prepare("
-                UPDATE schedule_events 
+                UPDATE events
                 SET status = 'done', actual_end = NOW(), updated_at = NOW()
-                WHERE id IN ($placeholders) 
+                WHERE id IN ($placeholders)
                 AND family_id = ?
             ");
             $stmt->execute([...$eventIds, $user['family_id']]);
-            
+
             echo json_encode([
                 'success' => true,
                 'count' => $stmt->rowCount()
             ]);
             break;
-            
+
         case 'bulk_change_type':
             $eventIds = json_decode($_POST['event_ids'] ?? '[]', true);
             $kind = $_POST['kind'] ?? 'todo';
-            
+
             if (empty($eventIds)) {
                 throw new Exception('No events selected');
             }
-            
+
             $placeholders = rtrim(str_repeat('?,', count($eventIds)), ',');
-            
+
             $stmt = $db->prepare("
-                UPDATE schedule_events 
+                UPDATE events
                 SET kind = ?, updated_at = NOW()
-                WHERE id IN ($placeholders) 
+                WHERE id IN ($placeholders)
                 AND family_id = ?
             ");
             $stmt->execute([$kind, ...$eventIds, $user['family_id']]);
-            
+
             echo json_encode([
                 'success' => true,
                 'count' => $stmt->rowCount()
             ]);
             break;
-            
+
         case 'bulk_assign':
             $eventIds = json_decode($_POST['event_ids'] ?? '[]', true);
             $assignTo = $_POST['assign_to'] ?? null;
-            
+
             if (empty($eventIds)) {
                 throw new Exception('No events selected');
             }
-            
+
             $placeholders = rtrim(str_repeat('?,', count($eventIds)), ',');
-            
+
             $stmt = $db->prepare("
-                UPDATE schedule_events 
+                UPDATE events
                 SET assigned_to = ?, updated_at = NOW()
-                WHERE id IN ($placeholders) 
+                WHERE id IN ($placeholders)
                 AND family_id = ?
             ");
             $stmt->execute([$assignTo, ...$eventIds, $user['family_id']]);
-            
+
             echo json_encode([
                 'success' => true,
                 'count' => $stmt->rowCount()
             ]);
             break;
-            
+
         case 'bulk_delete':
             $eventIds = json_decode($_POST['event_ids'] ?? '[]', true);
-            
+
             if (empty($eventIds)) {
                 throw new Exception('No events selected');
             }
-            
+
             $placeholders = rtrim(str_repeat('?,', count($eventIds)), ',');
-            
+
             $stmt = $db->prepare("
-                UPDATE schedule_events 
+                UPDATE events
                 SET status = 'cancelled', updated_at = NOW()
-                WHERE id IN ($placeholders) 
+                WHERE id IN ($placeholders)
                 AND family_id = ?
             ");
             $stmt->execute([...$eventIds, $user['family_id']]);
-            
+
             echo json_encode([
                 'success' => true,
                 'count' => $stmt->rowCount()
             ]);
             break;
-            
+
+        // ========== BIRTHDAY SUPPORT ==========
+        case 'add_birthday':
+            $name = trim($_POST['name'] ?? '');
+            $date = $_POST['date'] ?? ''; // Format: YYYY-MM-DD (birth date)
+            $notes = trim($_POST['notes'] ?? '');
+            $color = $_POST['color'] ?? '#e74c3c'; // Red default for birthdays
+
+            if (!$name || !$date) {
+                throw new Exception('Name and date are required');
+            }
+
+            // Calculate this year's birthday
+            $birthDate = new DateTime($date);
+            $thisYear = new DateTime();
+            $thisYear->setDate((int)$thisYear->format('Y'), (int)$birthDate->format('m'), (int)$birthDate->format('d'));
+
+            // If birthday has passed this year, use next year
+            if ($thisYear < new DateTime()) {
+                $thisYear->modify('+1 year');
+            }
+
+            $birthdayDate = $thisYear->format('Y-m-d');
+            $startsAt = $birthdayDate . ' 00:00:00';
+            $endsAt = $birthdayDate . ' 23:59:59';
+
+            $stmt = $db->prepare("
+                INSERT INTO events
+                (family_id, user_id, created_by, title, kind, notes,
+                 starts_at, ends_at, all_day, color, status,
+                 recurrence_rule, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'birthday', ?, ?, ?, 1, ?, 'pending', 'yearly', NOW(), NOW())
+            ");
+
+            $stmt->execute([
+                $user['family_id'],
+                $user['id'],
+                $user['id'],
+                $name . "'s Birthday",
+                $notes ?: null,
+                $startsAt,
+                $endsAt,
+                $color
+            ]);
+
+            $eventId = $db->lastInsertId();
+
+            // Create occurrences for next 5 years
+            for ($i = 1; $i <= 5; $i++) {
+                $nextYear = clone $thisYear;
+                $nextYear->modify("+{$i} year");
+                $nextBirthdayDate = $nextYear->format('Y-m-d');
+
+                $stmt = $db->prepare("
+                    INSERT INTO events
+                    (family_id, user_id, created_by, title, kind, notes,
+                     starts_at, ends_at, all_day, color, status,
+                     recurrence_rule, recurrence_parent_id, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, 'birthday', ?, ?, ?, 1, ?, 'pending', 'yearly', ?, NOW(), NOW())
+                ");
+                $stmt->execute([
+                    $user['family_id'],
+                    $user['id'],
+                    $user['id'],
+                    $name . "'s Birthday",
+                    $notes ?: null,
+                    $nextBirthdayDate . ' 00:00:00',
+                    $nextBirthdayDate . ' 23:59:59',
+                    $color,
+                    $eventId
+                ]);
+            }
+
+            // Get created event
+            $stmt = $db->prepare("SELECT * FROM events WHERE id = ?");
+            $stmt->execute([$eventId]);
+            $event = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            echo json_encode([
+                'success' => true,
+                'event' => $event,
+                'message' => 'Birthday added with yearly recurrence'
+            ]);
+            break;
+
+        case 'get_birthdays':
+            $year = $_GET['year'] ?? date('Y');
+
+            $stmt = $db->prepare("
+                SELECT e.*,
+                       u.full_name as added_by_name, u.avatar_color
+                FROM events e
+                LEFT JOIN users u ON e.created_by = u.id
+                WHERE e.family_id = ?
+                AND e.kind = 'birthday'
+                AND YEAR(e.starts_at) = ?
+                AND e.status != 'cancelled'
+                ORDER BY e.starts_at ASC
+            ");
+            $stmt->execute([$user['family_id'], $year]);
+            $birthdays = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            echo json_encode([
+                'success' => true,
+                'birthdays' => $birthdays
+            ]);
+            break;
+
         default:
             throw new Exception('Invalid action');
     }
-    
+
 } catch (Exception $e) {
     http_response_code(400);
     echo json_encode([
