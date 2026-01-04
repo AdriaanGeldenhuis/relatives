@@ -41,7 +41,7 @@ try {
 
 $pageTitle = 'Weather';
 $activePage = 'weather';
-$cacheVersion = '4.3.0';
+$cacheVersion = '4.4.0';
 $pageCSS = ['/weather/css/weather.css?v=' . $cacheVersion];
 $pageJS = ['/weather/js/weather.js?v=' . $cacheVersion];
 
@@ -111,16 +111,57 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
         </div>
 
-        <!-- Today's Weather Details (Combined Stats Bar) -->
-        <div class="stats-bar glass-card" id="weatherStats" style="display: none;">
-            <div class="stats-title">Today</div>
-            <div id="weatherDetails" class="stats-chips">
-                <div class="stat-chip" id="statHumidity">💧 --</div>
-                <div class="stat-chip" id="statWind">💨 --</div>
-                <div class="stat-chip" id="statVisibility">👁️ --</div>
-                <div class="stat-chip" id="statPressure">🌡️ --</div>
-                <div class="stat-chip" id="statUV">☀️ --</div>
-                <div class="stat-chip" id="statSunrise">🌅 --</div>
+        <!-- Today's Weather Summary Card -->
+        <div class="today-card glass-card" id="weatherStats" style="display: none;">
+            <div class="today-header">
+                <div class="today-title">📅 Today's Overview</div>
+                <div class="today-temps" id="todayTemps">
+                    <span class="temp-hi">--°</span>
+                    <span class="temp-sep">/</span>
+                    <span class="temp-lo">--°</span>
+                </div>
+            </div>
+            <div class="today-grid" id="weatherDetails">
+                <div class="today-stat" id="statHumidity">
+                    <span class="stat-icon">💧</span>
+                    <span class="stat-label">Humidity</span>
+                    <span class="stat-value">--%</span>
+                </div>
+                <div class="today-stat" id="statWind">
+                    <span class="stat-icon">💨</span>
+                    <span class="stat-label">Wind</span>
+                    <span class="stat-value">-- km/h</span>
+                </div>
+                <div class="today-stat" id="statVisibility">
+                    <span class="stat-icon">👁️</span>
+                    <span class="stat-label">Visibility</span>
+                    <span class="stat-value">-- km</span>
+                </div>
+                <div class="today-stat" id="statPressure">
+                    <span class="stat-icon">🌡️</span>
+                    <span class="stat-label">Pressure</span>
+                    <span class="stat-value">-- hPa</span>
+                </div>
+                <div class="today-stat" id="statUV">
+                    <span class="stat-icon">☀️</span>
+                    <span class="stat-label">UV Index</span>
+                    <span class="stat-value">--</span>
+                </div>
+                <div class="today-stat" id="statSunrise">
+                    <span class="stat-icon">🌅</span>
+                    <span class="stat-label">Sunrise</span>
+                    <span class="stat-value">--</span>
+                </div>
+                <div class="today-stat" id="statSunset">
+                    <span class="stat-icon">🌇</span>
+                    <span class="stat-label">Sunset</span>
+                    <span class="stat-value">--</span>
+                </div>
+                <div class="today-stat" id="statRain">
+                    <span class="stat-icon">🌧️</span>
+                    <span class="stat-label">Rain Chance</span>
+                    <span class="stat-value">--%</span>
+                </div>
             </div>
         </div>
 

@@ -458,18 +458,8 @@ body {
 }
 
 /* ============================================
-   STATS BAR
+   TODAY'S OVERVIEW CARD
    ============================================ */
-
-.stats-bar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-md) var(--space-lg);
-    margin-bottom: var(--space-xl);
-    flex-wrap: wrap;
-    justify-content: center;
-}
 
 .glass-card {
     background: var(--glass-light);
@@ -478,24 +468,92 @@ body {
     border-radius: var(--radius-lg);
 }
 
-.stats-title {
-    font-weight: 700;
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.7);
+.today-card {
+    padding: var(--space-lg);
+    margin-bottom: var(--space-xl);
 }
 
-.stats-chips {
+.today-header {
     display: flex;
-    gap: var(--space-sm);
-    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-md);
+    border-bottom: 1px solid var(--glass-border);
 }
 
-.stat-chip {
-    background: var(--glass-medium);
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-sm);
-    font-size: 0.8rem;
+.today-title {
+    font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
+    font-size: 1rem;
+    color: white;
+}
+
+.today-temps {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+.temp-hi {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #ff6b6b;
+}
+
+.temp-sep {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 1rem;
+}
+
+.temp-lo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #4facfe;
+}
+
+.today-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-sm);
+}
+
+.today-stat {
+    background: var(--glass-medium);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-sm) var(--space-md);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 4px;
+    transition: all var(--transition-base);
+}
+
+.today-stat:hover {
+    background: var(--glass-heavy);
+    transform: translateY(-2px);
+}
+
+.stat-icon {
+    font-size: 1.25rem;
+}
+
+.stat-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: white;
 }
 
 /* ============================================
@@ -1082,8 +1140,22 @@ body {
     .quick-action-btn { padding: var(--space-xs) var(--space-sm); font-size: 0.75rem; }
     .qa-icon { font-size: 1rem; }
 
-    .stats-bar { padding: var(--space-sm) var(--space-md); gap: var(--space-sm); }
-    .stat-chip { font-size: 0.7rem; padding: 4px 8px; }
+    /* Today card mobile */
+    .today-card { padding: var(--space-md); }
+    .today-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-sm);
+        padding-bottom: var(--space-sm);
+    }
+    .today-title { font-size: 0.9rem; }
+    .temp-hi { font-size: 1.25rem; }
+    .temp-lo { font-size: 1rem; }
+    .today-grid { grid-template-columns: repeat(2, 1fr); }
+    .today-stat { padding: var(--space-sm); }
+    .stat-icon { font-size: 1.1rem; }
+    .stat-label { font-size: 0.6rem; }
+    .stat-value { font-size: 0.85rem; }
 
     /* Modal on mobile */
     .modal-content { max-height: 90vh; border-radius: var(--radius-lg); }

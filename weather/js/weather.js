@@ -896,7 +896,7 @@ class WeatherWidget {
     updateStatsBar() {
         const statsEl = document.getElementById('weatherStats');
         if (!statsEl || !this.currentWeather) return;
-        statsEl.style.display = 'flex';
+        statsEl.style.display = 'block';
     }
     
     renderWeeklyForecast() {
@@ -1022,21 +1022,42 @@ class WeatherWidget {
         if (!this.currentWeather) return;
 
         const sunrise = new Date(this.currentWeather.sunrise * 1000);
+        const sunset = new Date(this.currentWeather.sunset * 1000);
 
-        // Update stat chips in the combined stats bar
-        const humidityEl = document.getElementById('statHumidity');
-        const windEl = document.getElementById('statWind');
-        const visibilityEl = document.getElementById('statVisibility');
-        const pressureEl = document.getElementById('statPressure');
-        const uvEl = document.getElementById('statUV');
-        const sunriseEl = document.getElementById('statSunrise');
+        // Update temperature range from forecast
+        const todayTempsEl = document.getElementById('todayTemps');
+        if (todayTempsEl && this.forecast && this.forecast[0]) {
+            const today = this.forecast[0];
+            todayTempsEl.innerHTML = `
+                <span class="temp-hi">${today.temp_max}°</span>
+                <span class="temp-sep">/</span>
+                <span class="temp-lo">${today.temp_min}°</span>
+            `;
+        }
 
-        if (humidityEl) humidityEl.textContent = `💧 ${this.currentWeather.humidity}%`;
-        if (windEl) windEl.textContent = `💨 ${this.currentWeather.wind_speed} km/h`;
-        if (visibilityEl) visibilityEl.textContent = `👁️ ${this.currentWeather.visibility} km`;
-        if (pressureEl) pressureEl.textContent = `🌡️ ${this.currentWeather.pressure} hPa`;
-        if (uvEl) uvEl.textContent = `☀️ ${this.currentWeather.clouds < 30 ? 'High' : 'Low'} UV`;
-        if (sunriseEl) sunriseEl.textContent = `🌅 ${sunrise.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'})}`;
+        // Update stat cards
+        this.updateStatCard('statHumidity', `${this.currentWeather.humidity}%`);
+        this.updateStatCard('statWind', `${this.currentWeather.wind_speed} km/h`);
+        this.updateStatCard('statVisibility', `${this.currentWeather.visibility} km`);
+        this.updateStatCard('statPressure', `${this.currentWeather.pressure} hPa`);
+        this.updateStatCard('statUV', this.currentWeather.clouds < 30 ? 'High' : 'Low');
+        this.updateStatCard('statSunrise', sunrise.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}));
+        this.updateStatCard('statSunset', sunset.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}));
+
+        // Rain chance from forecast
+        if (this.forecast && this.forecast[0]) {
+            this.updateStatCard('statRain', `${this.forecast[0].precipitation || 0}%`);
+        }
+    }
+
+    updateStatCard(id, value) {
+        const el = document.getElementById(id);
+        if (el) {
+            const valueEl = el.querySelector('.stat-value');
+            if (valueEl) {
+                valueEl.textContent = value;
+            }
+        }
     }
     
     generateInsights() {
