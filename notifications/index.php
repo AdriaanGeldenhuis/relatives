@@ -180,6 +180,7 @@ function formatTimeAgo($secondsAgo) {
 
 $pageTitle = 'Notifications';
 $activePage = 'notifications';
+$cacheVersion = '10.0.0';
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 

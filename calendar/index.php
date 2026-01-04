@@ -498,8 +498,9 @@ $doneEvents = count(array_filter($events, fn($e) => $e['status'] === 'done'));
 
 $pageTitle = 'Calendar';
 $activePage = 'calendar';
-$pageCSS = ['/calendar/css/calendar.css'];
-$pageJS = ['/calendar/js/calendar.js'];
+$cacheVersion = '3.1.0';
+$pageCSS = ['/calendar/css/calendar.css?v=' . $cacheVersion];
+$pageJS = ['/calendar/js/calendar.js?v=' . $cacheVersion];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>

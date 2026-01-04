@@ -6,102 +6,12 @@
 console.log('🔔 Notifications JS Loading...');
 
 // ============================================
-// PARTICLE SYSTEM
+// PARTICLE SYSTEM - DISABLED FOR PERFORMANCE
+// Canvas hidden via CSS, class is a no-op stub
 // ============================================
 class ParticleSystem {
     constructor(canvasId) {
-        this.canvas = document.getElementById(canvasId);
-        if (!this.canvas) return;
-        
-        this.ctx = this.canvas.getContext('2d');
-        this.particles = [];
-        this.particleCount = Math.min(100, window.innerWidth / 10);
-        this.mouse = { x: null, y: null, radius: 150 };
-        
-        this.resize();
-        this.init();
-        this.animate();
-        
-        window.addEventListener('resize', () => this.resize());
-        window.addEventListener('mousemove', (e) => {
-            this.mouse.x = e.clientX;
-            this.mouse.y = e.clientY;
-        });
-        
-        window.addEventListener('touchmove', (e) => {
-            if (e.touches.length > 0) {
-                this.mouse.x = e.touches[0].clientX;
-                this.mouse.y = e.touches[0].clientY;
-            }
-        });
-        
-        window.addEventListener('touchend', () => {
-            this.mouse.x = null;
-            this.mouse.y = null;
-        });
-    }
-    
-    resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-    }
-    
-    init() {
-        this.particles = [];
-        const colors = [
-            'rgba(102, 126, 234, ',
-            'rgba(118, 75, 162, ',
-            'rgba(240, 147, 251, '
-        ];
-        
-        for (let i = 0; i < this.particleCount; i++) {
-            this.particles.push({
-                x: Math.random() * this.canvas.width,
-                y: Math.random() * this.canvas.height,
-                size: Math.random() * 3 + 1,
-                baseSize: Math.random() * 3 + 1,
-                speedX: (Math.random() - 0.5) * 0.5,
-                speedY: (Math.random() - 0.5) * 0.5,
-                baseColor: colors[Math.floor(Math.random() * colors.length)],
-                opacity: Math.random() * 0.4 + 0.2
-            });
-        }
-    }
-    
-    animate() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        this.particles.forEach((particle) => {
-            particle.x += particle.speedX;
-            particle.y += particle.speedY;
-            
-            if (particle.x > this.canvas.width || particle.x < 0) particle.speedX *= -1;
-            if (particle.y > this.canvas.height || particle.y < 0) particle.speedY *= -1;
-            
-            if (this.mouse.x !== null && this.mouse.y !== null) {
-                const dx = this.mouse.x - particle.x;
-                const dy = this.mouse.y - particle.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance < this.mouse.radius) {
-                    const force = (this.mouse.radius - distance) / this.mouse.radius;
-                    particle.x -= Math.cos(Math.atan2(dy, dx)) * force * 2;
-                    particle.y -= Math.sin(Math.atan2(dy, dx)) * force * 2;
-                    particle.size = particle.baseSize * (1 + force * 0.5);
-                } else {
-                    particle.size = particle.baseSize;
-                }
-            } else {
-                particle.size = particle.baseSize;
-            }
-            
-            this.ctx.beginPath();
-            this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-            this.ctx.fillStyle = particle.baseColor + particle.opacity + ')';
-            this.ctx.fill();
-        });
-        
-        requestAnimationFrame(() => this.animate());
+        // Disabled - canvas hidden via CSS for performance
     }
 }
 

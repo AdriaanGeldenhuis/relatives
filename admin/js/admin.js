@@ -8,121 +8,16 @@
 console.log('%c⚙️ Admin Panel v3.0 Loading...', 'font-size: 16px; font-weight: bold; color: #667eea;');
 
 // ============================================
-// PARTICLE SYSTEM (Reuse from home)
+// PARTICLE SYSTEM - DISABLED FOR PERFORMANCE
+// Canvas hidden via CSS, class is a no-op stub
 // ============================================
 class ParticleSystem {
     constructor(canvasId) {
-        this.canvas = document.getElementById(canvasId);
-        if (!this.canvas) return;
-        
-        this.ctx = this.canvas.getContext('2d');
-        this.particles = [];
-        this.particleCount = Math.min(100, window.innerWidth / 10);
-        this.mouse = { x: null, y: null, radius: 150 };
-        
-        this.resize();
-        this.init();
-        this.animate();
-        
-        window.addEventListener('resize', () => this.resize());
-        window.addEventListener('mousemove', (e) => {
-            this.mouse.x = e.clientX;
-            this.mouse.y = e.clientY;
-        });
-    }
-    
-    resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-    }
-    
-    init() {
-        this.particles = [];
-        const colors = [
-            'rgba(102, 126, 234, ',
-            'rgba(118, 75, 162, ',
-            'rgba(240, 147, 251, '
-        ];
-        
-        for (let i = 0; i < this.particleCount; i++) {
-            const baseColor = colors[Math.floor(Math.random() * colors.length)];
-            this.particles.push({
-                x: Math.random() * this.canvas.width,
-                y: Math.random() * this.canvas.height,
-                size: Math.random() * 2 + 1,
-                baseSize: Math.random() * 2 + 1,
-                speedX: (Math.random() - 0.5) * 0.5,
-                speedY: (Math.random() - 0.5) * 0.5,
-                baseColor: baseColor,
-                opacity: Math.random() * 0.5 + 0.2
-            });
-        }
-    }
-    
-    animate() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        this.particles.forEach((particle, index) => {
-            particle.x += particle.speedX;
-            particle.y += particle.speedY;
-            
-            if (particle.x > this.canvas.width || particle.x < 0) {
-                particle.speedX *= -1;
-            }
-            if (particle.y > this.canvas.height || particle.y < 0) {
-                particle.speedY *= -1;
-            }
-            
-            if (this.mouse.x !== null && this.mouse.y !== null) {
-                const dx = this.mouse.x - particle.x;
-                const dy = this.mouse.y - particle.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance < this.mouse.radius) {
-                    const force = (this.mouse.radius - distance) / this.mouse.radius;
-                    const angle = Math.atan2(dy, dx);
-                    particle.x -= Math.cos(angle) * force * 2;
-                    particle.y -= Math.sin(angle) * force * 2;
-                    particle.size = particle.baseSize * (1 + force * 0.5);
-                } else {
-                    particle.size += (particle.baseSize - particle.size) * 0.1;
-                }
-            }
-            
-            this.ctx.beginPath();
-            this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-            
-            const gradient = this.ctx.createRadialGradient(
-                particle.x, particle.y, 0,
-                particle.x, particle.y, particle.size * 2
-            );
-            gradient.addColorStop(0, particle.baseColor + particle.opacity + ')');
-            gradient.addColorStop(1, particle.baseColor + '0)');
-            
-            this.ctx.fillStyle = gradient;
-            this.ctx.fill();
-            
-            for (let j = index + 1; j < this.particles.length; j++) {
-                const dx2 = this.particles[j].x - particle.x;
-                const dy2 = this.particles[j].y - particle.y;
-                const distance2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-                
-                if (distance2 < 80) {
-                    this.ctx.beginPath();
-                    this.ctx.strokeStyle = `rgba(255, 255, 255, ${0.15 * (1 - distance2 / 80)})`;
-                    this.ctx.lineWidth = 1;
-                    this.ctx.moveTo(particle.x, particle.y);
-                    this.ctx.lineTo(this.particles[j].x, this.particles[j].y);
-                    this.ctx.stroke();
-                }
-            }
-        });
-        
-        requestAnimationFrame(() => this.animate());
+        // Disabled - canvas hidden via CSS for performance
     }
 }
 
-// Initialize
+// Initialize (no-op)
 const particleSystem = new ParticleSystem('particles');
 
 // ============================================

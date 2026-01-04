@@ -50,14 +50,15 @@ try {
 $pageTitle = 'Family Chat';
 $activePage = 'messages';
 
+$cacheVersion = '10.0.0';
 $pageCSS = [
-    '/messages/css/messages.css',
-    '/messages/css/messages-enhanced.css'
+    '/messages/css/messages.css?v=' . $cacheVersion,
+    '/messages/css/messages-enhanced.css?v=' . $cacheVersion
 ];
 
 $pageJS = [
-    '/messages/js/messages.js',
-    '/messages/js/messages-enhanced.js'
+    '/messages/js/messages.js?v=' . $cacheVersion,
+    '/messages/js/messages-enhanced.js?v=' . $cacheVersion
 ];
 
 require_once __DIR__ . '/../shared/components/header.php';
