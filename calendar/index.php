@@ -64,33 +64,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $allDay = (int)($_POST['all_day'] ?? 0);
                 $color = $_POST['color'] ?? '#3498db';
                 $reminderMinutes = (int)($_POST['reminder_minutes'] ?? 0);
-                
+                $kind = $_POST['kind'] ?? 'other';
+                $recurrenceRule = $_POST['recurrence_rule'] ?? null;
+
                 if (empty($title)) {
                     throw new Exception('Event title is required');
                 }
-                
+
                 if (empty($startsAt)) {
                     throw new Exception('Start date/time is required');
                 }
-                
+
+                // Validate kind
+                $validKinds = ['study', 'work', 'todo', 'break', 'focus', 'birthday', 'event', 'other'];
+                if (!in_array($kind, $validKinds)) {
+                    $kind = 'other';
+                }
+
                 $stmt = $db->prepare("
-                    INSERT INTO events 
-                    (family_id, user_id, kind, title, notes, starts_at, ends_at, 
-                     all_day, color, status, reminder_minutes) 
-                    VALUES (?, ?, 'other', ?, ?, ?, ?, ?, ?, 'pending', ?)
+                    INSERT INTO events
+                    (family_id, user_id, created_by, kind, title, notes, starts_at, ends_at,
+                     all_day, color, status, reminder_minutes, recurrence_rule)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
                 ");
                 $stmt->execute([
-                    $user['family_id'], 
-                    $user['id'], 
-                    $title, 
+                    $user['family_id'],
+                    $user['id'],
+                    $user['id'],
+                    $kind,
+                    $title,
                     $notes,
-                    $startsAt, 
-                    $endsAt ?: $startsAt, 
+                    $startsAt,
+                    $endsAt ?: $startsAt,
                     $allDay,
                     $color,
-                    $reminderMinutes > 0 ? $reminderMinutes : null
+                    $reminderMinutes > 0 ? $reminderMinutes : null,
+                    $recurrenceRule ?: null
                 ]);
                 $eventId = $db->lastInsertId();
+
+                // Handle recurring events
+                if ($recurrenceRule && in_array($recurrenceRule, ['daily', 'weekly', 'weekdays', 'monthly', 'yearly'])) {
+                    $occurrences = $recurrenceRule === 'yearly' ? 5 : 10;
+                    $baseDate = new DateTime($startsAt);
+                    $baseEndDate = new DateTime($endsAt ?: $startsAt);
+                    $duration = $baseEndDate->getTimestamp() - $baseDate->getTimestamp();
+
+                    for ($i = 1; $i <= $occurrences; $i++) {
+                        $nextDate = clone $baseDate;
+
+                        switch ($recurrenceRule) {
+                            case 'daily':
+                                $nextDate->modify("+{$i} day");
+                                break;
+                            case 'weekdays':
+                                $daysAdded = 0;
+                                $tempDate = clone $baseDate;
+                                while ($daysAdded < $i) {
+                                    $tempDate->modify('+1 day');
+                                    if ($tempDate->format('N') < 6) {
+                                        $daysAdded++;
+                                    }
+                                }
+                                $nextDate = $tempDate;
+                                break;
+                            case 'weekly':
+                                $nextDate->modify("+{$i} week");
+                                break;
+                            case 'monthly':
+                                $nextDate->modify("+{$i} month");
+                                break;
+                            case 'yearly':
+                                $nextDate->modify("+{$i} year");
+                                break;
+                        }
+
+                        $newStartsAt = $nextDate->format('Y-m-d H:i:s');
+                        $newEndsAt = (clone $nextDate)->modify("+{$duration} seconds")->format('Y-m-d H:i:s');
+
+                        $stmt = $db->prepare("
+                            INSERT INTO events
+                            (family_id, user_id, created_by, kind, title, notes, starts_at, ends_at,
+                             all_day, color, status, reminder_minutes, recurrence_rule, recurrence_parent_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+                        ");
+                        $stmt->execute([
+                            $user['family_id'],
+                            $user['id'],
+                            $user['id'],
+                            $kind,
+                            $title,
+                            $notes,
+                            $newStartsAt,
+                            $newEndsAt,
+                            $allDay,
+                            $color,
+                            $reminderMinutes > 0 ? $reminderMinutes : null,
+                            $recurrenceRule,
+                            $eventId
+                        ]);
+                    }
+                }
                 
                 // SEND NOTIFICATION
                 try {
@@ -116,30 +190,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $endsAt = $_POST['ends_at'] ?? '';
                 $allDay = (int)($_POST['all_day'] ?? 0);
                 $color = $_POST['color'] ?? '#3498db';
-                
+                $reminderMinutes = isset($_POST['reminder_minutes']) ? (int)$_POST['reminder_minutes'] : null;
+                $kind = $_POST['kind'] ?? null;
+                $recurrenceRule = $_POST['recurrence_rule'] ?? null;
+
                 // Get original event for change detection
                 $stmt = $db->prepare("
-                    SELECT title, starts_at, ends_at 
-                    FROM events 
+                    SELECT title, starts_at, ends_at, kind, reminder_minutes, recurrence_rule
+                    FROM events
                     WHERE id = ? AND family_id = ?
                 ");
                 $stmt->execute([$eventId, $user['family_id']]);
                 $originalEvent = $stmt->fetch(PDO::FETCH_ASSOC);
-                
+
+                // Use original values if not provided
+                if ($kind === null) {
+                    $kind = $originalEvent['kind'] ?? 'other';
+                }
+
                 $stmt = $db->prepare("
-                    UPDATE events 
-                    SET title = ?, notes = ?, starts_at = ?, ends_at = ?, 
-                        all_day = ?, color = ?, updated_at = NOW()
+                    UPDATE events
+                    SET title = ?, notes = ?, starts_at = ?, ends_at = ?,
+                        all_day = ?, color = ?, reminder_minutes = ?,
+                        kind = ?, recurrence_rule = ?, updated_at = NOW()
                     WHERE id = ? AND family_id = ?
                 ");
                 $stmt->execute([
-                    $title, 
+                    $title,
                     $notes,
-                    $startsAt, 
+                    $startsAt,
                     $endsAt ?: $startsAt,
                     $allDay,
                     $color,
-                    $eventId, 
+                    $reminderMinutes > 0 ? $reminderMinutes : null,
+                    $kind,
+                    $recurrenceRule ?: null,
+                    $eventId,
                     $user['family_id']
                 ]);
                 
