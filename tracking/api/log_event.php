@@ -105,9 +105,22 @@ try {
     ]);
     
     $eventId = (int)$db->lastInsertId();
-    
-    // TODO: Trigger notifications based on event type
-    
+
+    // Trigger notifications based on event type
+    if ($eventType === 'sos' && $latitude !== null && $longitude !== null) {
+        require_once __DIR__ . '/../../core/NotificationManager.php';
+        require_once __DIR__ . '/../../core/NotificationTriggers.php';
+
+        // Get user's name
+        $stmt = $db->prepare("SELECT full_name FROM users WHERE id = ?");
+        $stmt->execute([$userId]);
+        $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+        $userName = $userData['full_name'] ?? 'A family member';
+
+        $triggers = new NotificationTriggers($db);
+        $triggers->onSOSAlert($userId, $familyId, $userName, $latitude, $longitude);
+    }
+
     echo json_encode([
         'success' => true,
         'event_id' => $eventId

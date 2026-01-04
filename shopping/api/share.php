@@ -50,7 +50,13 @@ try {
             $stmt->execute([$listId, $shareToken, $user['id']]);
             
             $shareUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/shopping/shared.php?token=' . $shareToken;
-            
+
+            // Notify family members
+            require_once __DIR__ . '/../../core/NotificationManager.php';
+            require_once __DIR__ . '/../../core/NotificationTriggers.php';
+            $triggers = new NotificationTriggers($db);
+            $triggers->onShoppingListShared($listId, $user['id'], $shareUrl);
+
             echo json_encode([
                 'success' => true,
                 'share_url' => $shareUrl,

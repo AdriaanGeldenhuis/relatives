@@ -93,6 +93,18 @@ try {
         ");
         $stmt->execute([$messageId, $userId, $emoji]);
         $action = 'added';
+
+        // Send notification to message owner
+        $stmt = $db->prepare("SELECT user_id FROM messages WHERE id = ?");
+        $stmt->execute([$messageId]);
+        $messageOwnerId = (int)$stmt->fetchColumn();
+
+        if ($messageOwnerId && $messageOwnerId !== $userId) {
+            require_once __DIR__ . '/../../core/NotificationManager.php';
+            require_once __DIR__ . '/../../core/NotificationTriggers.php';
+            $triggers = new NotificationTriggers($db);
+            $triggers->onMessageReaction($messageId, $userId, $messageOwnerId, $emoji);
+        }
     }
     
     echo json_encode([

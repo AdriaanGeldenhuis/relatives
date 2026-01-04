@@ -86,8 +86,8 @@ try {
                 $stmt = $db->prepare("
                     SELECT id FROM notifications
                     WHERE user_id = ?
-                      AND JSON_EXTRACT(data, '$.event_id') = ?
-                      AND JSON_EXTRACT(data, '$.days_until') = ?
+                      AND JSON_EXTRACT(data_json, '$.event_id') = ?
+                      AND JSON_EXTRACT(data_json, '$.days_until') = ?
                       AND DATE(created_at) = CURDATE()
                     LIMIT 1
                 ");
