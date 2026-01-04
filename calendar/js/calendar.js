@@ -781,15 +781,17 @@ async function createEvent(event) {
         const notes = document.getElementById('eventNotes').value.trim();
         const reminderMinutes = document.getElementById('eventReminder').value;
         const color = document.querySelector('input[name="eventColor"]:checked').value;
-        
+        const kind = document.getElementById('eventKind').value;
+        const recurrenceRule = document.getElementById('eventRecurrence').value;
+
         if (!title) {
             showToast('Please enter event title', 'error');
             return;
         }
-        
+
         const startsAt = allDay ? `${startDate} 00:00:00` : `${startDate} ${startTime}:00`;
         const endsAt = allDay ? `${endDate} 23:59:59` : `${endDate} ${endTime}:00`;
-        
+
         const formData = new FormData();
         formData.append('action', 'create_event');
         formData.append('title', title);
@@ -800,6 +802,8 @@ async function createEvent(event) {
         formData.append('all_day', allDay);
         formData.append('color', color);
         formData.append('reminder_minutes', reminderMinutes);
+        formData.append('kind', kind);
+        formData.append('recurrence_rule', recurrenceRule);
         
         const response = await fetch('', {
             method: 'POST',
@@ -933,12 +937,16 @@ function showEventDetails(eventId) {
                 </div>
             </div>
             
-            <div style="display: flex; gap: 12px;">
-                <button onclick="shareEvent(${event.id})" class="btn btn-secondary" style="flex: 1;">
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button onclick="openEditEvent(${event.id})" class="btn btn-primary" style="flex: 1; min-width: 100px;">
+                    <span class="btn-icon">✏️</span>
+                    <span class="btn-text">Edit</span>
+                </button>
+                <button onclick="shareEvent(${event.id})" class="btn btn-secondary" style="flex: 1; min-width: 100px;">
                     <span class="btn-icon">📤</span>
                     <span class="btn-text">Share</span>
                 </button>
-                <button onclick="deleteEvent(${event.id})" class="btn" style="flex: 1; background: #f56565; color: white;">
+                <button onclick="deleteEvent(${event.id})" class="btn" style="flex: 1; min-width: 100px; background: #f56565; color: white;">
                     <span class="btn-icon">🗑️</span>
                     <span class="btn-text">Delete</span>
                 </button>
@@ -985,14 +993,14 @@ async function deleteEvent(eventId) {
 
 function shareEvent(eventId) {
     const event = window.events.find(e => e.id == eventId);
-    
+
     if (!event) return;
-    
+
     const shareText = `📅 ${event.title}\n` +
                      `📍 ${event.location || 'No location'}\n` +
                      `🕐 ${formatDate(event.starts_at)} at ${formatTime(event.starts_at)}\n` +
                      `${event.notes ? '\n📝 ' + event.notes : ''}`;
-    
+
     if (navigator.share) {
         navigator.share({
             title: event.title,
@@ -1008,6 +1016,130 @@ function shareEvent(eventId) {
         }).catch(() => {
             showToast('Failed to copy', 'error');
         });
+    }
+}
+
+function openEditEvent(eventId) {
+    const event = window.events.find(e => e.id == eventId);
+    if (!event) {
+        showToast('Event not found', 'error');
+        return;
+    }
+
+    closeModal('eventDetailsModal');
+
+    document.getElementById('editEventId').value = event.id;
+    document.getElementById('editEventTitle').value = event.title;
+    document.getElementById('editEventNotes').value = event.notes || '';
+
+    // Parse dates and times
+    const startDate = event.starts_at.split(' ')[0];
+    const startTime = event.starts_at.split(' ')[1]?.substring(0, 5) || '00:00';
+    const endDate = event.ends_at.split(' ')[0];
+    const endTime = event.ends_at.split(' ')[1]?.substring(0, 5) || '23:59';
+
+    document.getElementById('editEventStartDate').value = startDate;
+    document.getElementById('editEventStartTime').value = startTime;
+    document.getElementById('editEventEndDate').value = endDate;
+    document.getElementById('editEventEndTime').value = endTime;
+
+    document.getElementById('editEventAllDay').checked = event.all_day == 1;
+    toggleEditAllDay();
+
+    document.getElementById('editEventKind').value = event.kind || 'event';
+    document.getElementById('editEventRecurrence').value = event.recurrence_rule || '';
+    document.getElementById('editEventReminder').value = event.reminder_minutes || '0';
+
+    // Set color
+    const colorRadios = document.querySelectorAll('input[name="editEventColor"]');
+    colorRadios.forEach(radio => {
+        radio.checked = (radio.value === event.color);
+    });
+    // If no match, select first
+    if (!document.querySelector('input[name="editEventColor"]:checked')) {
+        colorRadios[0].checked = true;
+    }
+
+    showModal('editEventModal');
+}
+
+function toggleEditAllDay() {
+    const allDay = document.getElementById('editEventAllDay').checked;
+    const startTime = document.getElementById('editEventStartTime');
+    const endTime = document.getElementById('editEventEndTime');
+
+    if (allDay) {
+        startTime.disabled = true;
+        endTime.disabled = true;
+        startTime.style.opacity = '0.5';
+        endTime.style.opacity = '0.5';
+    } else {
+        startTime.disabled = false;
+        endTime.disabled = false;
+        startTime.style.opacity = '1';
+        endTime.style.opacity = '1';
+    }
+}
+
+async function updateEvent(e) {
+    e.preventDefault();
+
+    try {
+        const eventId = document.getElementById('editEventId').value;
+        const title = document.getElementById('editEventTitle').value.trim();
+        const startDate = document.getElementById('editEventStartDate').value;
+        const startTime = document.getElementById('editEventStartTime').value;
+        const endDate = document.getElementById('editEventEndDate').value || startDate;
+        const endTime = document.getElementById('editEventEndTime').value || startTime;
+        const allDay = document.getElementById('editEventAllDay').checked ? 1 : 0;
+        const notes = document.getElementById('editEventNotes').value.trim();
+        const kind = document.getElementById('editEventKind').value;
+        const recurrenceRule = document.getElementById('editEventRecurrence').value;
+        const reminderMinutes = document.getElementById('editEventReminder').value;
+        const color = document.querySelector('input[name="editEventColor"]:checked').value;
+
+        if (!title) {
+            showToast('Please enter event title', 'error');
+            return;
+        }
+
+        const startsAt = allDay ? `${startDate} 00:00:00` : `${startDate} ${startTime}:00`;
+        const endsAt = allDay ? `${endDate} 23:59:59` : `${endDate} ${endTime}:00`;
+
+        const formData = new FormData();
+        formData.append('action', 'update_event');
+        formData.append('event_id', eventId);
+        formData.append('title', title);
+        formData.append('notes', notes);
+        formData.append('starts_at', startsAt);
+        formData.append('ends_at', endsAt);
+        formData.append('all_day', allDay);
+        formData.append('color', color);
+        formData.append('reminder_minutes', reminderMinutes);
+        formData.append('kind', kind);
+        formData.append('recurrence_rule', recurrenceRule);
+
+        const response = await fetch('', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast('✓ Event updated!', 'success');
+            closeModal('editEventModal');
+
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+
+        } else {
+            throw new Error(data.error || 'Failed to update event');
+        }
+
+    } catch (error) {
+        showToast(error.message, 'error');
     }
 }
 

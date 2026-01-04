@@ -790,8 +790,32 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                 <div class="form-group">
                     <label>Notes (optional)</label>
-                    <textarea id="eventNotes" class="form-control" rows="3" 
+                    <textarea id="eventNotes" class="form-control" rows="3"
                               placeholder="Add any details..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Event Type</label>
+                    <select id="eventKind" class="form-control">
+                        <option value="event">📅 Event</option>
+                        <option value="birthday">🎂 Birthday</option>
+                        <option value="study">📚 Study</option>
+                        <option value="work">💼 Work</option>
+                        <option value="todo">✅ To-Do</option>
+                        <option value="other">📌 Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Repeat</label>
+                    <select id="eventRecurrence" class="form-control">
+                        <option value="">No repeat</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekdays">Weekdays</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                    </select>
                 </div>
 
                 <div class="form-group">
@@ -844,6 +868,123 @@ require_once __DIR__ . '/../shared/components/header.php';
             <button onclick="closeModal('eventDetailsModal')" class="modal-close">&times;</button>
         </div>
         <div class="modal-body" id="eventDetailsContent">
+        </div>
+    </div>
+</div>
+
+<!-- Edit Event Modal -->
+<div id="editEventModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>✏️ Edit Event</h2>
+            <button onclick="closeModal('editEventModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form onsubmit="updateEvent(event)">
+                <input type="hidden" id="editEventId">
+
+                <div class="form-group">
+                    <label>Event Title *</label>
+                    <input type="text" id="editEventTitle" class="form-control" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Start Date *</label>
+                        <input type="date" id="editEventStartDate" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Start Time</label>
+                        <input type="time" id="editEventStartTime" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label>End Date</label>
+                        <input type="date" id="editEventEndDate" class="form-control">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>End Time</label>
+                        <input type="time" id="editEventEndTime" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="editEventAllDay" onchange="toggleEditAllDay()">
+                        All Day Event
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>Notes (optional)</label>
+                    <textarea id="editEventNotes" class="form-control" rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Event Type</label>
+                    <select id="editEventKind" class="form-control">
+                        <option value="event">📅 Event</option>
+                        <option value="birthday">🎂 Birthday</option>
+                        <option value="study">📚 Study</option>
+                        <option value="work">💼 Work</option>
+                        <option value="todo">✅ To-Do</option>
+                        <option value="other">📌 Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Repeat</label>
+                    <select id="editEventRecurrence" class="form-control">
+                        <option value="">No repeat</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekdays">Weekdays</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Reminder</label>
+                    <select id="editEventReminder" class="form-control">
+                        <option value="0">No reminder</option>
+                        <option value="15">15 minutes before</option>
+                        <option value="30">30 minutes before</option>
+                        <option value="60">1 hour before</option>
+                        <option value="1440">1 day before</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Color</label>
+                    <div class="color-picker">
+                        <input type="radio" name="editEventColor" value="#3498db" id="edit_ecolor1">
+                        <label for="edit_ecolor1" class="color-option" style="background: #3498db;"></label>
+
+                        <input type="radio" name="editEventColor" value="#9b59b6" id="edit_ecolor2">
+                        <label for="edit_ecolor2" class="color-option" style="background: #9b59b6;"></label>
+
+                        <input type="radio" name="editEventColor" value="#e74c3c" id="edit_ecolor3">
+                        <label for="edit_ecolor3" class="color-option" style="background: #e74c3c;"></label>
+
+                        <input type="radio" name="editEventColor" value="#2ecc71" id="edit_ecolor4">
+                        <label for="edit_ecolor4" class="color-option" style="background: #2ecc71;"></label>
+
+                        <input type="radio" name="editEventColor" value="#f39c12" id="edit_ecolor5">
+                        <label for="edit_ecolor5" class="color-option" style="background: #f39c12;"></label>
+
+                        <input type="radio" name="editEventColor" value="#1abc9c" id="edit_ecolor6">
+                        <label for="edit_ecolor6" class="color-option" style="background: #1abc9c;"></label>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">Save Changes</button>
+                    <button type="button" onclick="closeModal('editEventModal')" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
