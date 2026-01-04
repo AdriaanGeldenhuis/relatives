@@ -514,16 +514,17 @@ require_once __DIR__ . '/../shared/components/header.php';
         
         <section class="hero-section">
             <div class="greeting-card">
-                <div class="calendar-hero-icon">📅</div>
-                <h1 class="hero-title">
-                    <span class="hero-month"><?php echo $monthName; ?></span>
+                <div class="greeting-time"><?php echo date('l, F j, Y'); ?></div>
+                <h1 class="greeting-text">
+                    <span class="greeting-icon">📅</span>
+                    <span class="greeting-name"><?php echo $monthName; ?></span>
                 </h1>
-                <p class="hero-subtitle">Your family's schedule at a glance</p>
-                
+                <p class="greeting-subtitle">Your family's schedule at a glance</p>
+
                 <div class="quick-actions">
                     <button onclick="showCreateEventModal()" class="quick-action-btn">
-                        <span class="qa-icon">+</span>
-                        <span class="qa-text">New Event</span>
+                        <span class="qa-icon">➕</span>
+                        <span class="qa-text">Add Event</span>
                     </button>
                     <button onclick="goToToday()" class="quick-action-btn">
                         <span class="qa-icon">📍</span>

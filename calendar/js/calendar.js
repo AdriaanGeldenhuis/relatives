@@ -356,73 +356,27 @@ function goToToday() {
 }
 
 // ============================================
-// WEEK VIEW
+// WEEK VIEW - 3 ROW LAYOUT
 // ============================================
 function loadWeekView() {
     const today = currentWeekStart || new Date();
-    
+
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - today.getDay());
     currentWeekStart = weekStart;
-    
+
     const weekDays = [];
     for (let i = 0; i < 7; i++) {
         const day = new Date(weekStart);
         day.setDate(weekStart.getDate() + i);
         weekDays.push(day);
     }
-    
-    const weekHeader = document.querySelector('.week-header');
-    if (weekHeader) {
-        let headerHTML = '<div class="week-time-label">Time</div>';
-        
-        weekDays.forEach(day => {
-            const isToday = day.toDateString() === new Date().toDateString();
-            headerHTML += `
-                <div class="week-day-header ${isToday ? 'today' : ''}">
-                    <div class="week-day-name">${day.toLocaleDateString('en-ZA', { weekday: 'short' })}</div>
-                    <div class="week-day-number">${day.getDate()}</div>
-                </div>
-            `;
-        });
-        
-        weekHeader.innerHTML = headerHTML;
-    }
-    
-    const weekGrid = document.querySelector('.week-grid');
-    if (weekGrid) {
-        let gridHTML = '<div class="week-timeline">';
-        
-        for (let hour = 6; hour <= 23; hour++) {
-            const displayHour = hour > 12 ? hour - 12 : hour;
-            const ampm = hour >= 12 ? 'PM' : 'AM';
-            gridHTML += `<div class="week-hour">${displayHour}:00 ${ampm}</div>`;
-        }
-        
-        gridHTML += '</div>';
-        
-        weekDays.forEach(day => {
-            gridHTML += '<div class="week-day-column">';
-            
-            for (let hour = 6; hour <= 23; hour++) {
-                const dateStr = day.toISOString().split('T')[0];
-                gridHTML += `
-                    <div class="week-hour-slot" 
-                         data-date="${dateStr}" 
-                         data-hour="${hour}"
-                         onclick="quickAddEvent('${dateStr}', ${hour})">
-                    </div>
-                `;
-            }
-            
-            gridHTML += '</div>';
-        });
-        
-        weekGrid.innerHTML = gridHTML;
-    }
-    
+
+    // Always use 3-row layout
+    render3RowWeekView(weekDays);
+
     loadWeekEvents(weekDays);
-    
+
     const monthDisplay = document.getElementById('currentMonthDisplay');
     if (monthDisplay) {
         monthDisplay.textContent = currentWeekStart.toLocaleDateString('en-ZA', {
@@ -430,6 +384,85 @@ function loadWeekView() {
             year: 'numeric'
         });
     }
+}
+
+function render3RowWeekView(weekDays) {
+    // Reorder: Mon, Tue, Wed, Thu, Fri, Sat, Sun
+    // weekDays[0] = Sunday, weekDays[1] = Monday, etc.
+    const orderedDays = [
+        weekDays[1], weekDays[2], weekDays[3], // Mon, Tue, Wed
+        weekDays[4], weekDays[5], weekDays[6], // Thu, Fri, Sat
+        weekDays[0] // Sunday
+    ];
+
+    const weekView = document.getElementById('week-view');
+    if (!weekView) return;
+
+    // Create 3-row grid structure
+    let gridHTML = '<div class="week-3row-grid">';
+
+    // Row 1: Mon, Tue, Wed
+    gridHTML += '<div class="week-row">';
+    for (let i = 0; i < 3; i++) {
+        const day = orderedDays[i];
+        const isToday = day.toDateString() === new Date().toDateString();
+        const dateStr = day.toISOString().split('T')[0];
+        gridHTML += `
+            <div class="week-day-card ${isToday ? 'today' : ''}"
+                 data-date="${dateStr}"
+                 onclick="selectDay('${dateStr}')">
+                <div class="day-header-info">
+                    <span class="day-name">${day.toLocaleDateString('en-ZA', { weekday: 'short' })}</span>
+                    <span class="day-num">${day.getDate()}</span>
+                </div>
+                <div class="day-events-list" data-date="${dateStr}"></div>
+            </div>
+        `;
+    }
+    gridHTML += '</div>';
+
+    // Row 2: Thu, Fri, Sat
+    gridHTML += '<div class="week-row">';
+    for (let i = 3; i < 6; i++) {
+        const day = orderedDays[i];
+        const isToday = day.toDateString() === new Date().toDateString();
+        const dateStr = day.toISOString().split('T')[0];
+        gridHTML += `
+            <div class="week-day-card ${isToday ? 'today' : ''}"
+                 data-date="${dateStr}"
+                 onclick="selectDay('${dateStr}')">
+                <div class="day-header-info">
+                    <span class="day-name">${day.toLocaleDateString('en-ZA', { weekday: 'short' })}</span>
+                    <span class="day-num">${day.getDate()}</span>
+                </div>
+                <div class="day-events-list" data-date="${dateStr}"></div>
+            </div>
+        `;
+    }
+    gridHTML += '</div>';
+
+    // Row 3: Sunday (full width)
+    gridHTML += '<div class="week-row sunday-row">';
+    const sunday = orderedDays[6];
+    const isSundayToday = sunday.toDateString() === new Date().toDateString();
+    const sundayDateStr = sunday.toISOString().split('T')[0];
+    gridHTML += `
+        <div class="week-day-card ${isSundayToday ? 'today' : ''}"
+             data-date="${sundayDateStr}"
+             onclick="selectDay('${sundayDateStr}')">
+            <div class="day-header-info">
+                <span class="day-name">${sunday.toLocaleDateString('en-ZA', { weekday: 'long' })}</span>
+                <span class="day-num">${sunday.getDate()}</span>
+            </div>
+            <div class="day-events-list" data-date="${sundayDateStr}"></div>
+        </div>
+    `;
+    gridHTML += '</div>';
+
+    gridHTML += '</div>';
+
+    // Replace week view content
+    weekView.innerHTML = gridHTML;
 }
 
 async function loadWeekEvents(weekDays) {
@@ -458,44 +491,22 @@ async function loadWeekEvents(weekDays) {
 }
 
 function positionWeekEvents(events, weekDays) {
+    // Add events to 3-row week view day cards
     events.forEach(event => {
         const eventDate = new Date(event.starts_at);
-        const dayIndex = weekDays.findIndex(d => 
-            d.toDateString() === eventDate.toDateString()
-        );
-        
-        if (dayIndex === -1) return;
-        
-        const startHour = eventDate.getHours();
-        const startMinutes = eventDate.getMinutes();
-        const endDate = new Date(event.ends_at);
-        const endHour = endDate.getHours();
-        const endMinutes = endDate.getMinutes();
-        
-        const top = ((startHour - 6) * 60) + startMinutes;
-        const duration = ((endHour - startHour) * 60) + (endMinutes - startMinutes);
-        const height = duration;
-        
-        const dayColumns = document.querySelectorAll('.week-day-column');
-        const dayColumn = dayColumns[dayIndex];
-        
-        if (dayColumn) {
+        const dateStr = eventDate.toISOString().split('T')[0];
+
+        const eventsList = document.querySelector(`.day-events-list[data-date="${dateStr}"]`);
+        if (eventsList) {
             const eventEl = document.createElement('div');
-            eventEl.className = 'week-event';
-            eventEl.style.cssText = `
-                top: ${top}px;
-                height: ${height}px;
-                background: ${event.color};
-            `;
-            eventEl.innerHTML = `
-                <div class="week-event-time">
-                    ${formatTime(event.starts_at)} - ${formatTime(event.ends_at)}
-                </div>
-                <div class="week-event-title">${event.title}</div>
-            `;
-            eventEl.onclick = () => showEventDetails(event.id);
-            
-            dayColumn.appendChild(eventEl);
+            eventEl.className = 'week-mini-event';
+            eventEl.style.background = event.color || '#667eea';
+            eventEl.textContent = `${formatTime(event.starts_at)} ${event.title}`;
+            eventEl.onclick = (e) => {
+                e.stopPropagation();
+                showEventDetails(event.id);
+            };
+            eventsList.appendChild(eventEl);
         }
     });
 }
@@ -598,19 +609,23 @@ async function loadDayEvents(date) {
 function positionDayEvents(events) {
     const dayEventsColumn = document.querySelector('.day-events-column');
     if (!dayEventsColumn) return;
-    
+
+    const hourHeight = 60; // Height of each hour slot in pixels (from CSS .day-hour)
+
     events.forEach(event => {
         const startDate = new Date(event.starts_at);
         const endDate = new Date(event.ends_at);
-        
+
         const startHour = startDate.getHours();
         const startMinutes = startDate.getMinutes();
         const endHour = endDate.getHours();
         const endMinutes = endDate.getMinutes();
-        
-        const top = (startHour * 80) + (startMinutes / 60 * 80);
-        const duration = ((endHour - startHour) * 60) + (endMinutes - startMinutes);
-        const height = (duration / 60) * 80;
+
+        // Calculate position based on hour slots
+        const startOffset = startHour + (startMinutes / 60);
+        const endOffset = endHour + (endMinutes / 60);
+        const top = startOffset * hourHeight;
+        const height = Math.max((endOffset - startOffset) * hourHeight, 30); // Min height 30px
         
         const eventEl = document.createElement('div');
         eventEl.className = 'day-view-event';
@@ -1285,7 +1300,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     document.querySelectorAll('[data-tilt]').forEach(card => new TiltEffect(card));
-    
+
     const heroMonth = document.querySelector('.hero-month');
     if (heroMonth) {
         const text = heroMonth.textContent;
@@ -1298,7 +1313,22 @@ document.addEventListener('DOMContentLoaded', () => {
             heroMonth.appendChild(span);
         });
     }
-    
+
+    // Re-render week view on window resize (for mobile/desktop switch)
+    let resizeTimeout;
+    let lastWidth = window.innerWidth;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            const currentWidth = window.innerWidth;
+            const crossedMobileThreshold = (lastWidth <= 480) !== (currentWidth <= 480);
+            if (crossedMobileThreshold && calendarView === 'week') {
+                loadWeekView();
+            }
+            lastWidth = currentWidth;
+        }, 250);
+    });
+
     console.log('✅ Calendar Page Initialized');
 });
 

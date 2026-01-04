@@ -1428,16 +1428,19 @@ textarea.form-control {
 
 /* Color Picker */
 .color-picker {
-    display: flex;
-    gap: 10px;
+    display: flex !important;
+    flex-direction: row !important;
     flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
 }
 
 .color-picker input[type="radio"] {
-    display: none;
+    display: none !important;
 }
 
-.color-picker .color-option {
+.color-picker label.color-option {
+    display: inline-block !important;
     width: 36px;
     height: 36px;
     border-radius: 50%;
@@ -1445,14 +1448,17 @@ textarea.form-control {
     transition: all 0.2s ease;
     border: 3px solid transparent;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
 }
 
-.color-picker .color-option:hover {
+.color-picker label.color-option:hover {
     transform: scale(1.1);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.color-picker input[type="radio"]:checked + .color-option {
+.color-picker input[type="radio"]:checked + label.color-option {
     border-color: white;
     transform: scale(1.1);
     box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3);
