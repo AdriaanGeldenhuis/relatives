@@ -321,15 +321,19 @@ async function saveScheduleEvent() {
         }
         
         showToast(`✓ Added "${title}"!`, 'success');
-        
+
+        // Close modal first
+        closeModal('addEventModal');
+
+        // Reset form for next use
         titleInput.value = '';
         reminderCheckbox.checked = false;
         recurringCheckbox.checked = false;
         focusModeCheckbox.checked = false;
         toggleReminderInput();
         toggleRecurringInput();
-        titleInput.focus();
-        
+
+        // Add event to DOM immediately (no refresh needed)
         addEventToDOM(result.event);
         updateStats();
         
