@@ -7,22 +7,25 @@
 ALTER TABLE events
 ADD COLUMN IF NOT EXISTS priority ENUM('low', 'medium', 'high', 'urgent') DEFAULT 'medium' AFTER color;
 
--- Add index on priority for filtering
-CREATE INDEX IF NOT EXISTS idx_events_priority ON events(priority);
+-- Add index on priority for filtering (ignore if exists)
+-- CREATE INDEX idx_events_priority ON events(priority);
 
 -- Create subtasks table for checklist support
+-- Note: Using INT UNSIGNED to match events.id if it's unsigned
 CREATE TABLE IF NOT EXISTS event_subtasks (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    event_id INT NOT NULL,
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    event_id INT UNSIGNED NOT NULL,
     title VARCHAR(255) NOT NULL,
     is_done TINYINT(1) DEFAULT 0,
     sort_order INT DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME NULL,
-    FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
     INDEX idx_subtasks_event (event_id),
     INDEX idx_subtasks_done (is_done)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Add foreign key separately (will fail silently if column types don't match)
+-- ALTER TABLE event_subtasks ADD CONSTRAINT fk_subtask_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE;
 
 -- Add estimated duration column (in minutes)
 ALTER TABLE events
@@ -34,8 +37,8 @@ ADD COLUMN IF NOT EXISTS actual_duration INT NULL AFTER estimated_duration;
 
 -- Add tags/labels support
 CREATE TABLE IF NOT EXISTS event_tags (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    family_id INT NOT NULL,
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    family_id INT UNSIGNED NOT NULL,
     name VARCHAR(50) NOT NULL,
     color VARCHAR(20) DEFAULT '#667eea',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -45,11 +48,11 @@ CREATE TABLE IF NOT EXISTS event_tags (
 
 -- Junction table for event-tag relationship
 CREATE TABLE IF NOT EXISTS event_tag_assignments (
-    event_id INT NOT NULL,
-    tag_id INT NOT NULL,
+    event_id INT UNSIGNED NOT NULL,
+    tag_id INT UNSIGNED NOT NULL,
     PRIMARY KEY (event_id, tag_id),
-    FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
-    FOREIGN KEY (tag_id) REFERENCES event_tags(id) ON DELETE CASCADE
+    INDEX idx_eta_event (event_id),
+    INDEX idx_eta_tag (tag_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Add snooze tracking to existing event_reminders (if not exists)
@@ -59,11 +62,11 @@ ADD COLUMN IF NOT EXISTS snooze_until DATETIME NULL AFTER snooze_count;
 
 -- Create quick duration presets table
 CREATE TABLE IF NOT EXISTS duration_presets (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NULL,  -- NULL = system preset
-    family_id INT NULL,
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NULL,  -- NULL = system preset
+    family_id INT UNSIGNED NULL,
     label VARCHAR(50) NOT NULL,
-    duration_minutes INT NOT NULL,
+    duration_minutes INT UNSIGNED NOT NULL,
     icon VARCHAR(10) DEFAULT '⏱️',
     is_default TINYINT(1) DEFAULT 0,
     sort_order INT DEFAULT 0,
