@@ -500,7 +500,7 @@ $doneEvents = count(array_filter($events, fn($e) => $e['status'] === 'done'));
 
 $pageTitle = 'Calendar';
 $activePage = 'calendar';
-$cacheVersion = '3.6.0';
+$cacheVersion = '3.7.0';
 $pageCSS = ['/calendar/css/calendar.css?v=' . $cacheVersion];
 $pageJS = ['/calendar/js/calendar.js?v=' . $cacheVersion];
 
@@ -603,8 +603,9 @@ require_once __DIR__ . '/../shared/components/header.php';
                                     <?php if (!empty($dayEvents)): ?>
                                         <div class="day-events">
                                             <?php foreach (array_slice($dayEvents, 0, 3) as $event): ?>
-                                                <div class="day-event" 
+                                                <div class="day-event"
                                                      style="background: <?php echo htmlspecialchars($event['color']); ?>;"
+                                                     data-event-id="<?php echo $event['id']; ?>"
                                                      onclick="event.stopPropagation(); showEventDetails(<?php echo $event['id']; ?>)">
                                                     <?php echo htmlspecialchars($event['title']); ?>
                                                 </div>
@@ -758,7 +759,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             <button onclick="closeModal('createEventModal')" class="modal-close">&times;</button>
         </div>
         <div class="modal-body">
-            <form onsubmit="createEvent(event)">
+            <form onsubmit="createEvent(event); return false;">
                 
                 <div class="form-group">
                     <label>Event Title *</label>
@@ -899,7 +900,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             <button onclick="closeModal('editEventModal')" class="modal-close">&times;</button>
         </div>
         <div class="modal-body">
-            <form onsubmit="updateEvent(event)">
+            <form onsubmit="updateEvent(event); return false;">
                 <input type="hidden" id="editEventId">
 
                 <div class="form-group">

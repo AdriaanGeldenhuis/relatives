@@ -810,12 +810,18 @@ async function createEvent(event) {
 
 // Add event to calendar without page reload
 function addEventToCalendar(event) {
+    console.log('Adding event to calendar:', event);
+
     const dateStr = event.starts_at.split(' ')[0];
+    console.log('Looking for day cell with date:', dateStr);
+
     const dayCell = document.querySelector(`.calendar-day[data-date="${dateStr}"]`);
+    console.log('Found day cell:', dayCell);
 
     if (dayCell) {
         let eventsContainer = dayCell.querySelector('.day-events');
         if (!eventsContainer) {
+            console.log('Creating new events container');
             eventsContainer = document.createElement('div');
             eventsContainer.className = 'day-events';
             dayCell.appendChild(eventsContainer);
@@ -823,8 +829,9 @@ function addEventToCalendar(event) {
 
         const eventEl = document.createElement('div');
         eventEl.className = 'day-event';
-        eventEl.style.background = event.color;
+        eventEl.style.background = event.color || '#3498db';
         eventEl.textContent = event.title;
+        eventEl.dataset.eventId = event.id;
         eventEl.onclick = (e) => {
             e.stopPropagation();
             showEventDetails(event.id);
@@ -833,10 +840,60 @@ function addEventToCalendar(event) {
         // Add with animation
         eventEl.style.animation = 'fadeInUp 0.3s ease';
         eventsContainer.appendChild(eventEl);
+        console.log('Event added to calendar successfully');
 
         // Add to window.events array for details view
         if (window.events) {
-            window.events.push(event);
+            // Add full event data for details modal
+            window.events.push({
+                ...event,
+                full_name: window.currentUser?.name || 'You',
+                avatar_color: '#667eea',
+                created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
+            });
+        }
+    } else {
+        console.log('Day cell not found for date:', dateStr, '- event may be in a different month');
+    }
+}
+
+// Update event on calendar without page reload
+function updateEventOnCalendar(event) {
+    console.log('Updating event on calendar:', event);
+
+    // Remove old event element
+    const oldEventEl = document.querySelector(`.day-event[data-event-id="${event.id}"]`);
+    if (oldEventEl) {
+        oldEventEl.remove();
+    }
+
+    // Update in window.events array
+    if (window.events) {
+        const index = window.events.findIndex(e => e.id == event.id);
+        if (index !== -1) {
+            window.events[index] = { ...window.events[index], ...event };
+        }
+    }
+
+    // Add to new location
+    addEventToCalendar(event);
+}
+
+// Remove event from calendar without page reload
+function removeEventFromCalendar(eventId) {
+    console.log('Removing event from calendar:', eventId);
+
+    const eventEl = document.querySelector(`.day-event[data-event-id="${eventId}"]`);
+    if (eventEl) {
+        eventEl.style.animation = 'fadeOut 0.3s ease';
+        setTimeout(() => eventEl.remove(), 300);
+    }
+
+    // Remove from window.events array
+    if (window.events) {
+        const index = window.events.findIndex(e => e.id == eventId);
+        if (index !== -1) {
+            window.events.splice(index, 1);
         }
     }
 }
@@ -990,15 +1047,15 @@ async function deleteEvent(eventId) {
             showToast('Event deleted', 'success');
             closeModal('eventDetailsModal');
 
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+            // Remove event from calendar in real-time
+            removeEventFromCalendar(eventId);
 
         } else {
             throw new Error(data.error || 'Failed to delete event');
         }
-        
+
     } catch (error) {
+        console.error('Delete event error:', error);
         showToast(error.message, 'error');
     }
 }
@@ -1148,15 +1205,25 @@ async function updateEvent(e) {
             showToast('✓ Event updated!', 'success');
             closeModal('editEventModal');
 
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+            // Update event on calendar in real-time
+            updateEventOnCalendar({
+                id: eventId,
+                title: title,
+                starts_at: startsAt,
+                ends_at: endsAt,
+                color: color,
+                kind: kind,
+                all_day: allDay,
+                notes: notes,
+                location: eventLocation
+            });
 
         } else {
             throw new Error(data.error || 'Failed to update event');
         }
 
     } catch (error) {
+        console.error('Update event error:', error);
         showToast(error.message, 'error');
     }
 }
