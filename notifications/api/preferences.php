@@ -311,31 +311,51 @@ try {
             // Body: Multi-line beautiful format
             $lines = [];
 
-            // Line 1: Condition
-            $lines[] = $description;
-
-            // Line 2: High/Low/Feels
-            $tempLine = [];
-            if ($maxTemp != $minTemp) {
-                $tempLine[] = "↑ {$maxTemp}°";
-                $tempLine[] = "↓ {$minTemp}°";
-            }
+            // Line 1: Condition + Feels like
+            $line1 = $description;
             if ($feelsLike !== null && $feelsLike != $temp) {
-                $tempLine[] = "Feels {$feelsLike}°";
+                $line1 .= " · Feels {$feelsLike}°";
             }
-            if (!empty($tempLine)) {
-                $lines[] = implode(" · ", $tempLine);
+            $lines[] = $line1;
+
+            // Line 2: High/Low temps
+            if ($maxTemp != $minTemp) {
+                $lines[] = "📈 High {$maxTemp}° · Low {$minTemp}°";
             }
 
             // Line 3: Rain, Humidity, Wind
+            $humidity = $weatherData['main']['humidity'] ?? 0;
             $statsLine = [];
             if ($rainChance > 0) {
                 $statsLine[] = "☔ {$rainChance}%";
             }
-            $humidity = $weatherData['main']['humidity'] ?? 0;
             $statsLine[] = "💧 {$humidity}%";
             $statsLine[] = "💨 {$windSpeed} km/h";
             $lines[] = implode(" · ", $statsLine);
+
+            // Line 4: Sunrise/Sunset if available
+            if (isset($weatherData['sys']['sunrise']) && isset($weatherData['sys']['sunset'])) {
+                $sunrise = date('H:i', $weatherData['sys']['sunrise'] + ($weatherData['timezone'] ?? 7200));
+                $sunset = date('H:i', $weatherData['sys']['sunset'] + ($weatherData['timezone'] ?? 7200));
+                $lines[] = "🌅 {$sunrise} · 🌇 {$sunset}";
+            }
+
+            // Line 5: Smart tip based on conditions
+            $tip = null;
+            if ($rainChance >= 60) {
+                $tip = "☂️ Take an umbrella today!";
+            } elseif ($rainChance >= 30) {
+                $tip = "🌂 Might want an umbrella";
+            } elseif ($temp >= 30) {
+                $tip = "🥵 Stay hydrated, it's hot!";
+            } elseif ($temp <= 10) {
+                $tip = "🧥 Bundle up, it's cold!";
+            } elseif ($temp >= 20 && $temp <= 26 && $rainChance < 20) {
+                $tip = "😎 Perfect weather outside!";
+            }
+            if ($tip) {
+                $lines[] = $tip;
+            }
 
             $message = implode("\n", $lines);
 
