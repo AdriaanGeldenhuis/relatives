@@ -254,9 +254,7 @@ async function apiCall(endpoint, data = {}, method = 'POST') {
 // ============================================
 // ADD EVENT
 // ============================================
-async function addEvent(event) {
-    if (event) event.preventDefault();
-    
+async function saveScheduleEvent() {
     const titleInput = document.getElementById('eventTitle');
     const dateInput = document.getElementById('eventDate');
     const startInput = document.getElementById('eventStart');
@@ -291,8 +289,8 @@ async function addEvent(event) {
         showToast('End time must be after start time', 'error');
         return;
     }
-    
-    const submitBtn = event.target.querySelector('button[type="submit"]');
+
+    const submitBtn = document.getElementById('addEventSubmitBtn');
     const originalBtnText = submitBtn.innerHTML;
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="btn-icon">⏳</span><span class="btn-text">Adding...</span>';
@@ -520,9 +518,7 @@ function editEvent(eventId) {
     showModal('editEventModal');
 }
 
-async function saveEditedEvent(event) {
-    if (event) event.preventDefault();
-
+async function saveScheduleChanges() {
     const eventId = document.getElementById('editEventId').value;
     const title = document.getElementById('editEventTitle').value.trim();
     const eventDate = document.getElementById('editEventDate').value;
@@ -559,7 +555,7 @@ async function saveEditedEvent(event) {
     }
 
     // Show loading
-    const submitBtn = event.target.querySelector('button[type="submit"]');
+    const submitBtn = document.getElementById('editEventSubmitBtn');
     const originalText = submitBtn.textContent;
     submitBtn.disabled = true;
     submitBtn.textContent = 'Saving...';
