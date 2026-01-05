@@ -709,7 +709,7 @@ function toggleAllDay() {
 
 async function createEvent(event) {
     event.preventDefault();
-    
+
     try {
         const title = document.getElementById('eventTitle').value.trim();
         const startDate = document.getElementById('eventStartDate').value;
@@ -717,7 +717,7 @@ async function createEvent(event) {
         const endDate = document.getElementById('eventEndDate').value || startDate;
         const endTime = document.getElementById('eventEndTime').value || startTime;
         const allDay = document.getElementById('eventAllDay').checked ? 1 : 0;
-        const location = document.getElementById('eventLocation').value.trim();
+        const eventLocation = document.getElementById('eventLocation').value.trim();
         const notes = document.getElementById('eventNotes').value.trim();
         const reminderMinutes = document.getElementById('eventReminder').value;
         const color = document.querySelector('input[name="eventColor"]:checked').value;
@@ -736,7 +736,7 @@ async function createEvent(event) {
         formData.append('action', 'create_event');
         formData.append('title', title);
         formData.append('notes', notes);
-        formData.append('location', location);
+        formData.append('location', eventLocation);
         formData.append('starts_at', startsAt);
         formData.append('ends_at', endsAt);
         formData.append('all_day', allDay);
@@ -744,26 +744,26 @@ async function createEvent(event) {
         formData.append('reminder_minutes', reminderMinutes);
         formData.append('kind', kind);
         formData.append('recurrence_rule', recurrenceRule);
-        
+
         const response = await fetch('', {
             method: 'POST',
             body: formData
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             showToast('✓ Event created!', 'success');
             confetti();
-            
+
             setTimeout(() => {
-                location.reload();
+                window.location.reload();
             }, 1500);
-            
+
         } else {
             throw new Error(data.error || 'Failed to create event');
         }
-        
+
     } catch (error) {
         showToast(error.message, 'error');
     }

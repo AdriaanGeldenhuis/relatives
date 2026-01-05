@@ -498,7 +498,7 @@ $doneEvents = count(array_filter($events, fn($e) => $e['status'] === 'done'));
 
 $pageTitle = 'Calendar';
 $activePage = 'calendar';
-$cacheVersion = '3.4.0';
+$cacheVersion = '3.5.0';
 $pageCSS = ['/calendar/css/calendar.css?v=' . $cacheVersion];
 $pageJS = ['/calendar/js/calendar.js?v=' . $cacheVersion];
 
