@@ -608,7 +608,7 @@ function showDayEvents(dateStr) {
                     <span class="day-event-type">${getEventTypeLabel(event.kind)}</span>
                 </div>
                 <div class="day-event-actions">
-                    <button class="day-event-action edit" onclick="closeModal('dayEventsModal'); showEditEventModal(${event.id});" title="Edit">✏️</button>
+                    <button class="day-event-action edit" onclick="closeModal('dayEventsModal'); openEditEvent(${event.id});" title="Edit">✏️</button>
                     <button class="day-event-action delete" onclick="confirmDeleteFromDay(${event.id});" title="Delete">🗑️</button>
                 </div>
             </div>
