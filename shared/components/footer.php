@@ -418,6 +418,10 @@
                 
                 <div class="plus-wrapper">
                     <div class="plus-menu" id="plusMenu">
+                        <a href="/notifications/" class="plus-menu-item">
+                            <span class="plus-menu-icon">🔔</span>
+                            <span>Notifications</span>
+                        </a>
                         <a href="/shopping/" class="plus-menu-item">
                             <span class="plus-menu-icon">🛒</span>
                             <span>Shopping</span>

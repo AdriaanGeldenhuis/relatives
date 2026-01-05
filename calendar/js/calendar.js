@@ -621,11 +621,49 @@ function showDayEvents(dateStr) {
 }
 
 // ============================================
+// EVENT TYPE COLORS AND SETTINGS
+// ============================================
+const eventTypeSettings = {
+    birthday: { color: '#e74c3c', allDay: true },
+    anniversary: { color: '#9b59b6', allDay: true },
+    holiday: { color: '#f39c12', allDay: true },
+    family_event: { color: '#2ecc71', allDay: false },
+    date: { color: '#e91e63', allDay: false },
+    reminder: { color: '#3498db', allDay: false },
+    event: { color: '#3498db', allDay: false }
+};
+
+function onEventTypeChange(selectElement, isEdit = false) {
+    const type = selectElement.value;
+    const settings = eventTypeSettings[type] || { color: '#3498db', allDay: false };
+
+    // Set all day checkbox
+    const allDayCheckbox = document.getElementById(isEdit ? 'editEventAllDay' : 'eventAllDay');
+    if (allDayCheckbox && settings.allDay) {
+        allDayCheckbox.checked = true;
+        if (isEdit) {
+            toggleEditAllDay();
+        } else {
+            toggleAllDay();
+        }
+    }
+
+    // Set color
+    const colorName = isEdit ? 'editEventColor' : 'eventColor';
+    const colorRadios = document.querySelectorAll(`input[name="${colorName}"]`);
+    colorRadios.forEach(radio => {
+        if (radio.value === settings.color) {
+            radio.checked = true;
+        }
+    });
+}
+
+// ============================================
 // CREATE EVENT MODAL
 // ============================================
 function showCreateEventModal(preselectedDate = null) {
     const modal = document.getElementById('createEventModal');
-    
+
     if (preselectedDate) {
         document.getElementById('eventStartDate').value = preselectedDate;
         document.getElementById('eventEndDate').value = preselectedDate;
@@ -633,16 +671,20 @@ function showCreateEventModal(preselectedDate = null) {
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('eventStartDate').value = today;
     }
-    
+
     const now = new Date();
     const startTime = new Date(now.getTime() + 60 * 60 * 1000);
-    document.getElementById('eventStartTime').value = 
+    document.getElementById('eventStartTime').value =
         startTime.getHours().toString().padStart(2, '0') + ':00';
-    
+
     const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
-    document.getElementById('eventEndTime').value = 
+    document.getElementById('eventEndTime').value =
         endTime.getHours().toString().padStart(2, '0') + ':00';
-    
+
+    // Reset all day checkbox
+    document.getElementById('eventAllDay').checked = false;
+    toggleAllDay();
+
     showModal('createEventModal');
     document.getElementById('eventTitle').focus();
 }
