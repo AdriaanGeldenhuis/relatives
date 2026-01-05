@@ -1136,6 +1136,8 @@ async function changeDate(days) {
             : 'slideOutRight 0.2s ease forwards';
     }
 
+    // Wait for animation then load
+    await new Promise(resolve => setTimeout(resolve, 200));
     await loadScheduleData(newDate, days > 0 ? 'slideInRight' : 'slideInLeft');
 }
 
@@ -1187,6 +1189,8 @@ function changeView(view) {
 
 async function loadScheduleData(date, animationIn) {
     try {
+        console.log('Loading schedule for date:', date);
+
         // Fetch the schedule page for the new date
         const response = await fetch(`?date=${date}&view=${window.ScheduleApp.viewMode}&ajax=1`);
         const html = await response.text();
@@ -1211,6 +1215,12 @@ async function loadScheduleData(date, animationIn) {
         const newDateEvents = doc.querySelector('.date-events');
         const newDateDisplay = doc.querySelector('.date-display');
 
+        console.log('New date values from server:', {
+            value: newDateValue?.textContent,
+            day: newDateDay?.textContent,
+            events: newDateEvents?.textContent
+        });
+
         const dateValue = document.querySelector('.date-value');
         const dateDay = document.querySelector('.date-day');
         const dateEvents = document.querySelector('.date-events');
@@ -1218,12 +1228,19 @@ async function loadScheduleData(date, animationIn) {
 
         if (dateValue && newDateValue) {
             dateValue.textContent = newDateValue.textContent;
+            console.log('Updated date-value to:', newDateValue.textContent);
+        } else {
+            console.log('Could not find date-value elements', { current: !!dateValue, new: !!newDateValue });
         }
+
         if (dateDay && newDateDay) {
             dateDay.textContent = newDateDay.textContent;
+            console.log('Updated date-day to:', newDateDay.textContent);
         }
+
         if (dateEvents && newDateEvents) {
             dateEvents.textContent = newDateEvents.textContent;
+            console.log('Updated date-events to:', newDateEvents.textContent);
         }
 
         // Update today class
@@ -1253,6 +1270,8 @@ async function loadScheduleData(date, animationIn) {
         // Update URL without refresh
         const newUrl = `?date=${date}&view=${window.ScheduleApp.viewMode}`;
         window.history.pushState({ date: date }, '', newUrl);
+
+        console.log('Schedule loaded successfully for:', date);
 
     } catch (error) {
         console.error('Failed to load schedule:', error);
