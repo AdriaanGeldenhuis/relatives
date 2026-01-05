@@ -535,6 +535,19 @@ require_once __DIR__ . '/../shared/components/header.php';
         <div class="modal-body">
             <form id="quickAddForm" onsubmit="addEvent(event)">
                 <div class="form-group">
+                    <label>Event Type</label>
+                    <select id="eventType" class="form-control">
+                        <option value="work">💼 Work</option>
+                        <option value="study">📚 Study</option>
+                        <option value="church">⛪ Church</option>
+                        <option value="event">📅 Event</option>
+                        <option value="focus">🎯 Focus</option>
+                        <option value="break">☕ Break</option>
+                        <option value="todo">✅ To-Do</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label>What do you want to work on?</label>
                     <input
                         type="text"
@@ -574,19 +587,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                             value="<?php echo date('H:00', strtotime('+1 hour')); ?>"
                             required>
                     </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Event Type</label>
-                    <select id="eventType" class="form-control">
-                        <option value="work">💼 Work</option>
-                        <option value="study">📚 Study</option>
-                        <option value="church">⛪ Church</option>
-                        <option value="event">📅 Event</option>
-                        <option value="focus">🎯 Focus</option>
-                        <option value="break">☕ Break</option>
-                        <option value="todo">✅ To-Do</option>
-                    </select>
                 </div>
 
                 <div class="form-group">

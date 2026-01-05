@@ -624,27 +624,63 @@ function showDayEvents(dateStr) {
 // EVENT TYPE COLORS AND SETTINGS
 // ============================================
 const eventTypeSettings = {
-    birthday: { color: '#e74c3c', allDay: true },
-    anniversary: { color: '#9b59b6', allDay: true },
-    holiday: { color: '#f39c12', allDay: true },
-    family_event: { color: '#2ecc71', allDay: false },
-    date: { color: '#e91e63', allDay: false },
-    reminder: { color: '#3498db', allDay: false },
-    event: { color: '#3498db', allDay: false }
+    birthday: { color: '#e74c3c', allDay: true, yearlyRepeat: true, hideTime: true },
+    anniversary: { color: '#9b59b6', allDay: true, yearlyRepeat: true, hideTime: true },
+    holiday: { color: '#f39c12', allDay: true, yearlyRepeat: false, hideTime: false },
+    family_event: { color: '#2ecc71', allDay: false, yearlyRepeat: false, hideTime: false },
+    date: { color: '#e91e63', allDay: false, yearlyRepeat: false, hideTime: false },
+    reminder: { color: '#3498db', allDay: false, yearlyRepeat: false, hideTime: false },
+    event: { color: '#3498db', allDay: false, yearlyRepeat: false, hideTime: false }
 };
 
 function onEventTypeChange(selectElement, isEdit = false) {
     const type = selectElement.value;
-    const settings = eventTypeSettings[type] || { color: '#3498db', allDay: false };
+    const settings = eventTypeSettings[type] || { color: '#3498db', allDay: false, yearlyRepeat: false, hideTime: false };
 
-    // Set all day checkbox
+    // Get element IDs based on create/edit mode
+    const prefix = isEdit ? 'edit' : '';
     const allDayCheckbox = document.getElementById(isEdit ? 'editEventAllDay' : 'eventAllDay');
-    if (allDayCheckbox && settings.allDay) {
-        allDayCheckbox.checked = true;
-        if (isEdit) {
-            toggleEditAllDay();
-        } else {
-            toggleAllDay();
+    const timeSectionId = isEdit ? 'editEventTimeSection' : 'eventTimeSection';
+    const repeatSectionId = isEdit ? 'editEventRepeatSection' : 'eventRepeatSection';
+    const recurrenceSelect = document.getElementById(isEdit ? 'editEventRecurrence' : 'eventRecurrence');
+    const timeSection = document.getElementById(timeSectionId);
+    const repeatSection = document.getElementById(repeatSectionId);
+
+    // Handle birthday/anniversary: hide time section and set yearly repeat
+    if (settings.hideTime) {
+        // Hide time section completely
+        if (timeSection) {
+            timeSection.style.display = 'none';
+        }
+        // Hide repeat section (auto-set to yearly)
+        if (repeatSection) {
+            repeatSection.style.display = 'none';
+        }
+        // Set all day
+        if (allDayCheckbox) {
+            allDayCheckbox.checked = true;
+        }
+        // Set yearly repeat
+        if (recurrenceSelect) {
+            recurrenceSelect.value = 'yearly';
+        }
+    } else {
+        // Show time section
+        if (timeSection) {
+            timeSection.style.display = 'block';
+        }
+        // Show repeat section
+        if (repeatSection) {
+            repeatSection.style.display = 'block';
+        }
+        // Reset all day if not a special all-day type
+        if (allDayCheckbox && !settings.allDay) {
+            allDayCheckbox.checked = false;
+            if (isEdit) {
+                toggleEditAllDay();
+            } else {
+                toggleAllDay();
+            }
         }
     }
 
@@ -656,6 +692,8 @@ function onEventTypeChange(selectElement, isEdit = false) {
             radio.checked = true;
         }
     });
+
+    console.log('Event type changed to:', type, 'Settings:', settings);
 }
 
 // ============================================

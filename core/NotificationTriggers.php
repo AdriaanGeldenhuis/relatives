@@ -215,6 +215,37 @@ class NotificationTriggers {
         ]);
     }
 
+    // ==================== ANNIVERSARIES ====================
+
+    public function onAnniversaryReminder(int $eventId, int $userId, string $title, int $daysUntil) {
+        $notifTitle = $daysUntil === 0
+            ? "💍 Anniversary Today: {$title}"
+            : "💍 Anniversary " . ($daysUntil === 1 ? "Tomorrow" : "in $daysUntil days") . ": {$title}";
+
+        $message = $daysUntil === 0
+            ? "Today is a special day! Celebrate your anniversary."
+            : "Don't forget to prepare for this special day!";
+
+        $this->notifManager->create([
+            'user_id' => $userId,
+            'type' => NotificationManager::TYPE_CALENDAR,
+            'title' => $notifTitle,
+            'message' => $message,
+            'action_url' => '/calendar/',
+            'priority' => $daysUntil === 0 ? NotificationManager::PRIORITY_HIGH : NotificationManager::PRIORITY_NORMAL,
+            'icon' => '💍',
+            'vibrate' => 1,
+            'sound' => $daysUntil === 0 ? 'celebration' : 'reminder',
+            'requires_interaction' => $daysUntil === 0 ? 1 : 0,
+            'data' => [
+                'event_id' => $eventId,
+                'title' => $title,
+                'days_until' => $daysUntil,
+                'type' => 'anniversary_reminder'
+            ]
+        ]);
+    }
+
     // ==================== ALARMS ====================
 
     public function onAlarmTriggered(int $eventId, int $userId, string $title, string $scheduledTime) {
