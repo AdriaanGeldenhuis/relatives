@@ -602,18 +602,16 @@ require_once __DIR__ . '/../shared/components/header.php';
                                     
                                     <?php if (!empty($dayEvents)): ?>
                                         <div class="day-events">
-                                            <?php foreach (array_slice($dayEvents, 0, 3) as $event): ?>
+                                            <?php foreach (array_slice($dayEvents, 0, 2) as $event): ?>
                                                 <div class="day-event"
-                                                     style="background: <?php echo htmlspecialchars($event['color']); ?>;"
-                                                     data-event-id="<?php echo $event['id']; ?>"
-                                                     onclick="event.stopPropagation(); showEventDetails(<?php echo $event['id']; ?>)">
-                                                    <?php echo htmlspecialchars($event['title']); ?>
+                                                     style="background: <?php echo htmlspecialchars($event['color']); ?>;">
+                                                    <?php echo htmlspecialchars(mb_substr($event['title'], 0, 12)); ?><?php echo mb_strlen($event['title']) > 12 ? '...' : ''; ?>
                                                 </div>
                                             <?php endforeach; ?>
-                                            
-                                            <?php if (count($dayEvents) > 3): ?>
+
+                                            <?php if (count($dayEvents) > 2): ?>
                                                 <div class="day-event-more">
-                                                    +<?php echo count($dayEvents) - 3; ?> more
+                                                    +<?php echo count($dayEvents) - 2; ?> more
                                                 </div>
                                             <?php endif; ?>
                                         </div>
@@ -751,6 +749,23 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     </div>
 </main>
+
+<!-- Day Events Overlay Modal -->
+<div id="dayEventsModal" class="modal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2 id="dayEventsTitle">📅 Events</h2>
+            <button onclick="closeModal('dayEventsModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="dayEventsList" class="day-events-list-modal"></div>
+            <div class="modal-actions">
+                <button type="button" onclick="addEventForDay()" class="btn btn-primary">➕ Add Event</button>
+                <button type="button" onclick="closeModal('dayEventsModal')" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div id="createEventModal" class="modal">
     <div class="modal-content">

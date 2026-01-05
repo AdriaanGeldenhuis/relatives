@@ -578,46 +578,77 @@ function showDayEvents(dateStr) {
         const eventDate = e.starts_at.split(' ')[0];
         return eventDate === dateStr;
     });
-    
+
+    // Store selected date for adding events
+    window.selectedDayForEvent = dateStr;
+
+    // Get the modal elements
+    const titleEl = document.getElementById('dayEventsTitle');
+    const listEl = document.getElementById('dayEventsList');
+
+    titleEl.textContent = `📅 ${formatDate(dateStr)}`;
+
     if (dayEvents.length === 0) {
-        showToast('No events on this day', 'info');
-        return;
-    }
-    
-    const modal = document.createElement('div');
-    modal.className = 'modal active';
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 600px;">
-            <div class="modal-header">
-                <h2>📅 ${formatDate(dateStr)}</h2>
-                <button onclick="this.closest('.modal').remove()" class="modal-close">&times;</button>
+        listEl.innerHTML = `
+            <div class="day-no-events">
+                <div class="day-no-events-icon">📭</div>
+                <p>No events on this day</p>
             </div>
-            <div class="modal-body">
-                <div style="display: flex; flex-direction: column; gap: 15px;">
-                    ${dayEvents.map(event => `
-                        <div class="day-event-card" 
-                             style="background: ${event.color}; padding: 20px; border-radius: 16px; color: white; cursor: pointer;"
-                             onclick="this.closest('.modal').remove(); showEventDetails(${event.id});">
-                            <div style="font-size: 20px; font-weight: 800; margin-bottom: 8px;">
-                                ${event.title}
-                            </div>
-                            <div style="font-size: 14px; opacity: 0.9;">
-                                ${event.all_day ? 'All day' : formatTime(event.starts_at)}
-                                ${event.location ? `• 📍 ${event.location}` : ''}
-                            </div>
-                        </div>
-                    `).join('')}
+        `;
+    } else {
+        listEl.innerHTML = dayEvents.map(event => `
+            <div class="day-event-card">
+                <div class="day-event-color" style="background: ${event.color};"></div>
+                <div class="day-event-info" onclick="closeModal('dayEventsModal'); showEventDetails(${event.id});">
+                    <div class="day-event-title">${escapeHtml(event.title)}</div>
+                    <div class="day-event-time">
+                        ${event.all_day ? '🌅 All day' : `⏰ ${formatTime(event.starts_at)}${event.ends_at ? ' - ' + formatTime(event.ends_at) : ''}`}
+                        ${event.eventLocation ? ` • 📍 ${escapeHtml(event.eventLocation)}` : ''}
+                    </div>
+                    <span class="day-event-type">${getEventTypeLabel(event.kind)}</span>
                 </div>
-                <button onclick="this.closest('.modal').remove(); showCreateEventModal('${dateStr}');" 
-                        class="btn btn-primary" 
-                        style="width: 100%; margin-top: 20px;">
-                    + Add Event to This Day
-                </button>
+                <div class="day-event-actions">
+                    <button class="day-event-action edit" onclick="closeModal('dayEventsModal'); showEditEventModal(${event.id});" title="Edit">✏️</button>
+                    <button class="day-event-action delete" onclick="confirmDeleteFromDay(${event.id});" title="Delete">🗑️</button>
+                </div>
             </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
+        `).join('');
+    }
+
+    showModal('dayEventsModal');
+}
+
+function getEventTypeLabel(kind) {
+    const labels = {
+        birthday: '🎂 Birthday',
+        anniversary: '💍 Anniversary',
+        holiday: '🎉 Holiday',
+        family_event: '👨‍👩‍👧‍👦 Family',
+        date: '💕 Date',
+        reminder: '🔔 Reminder',
+        event: '📅 Event'
+    };
+    return labels[kind] || '📅 Event';
+}
+
+function addEventForDay() {
+    closeModal('dayEventsModal');
+    showCreateEventModal(window.selectedDayForEvent || new Date().toISOString().split('T')[0]);
+}
+
+async function confirmDeleteFromDay(eventId) {
+    if (confirm('Are you sure you want to delete this event?')) {
+        try {
+            await deleteEventById(eventId);
+            showToast('Event deleted!', 'success');
+            // Refresh the day events modal
+            showDayEvents(window.selectedDayForEvent);
+            // Also update the calendar
+            removeEventFromCalendar(eventId);
+        } catch (error) {
+            showToast('Failed to delete event', 'error');
+        }
+    }
 }
 
 // ============================================
@@ -1447,5 +1478,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log('✅ Calendar Page Initialized');
 });
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+async function deleteEventById(eventId) {
+    const formData = new FormData();
+    formData.append('action', 'delete_event');
+    formData.append('event_id', eventId);
+
+    const response = await fetch('', {
+        method: 'POST',
+        body: formData
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+        throw new Error(data.error || 'Failed to delete event');
+    }
+
+    return data;
+}
+
+// ============================================
+// EXPORT FUNCTIONS TO GLOBAL SCOPE
+// ============================================
+window.showDayEvents = showDayEvents;
+window.addEventForDay = addEventForDay;
+window.confirmDeleteFromDay = confirmDeleteFromDay;
+window.getEventTypeLabel = getEventTypeLabel;
 
 console.log('✅ Calendar JavaScript loaded');
