@@ -500,7 +500,7 @@ $doneEvents = count(array_filter($events, fn($e) => $e['status'] === 'done'));
 
 $pageTitle = 'Calendar';
 $activePage = 'calendar';
-$cacheVersion = '3.8.0';
+$cacheVersion = '3.9.0';
 $pageCSS = ['/calendar/css/calendar.css?v=' . $cacheVersion];
 $pageJS = ['/calendar/js/calendar.js?v=' . $cacheVersion];
 
@@ -872,7 +872,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="button" onclick="createEvent()" class="btn btn-primary" style="flex: 1;">Create Event</button>
+                    <button type="button" onclick="saveNewEvent()" class="btn btn-primary" style="flex: 1;">Create Event</button>
                     <button type="button" onclick="closeModal('createEventModal')" class="btn btn-secondary">Cancel</button>
                 </div>
             </div>
@@ -1007,7 +1007,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="button" onclick="updateEvent()" class="btn btn-primary" style="flex: 1;">Save Changes</button>
+                    <button type="button" onclick="saveEventChanges()" class="btn btn-primary" style="flex: 1;">Save Changes</button>
                     <button type="button" onclick="closeModal('editEventModal')" class="btn btn-secondary">Cancel</button>
                 </div>
             </div>

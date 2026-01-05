@@ -707,8 +707,8 @@ function toggleAllDay() {
     }
 }
 
-async function createEvent() {
-    console.log('createEvent() called');
+async function saveNewEvent() {
+    console.log('saveNewEvent() called');
 
     try {
         const title = document.getElementById('eventTitle').value.trim();
@@ -1153,8 +1153,8 @@ function toggleEditAllDay() {
     }
 }
 
-async function updateEvent() {
-    console.log('updateEvent() called');
+async function saveEventChanges() {
+    console.log('saveEventChanges() called');
 
     try {
         const eventId = document.getElementById('editEventId').value;
