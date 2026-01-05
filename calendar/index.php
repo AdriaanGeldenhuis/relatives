@@ -500,7 +500,7 @@ $doneEvents = count(array_filter($events, fn($e) => $e['status'] === 'done'));
 
 $pageTitle = 'Calendar';
 $activePage = 'calendar';
-$cacheVersion = '3.7.0';
+$cacheVersion = '3.8.0';
 $pageCSS = ['/calendar/css/calendar.css?v=' . $cacheVersion];
 $pageJS = ['/calendar/js/calendar.js?v=' . $cacheVersion];
 
@@ -759,16 +759,15 @@ require_once __DIR__ . '/../shared/components/header.php';
             <button onclick="closeModal('createEventModal')" class="modal-close">&times;</button>
         </div>
         <div class="modal-body">
-            <form onsubmit="createEvent(event); return false;">
-                
+            <div id="createEventForm">
+
                 <div class="form-group">
                     <label>Event Title *</label>
-                    <input type="text" 
-                           id="eventTitle" 
-                           class="form-control" 
+                    <input type="text"
+                           id="eventTitle"
+                           class="form-control"
                            placeholder="e.g., Family Dinner, Birthday Party"
-                           value="<?php echo htmlspecialchars($voicePrefillContent); ?>"
-                           required>
+                           value="<?php echo htmlspecialchars($voicePrefillContent); ?>">
                 </div>
 
                 <div class="form-row">
@@ -873,10 +872,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" class="btn btn-primary" style="flex: 1;">Create Event</button>
+                    <button type="button" onclick="createEvent()" class="btn btn-primary" style="flex: 1;">Create Event</button>
                     <button type="button" onclick="closeModal('createEventModal')" class="btn btn-secondary">Cancel</button>
                 </div>
-            </form>
+            </div>
         </div>
     </div>
 </div>
@@ -900,12 +899,12 @@ require_once __DIR__ . '/../shared/components/header.php';
             <button onclick="closeModal('editEventModal')" class="modal-close">&times;</button>
         </div>
         <div class="modal-body">
-            <form onsubmit="updateEvent(event); return false;">
+            <div id="editEventForm">
                 <input type="hidden" id="editEventId">
 
                 <div class="form-group">
                     <label>Event Title *</label>
-                    <input type="text" id="editEventTitle" class="form-control" required>
+                    <input type="text" id="editEventTitle" class="form-control">
                 </div>
 
                 <div class="form-row">
@@ -1008,10 +1007,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" class="btn btn-primary" style="flex: 1;">Save Changes</button>
+                    <button type="button" onclick="updateEvent()" class="btn btn-primary" style="flex: 1;">Save Changes</button>
                     <button type="button" onclick="closeModal('editEventModal')" class="btn btn-secondary">Cancel</button>
                 </div>
-            </form>
+            </div>
         </div>
     </div>
 </div>
