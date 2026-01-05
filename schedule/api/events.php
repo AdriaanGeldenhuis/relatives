@@ -116,16 +116,20 @@ try {
 
             $eventId = $db->lastInsertId();
 
-            // SEND NOTIFICATION TO FAMILY
-            require_once __DIR__ . '/../../core/NotificationTriggers.php';
-            $triggers = new NotificationTriggers($db);
-            $triggers->onScheduleTaskCreated(
-                $eventId,
-                $user['id'],
-                $user['family_id'],
-                $title,
-                date('M j, Y \a\t g:i A', strtotime($startsAt))
-            );
+            // SEND NOTIFICATION TO FAMILY (wrapped in try-catch to not break response)
+            try {
+                require_once __DIR__ . '/../../core/NotificationTriggers.php';
+                $triggers = new NotificationTriggers($db);
+                $triggers->onScheduleTaskCreated(
+                    $eventId,
+                    $user['id'],
+                    $user['family_id'],
+                    $title,
+                    date('M j, Y \a\t g:i A', strtotime($startsAt))
+                );
+            } catch (Exception $notifError) {
+                error_log("Notification error (non-fatal): " . $notifError->getMessage());
+            }
 
             // Handle recurring events
             if ($repeatRule && in_array($repeatRule, ['daily', 'weekly', 'weekdays', 'monthly', 'yearly'])) {
