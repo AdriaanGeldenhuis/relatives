@@ -717,10 +717,12 @@ async function createEvent(event) {
         const endDate = document.getElementById('eventEndDate').value || startDate;
         const endTime = document.getElementById('eventEndTime').value || startTime;
         const allDay = document.getElementById('eventAllDay').checked ? 1 : 0;
-        const eventLocation = document.getElementById('eventLocation').value.trim();
+        const locationEl = document.getElementById('eventLocation');
+        const eventLocation = locationEl ? locationEl.value.trim() : '';
         const notes = document.getElementById('eventNotes').value.trim();
         const reminderMinutes = document.getElementById('eventReminder').value;
-        const color = document.querySelector('input[name="eventColor"]:checked').value;
+        const colorEl = document.querySelector('input[name="eventColor"]:checked');
+        const color = colorEl ? colorEl.value : '#3498db';
         const kind = document.getElementById('eventKind').value;
         const recurrenceRule = document.getElementById('eventRecurrence').value;
 
@@ -729,8 +731,16 @@ async function createEvent(event) {
             return;
         }
 
-        const startsAt = allDay ? `${startDate} 00:00:00` : `${startDate} ${startTime}:00`;
-        const endsAt = allDay ? `${endDate} 23:59:59` : `${endDate} ${endTime}:00`;
+        if (!startDate) {
+            showToast('Please select a start date', 'error');
+            return;
+        }
+
+        // For all-day events, don't require time
+        const startsAt = allDay ? `${startDate} 00:00:00` : `${startDate} ${startTime || '00:00'}:00`;
+        const endsAt = allDay ? `${endDate || startDate} 23:59:59` : `${endDate || startDate} ${endTime || startTime || '23:59'}:00`;
+
+        console.log('Creating event:', { title, startsAt, endsAt, allDay, kind, color });
 
         const formData = new FormData();
         formData.append('action', 'create_event');
@@ -741,31 +751,93 @@ async function createEvent(event) {
         formData.append('ends_at', endsAt);
         formData.append('all_day', allDay);
         formData.append('color', color);
-        formData.append('reminder_minutes', reminderMinutes);
+        formData.append('reminder_minutes', reminderMinutes || '0');
         formData.append('kind', kind);
-        formData.append('recurrence_rule', recurrenceRule);
+        formData.append('recurrence_rule', recurrenceRule || '');
 
         const response = await fetch('', {
             method: 'POST',
             body: formData
         });
 
-        const data = await response.json();
+        // Check if response is OK
+        if (!response.ok) {
+            console.error('Server response not OK:', response.status, response.statusText);
+            throw new Error(`Server error: ${response.status}`);
+        }
+
+        const text = await response.text();
+        console.log('Raw response:', text);
+
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            console.error('Failed to parse JSON:', text);
+            throw new Error('Invalid server response');
+        }
 
         if (data.success) {
             showToast('✓ Event created!', 'success');
             confetti();
+            closeModal('createEventModal');
 
-            setTimeout(() => {
-                window.location.reload();
-            }, 1500);
+            // Add event to calendar in real-time
+            addEventToCalendar({
+                id: data.event_id || Date.now(),
+                title: title,
+                starts_at: startsAt,
+                ends_at: endsAt,
+                color: color,
+                kind: kind,
+                all_day: allDay
+            });
+
+            // Reset form
+            document.getElementById('eventTitle').value = '';
+            document.getElementById('eventNotes').value = '';
+            if (locationEl) locationEl.value = '';
 
         } else {
             throw new Error(data.error || 'Failed to create event');
         }
 
     } catch (error) {
+        console.error('Create event error:', error);
         showToast(error.message, 'error');
+    }
+}
+
+// Add event to calendar without page reload
+function addEventToCalendar(event) {
+    const dateStr = event.starts_at.split(' ')[0];
+    const dayCell = document.querySelector(`.calendar-day[data-date="${dateStr}"]`);
+
+    if (dayCell) {
+        let eventsContainer = dayCell.querySelector('.day-events');
+        if (!eventsContainer) {
+            eventsContainer = document.createElement('div');
+            eventsContainer.className = 'day-events';
+            dayCell.appendChild(eventsContainer);
+        }
+
+        const eventEl = document.createElement('div');
+        eventEl.className = 'day-event';
+        eventEl.style.background = event.color;
+        eventEl.textContent = event.title;
+        eventEl.onclick = (e) => {
+            e.stopPropagation();
+            showEventDetails(event.id);
+        };
+
+        // Add with animation
+        eventEl.style.animation = 'fadeInUp 0.3s ease';
+        eventsContainer.appendChild(eventEl);
+
+        // Add to window.events array for details view
+        if (window.events) {
+            window.events.push(event);
+        }
     }
 }
 
@@ -917,11 +989,11 @@ async function deleteEvent(eventId) {
         if (data.success) {
             showToast('Event deleted', 'success');
             closeModal('eventDetailsModal');
-            
+
             setTimeout(() => {
-                location.reload();
+                window.location.reload();
             }, 1000);
-            
+
         } else {
             throw new Error(data.error || 'Failed to delete event');
         }
@@ -971,6 +1043,9 @@ function openEditEvent(eventId) {
     document.getElementById('editEventId').value = event.id;
     document.getElementById('editEventTitle').value = event.title;
     document.getElementById('editEventNotes').value = event.notes || '';
+
+    const editLocationEl = document.getElementById('editEventLocation');
+    if (editLocationEl) editLocationEl.value = event.location || '';
 
     // Parse dates and times
     const startDate = event.starts_at.split(' ')[0];
@@ -1032,6 +1107,8 @@ async function updateEvent(e) {
         const endDate = document.getElementById('editEventEndDate').value || startDate;
         const endTime = document.getElementById('editEventEndTime').value || startTime;
         const allDay = document.getElementById('editEventAllDay').checked ? 1 : 0;
+        const editLocationEl = document.getElementById('editEventLocation');
+        const eventLocation = editLocationEl ? editLocationEl.value.trim() : '';
         const notes = document.getElementById('editEventNotes').value.trim();
         const kind = document.getElementById('editEventKind').value;
         const recurrenceRule = document.getElementById('editEventRecurrence').value;
@@ -1051,6 +1128,7 @@ async function updateEvent(e) {
         formData.append('event_id', eventId);
         formData.append('title', title);
         formData.append('notes', notes);
+        formData.append('location', eventLocation);
         formData.append('starts_at', startsAt);
         formData.append('ends_at', endsAt);
         formData.append('all_day', allDay);
@@ -1071,7 +1149,7 @@ async function updateEvent(e) {
             closeModal('editEventModal');
 
             setTimeout(() => {
-                location.reload();
+                window.location.reload();
             }, 1000);
 
         } else {
@@ -1175,10 +1253,18 @@ function showToast(message, type = 'info') {
     toast.textContent = message;
     document.body.appendChild(toast);
     setTimeout(() => toast.classList.add('show'), 10);
+
+    // Errors stay longer (6 seconds), success/info 3 seconds
+    const duration = type === 'error' ? 6000 : 3000;
     setTimeout(() => {
         toast.classList.remove('show');
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, duration);
+
+    // Also log errors to console
+    if (type === 'error') {
+        console.error('Calendar Error:', message);
+    }
 }
 
 // ============================================

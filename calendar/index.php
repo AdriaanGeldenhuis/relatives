@@ -186,6 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $eventId = (int)$_POST['event_id'];
                 $title = trim($_POST['title'] ?? '');
                 $notes = trim($_POST['notes'] ?? '');
+                $eventLocation = trim($_POST['location'] ?? '');
                 $startsAt = $_POST['starts_at'] ?? '';
                 $endsAt = $_POST['ends_at'] ?? '';
                 $allDay = (int)($_POST['all_day'] ?? 0);
@@ -210,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                 $stmt = $db->prepare("
                     UPDATE events
-                    SET title = ?, notes = ?, starts_at = ?, ends_at = ?,
+                    SET title = ?, notes = ?, location = ?, starts_at = ?, ends_at = ?,
                         all_day = ?, color = ?, reminder_minutes = ?,
                         kind = ?, recurrence_rule = ?, updated_at = NOW()
                     WHERE id = ? AND family_id = ?
@@ -218,6 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $stmt->execute([
                     $title,
                     $notes,
+                    $eventLocation,
                     $startsAt,
                     $endsAt ?: $startsAt,
                     $allDay,
@@ -498,7 +500,7 @@ $doneEvents = count(array_filter($events, fn($e) => $e['status'] === 'done'));
 
 $pageTitle = 'Calendar';
 $activePage = 'calendar';
-$cacheVersion = '3.5.0';
+$cacheVersion = '3.6.0';
 $pageCSS = ['/calendar/css/calendar.css?v=' . $cacheVersion];
 $pageJS = ['/calendar/js/calendar.js?v=' . $cacheVersion];
 
@@ -799,6 +801,12 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
 
                 <div class="form-group">
+                    <label>Location (optional)</label>
+                    <input type="text" id="eventLocation" class="form-control"
+                           placeholder="e.g., Home, Restaurant, Park">
+                </div>
+
+                <div class="form-group">
                     <label>Notes (optional)</label>
                     <textarea id="eventNotes" class="form-control" rows="3"
                               placeholder="Add any details..."></textarea>
@@ -926,6 +934,12 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <input type="checkbox" id="editEventAllDay" onchange="toggleEditAllDay()">
                         All Day Event
                     </label>
+                </div>
+
+                <div class="form-group">
+                    <label>Location (optional)</label>
+                    <input type="text" id="editEventLocation" class="form-control"
+                           placeholder="e.g., Home, Restaurant, Park">
                 </div>
 
                 <div class="form-group">
