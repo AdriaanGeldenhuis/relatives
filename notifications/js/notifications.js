@@ -1,9 +1,13 @@
 /**
- * NOTIFICATIONS JS - COMPLETE REBUILD v2.0
+ * NOTIFICATIONS JS - COMPLETE REBUILD v2.1
  * All buttons work, optimized for native app
+ * AJAX-based navigation - no page refreshes
  */
 
 console.log('🔔 Notifications JS Loading...');
+
+// Current filter state
+let currentFilter = new URLSearchParams(window.location.search).get('filter') || 'all';
 
 // ============================================
 // PARTICLE SYSTEM - DISABLED FOR PERFORMANCE
@@ -14,6 +18,151 @@ class ParticleSystem {
         // Disabled - canvas hidden via CSS for performance
     }
 }
+
+// ============================================
+// AJAX NAVIGATION - NO PAGE REFRESH
+// ============================================
+
+async function loadNotificationsData(filter, animationIn = 'fadeIn') {
+    try {
+        console.log('Loading notifications for filter:', filter);
+
+        // Animate out current content
+        const notesSection = document.querySelector('.notes-section');
+        if (notesSection) {
+            notesSection.style.animation = 'fadeOut 0.2s ease forwards';
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        // Fetch the notifications page for the new filter
+        const response = await fetch(`/notifications/?filter=${filter}&ajax=1`);
+        const html = await response.text();
+
+        // Parse the HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // Extract and update the notes section (main content)
+        const newNotesSection = doc.querySelector('.notes-section');
+        if (notesSection && newNotesSection) {
+            notesSection.innerHTML = newNotesSection.innerHTML;
+            notesSection.style.animation = `${animationIn} 0.3s ease forwards`;
+        }
+
+        // Update filter buttons active state
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        filterButtons.forEach(btn => {
+            const btnFilter = btn.getAttribute('data-filter');
+            if (btnFilter === filter) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // Update stats bar
+        const newStatsBar = doc.querySelector('.week-stats-bar');
+        const statsBar = document.querySelector('.week-stats-bar');
+        if (newStatsBar && statsBar) {
+            statsBar.outerHTML = newStatsBar.outerHTML;
+        } else if (newStatsBar && !statsBar) {
+            // Stats bar appeared, insert it
+            const filterSection = document.querySelector('.search-filter-section');
+            if (filterSection) {
+                filterSection.insertAdjacentHTML('afterend', newStatsBar.outerHTML);
+            }
+        } else if (!newStatsBar && statsBar) {
+            // Stats bar disappeared, remove it
+            statsBar.remove();
+        }
+
+        // Update quick action buttons in hero section
+        const newQuickActions = doc.querySelector('.quick-actions');
+        const quickActions = document.querySelector('.quick-actions');
+        if (quickActions && newQuickActions) {
+            quickActions.innerHTML = newQuickActions.innerHTML;
+        }
+
+        // Update list actions (progress bar section)
+        const newListActions = doc.querySelector('.list-actions');
+        const listActions = document.querySelector('.list-actions');
+        if (newListActions && listActions) {
+            listActions.outerHTML = newListActions.outerHTML;
+        } else if (newListActions && !listActions) {
+            const notesGrid = document.querySelector('.notes-grid');
+            if (notesGrid) {
+                notesGrid.insertAdjacentHTML('beforebegin', newListActions.outerHTML);
+            }
+        } else if (!newListActions && listActions) {
+            listActions.remove();
+        }
+
+        // Update current filter state
+        currentFilter = filter;
+
+        // Update URL without refresh
+        const newUrl = filter === 'all' ? '/notifications/' : `/notifications/?filter=${filter}`;
+        window.history.pushState({ filter: filter }, '', newUrl);
+
+        // Re-animate notification cards
+        document.querySelectorAll('.notification-card').forEach((card, index) => {
+            card.style.animation = `fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${index * 0.05}s backwards`;
+        });
+
+        console.log('Notifications loaded successfully for filter:', filter);
+
+    } catch (error) {
+        console.error('Failed to load notifications:', error);
+        showToast('Failed to load notifications. Please try again.', 'error');
+    }
+}
+
+// AJAX refresh of notifications content (same filter)
+async function refreshNotifications(animationIn = 'fadeIn') {
+    await loadNotificationsData(currentFilter, animationIn);
+}
+
+// Handle filter button clicks
+function handleFilterClick(event) {
+    event.preventDefault();
+    const filter = event.currentTarget.getAttribute('data-filter');
+    if (filter && filter !== currentFilter) {
+        loadNotificationsData(filter, 'fadeIn');
+    }
+}
+
+// Initialize filter buttons for AJAX navigation
+function initFilterButtons() {
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        // Get filter from href
+        const href = btn.getAttribute('href');
+        let filter = 'all';
+        if (href) {
+            const match = href.match(/filter=([^&]+)/);
+            filter = match ? match[1] : 'all';
+        }
+
+        // Set data attribute and remove href for AJAX handling
+        btn.setAttribute('data-filter', filter);
+        btn.removeAttribute('href');
+        btn.style.cursor = 'pointer';
+
+        // Add click handler
+        btn.addEventListener('click', handleFilterClick);
+    });
+}
+
+// Handle browser back/forward navigation
+window.addEventListener('popstate', (event) => {
+    if (event.state && event.state.filter !== undefined) {
+        loadNotificationsData(event.state.filter, 'fadeIn');
+    } else {
+        // Default to 'all' filter
+        const urlParams = new URLSearchParams(window.location.search);
+        const filter = urlParams.get('filter') || 'all';
+        loadNotificationsData(filter, 'fadeIn');
+    }
+});
 
 // ============================================
 // NOTIFICATION FUNCTIONS
@@ -79,14 +228,15 @@ async function handleNotificationClick(notificationId, actionUrl) {
 
 async function markAllRead() {
     if (!confirm('Mark all notifications as read?')) return;
-    
+
     showToast('Marking all as read...', 'info');
-    
+
     const result = await apiRequest('mark_all_read');
-    
+
     if (result.success) {
         showToast('All notifications marked as read! 🎉', 'success');
-        setTimeout(() => window.location.reload(), 1000);
+        // Use AJAX refresh instead of page reload
+        setTimeout(() => refreshNotifications('fadeIn'), 500);
     } else {
         showToast('Failed to mark all as read', 'error');
     }
@@ -112,9 +262,9 @@ async function deleteNotification(notificationId) {
                     group.remove();
                 }
                 
-                // Check if all notifications are gone
+                // Check if all notifications are gone - refresh to show empty state
                 if (!document.querySelector('.notification-card')) {
-                    setTimeout(() => window.location.reload(), 500);
+                    setTimeout(() => refreshNotifications('fadeIn'), 300);
                 }
             }, 300);
         }
@@ -134,14 +284,15 @@ function showClearConfirm() {
 
 async function clearAllRead() {
     closeModal('clearConfirmModal');
-    
+
     showToast('Clearing read notifications...', 'info');
-    
+
     const result = await apiRequest('clear_all');
-    
+
     if (result.success) {
         showToast('Cleared successfully! 🎉', 'success');
-        setTimeout(() => window.location.reload(), 1000);
+        // Use AJAX refresh instead of page reload
+        setTimeout(() => refreshNotifications('fadeIn'), 500);
     } else {
         showToast('Failed to clear notifications', 'error');
     }
@@ -415,7 +566,7 @@ async function testNotification() {
     try {
         const formData = new URLSearchParams();
         formData.append('action', 'test');
-        
+
         const response = await fetch('/notifications/api/preferences.php', {
             method: 'POST',
             headers: {
@@ -423,17 +574,18 @@ async function testNotification() {
             },
             body: formData
         });
-        
+
         const data = await response.json();
-        
+
         if (!data.success) {
             throw new Error(data.error || 'Failed');
         }
-        
+
         showToast('Test notification sent! Check your notifications.', 'success');
-        
-        setTimeout(() => window.location.reload(), 2000);
-        
+
+        // Use AJAX refresh instead of page reload
+        setTimeout(() => refreshNotifications('fadeIn'), 1500);
+
     } catch (error) {
         console.error('Test error:', error);
         showToast('Failed to send test', 'error');
@@ -463,7 +615,8 @@ async function testWeatherNotification() {
 
         showToast('Weather notification sent! Check your notifications.', 'success');
 
-        setTimeout(() => window.location.reload(), 2000);
+        // Use AJAX refresh instead of page reload
+        setTimeout(() => refreshNotifications('fadeIn'), 1500);
 
     } catch (error) {
         console.error('Weather test error:', error);
@@ -510,16 +663,22 @@ function showToast(message, type = 'info') {
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🔔 Initializing Notifications...');
-    
+
     // Initialize particle system
     new ParticleSystem('particles');
-    
+
+    // Initialize AJAX filter buttons (no page refresh)
+    initFilterButtons();
+
+    // Set initial history state
+    window.history.replaceState({ filter: currentFilter }, '', window.location.href);
+
     // Animate notification cards
     document.querySelectorAll('.notification-card').forEach((card, index) => {
         card.style.animation = `fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${index * 0.05}s backwards`;
     });
-    
-    console.log('✅ Notifications Initialized');
+
+    console.log('✅ Notifications Initialized (AJAX Mode)');
 });
 
 // Modal close on outside click

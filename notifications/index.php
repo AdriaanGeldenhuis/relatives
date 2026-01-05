@@ -180,7 +180,7 @@ function formatTimeAgo($secondsAgo) {
 
 $pageTitle = 'Notifications';
 $activePage = 'notifications';
-$cacheVersion = '10.0.0';
+$cacheVersion = '10.1.0'; // v10.1.0 - AJAX navigation (no page refresh)
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
@@ -285,9 +285,9 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <?php endif; ?>
                     </p>
                     <?php if ($filter !== 'all'): ?>
-                        <a href="/notifications/" class="btn btn-primary btn-lg">
+                        <button onclick="loadNotificationsData('all', 'fadeIn')" class="btn btn-primary btn-lg">
                             View All
-                        </a>
+                        </button>
                     <?php endif; ?>
                 </div>
 

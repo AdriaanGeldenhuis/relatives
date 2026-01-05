@@ -240,35 +240,154 @@ try {
                 throw new Exception('Invalid weather response');
             }
 
-            // Prepare notification
-            $temp = round($weatherData['main']['temp']);
-            $feelsLike = round($weatherData['main']['feels_like']);
+            // Prepare notification - GOOGLE-STYLE FORMAT
+            $temp = isset($weatherData['main']['temp']) ? round($weatherData['main']['temp']) : null;
+            $feelsLike = isset($weatherData['main']['feels_like']) ? round($weatherData['main']['feels_like']) : null;
+            $condition = $weatherData['weather'][0]['main'] ?? 'Clear';
             $description = ucfirst($weatherData['weather'][0]['description'] ?? 'clear sky');
             $locationName = $weatherData['name'] ?? 'Your location';
-            $humidity = $weatherData['main']['humidity'] ?? 0;
             $windSpeed = round(($weatherData['wind']['speed'] ?? 0) * 3.6);
 
-            $message = "Test Weather Update\n\n";
-            $message .= "📍 $locationName\n";
-            $message .= "🌡️ $temp°C (feels like $feelsLike°C)\n";
-            $message .= "☁️ $description\n";
-            $message .= "💧 Humidity: $humidity%\n";
-            $message .= "💨 Wind: $windSpeed km/h";
+            if ($temp === null) {
+                throw new Exception('No temperature data available');
+            }
+
+            // Get weather icon based on condition
+            $weatherIcons = [
+                'Clear' => '☀️',
+                'Clouds' => '☁️',
+                'Rain' => '🌧️',
+                'Drizzle' => '🌦️',
+                'Thunderstorm' => '⛈️',
+                'Snow' => '❄️',
+                'Mist' => '🌫️',
+                'Fog' => '🌫️',
+                'Haze' => '🌫️'
+            ];
+            $weatherIcon = $weatherIcons[$condition] ?? '🌤️';
+
+            // Get forecast for high/low temps (use cURL for reliability)
+            $forecastUrl = "https://api.openweathermap.org/data/2.5/forecast?lat={$lat}&lon={$lon}&appid={$apiKey}&units=metric&cnt=8";
+            $forecastResponse = false;
+            if (function_exists('curl_init')) {
+                $ch = curl_init($forecastUrl);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                $forecastResponse = curl_exec($ch);
+                curl_close($ch);
+            }
+            if (!$forecastResponse) {
+                $forecastResponse = @file_get_contents($forecastUrl);
+            }
+            $forecastData = $forecastResponse ? json_decode($forecastResponse, true) : null;
+
+            $maxTemp = $temp;
+            $minTemp = $temp;
+            $rainChance = 0;
+
+            if ($forecastData && isset($forecastData['list']) && !empty($forecastData['list'])) {
+                $temps = [];
+                foreach ($forecastData['list'] as $item) {
+                    if (isset($item['main']['temp_max'])) $temps[] = $item['main']['temp_max'];
+                    if (isset($item['main']['temp_min'])) $temps[] = $item['main']['temp_min'];
+                    if (isset($item['pop'])) {
+                        $rainChance = max($rainChance, round($item['pop'] * 100));
+                    }
+                }
+                if (!empty($temps)) {
+                    $maxTemp = round(max($temps));
+                    $minTemp = round(min($temps));
+                }
+            }
+
+            // ============================================
+            // BEAUTIFUL WEATHER NOTIFICATION
+            // ============================================
+
+            // Determine greeting based on time
+            $hour = (int)date('H');
+            if ($hour >= 5 && $hour < 12) {
+                $greeting = "Good morning";
+            } elseif ($hour >= 12 && $hour < 17) {
+                $greeting = "Good afternoon";
+            } elseif ($hour >= 17 && $hour < 21) {
+                $greeting = "Good evening";
+            } else {
+                $greeting = "Weather update";
+            }
+
+            // Title: Greeting + location
+            $title = "{$weatherIcon} {$greeting} · {$locationName}";
+
+            // Body: Multi-line beautiful format
+            $lines = [];
+
+            // Line 1: Current temp big and bold
+            $lines[] = "🌡️ Currently {$temp}°";
+
+            // Line 2: Condition + Feels like
+            $line2 = $description;
+            if ($feelsLike !== null && $feelsLike != $temp) {
+                $line2 .= " · Feels {$feelsLike}°";
+            }
+            $lines[] = $line2;
+
+            // Line 2: High/Low temps
+            if ($maxTemp != $minTemp) {
+                $lines[] = "📈 High {$maxTemp}° · Low {$minTemp}°";
+            }
+
+            // Line 3: Rain, Humidity, Wind
+            $humidity = $weatherData['main']['humidity'] ?? 0;
+            $statsLine = [];
+            if ($rainChance > 0) {
+                $statsLine[] = "☔ {$rainChance}%";
+            }
+            $statsLine[] = "💧 {$humidity}%";
+            $statsLine[] = "💨 {$windSpeed} km/h";
+            $lines[] = implode(" · ", $statsLine);
+
+            // Line 4: Sunrise/Sunset if available
+            if (isset($weatherData['sys']['sunrise']) && isset($weatherData['sys']['sunset'])) {
+                $sunrise = date('H:i', $weatherData['sys']['sunrise'] + ($weatherData['timezone'] ?? 7200));
+                $sunset = date('H:i', $weatherData['sys']['sunset'] + ($weatherData['timezone'] ?? 7200));
+                $lines[] = "🌅 {$sunrise} · 🌇 {$sunset}";
+            }
+
+            // Line 5: Smart tip based on conditions
+            $tip = null;
+            if ($rainChance >= 60) {
+                $tip = "☂️ Take an umbrella today!";
+            } elseif ($rainChance >= 30) {
+                $tip = "🌂 Might want an umbrella";
+            } elseif ($temp >= 30) {
+                $tip = "🥵 Stay hydrated, it's hot!";
+            } elseif ($temp <= 10) {
+                $tip = "🧥 Bundle up, it's cold!";
+            } elseif ($temp >= 20 && $temp <= 26 && $rainChance < 20) {
+                $tip = "😎 Perfect weather outside!";
+            }
+            if ($tip) {
+                $lines[] = $tip;
+            }
+
+            $message = implode("\n", $lines);
 
             $notifManager = NotificationManager::getInstance($db);
             $notifId = $notifManager->create([
                 'user_id' => $userId,
                 'type' => NotificationManager::TYPE_WEATHER,
-                'title' => "Weather Test - $locationName",
+                'title' => $title,
                 'message' => $message,
-                'action_url' => '/notifications/',
+                'action_url' => '/weather/',
                 'priority' => NotificationManager::PRIORITY_NORMAL,
-                'icon' => '🌤️',
+                'icon' => $weatherIcon,
                 'vibrate' => 1,
                 'data' => [
                     'test' => true,
                     'temperature' => $temp,
-                    'condition' => $weatherData['weather'][0]['main'] ?? 'Clear'
+                    'condition' => $condition
                 ]
             ]);
 
