@@ -971,11 +971,12 @@ window.ScheduleApp = {
     activeFocusSession: <?php echo $activeFocusSession ? json_encode($activeFocusSession) : 'null'; ?>,
     bulkMode: false,
     selectedItems: new Set(),
-    
+
     API: {
         events: '/schedule/api/events.php'
     }
 };
 </script>
+<script type="application/json" id="scheduleEventsData"><?php echo json_encode($events); ?></script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>
