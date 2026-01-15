@@ -7,12 +7,18 @@
 
 (function() {
     'use strict';
-    
-    console.log('🔧 Header JavaScript v3.2 initializing...');
-    
+
+    console.log('🔧 Header JavaScript v3.3 initializing...');
+
+    // Detect native Android app WebView
+    const isNativeApp = navigator.userAgent.includes('RelativesAndroidApp');
+
     let isMenuOpen = false;
     let elements = {};
     let notificationCheckInterval = null;
+
+    // Polling interval for web browsers (60 seconds)
+    const WEB_POLLING_INTERVAL = 60000;
     
     function cacheElements() {
         elements = {
@@ -135,17 +141,23 @@
         window.unreadNotificationCount = count;
     }
     
-    // Start notification polling (every 30 seconds)
+    // Start notification polling (for web browsers only)
     function startNotificationPolling() {
+        // Don't start polling for native app
+        if (isNativeApp) {
+            console.log('📱 Native app detected - skipping setInterval polling');
+            return;
+        }
+
         // Initial fetch
         fetchNotificationCount();
-        
-        // Poll every 30 seconds
+
+        // Poll at reduced interval (60 seconds) for web
         notificationCheckInterval = setInterval(() => {
             fetchNotificationCount();
-        }, 30000);
-        
-        console.log('✅ Notification polling started');
+        }, WEB_POLLING_INTERVAL);
+
+        console.log('✅ Notification polling started (web mode, ' + WEB_POLLING_INTERVAL + 'ms interval)');
     }
     
     // Stop notification polling
@@ -179,8 +191,44 @@
             }
         });
         console.log('✅ Escape key listener attached');
-        
-        // Listen for visibility changes to pause/resume polling
+
+        // Setup visibility/focus handling based on app mode
+        if (isNativeApp) {
+            // Native app: fetch on focus/visibility/pageshow only (no polling)
+            bindFocusVisibilityRefresh();
+        } else {
+            // Web browser: pause/resume polling on visibility
+            bindVisibilityPauseResume();
+        }
+    }
+
+    // Native app: refresh notification count on user-visible events only
+    function bindFocusVisibilityRefresh() {
+        // When page becomes visible
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                console.log('📱 Native: visibility change - refreshing notifications');
+                fetchNotificationCount();
+            }
+        });
+
+        // When window gains focus
+        window.addEventListener('focus', () => {
+            console.log('📱 Native: focus event - refreshing notifications');
+            fetchNotificationCount();
+        });
+
+        // When page is shown (e.g., back/forward navigation)
+        window.addEventListener('pageshow', (e) => {
+            console.log('📱 Native: pageshow event - refreshing notifications');
+            fetchNotificationCount();
+        });
+
+        console.log('✅ Native app visibility handlers attached');
+    }
+
+    // Web browser: stop polling when hidden, resume when visible
+    function bindVisibilityPauseResume() {
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 stopNotificationPolling();
@@ -188,19 +236,29 @@
                 startNotificationPolling();
             }
         });
+
+        console.log('✅ Web visibility pause/resume handlers attached');
     }
     
     function init() {
         console.log('🚀 Starting header initialization...');
+        console.log('📱 Native app mode:', isNativeApp);
         cacheElements();
         attachEvents();
         setTimeout(hideLoader, 500);
-        
-        // Start notification polling if user is logged in
+
+        // Initialize notifications if user is logged in
         if (document.body.hasAttribute('data-logged-in')) {
-            startNotificationPolling();
+            if (isNativeApp) {
+                // Native app: just do initial fetch, no polling
+                fetchNotificationCount();
+                console.log('✅ Native app: initial notification fetch (no polling)');
+            } else {
+                // Web browser: start polling with visibility pause/resume
+                startNotificationPolling();
+            }
         }
-        
+
         console.log('✅ Header JavaScript initialized');
     }
     

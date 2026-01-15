@@ -45,7 +45,8 @@ const MessageSystem = {
 // ============================================
 // DETECT NATIVE APP
 // ============================================
-const isNativeApp = navigator.userAgent.includes('wv') || 
+const isNativeApp = navigator.userAgent.includes('RelativesAndroidApp') ||
+                    navigator.userAgent.includes('wv') ||
                     navigator.userAgent.includes('relatives-native') ||
                     window.AndroidInterface !== undefined;
 
@@ -913,43 +914,60 @@ function setupEventListeners() {
         }
     });
     
-    // Refresh on visibility change
+    // Visibility-based polling pause/resume to save battery
     document.addEventListener('visibilitychange', function() {
-        if (!document.hidden && MessageSystem.initialLoadComplete) {
-            console.log('👀 App visible, refreshing messages...');
-            loadNewMessages();
+        if (document.hidden) {
+            // Stop polling when page is hidden (tab switched, app minimized)
+            console.log('👁️ Page hidden, stopping polling...');
+            stopPolling();
+        } else if (MessageSystem.initialLoadComplete) {
+            // Resume polling when page becomes visible
+            console.log('👀 Page visible, resuming polling...');
+            loadNewMessages(); // Immediate refresh
+            startPolling();    // Resume interval polling
         }
     });
     
     // Handle page unload
     window.addEventListener('beforeunload', function() {
-        if (MessageSystem.pollingInterval) {
-            clearInterval(MessageSystem.pollingInterval);
-        }
-        if (MessageSystem.typingInterval) {
-            clearInterval(MessageSystem.typingInterval);
-        }
+        stopPolling();
     });
 }
 
 // ============================================
 // POLLING
 // ============================================
+
+// Reduced polling intervals to save battery
+// Push notifications handle real-time alerts; polling is just for thread refresh
+const MESSAGE_POLL_INTERVAL = isNativeApp ? 15000 : 10000;  // 15s native, 10s web
+const TYPING_POLL_INTERVAL = isNativeApp ? 12000 : 8000;    // 12s native, 8s web
+
 function startPolling() {
+    // Don't start if already running
     if (MessageSystem.pollingInterval) {
         clearInterval(MessageSystem.pollingInterval);
     }
     if (MessageSystem.typingInterval) {
         clearInterval(MessageSystem.typingInterval);
     }
-    
-    const messageInterval = isNativeApp ? 8000 : 7000;
-    const typingCheckInterval = isNativeApp ? 6000 : 5000;
-    
-    MessageSystem.pollingInterval = setInterval(loadNewMessages, messageInterval);
-    MessageSystem.typingInterval = setInterval(checkTypingStatus, typingCheckInterval);
-    
-    console.log(`⏱️ Polling started: messages every ${messageInterval}ms, typing every ${typingCheckInterval}ms`);
+
+    MessageSystem.pollingInterval = setInterval(loadNewMessages, MESSAGE_POLL_INTERVAL);
+    MessageSystem.typingInterval = setInterval(checkTypingStatus, TYPING_POLL_INTERVAL);
+
+    console.log(`⏱️ Polling started: messages every ${MESSAGE_POLL_INTERVAL}ms, typing every ${TYPING_POLL_INTERVAL}ms`);
+}
+
+function stopPolling() {
+    if (MessageSystem.pollingInterval) {
+        clearInterval(MessageSystem.pollingInterval);
+        MessageSystem.pollingInterval = null;
+    }
+    if (MessageSystem.typingInterval) {
+        clearInterval(MessageSystem.typingInterval);
+        MessageSystem.typingInterval = null;
+    }
+    console.log('⏹️ Polling stopped');
 }
 
 // ============================================
@@ -1064,5 +1082,7 @@ window.openMediaViewer = openMediaViewer;
 window.retryConnection = retryConnection;
 window.updateConnectionStatus = updateConnectionStatus;
 window.replyToMessage = replyToMessage;
+window.startPolling = startPolling;
+window.stopPolling = stopPolling;
 
 console.log('✅ Core messaging system ready');
