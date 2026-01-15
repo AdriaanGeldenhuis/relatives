@@ -17,10 +17,10 @@ if (empty($activePage) || $activePage === 'index.php') {
     $activePage = 'home';
 }
 
-$appVersion = '10.0.0';
+$appVersion = '10.0.1';
 // Use static cache version - bump this when deploying CSS/JS changes
 // DO NOT use time() as it defeats browser caching!
-$cacheVersion = '10.0.0';
+$cacheVersion = '10.0.1';
 $buildTime = $cacheVersion;
 
 // Get unread notification count
@@ -554,6 +554,23 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             <div class="loader-icon">🏠</div>
         </div>
     </div>
+
+    <!-- CRITICAL: Fallback loader hide - ensures loader ALWAYS disappears even if JS fails -->
+    <script>
+        (function() {
+            // Fallback: hide loader after 3 seconds maximum, regardless of JS init
+            var fallbackTimer = setTimeout(function() {
+                var loader = document.getElementById('appLoader');
+                if (loader && !loader.classList.contains('hidden')) {
+                    console.warn('⚠️ Loader fallback triggered - JS init may have failed');
+                    loader.classList.add('hidden');
+                }
+            }, 3000);
+
+            // Allow main JS to cancel fallback if it runs successfully
+            window._loaderFallbackTimer = fallbackTimer;
+        })();
+    </script>
 
     <!-- Mobile Menu Overlay -->
     <div class="mobile-menu-overlay" id="mobileMenuOverlay"></div>

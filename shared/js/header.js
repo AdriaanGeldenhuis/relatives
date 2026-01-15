@@ -73,6 +73,12 @@
         if (elements.loader) {
             elements.loader.classList.add('hidden');
             console.log('✅ App loader hidden');
+
+            // Cancel fallback timer since we handled it
+            if (window._loaderFallbackTimer) {
+                clearTimeout(window._loaderFallbackTimer);
+                window._loaderFallbackTimer = null;
+            }
         }
     }
     
