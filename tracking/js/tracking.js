@@ -535,129 +535,111 @@ class TrackingMapProfessional {
         // Get marker content (avatar image or initial)
         let markerContent;
         if (member.has_avatar && member.avatar_url) {
-            markerContent = `<img src="${member.avatar_url}" alt="${member.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+            markerContent = `<img src="${member.avatar_url}" alt="${member.name}" style="width: 100%; height: 100%; object-fit: cover;">`;
         } else {
             markerContent = member.name ? member.name.charAt(0).toUpperCase() : '?';
         }
 
-        const avatarSize = isMe ? 52 : 46;
-        const stemLength = isClustered ? 45 : 0; // Stem only when clustered
-        const totalHeight = avatarSize + stemLength + (isClustered ? 10 : 0); // 10 for the point
+        // Pin dimensions - compact teardrop shape
+        const pinWidth = isMe ? 48 : 42;
+        const pinHeight = isMe ? 58 : 52;
+        const avatarSize = isMe ? 38 : 34;
 
-        // Calculate rotation angle for this member (spread around the point)
+        // Calculate rotation angle for clustered members
         let rotationAngle = 0;
         if (isClustered && membersAtLocation.length > 1) {
             const memberIndex = membersAtLocation.findIndex(m => m.user_id === member.user_id);
-            // Spread evenly in a circle, offset so first isn't straight up
-            rotationAngle = (360 / membersAtLocation.length) * memberIndex - 45;
+            rotationAngle = (360 / membersAtLocation.length) * memberIndex;
         }
 
-        // Create pin marker HTML with rotation
+        // Create teardrop pin marker with SVG
         const pinHtml = `
-            <div class="pin-marker-wrapper" style="
-                width: ${avatarSize + 20}px;
-                height: ${totalHeight + 20}px;
+            <div class="location-pin-wrapper" style="
+                width: ${pinWidth + 20}px;
+                height: ${pinHeight + 30}px;
                 position: relative;
             ">
-                <div class="pin-marker ${isMe ? 'is-me' : ''}" style="
+                <div class="location-pin ${isMe ? 'is-me' : ''}" style="
                     position: absolute;
                     bottom: 0;
                     left: 50%;
                     transform-origin: bottom center;
                     transform: translateX(-50%) rotate(${rotationAngle}deg);
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
+                    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
                 ">
-                    <!-- Avatar (counter-rotate to stay upright) -->
-                    <div class="pin-avatar" style="
+                    <!-- Teardrop SVG shape -->
+                    <svg width="${pinWidth}" height="${pinHeight}" viewBox="0 0 48 58" fill="none">
+                        <!-- Pin shape - teardrop -->
+                        <path d="M24 58 C24 58 0 35 0 22 C0 10 10.7 0 24 0 C37.3 0 48 10 48 22 C48 35 24 58 24 58Z"
+                              fill="${color}" stroke="white" stroke-width="3"/>
+                    </svg>
+
+                    <!-- Avatar circle inside pin -->
+                    <div style="
+                        position: absolute;
+                        top: 5px;
+                        left: 50%;
+                        transform: translateX(-50%) rotate(${-rotationAngle}deg);
                         width: ${avatarSize}px;
                         height: ${avatarSize}px;
                         border-radius: 50%;
                         overflow: hidden;
+                        background: white;
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        font-size: ${isMe ? 24 : 20}px;
+                        font-size: ${isMe ? 18 : 16}px;
                         font-weight: 900;
-                        color: white;
-                        background: ${color};
-                        border: 3px solid white;
-                        box-shadow: 0 4px 15px rgba(0,0,0,0.35);
-                        transform: rotate(${-rotationAngle}deg);
-                        position: relative;
-                        z-index: 2;
+                        color: ${color};
                     ">
                         ${markerContent}
                     </div>
-
-                    ${isClustered ? `
-                    <!-- Stem -->
-                    <div class="pin-stem" style="
-                        width: 3px;
-                        height: ${stemLength}px;
-                        background: linear-gradient(to bottom, ${color}, ${color}88);
-                        margin-top: -2px;
-                    "></div>
-
-                    <!-- Point -->
-                    <div class="pin-point" style="
-                        width: 12px;
-                        height: 12px;
-                        background: ${color};
-                        border: 3px solid white;
-                        border-radius: 50%;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                        margin-top: -2px;
-                    "></div>
-                    ` : ''}
 
                     <!-- Status indicator -->
                     ${member.status === 'online' || member.status === 'stale' ? `
                         <div style="
                             position: absolute;
-                            top: ${avatarSize - 14}px;
-                            right: -2px;
-                            width: 14px;
-                            height: 14px;
+                            top: 2px;
+                            right: 2px;
+                            width: 12px;
+                            height: 12px;
                             background: ${member.status === 'online' ? '#43e97b' : '#ffa502'};
                             border: 2px solid white;
                             border-radius: 50%;
-                            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
                             transform: rotate(${-rotationAngle}deg);
                             z-index: 3;
                         "></div>
                     ` : ''}
-
-                    <!-- YOU badge -->
-                    ${isMe ? `
-                        <div style="
-                            position: absolute;
-                            top: -18px;
-                            left: 50%;
-                            transform: translateX(-50%) rotate(${-rotationAngle}deg);
-                            background: linear-gradient(135deg, #667eea, #764ba2);
-                            color: white;
-                            padding: 2px 8px;
-                            border-radius: 8px;
-                            font-size: 9px;
-                            font-weight: 800;
-                            white-space: nowrap;
-                            box-shadow: 0 2px 6px rgba(102,126,234,0.4);
-                            z-index: 3;
-                        ">YOU</div>
-                    ` : ''}
                 </div>
+
+                <!-- YOU badge (outside rotation) -->
+                ${isMe ? `
+                    <div style="
+                        position: absolute;
+                        bottom: ${pinHeight + 5}px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: linear-gradient(135deg, #667eea, #764ba2);
+                        color: white;
+                        padding: 2px 8px;
+                        border-radius: 8px;
+                        font-size: 9px;
+                        font-weight: 800;
+                        white-space: nowrap;
+                        box-shadow: 0 2px 6px rgba(102,126,234,0.4);
+                        z-index: 10;
+                    ">YOU</div>
+                ` : ''}
             </div>
         `;
 
-        // Icon anchor at the bottom center (where the point is)
+        // Icon anchor at the very bottom tip of the pin
         const icon = L.divIcon({
             html: pinHtml,
-            className: `location-pin ${isMe ? 'is-me' : ''}`,
-            iconSize: [avatarSize + 20, totalHeight + 20],
-            iconAnchor: [(avatarSize + 20) / 2, totalHeight + 10], // Bottom center at the point
-            popupAnchor: [0, -totalHeight]
+            className: `location-pin-container ${isMe ? 'is-me' : ''}`,
+            iconSize: [pinWidth + 20, pinHeight + 30],
+            iconAnchor: [(pinWidth + 20) / 2, pinHeight + 15],
+            popupAnchor: [0, -(pinHeight + 10)]
         });
 
         const marker = L.marker(position, {
