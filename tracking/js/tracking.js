@@ -51,16 +51,17 @@ class TrackingMapProfessional {
             // Mapbox styles (better quality)
             return {
                 light: {
-                    url: `https://api.mapbox.com/styles/v1/mapbox/light-v11/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+                    // Streets style is more colorful and vibrant than light-v11
+                    url: `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
                     attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>',
-                    name: 'Light',
+                    name: 'Streets',
                     tileSize: 512,
                     zoomOffset: -1
                 },
                 dark: {
-                    url: `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+                    url: `https://api.mapbox.com/styles/v1/mapbox/navigation-night-v1/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
                     attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>',
-                    name: 'Dark',
+                    name: 'Night',
                     tileSize: 512,
                     zoomOffset: -1
                 },
@@ -73,12 +74,13 @@ class TrackingMapProfessional {
                 }
             };
         } else {
-            // Free tile providers (fallback)
+            // Free tile providers (fallback) - using more colorful options
             return {
                 light: {
-                    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-                    name: 'Light'
+                    // CartoDB Voyager is colorful and modern looking
+                    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://carto.com/attributions">CARTO</a>',
+                    name: 'Voyager'
                 },
                 dark: {
                     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
