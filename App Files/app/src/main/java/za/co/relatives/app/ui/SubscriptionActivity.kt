@@ -21,6 +21,7 @@ import za.co.relatives.app.network.ApiClient
 import za.co.relatives.app.MainActivity
 import za.co.relatives.app.ui.theme.RelativesTheme
 import za.co.relatives.app.utils.PreferencesManager
+import za.co.relatives.app.findActivity
 
 class SubscriptionActivity : ComponentActivity() {
 
@@ -97,7 +98,8 @@ class SubscriptionActivity : ComponentActivity() {
 @Composable
 fun SubscriptionScreen(billingManager: BillingManager) {
     val products by billingManager.subscriptions.collectAsState()
-    val context = LocalContext.current as Activity
+    val context = LocalContext.current
+    val activity = context.findActivity() ?: return
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -120,7 +122,7 @@ fun SubscriptionScreen(billingManager: BillingManager) {
             } else {
                 products.sortedBy { it.productId }.forEach { product ->
                     PlanCard(product = product) {
-                        billingManager.launchPurchase(context, product)
+                        billingManager.launchPurchase(activity, product)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
