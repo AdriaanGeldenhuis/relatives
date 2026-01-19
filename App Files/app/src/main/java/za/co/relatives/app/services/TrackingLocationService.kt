@@ -76,12 +76,18 @@ class TrackingLocationService : Service() {
     private val offlineQueue = mutableListOf<QueuedLocation>()
     private val MAX_QUEUE_SIZE = 50
 
+    // Exponential backoff for retries
+    private var retryDelayMs = 2000L  // Start at 2 seconds
+    private val MAX_RETRY_DELAY_MS = 60000L  // Max 60 seconds
+    private var consecutiveFailures = 0
+
     private data class QueuedLocation(
         val location: Location,
         val isMoving: Boolean,
         val speedKmh: Float,
         val timestamp: Long,
-        val clientEventId: String = UUID.randomUUID().toString()  // For idempotent uploads
+        val clientEventId: String = UUID.randomUUID().toString(),  // For idempotent uploads
+        val retryCount: Int = 0  // Track retry attempts
     )
 
     companion object {
@@ -416,16 +422,19 @@ class TrackingLocationService : Service() {
                     clientEventId = queued.clientEventId,  // Preserve ID for idempotency on retry
                     onSuccess = {
                         consecutiveAuthFailures = 0
+                        consecutiveFailures = 0
+                        retryDelayMs = 2000L  // Reset backoff on success
                         Log.d(TAG, "Queued location uploaded successfully (id=${queued.clientEventId})")
                     },
                     onAuthFailure = {
                         // Re-queue on auth failure - preserve clientEventId for retry
                         Log.w(TAG, "Queued location auth failure - re-queuing (id=${queued.clientEventId})")
-                        reQueueLocation(queued)
+                        reQueueLocationWithBackoff(queued)
                     },
                     onTransientFailure = {
-                        // Re-queue on transient failure - preserve clientEventId for retry
-                        reQueueLocation(queued)
+                        // Re-queue on transient failure with exponential backoff
+                        Log.w(TAG, "Queued location transient failure - re-queuing with backoff (id=${queued.clientEventId}, retry=${queued.retryCount})")
+                        reQueueLocationWithBackoff(queued)
                     }
                 )
             }
@@ -438,6 +447,31 @@ class TrackingLocationService : Service() {
             while (offlineQueue.size > MAX_QUEUE_SIZE) {
                 offlineQueue.removeAt(0)
             }
+        }
+    }
+
+    private fun reQueueLocationWithBackoff(queued: QueuedLocation) {
+        synchronized(offlineQueue) {
+            consecutiveFailures++
+            // Exponential backoff: 2s, 4s, 8s, 16s, 32s, max 60s
+            retryDelayMs = (retryDelayMs * 2).coerceAtMost(MAX_RETRY_DELAY_MS)
+
+            // Increment retry count for tracking
+            val updatedQueued = queued.copy(retryCount = queued.retryCount + 1)
+            offlineQueue.add(updatedQueued)
+
+            while (offlineQueue.size > MAX_QUEUE_SIZE) {
+                offlineQueue.removeAt(0)
+            }
+
+            Log.d(TAG, "Re-queued with backoff: ${retryDelayMs}ms delay, retry #${updatedQueued.retryCount}, queue size: ${offlineQueue.size}")
+
+            // Schedule retry with backoff delay
+            mainHandler.postDelayed({
+                if (isNetworkAvailable()) {
+                    sendQueuedLocations()
+                }
+            }, retryDelayMs)
         }
     }
 
@@ -863,22 +897,34 @@ class TrackingLocationService : Service() {
             onTransientFailure: () -> Unit
         ) = object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Upload failed with network error", e)
+                Log.e(TAG, "Upload failed with network error: ${e.message}", e)
                 onTransientFailure()
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use { resp ->
+                    val responseBody = try { resp.body?.string() } catch (e: Exception) { null }
+
                     when {
                         resp.isSuccessful -> {
                             val serverSettings = try {
-                                val responseBody = resp.body?.string()
                                 responseBody?.let { JSONObject(it).optJSONObject("server_settings") }
-                            } catch (e: Exception) { null }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed to parse server settings: ${e.message}")
+                                null
+                            }
                             onSuccess(serverSettings)
                         }
-                        resp.code in listOf(401, 402, 403) -> onAuthFailure()
-                        else -> onTransientFailure()
+                        resp.code in listOf(401, 402, 403) -> {
+                            // Log full response for auth failures
+                            Log.e(TAG, "Upload auth failure (${resp.code}): $responseBody")
+                            onAuthFailure()
+                        }
+                        else -> {
+                            // Log full response for any other failures - NO SILENT FAILS
+                            Log.e(TAG, "Upload failed (${resp.code}): $responseBody")
+                            onTransientFailure()
+                        }
                     }
                 }
             }
