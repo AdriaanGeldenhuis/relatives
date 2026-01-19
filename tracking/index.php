@@ -607,7 +607,15 @@ window.TrackingConfig = {
     zones: <?= json_encode($zones) ?>,
     defaultCenter: [-26.2041, 28.0473],
     defaultZoom: 12,
-    pollingInterval: <?= $pollingInterval ?> // User's location update interval in seconds
+
+    // Polling intervals (seconds)
+    pollingInterval: <?= $pollingInterval ?>,           // User's location update interval
+    pollingIntervalDefault: <?= max(10, $pollingInterval) ?>, // Normal polling (default: user setting or 30s)
+    pollingIntervalViewing: 10,                         // Fast polling when viewing someone (10s)
+    pollingIntervalMin: 5,                              // Minimum allowed (5s)
+
+    // Optional Mapbox token (set in .env as MAPBOX_TOKEN)
+    mapboxToken: <?= json_encode($_ENV['MAPBOX_TOKEN'] ?? null) ?>
 };
 
 /**

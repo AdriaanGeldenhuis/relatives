@@ -2,13 +2,21 @@
 declare(strict_types=1);
 
 /**
- * UPDATE LOCATION - WITH GEOFENCE & BATTERY NOTIFICATIONS
+ * ============================================
+ * UPDATE LOCATION - FAST INGEST v2.0
+ * ============================================
+ *
+ * Optimized for speed:
+ * - Validates + auths
+ * - Writes to DB + Redis cache
+ * - Queues geofence processing (async via cron)
+ * - NO geofence loops in request path
  *
  * Auth priority:
  * 1. Existing PHP session
  * 2. Authorization: Bearer <token>
  * 3. RELATIVES_SESSION cookie
- * 4. session_token in request body (fallback for problematic clients)
+ * 4. session_token in request body (fallback)
  */
 
 error_reporting(E_ALL);
@@ -26,7 +34,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    error_log("TRACKING_UPDATE: method_not_allowed ({$_SERVER['REQUEST_METHOD']})");
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'method_not_allowed']);
     exit;
@@ -34,43 +41,32 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 session_start();
 
-// Track which auth method succeeded for debugging
 $authMethod = 'none';
 $bootstrapLoaded = false;
 
 /**
- * Helper: Get Authorization header (works across different server configs)
+ * Get Authorization header (works across different server configs)
  */
 function getAuthorizationHeader(): ?string {
-    // Standard location
     if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
         return $_SERVER['HTTP_AUTHORIZATION'];
     }
-
-    // Apache redirect
     if (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
         return $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
     }
-
-    // Apache mod_rewrite
     if (function_exists('apache_request_headers')) {
         $headers = apache_request_headers();
-        if (isset($headers['Authorization'])) {
-            return $headers['Authorization'];
-        }
-        // Case-insensitive check
         foreach ($headers as $key => $value) {
             if (strtolower($key) === 'authorization') {
                 return $value;
             }
         }
     }
-
     return null;
 }
 
 /**
- * Helper: Validate session token and set session vars
+ * Validate session token and set session vars
  */
 function validateSessionToken(PDO $db, string $token): bool {
     global $authMethod;
@@ -115,9 +111,6 @@ if (!isset($_SESSION['user_id'])) {
 
             if (validateSessionToken($db, $bearerToken)) {
                 $authMethod = 'bearer';
-                error_log("TRACKING_UPDATE: bearer auth success user={$_SESSION['user_id']}");
-            } else {
-                error_log("TRACKING_UPDATE: bearer token invalid or expired");
             }
         } catch (Exception $e) {
             error_log("TRACKING_UPDATE: bearer auth error - " . $e->getMessage());
@@ -131,19 +124,14 @@ if (!isset($_SESSION['user_id'])) {
         preg_match('/RELATIVES_SESSION=([^;]+)/', $_SERVER['HTTP_COOKIE'], $matches);
 
         if (isset($matches[1])) {
-            $cookieSessionId = $matches[1];
-
             try {
                 if (!$bootstrapLoaded) {
                     require_once __DIR__ . '/../../core/bootstrap.php';
                     $bootstrapLoaded = true;
                 }
 
-                if (validateSessionToken($db, $cookieSessionId)) {
+                if (validateSessionToken($db, $matches[1])) {
                     $authMethod = 'cookie';
-                    error_log("TRACKING_UPDATE: cookie auth success user={$_SESSION['user_id']}");
-                } else {
-                    error_log("TRACKING_UPDATE: cookie token invalid or expired");
                 }
             } catch (Exception $e) {
                 error_log("TRACKING_UPDATE: cookie auth error - " . $e->getMessage());
@@ -152,11 +140,11 @@ if (!isset($_SESSION['user_id'])) {
     }
 }
 
-// 4. Try session_token in request body (last resort for problematic mobile clients)
-if (!isset($_SESSION['user_id'])) {
-    $rawInput = file_get_contents('php://input');
-    $inputData = json_decode($rawInput, true);
+// 4. Try session_token in request body (last resort)
+$rawInput = file_get_contents('php://input');
+$inputData = json_decode($rawInput, true);
 
+if (!isset($_SESSION['user_id'])) {
     if ($inputData && isset($inputData['session_token']) && !empty($inputData['session_token'])) {
         try {
             if (!$bootstrapLoaded) {
@@ -166,9 +154,6 @@ if (!isset($_SESSION['user_id'])) {
 
             if (validateSessionToken($db, $inputData['session_token'])) {
                 $authMethod = 'body';
-                error_log("TRACKING_UPDATE: body token auth success user={$_SESSION['user_id']}");
-            } else {
-                error_log("TRACKING_UPDATE: body token invalid or expired");
             }
         } catch (Exception $e) {
             error_log("TRACKING_UPDATE: body token auth error - " . $e->getMessage());
@@ -176,24 +161,16 @@ if (!isset($_SESSION['user_id'])) {
     }
 }
 
-// Add debug headers (useful for mobile debugging)
+// Debug headers
 header("X-Tracking-Auth: {$authMethod}");
-if (isset($_SESSION['user_id'])) {
-    header("X-Tracking-User: {$_SESSION['user_id']}");
-}
 
 // Final auth check
 if (!isset($_SESSION['user_id'])) {
-    $hasCookie = isset($_SERVER['HTTP_COOKIE']) ? 'yes' : 'no';
-    $hasAuthHeader = getAuthorizationHeader() ? 'yes' : 'no';
-    error_log("TRACKING_UPDATE: unauthorized (cookie={$hasCookie}, auth_header={$hasAuthHeader}, method={$authMethod})");
-
     http_response_code(401);
     echo json_encode([
         'success' => false,
         'error' => 'unauthorized',
-        'auth_method' => $authMethod,
-        'hint' => 'Use Authorization: Bearer <token> header or include session_token in body'
+        'hint' => 'Use Authorization: Bearer <token> or include session_token in body'
     ]);
     exit;
 }
@@ -201,26 +178,20 @@ if (!isset($_SESSION['user_id'])) {
 if (!$bootstrapLoaded) {
     require_once __DIR__ . '/../../core/bootstrap.php';
 }
-require_once __DIR__ . '/../../core/NotificationManager.php';
-require_once __DIR__ . '/../../core/NotificationTriggers.php';
+
+// Load Redis client (optional - gracefully handles missing Redis)
+require_once __DIR__ . '/../../core/RedisClient.php';
 
 try {
-    // Re-read input if we already consumed it during body token auth
-    $rawInput = file_get_contents('php://input');
-    if (empty($rawInput) && isset($inputData)) {
-        // Already parsed during auth
-        $input = $inputData;
-    } else {
-        $input = json_decode($rawInput, true);
-    }
-    
+    $input = $inputData ?? json_decode($rawInput, true);
+
     if (json_last_error() !== JSON_ERROR_NONE && !isset($input)) {
-        error_log("TRACKING_UPDATE: bad json - " . json_last_error_msg());
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'invalid_json']);
         exit;
     }
-    
+
+    // Validate required fields
     $requiredFields = ['device_uuid', 'latitude', 'longitude'];
     foreach ($requiredFields as $field) {
         if (!isset($input[$field])) {
@@ -229,7 +200,8 @@ try {
             exit;
         }
     }
-    
+
+    // Extract and validate input
     $deviceUuid = trim($input['device_uuid']);
     $latitude = (float)$input['latitude'];
     $longitude = (float)$input['longitude'];
@@ -240,82 +212,103 @@ try {
     $isMoving = isset($input['is_moving']) ? (int)(bool)$input['is_moving'] : 0;
     $batteryLevel = isset($input['battery_level']) ? (int)$input['battery_level'] : null;
     $source = $input['source'] ?? 'native';
-    
+    $clientEventId = $input['client_event_id'] ?? null;
+    $clientTimestamp = isset($input['client_timestamp']) ? date('Y-m-d H:i:s', (int)($input['client_timestamp'] / 1000)) : null;
+
+    // Device state info (for tracking_devices table)
+    $networkStatus = $input['network_status'] ?? null;
+    $locationStatus = $input['location_status'] ?? null;
+    $permissionStatus = $input['permission_status'] ?? null;
+    $appState = $input['app_state'] ?? null;
+
+    // Validate coordinates
     if ($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'invalid_coordinates']);
         exit;
     }
-    
+
+    // Validate battery level
     if ($batteryLevel !== null && ($batteryLevel < 0 || $batteryLevel > 100)) {
         $batteryLevel = null;
     }
-    
+
     $userId = (int)$_SESSION['user_id'];
-    
+
+    // Get user info
     $stmt = $db->prepare("SELECT family_id, full_name FROM users WHERE id = ? LIMIT 1");
     $stmt->execute([$userId]);
     $user = $stmt->fetch();
-    
+
     if (!$user) {
         http_response_code(404);
         echo json_encode(['success' => false, 'error' => 'user_not_found']);
         exit;
     }
-    
+
     $familyId = (int)$user['family_id'];
     $userName = $user['full_name'];
-    
+
     // ========== SUBSCRIPTION LOCK CHECK ==========
     require_once __DIR__ . '/../../core/SubscriptionManager.php';
-    
+
     $subscriptionManager = new SubscriptionManager($db);
-    
+
     if ($subscriptionManager->isFamilyLocked($familyId)) {
         http_response_code(402);
         echo json_encode([
             'success' => false,
             'error' => 'subscription_locked',
-            'message' => 'Your trial has ended. Please subscribe to continue using this feature.'
+            'message' => 'Your trial has ended. Please subscribe to continue.'
         ]);
         exit;
     }
-    // ========== END SUBSCRIPTION LOCK ==========
-    
+
+    // ========== DEVICE UPSERT WITH STATE ==========
     $stmt = $db->prepare("
-        SELECT id FROM tracking_devices 
+        SELECT id FROM tracking_devices
         WHERE device_uuid = ? AND user_id = ?
         LIMIT 1
     ");
     $stmt->execute([$deviceUuid, $userId]);
     $device = $stmt->fetch();
-    
+
     if ($device) {
         $deviceId = (int)$device['id'];
-        
+
+        // Update device with state info
         $stmt = $db->prepare("
-            UPDATE tracking_devices 
-            SET last_seen = NOW(), updated_at = NOW()
+            UPDATE tracking_devices
+            SET last_seen = NOW(),
+                updated_at = NOW(),
+                network_status = COALESCE(?, network_status),
+                location_status = COALESCE(?, location_status),
+                permission_status = COALESCE(?, permission_status),
+                app_state = COALESCE(?, app_state),
+                last_fix_at = NOW()
             WHERE id = ?
         ");
-        $stmt->execute([$deviceId]);
-        
+        $stmt->execute([$networkStatus, $locationStatus, $permissionStatus, $appState, $deviceId]);
+
     } else {
         $platform = $input['platform'] ?? 'android';
         $deviceName = $input['device_name'] ?? null;
-        
+
         $stmt = $db->prepare("
-            INSERT INTO tracking_devices 
-            (user_id, device_uuid, platform, device_name, last_seen, created_at, updated_at)
-            VALUES (?, ?, ?, ?, NOW(), NOW(), NOW())
+            INSERT INTO tracking_devices
+            (user_id, device_uuid, platform, device_name, last_seen,
+             network_status, location_status, permission_status, app_state, last_fix_at,
+             created_at, updated_at)
+            VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, NOW(), NOW(), NOW())
         ");
-        $stmt->execute([$userId, $deviceUuid, $platform, $deviceName]);
+        $stmt->execute([
+            $userId, $deviceUuid, $platform, $deviceName,
+            $networkStatus, $locationStatus, $permissionStatus, $appState
+        ]);
         $deviceId = (int)$db->lastInsertId();
     }
-    
-    // ========== RATE LIMITING ==========
-    // Prevent spam updates (buggy devices inserting 10 rows/second)
-    // If last location from same device < 5 seconds ago, skip insert
+
+    // ========== RATE LIMITING (5 second minimum) ==========
     $stmt = $db->prepare("
         SELECT id, created_at,
                TIMESTAMPDIFF(SECOND, created_at, NOW()) AS seconds_ago
@@ -329,18 +322,34 @@ try {
 
     $rateLimited = false;
     if ($lastLocation && $lastLocation['seconds_ago'] !== null && $lastLocation['seconds_ago'] < 5) {
-        // Too fast - skip insert, but still return success to not confuse the client
         $rateLimited = true;
         $locationId = (int)$lastLocation['id'];
-        error_log("TRACKING_UPDATE: rate limited user={$userId} device={$deviceId} last_update={$lastLocation['seconds_ago']}s ago");
     }
 
-    if (!$rateLimited) {
+    // ========== IDEMPOTENCY CHECK ==========
+    $isDuplicate = false;
+    if (!$rateLimited && $clientEventId) {
+        $stmt = $db->prepare("
+            SELECT id FROM tracking_locations
+            WHERE user_id = ? AND client_event_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$userId, $clientEventId]);
+        $existing = $stmt->fetch();
+        if ($existing) {
+            $isDuplicate = true;
+            $locationId = (int)$existing['id'];
+        }
+    }
+
+    // ========== INSERT LOCATION ==========
+    if (!$rateLimited && !$isDuplicate) {
         $stmt = $db->prepare("
             INSERT INTO tracking_locations
             (device_id, user_id, family_id, latitude, longitude, accuracy_m, speed_kmh,
-             heading_deg, altitude_m, is_moving, battery_level, source, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+             heading_deg, altitude_m, is_moving, battery_level, source,
+             client_event_id, client_timestamp, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ");
 
         $stmt->execute([
@@ -355,208 +364,110 @@ try {
             $altitudeM,
             $isMoving,
             $batteryLevel,
-            $source
+            $source,
+            $clientEventId,
+            $clientTimestamp
         ]);
 
         $locationId = (int)$db->lastInsertId();
 
-        error_log("TRACKING_UPDATE: inserted location user={$userId} device={$deviceId} source={$source} auth={$authMethod}");
-    }
-    // ========== END RATE LIMITING ==========
-
-    // ========== SEND NOTIFICATIONS (skip if rate limited) ==========
-    if (!$rateLimited) {
+        // ========== REDIS CACHE UPDATE ==========
         try {
-            $triggers = new NotificationTriggers($db);
-
-            // LOW BATTERY NOTIFICATION
-            if ($batteryLevel !== null && $batteryLevel <= 15) {
-            // Check if we already notified recently (within last hour)
-            $stmt = $db->prepare("
-                SELECT id FROM tracking_events 
-                WHERE user_id = ? 
-                  AND event_type = 'battery_low'
-                  AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
-                LIMIT 1
-            ");
-            $stmt->execute([$userId]);
-            $recentBatteryAlert = $stmt->fetch();
-            
-            if (!$recentBatteryAlert) {
-                $triggers->onLowBattery($userId, $familyId, $userName, $batteryLevel);
-                
-                // Log event
-                $stmt = $db->prepare("
-                    INSERT INTO tracking_events 
-                    (user_id, family_id, device_id, event_type, latitude, longitude, payload_json, created_at)
-                    VALUES (?, ?, ?, 'battery_low', ?, ?, ?, NOW())
-                ");
-                $stmt->execute([
-                    $userId,
-                    $familyId,
-                    $deviceId,
-                    $latitude,
-                    $longitude,
-                    json_encode(['battery_level' => $batteryLevel])
-                ]);
+            $redis = RedisClient::getInstance();
+            if ($redis->isAvailable()) {
+                $cacheData = [
+                    'lat' => $latitude,
+                    'lng' => $longitude,
+                    'accuracy_m' => $accuracyM,
+                    'speed_kmh' => $speedKmh,
+                    'heading_deg' => $headingDeg,
+                    'battery_level' => $batteryLevel,
+                    'is_moving' => $isMoving,
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'device_id' => $deviceId,
+                    'source' => $source
+                ];
+                $redis->setUserLocation($familyId, $userId, $cacheData);
             }
-        }
-        
-        // GEOFENCE CHECK
-        $stmt = $db->prepare("
-            SELECT id, name, type, center_lat, center_lng, radius_m, polygon_json
-            FROM tracking_zones
-            WHERE family_id = ? AND is_active = 1
-        ");
-        $stmt->execute([$familyId]);
-        $zones = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        foreach ($zones as $zone) {
-            $insideZone = false;
-            
-            if ($zone['type'] === 'circle') {
-                $distance = haversineDistance(
-                    $latitude, 
-                    $longitude, 
-                    (float)$zone['center_lat'], 
-                    (float)$zone['center_lng']
-                );
-                $insideZone = ($distance <= (int)$zone['radius_m']);
-            } elseif ($zone['type'] === 'polygon' && $zone['polygon_json']) {
-                $polygon = json_decode($zone['polygon_json'], true);
-                if ($polygon) {
-                    $insideZone = isPointInPolygon($latitude, $longitude, $polygon);
-                }
-            }
-            
-            // Check previous state
-            $stmt = $db->prepare("
-                SELECT event_type 
-                FROM tracking_events 
-                WHERE user_id = ? AND zone_id = ? 
-                ORDER BY created_at DESC 
-                LIMIT 1
-            ");
-            $stmt->execute([$userId, $zone['id']]);
-            $lastEvent = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            $wasInside = ($lastEvent && $lastEvent['event_type'] === 'enter_zone');
-            
-            // State changed
-            if ($insideZone && !$wasInside) {
-                // ENTERED ZONE
-                $triggers->onGeofenceEnter($userId, $familyId, $zone['name'], $userName);
-                
-                $stmt = $db->prepare("
-                    INSERT INTO tracking_events 
-                    (user_id, family_id, device_id, event_type, zone_id, latitude, longitude, created_at)
-                    VALUES (?, ?, ?, 'enter_zone', ?, ?, ?, NOW())
-                ");
-                $stmt->execute([$userId, $familyId, $deviceId, $zone['id'], $latitude, $longitude]);
-                
-            } elseif (!$insideZone && $wasInside) {
-                // EXITED ZONE
-                $triggers->onGeofenceExit($userId, $familyId, $zone['name'], $userName);
-                
-                $stmt = $db->prepare("
-                    INSERT INTO tracking_events 
-                    (user_id, family_id, device_id, event_type, zone_id, latitude, longitude, created_at)
-                    VALUES (?, ?, ?, 'exit_zone', ?, ?, ?, NOW())
-                ");
-                $stmt->execute([$userId, $familyId, $deviceId, $zone['id'], $latitude, $longitude]);
-            }
-        }
-        
         } catch (Exception $e) {
-            error_log('Location notification error: ' . $e->getMessage());
+            // Redis errors are non-fatal
+            error_log('Redis cache update error: ' . $e->getMessage());
         }
-    } // end if (!$rateLimited)
 
-    // Cleanup old locations (keep last 1000 per user)
+        // ========== QUEUE FOR ASYNC GEOFENCE PROCESSING ==========
+        try {
+            $stmt = $db->prepare("
+                INSERT INTO tracking_geofence_queue
+                (user_id, family_id, device_id, location_id, latitude, longitude, battery_level, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+            $stmt->execute([$userId, $familyId, $deviceId, $locationId, $latitude, $longitude, $batteryLevel]);
+        } catch (Exception $e) {
+            // Queue errors are non-fatal - geofences just won't be checked
+            error_log('Geofence queue error: ' . $e->getMessage());
+        }
+    }
+
+    // ========== GET SERVER SETTINGS TO RETURN ==========
+    $serverSettings = null;
     try {
+        // Get tracking settings for this user
         $stmt = $db->prepare("
-            SELECT id FROM tracking_locations
+            SELECT update_interval_seconds, idle_heartbeat_seconds,
+                   offline_threshold_seconds, stale_threshold_seconds
+            FROM tracking_settings
             WHERE user_id = ?
-            ORDER BY created_at DESC
-            LIMIT 1000
+            LIMIT 1
         ");
         $stmt->execute([$userId]);
-        $keepIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        
-        if (!empty($keepIds)) {
-            $placeholders = implode(',', array_fill(0, count($keepIds), '?'));
+        $settings = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($settings) {
+            $serverSettings = [
+                'update_interval_seconds' => (int)$settings['update_interval_seconds'],
+                'idle_heartbeat_seconds' => (int)($settings['idle_heartbeat_seconds'] ?? 600),
+                'offline_threshold_seconds' => (int)($settings['offline_threshold_seconds'] ?? 720),
+                'stale_threshold_seconds' => (int)($settings['stale_threshold_seconds'] ?? 3600)
+            ];
+        }
+    } catch (Exception $e) {
+        // Settings fetch error is non-fatal
+    }
+
+    // ========== CLEANUP OLD LOCATIONS (async-safe, runs rarely) ==========
+    if (!$rateLimited && !$isDuplicate && mt_rand(1, 100) <= 5) { // 5% chance
+        try {
             $stmt = $db->prepare("
                 DELETE FROM tracking_locations
                 WHERE user_id = ?
-                AND id NOT IN ($placeholders)
+                  AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
             ");
-            $params = array_merge([$userId], $keepIds);
-            $stmt->execute($params);
-            
-            $deleted = $stmt->rowCount();
-            if ($deleted > 0) {
-                error_log("Cleaned up $deleted old location records for user $userId");
-            }
+            $stmt->execute([$userId]);
+        } catch (Exception $e) {
+            // Cleanup errors are non-fatal
         }
-    } catch (Exception $e) {
-        error_log('Cleanup warning: ' . $e->getMessage());
     }
-    
-    http_response_code(200);
-    echo json_encode([
+
+    // ========== SUCCESS RESPONSE ==========
+    $response = [
         'success' => true,
         'location_id' => $locationId,
         'device_id' => $deviceId,
         'timestamp' => date('Y-m-d H:i:s'),
         'auth_method' => $authMethod,
-        'rate_limited' => $rateLimited
-    ]);
-    
+        'rate_limited' => $rateLimited,
+        'duplicate' => $isDuplicate
+    ];
+
+    if ($serverSettings) {
+        $response['server_settings'] = $serverSettings;
+    }
+
+    http_response_code(200);
+    echo json_encode($response);
+
 } catch (Exception $e) {
     error_log('Location update error: ' . $e->getMessage());
-    error_log('Stack trace: ' . $e->getTraceAsString());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'internal_error']);
-}
-
-/**
- * Calculate distance between two points using Haversine formula
- */
-function haversineDistance($lat1, $lon1, $lat2, $lon2): float {
-    $earthRadius = 6371000; // meters
-    
-    $dLat = deg2rad($lat2 - $lat1);
-    $dLon = deg2rad($lon2 - $lon1);
-    
-    $a = sin($dLat/2) * sin($dLat/2) +
-         cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-         sin($dLon/2) * sin($dLon/2);
-    
-    $c = 2 * atan2(sqrt($a), sqrt(1-$a));
-    
-    return $earthRadius * $c;
-}
-
-/**
- * Check if point is inside polygon
- */
-function isPointInPolygon($lat, $lng, $polygon): bool {
-    $inside = false;
-    $count = count($polygon);
-    
-    for ($i = 0, $j = $count - 1; $i < $count; $j = $i++) {
-        $xi = $polygon[$i]['lat'];
-        $yi = $polygon[$i]['lng'];
-        $xj = $polygon[$j]['lat'];
-        $yj = $polygon[$j]['lng'];
-        
-        $intersect = (($yi > $lng) != ($yj > $lng))
-            && ($lat < ($xj - $xi) * ($lng - $yi) / ($yj - $yi) + $xi);
-        
-        if ($intersect) {
-            $inside = !$inside;
-        }
-    }
-    
-    return $inside;
 }
