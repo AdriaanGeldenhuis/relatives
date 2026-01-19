@@ -39,6 +39,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import za.co.relatives.app.network.ApiClient
 import za.co.relatives.app.services.TrackingLocationService
 import za.co.relatives.app.ui.SubscriptionActivity
@@ -603,6 +604,16 @@ fun WebViewScreen(
 
     DisposableEffect(voiceAssistantBridge) {
         onDispose { voiceAssistantBridge.cleanup() }
+    }
+
+    // Handle back button - navigate back in WebView instead of exiting app
+    BackHandler(enabled = true) {
+        if (webView.canGoBack()) {
+            webView.goBack()
+        } else {
+            // If can't go back, let the system handle it (exit app)
+            activity.moveTaskToBack(true)
+        }
     }
 
     val fileChooserLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
