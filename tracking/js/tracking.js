@@ -589,12 +589,17 @@ class TrackingMapProfessional {
             this.tetherLines.set(member.user_id, tetherLine);
 
             const avatarSize = isMe ? 56 : 50;
+            const borderWidth = isMe ? 4 : 3;
+            const totalSize = avatarSize + (borderWidth * 2);
+
+            // Avatar centered in container, line connects to bottom center
             const balloonHtml = `
-                <div class="balloon-marker-container" style="position: relative;">
+                <div class="balloon-marker-container" style="
+                    position: relative;
+                    width: ${totalSize}px;
+                    height: ${totalSize}px;
+                ">
                     <div class="balloon-avatar ${isMe ? 'is-me' : ''}" style="
-                        position: absolute;
-                        top: -${avatarSize + 8}px;
-                        left: -${avatarSize / 2}px;
                         width: ${avatarSize}px;
                         height: ${avatarSize}px;
                         border-radius: 50%;
@@ -606,7 +611,7 @@ class TrackingMapProfessional {
                         font-weight: 900;
                         color: white;
                         background: ${color};
-                        border: ${isMe ? '4px' : '3px'} solid white;
+                        border: ${borderWidth}px solid white;
                         box-shadow: 0 4px 16px rgba(0,0,0,0.35);
                     ">
                         ${markerContent}
@@ -614,8 +619,8 @@ class TrackingMapProfessional {
                     ${member.status === 'online' || member.status === 'stale' ? `
                         <div style="
                             position: absolute;
-                            top: -${avatarSize - 8}px;
-                            left: ${avatarSize / 2 - 16}px;
+                            bottom: 0;
+                            right: 0;
                             width: 16px;
                             height: 16px;
                             background: ${member.status === 'online' ? '#43e97b' : '#ffa502'};
@@ -627,14 +632,14 @@ class TrackingMapProfessional {
                     ${isMe ? `
                         <div style="
                             position: absolute;
-                            top: -${avatarSize + 24}px;
+                            top: -20px;
                             left: 50%;
                             transform: translateX(-50%);
                             background: linear-gradient(135deg, #667eea, #764ba2);
                             color: white;
-                            padding: 2px 8px;
+                            padding: 3px 10px;
                             border-radius: 10px;
-                            font-size: 9px;
+                            font-size: 10px;
                             font-weight: 800;
                             white-space: nowrap;
                             box-shadow: 0 2px 8px rgba(102,126,234,0.4);
@@ -643,12 +648,13 @@ class TrackingMapProfessional {
                 </div>
             `;
 
+            // Anchor at bottom center of avatar - this is where line connects
             const balloonIcon = L.divIcon({
                 html: balloonHtml,
                 className: `balloon-marker ${isMe ? 'is-me' : ''}`,
-                iconSize: [avatarSize, avatarSize + 16],
-                iconAnchor: [0, 0],
-                popupAnchor: [0, -(avatarSize + 8)]
+                iconSize: [totalSize, totalSize],
+                iconAnchor: [totalSize / 2, totalSize], // Bottom center
+                popupAnchor: [0, -totalSize]
             });
 
             const balloonMarker = L.marker(balloonPosition, {
@@ -1635,21 +1641,27 @@ class TrackingMapProfessional {
             return { lat: centerLat, lng: centerLng };
         }
 
-        // Base offset distance (increases with zoom level)
+        // Much larger base offset that scales inversely with zoom
+        // At zoom 18: small offset, at zoom 12: large offset
         const zoom = this.map ? this.map.getZoom() : 14;
-        const baseOffset = 0.0004 / Math.pow(2, (zoom - 14) * 0.3);
 
-        // Use golden angle for even spiral distribution
-        const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // ~137.5 degrees
-        const angle = index * goldenAngle;
+        // Base offset in degrees - much larger for better visibility
+        // This formula gives bigger spread when zoomed out
+        const baseOffset = 0.0015 * Math.pow(2, (16 - zoom) * 0.5);
 
-        // Spiral outward: each successive marker is slightly further out
-        const ringIndex = Math.floor(index / 6); // 6 markers per ring
-        const offsetDistance = baseOffset * (1 + ringIndex * 0.5);
+        // Minimum offset to ensure avatars never overlap
+        const minOffset = 0.0003;
+        const effectiveOffset = Math.max(baseOffset, minOffset);
 
-        // Calculate offset with slight variation
-        const lat = centerLat + Math.cos(angle) * offsetDistance;
-        const lng = centerLng + Math.sin(angle) * offsetDistance * 1.3; // Adjust for latitude distortion
+        // Distribute evenly in a circle, starting from top-right
+        // Each member gets equal angle spacing
+        const angleStep = (2 * Math.PI) / total;
+        const startAngle = -Math.PI / 4; // Start from top-right (45 degrees)
+        const angle = startAngle + (index * angleStep);
+
+        // Calculate offset position
+        const lat = centerLat + Math.sin(angle) * effectiveOffset;
+        const lng = centerLng + Math.cos(angle) * effectiveOffset * 1.5; // Wider horizontally
 
         return { lat, lng };
     }
