@@ -51,13 +51,15 @@ class TrackingMapProfessional {
             // Mapbox styles (better quality)
             return {
                 light: {
-                    url: `https://api.mapbox.com/styles/v1/mapbox/light-v11/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+                    // Streets style is more colorful and vibrant than light-v11
+                    url: `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
                     attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>',
-                    name: 'Light',
+                    name: 'Streets',
                     tileSize: 512,
                     zoomOffset: -1
                 },
                 dark: {
+                    // dark-v11 has full street names and labels
                     url: `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
                     attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>',
                     name: 'Dark',
@@ -73,12 +75,13 @@ class TrackingMapProfessional {
                 }
             };
         } else {
-            // Free tile providers (fallback)
+            // Free tile providers (fallback) - using more colorful options
             return {
                 light: {
-                    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-                    name: 'Light'
+                    // CartoDB Voyager is colorful and modern looking
+                    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://carto.com/attributions">CARTO</a>',
+                    name: 'Voyager'
                 },
                 dark: {
                     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
@@ -465,23 +468,8 @@ class TrackingMapProfessional {
         const existingIds = new Set(this.markers.keys());
         const currentIds = new Set();
 
-        // Group members by location to detect clustering
-        const locationGroups = new Map();
-
-        members.forEach(member => {
-            if (!member.location || !member.location.lat || !member.location.lng) {
-                return;
-            }
-
-            const latKey = member.location.lat.toFixed(5);
-            const lngKey = member.location.lng.toFixed(5);
-            const locationKey = `${latKey},${lngKey}`;
-
-            if (!locationGroups.has(locationKey)) {
-                locationGroups.set(locationKey, []);
-            }
-            locationGroups.get(locationKey).push(member);
-        });
+        // Group members by proximity (within ~100 meters) to detect clustering
+        const clusters = this.clusterMembersByProximity(members, 0.001); // ~100m threshold
 
         members.forEach(member => {
             currentIds.add(member.user_id);
@@ -491,45 +479,45 @@ class TrackingMapProfessional {
             }
 
             const position = [member.location.lat, member.location.lng];
-            const latKey = member.location.lat.toFixed(5);
-            const lngKey = member.location.lng.toFixed(5);
-            const locationKey = `${latKey},${lngKey}`;
-            const membersAtLocation = locationGroups.get(locationKey);
-            const isClustered = membersAtLocation && membersAtLocation.length > 1;
+
+            // Find which cluster this member belongs to
+            const cluster = clusters.find(c => c.members.some(m => m.user_id === member.user_id));
+            const membersAtLocation = cluster ? cluster.members : [member];
+            const isClustered = membersAtLocation.length > 1;
 
             if (this.markers.has(member.user_id)) {
                 const marker = this.markers.get(member.user_id);
-                this.animateMarker(marker, position);
 
-                if (this.accuracyCircles.has(member.user_id)) {
-                    const circle = this.accuracyCircles.get(member.user_id);
-                    circle.setLatLng(position);
-                    circle.setRadius(member.location.accuracy_m || 20);
-                }
+                // Check if cluster status changed - if so, recreate marker
+                const wasInCluster = marker._wasInCluster || false;
+                if (wasInCluster !== isClustered || (isClustered && membersAtLocation.length !== (marker._clusterSize || 0))) {
+                    // Cluster status changed - remove and recreate
+                    this.removeMarker(member.user_id);
+                    this.createMarker(member, position, isClustered, membersAtLocation);
+                } else {
+                    // Just update position
+                    this.animateMarker(marker, position);
 
-                if (this.balloonMarkers.has(member.user_id)) {
-                    const balloonMarker = this.balloonMarkers.get(member.user_id);
-                    const memberIndex = membersAtLocation.findIndex(m => m.user_id === member.user_id);
-                    const totalMembers = membersAtLocation.length;
-                    const angle = (memberIndex / totalMembers) * 2 * Math.PI;
-                    const offsetDistance = 0.0002;
-                    const balloonLat = position[0] + Math.cos(angle) * offsetDistance;
-                    const balloonLng = position[1] + Math.sin(angle) * offsetDistance;
-                    this.animateMarker(balloonMarker, [balloonLat, balloonLng]);
+                    if (this.accuracyCircles.has(member.user_id)) {
+                        const circle = this.accuracyCircles.get(member.user_id);
+                        circle.setLatLng(position);
+                        circle.setRadius(member.location.accuracy_m || 20);
+                    }
 
-                    if (this.tetherLines.has(member.user_id)) {
-                        const tetherLine = this.tetherLines.get(member.user_id);
-                        tetherLine.setLatLngs([position, [balloonLat, balloonLng]]);
+                    const popup = marker.getPopup();
+                    if (popup) {
+                        popup.setContent(this.createPopupContent(member));
                     }
                 }
-
-                const popup = marker.getPopup();
-                if (popup) {
-                    popup.setContent(this.createPopupContent(member));
-                }
-
             } else {
                 this.createMarker(member, position, isClustered, membersAtLocation);
+            }
+
+            // Store cluster state on marker for next update
+            if (this.markers.has(member.user_id)) {
+                const marker = this.markers.get(member.user_id);
+                marker._wasInCluster = isClustered;
+                marker._clusterSize = membersAtLocation.length;
             }
         });
 
@@ -544,216 +532,151 @@ class TrackingMapProfessional {
         const isMe = member.user_id === this.config.userId;
         const color = member.avatar_color || '#667eea';
 
-        if (isClustered && !isMe) {
-            // Create small dot marker
-            const dotHtml = `
-                <div class="location-dot" style="
-                    width: 12px;
-                    height: 12px;
-                    border-radius: 50%;
-                    background: ${color};
-                    border: 2px solid white;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                "></div>
-            `;
+        // Get marker content (avatar image or initial)
+        let markerContent;
+        if (member.has_avatar && member.avatar_url) {
+            markerContent = `<img src="${member.avatar_url}" alt="${member.name}" style="width: 100%; height: 100%; object-fit: cover;">`;
+        } else {
+            markerContent = member.name ? member.name.charAt(0).toUpperCase() : '?';
+        }
 
-            const dotIcon = L.divIcon({
-                html: dotHtml,
-                className: 'location-dot-container',
-                iconSize: [12, 12],
-                iconAnchor: [6, 6]
-            });
+        // Pin dimensions - compact teardrop shape
+        const pinWidth = isMe ? 48 : 42;
+        const pinHeight = isMe ? 58 : 52;
+        const avatarSize = isMe ? 38 : 34;
 
-            const dotMarker = L.marker(position, {
-                icon: dotIcon,
-                zIndexOffset: 0
-            }).addTo(this.map);
-
-            this.markers.set(member.user_id, dotMarker);
-
-            // Create balloon avatar marker
-            let markerContent;
-            if (member.has_avatar && member.avatar_url) {
-                markerContent = `<img src="${member.avatar_url}" alt="${member.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
-            } else {
-                markerContent = member.name ? member.name.charAt(0).toUpperCase() : '?';
-            }
-
+        // Calculate rotation angle for clustered members
+        let rotationAngle = 0;
+        if (isClustered && membersAtLocation.length > 1) {
             const memberIndex = membersAtLocation.findIndex(m => m.user_id === member.user_id);
-            const totalMembers = membersAtLocation.length;
-            const angle = (memberIndex / totalMembers) * 2 * Math.PI;
-            const offsetDistance = 0.0002;
+            rotationAngle = (360 / membersAtLocation.length) * memberIndex;
+        }
 
-            const balloonLat = position[0] + Math.cos(angle) * offsetDistance;
-            const balloonLng = position[1] + Math.sin(angle) * offsetDistance;
-            const balloonPosition = [balloonLat, balloonLng];
-
-            // Create tether line
-            const tetherLine = L.polyline([position, balloonPosition], {
-                color: color,
-                weight: 2,
-                opacity: 0.6,
-                dashArray: '5, 5',
-                className: 'tether-line'
-            }).addTo(this.map);
-
-            this.tetherLines.set(member.user_id, tetherLine);
-
-            const balloonHtml = `
-                <div class="balloon-marker-container" style="position: relative;">
-                    <svg width="60" height="80" viewBox="0 0 60 80" style="position: absolute; top: -80px; left: -30px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));">
-                        <circle cx="30" cy="30" r="28" fill="${color}" stroke="white" stroke-width="3"/>
+        // Create teardrop pin marker with SVG
+        const pinHtml = `
+            <div class="location-pin-wrapper" style="
+                width: ${pinWidth + 20}px;
+                height: ${pinHeight + 30}px;
+                position: relative;
+            ">
+                <div class="location-pin ${isMe ? 'is-me' : ''}" style="
+                    position: absolute;
+                    bottom: 0;
+                    left: 50%;
+                    transform-origin: bottom center;
+                    transform: translateX(-50%) rotate(${rotationAngle}deg);
+                    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+                ">
+                    <!-- Teardrop SVG shape -->
+                    <svg width="${pinWidth}" height="${pinHeight}" viewBox="0 0 48 58" fill="none">
+                        <!-- Pin shape - teardrop -->
+                        <path d="M24 58 C24 58 0 35 0 22 C0 10 10.7 0 24 0 C37.3 0 48 10 48 22 C48 35 24 58 24 58Z"
+                              fill="${color}" stroke="white" stroke-width="3"/>
                     </svg>
+
+                    <!-- Avatar circle inside pin -->
                     <div style="
                         position: absolute;
-                        top: -76px;
-                        left: -26px;
-                        width: 52px;
-                        height: 52px;
+                        top: 5px;
+                        left: 50%;
+                        transform: translateX(-50%) rotate(${-rotationAngle}deg);
+                        width: ${avatarSize}px;
+                        height: ${avatarSize}px;
                         border-radius: 50%;
                         overflow: hidden;
+                        background: white;
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        font-size: 24px;
+                        font-size: ${isMe ? 18 : 16}px;
                         font-weight: 900;
-                        color: white;
-                        background: ${color};
+                        color: ${color};
                     ">
                         ${markerContent}
                     </div>
+
+                    <!-- Status indicator -->
                     ${member.status === 'online' || member.status === 'stale' ? `
                         <div style="
                             position: absolute;
-                            top: -46px;
-                            left: 8px;
-                            width: 14px;
-                            height: 14px;
+                            top: 2px;
+                            right: 2px;
+                            width: 12px;
+                            height: 12px;
                             background: ${member.status === 'online' ? '#43e97b' : '#ffa502'};
                             border: 2px solid white;
                             border-radius: 50%;
+                            transform: rotate(${-rotationAngle}deg);
+                            z-index: 3;
                         "></div>
                     ` : ''}
                 </div>
-            `;
 
-            const balloonIcon = L.divIcon({
-                html: balloonHtml,
-                className: 'balloon-marker',
-                iconSize: [60, 80],
-                iconAnchor: [30, 80],
-                popupAnchor: [0, -80]
-            });
+                <!-- YOU badge (outside rotation) -->
+                ${isMe ? `
+                    <div style="
+                        position: absolute;
+                        bottom: ${pinHeight + 5}px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: linear-gradient(135deg, #667eea, #764ba2);
+                        color: white;
+                        padding: 2px 8px;
+                        border-radius: 8px;
+                        font-size: 9px;
+                        font-weight: 800;
+                        white-space: nowrap;
+                        box-shadow: 0 2px 6px rgba(102,126,234,0.4);
+                        z-index: 10;
+                    ">YOU</div>
+                ` : ''}
+            </div>
+        `;
 
-            const balloonMarker = L.marker(balloonPosition, {
-                icon: balloonIcon,
-                zIndexOffset: 100,
-                riseOnHover: true
-            }).addTo(this.map);
+        // Icon anchor at the very bottom tip of the pin
+        const icon = L.divIcon({
+            html: pinHtml,
+            className: `location-pin-container ${isMe ? 'is-me' : ''}`,
+            iconSize: [pinWidth + 20, pinHeight + 30],
+            iconAnchor: [(pinWidth + 20) / 2, pinHeight + 15],
+            popupAnchor: [0, -(pinHeight + 10)]
+        });
 
-            balloonMarker.bindPopup(this.createPopupContent(member), {
-                closeButton: true,
-                maxWidth: this.getResponsivePopupWidth(),
-                minWidth: 240,
-                className: 'custom-popup',
-                autoPan: true,
-                autoPanPadding: [50, 50]
-            });
-
-            balloonMarker.on('click', () => {
-                this.isViewingMember = true;
-                this.restartPolling();
-                setTimeout(() => this.centerOnMember(member.user_id), 100);
-            });
-
-            this.balloonMarkers.set(member.user_id, balloonMarker);
-
-        } else {
-            // Standard marker
-            let markerContent;
-            if (member.has_avatar && member.avatar_url) {
-                markerContent = `<img src="${member.avatar_url}" alt="${member.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
-            } else {
-                markerContent = member.name ? member.name.charAt(0).toUpperCase() : '?';
-            }
-
-            const iconHtml = `
-                <div class="custom-marker ${isMe ? 'is-me' : ''}" style="
-                    width: ${isMe ? '64px' : '56px'};
-                    height: ${isMe ? '64px' : '56px'};
-                    border-radius: 50%;
-                    background: ${color};
-                    border: ${isMe ? '4px' : '3px'} solid white;
-                    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: ${isMe ? '28px' : '24px'};
-                    font-weight: 900;
-                    color: white;
-                    font-family: 'Plus Jakarta Sans', sans-serif;
-                    position: relative;
-                    overflow: hidden;
-                ">
-                    ${markerContent}
-                    ${member.status === 'online' || member.status === 'stale' ? `
-                        <div style="
-                            position: absolute;
-                            bottom: 0;
-                            right: 0;
-                            width: 18px;
-                            height: 18px;
-                            background: ${member.status === 'online' ? '#43e97b' : '#ffa502'};
-                            border: 3px solid white;
-                            border-radius: 50%;
-                        "></div>
-                    ` : ''}
-                </div>
-            `;
-
-            const icon = L.divIcon({
-                html: iconHtml,
-                className: 'member-marker-container',
-                iconSize: [isMe ? 64 : 56, isMe ? 64 : 56],
-                iconAnchor: [isMe ? 32 : 28, isMe ? 32 : 28],
-                popupAnchor: [0, isMe ? -32 : -28]
-            });
-
-            const marker = L.marker(position, {
-                icon,
-                zIndexOffset: isMe ? 1000 : 0,
-                riseOnHover: true
-            }).addTo(this.map);
-
-            marker.bindPopup(this.createPopupContent(member), {
-                closeButton: true,
-                maxWidth: this.getResponsivePopupWidth(),
-                minWidth: 240,
-                className: 'custom-popup',
-                autoPan: true,
-                autoPanPadding: [50, 50]
-            });
-
-            marker.on('click', () => {
-                this.isViewingMember = true;
-                this.restartPolling();
-                setTimeout(() => this.centerOnMember(member.user_id), 100);
-            });
-
-            this.markers.set(member.user_id, marker);
-        }
-
-        // Accuracy circle
-        const circle = L.circle(position, {
-            radius: member.location.accuracy_m || 20,
-            color: color,
-            fillColor: color,
-            fillOpacity: 0.08,
-            weight: 1.5,
-            opacity: 0.4
+        const marker = L.marker(position, {
+            icon: icon,
+            zIndexOffset: isMe ? 1000 : (isClustered ? 100 + (membersAtLocation.findIndex(m => m.user_id === member.user_id) || 0) : 50),
+            riseOnHover: true
         }).addTo(this.map);
 
-        this.accuracyCircles.set(member.user_id, circle);
+        marker.bindPopup(this.createPopupContent(member), {
+            closeButton: true,
+            maxWidth: this.getResponsivePopupWidth(),
+            minWidth: 240,
+            className: 'custom-popup',
+            autoPan: true,
+            autoPanPadding: [50, 50]
+        });
+
+        marker.on('click', () => {
+            this.isViewingMember = true;
+            this.restartPolling();
+            setTimeout(() => this.centerOnMember(member.user_id), 100);
+        });
+
+        this.markers.set(member.user_id, marker);
+
+        // Add accuracy circle if configured
+        if (this.settings?.show_accuracy && member.location?.accuracy_m) {
+            const circle = L.circle(position, {
+                radius: member.location.accuracy_m,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.1,
+                weight: 1,
+                opacity: 0.3
+            }).addTo(this.map);
+            this.accuracyCircles.set(member.user_id, circle);
+        }
 
         this.updateMemberCardStatus(member.user_id, true);
     }
@@ -1555,6 +1478,95 @@ class TrackingMapProfessional {
     toRad(degrees) {
         return degrees * (Math.PI / 180);
     }
+
+    // ============================================
+    // CLUSTERING & SPREADING ALGORITHMS
+    // ============================================
+
+    /**
+     * Cluster members by proximity threshold
+     * @param {Array} members - Array of member objects with location
+     * @param {number} threshold - Distance threshold in degrees (~0.001 = 100m)
+     * @returns {Array} Array of cluster objects with center and members
+     */
+    clusterMembersByProximity(members, threshold = 0.001) {
+        const membersWithLocation = members.filter(m =>
+            m.location && m.location.lat && m.location.lng
+        );
+
+        const clusters = [];
+        const assigned = new Set();
+
+        membersWithLocation.forEach(member => {
+            if (assigned.has(member.user_id)) return;
+
+            // Start a new cluster with this member
+            const cluster = {
+                center: { lat: member.location.lat, lng: member.location.lng },
+                members: [member]
+            };
+
+            // Find all nearby members
+            membersWithLocation.forEach(other => {
+                if (other.user_id === member.user_id || assigned.has(other.user_id)) return;
+
+                const distance = Math.sqrt(
+                    Math.pow(member.location.lat - other.location.lat, 2) +
+                    Math.pow(member.location.lng - other.location.lng, 2)
+                );
+
+                if (distance <= threshold) {
+                    cluster.members.push(other);
+                    assigned.add(other.user_id);
+                }
+            });
+
+            // Calculate cluster center as average
+            if (cluster.members.length > 1) {
+                const sumLat = cluster.members.reduce((sum, m) => sum + m.location.lat, 0);
+                const sumLng = cluster.members.reduce((sum, m) => sum + m.location.lng, 0);
+                cluster.center = {
+                    lat: sumLat / cluster.members.length,
+                    lng: sumLng / cluster.members.length
+                };
+            }
+
+            assigned.add(member.user_id);
+            clusters.push(cluster);
+        });
+
+        return clusters;
+    }
+
+    /**
+     * Calculate spiral offset position for clustered markers
+     * Spreads markers in a spiral pattern around the center point
+     * @param {number} centerLat - Center latitude
+     * @param {number} centerLng - Center longitude
+     * @param {number} index - Member index in cluster (0-based)
+     * @param {number} total - Total members in cluster
+     * @returns {Object} { lat, lng } of offset position
+     */
+    calculateSpiralOffset(centerLat, centerLng, index, total) {
+        if (total <= 1) {
+            return { lat: centerLat, lng: centerLng };
+        }
+
+        // Small offset - just enough to see each avatar (~50-70 meters)
+        // 0.0005 degrees ≈ 55 meters
+        const baseOffset = 0.0005;
+
+        // Distribute evenly in a circle
+        const angleStep = (2 * Math.PI) / total;
+        const startAngle = -Math.PI / 2; // Start from top
+        const angle = startAngle + (index * angleStep);
+
+        // Calculate offset position
+        const lat = centerLat + Math.sin(angle) * baseOffset;
+        const lng = centerLng + Math.cos(angle) * baseOffset * 1.2;
+
+        return { lat, lng };
+    }
 }
 
 // ============================================
@@ -1583,20 +1595,36 @@ document.addEventListener('DOMContentLoaded', () => {
 // Inject styles
 const style = document.createElement('style');
 style.textContent = `
+    /* Toast animations */
     @keyframes slideInRight { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     @keyframes slideOutRight { to { transform: translateX(400px); opacity: 0; } }
+
+    /* Standard marker styles */
     .custom-marker { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
     .custom-marker.is-me { animation: pulseMarker 2.5s ease-in-out infinite; }
-    @keyframes pulseMarker { 0%, 100% { box-shadow: 0 6px 20px rgba(0,0,0,0.4); } 50% { box-shadow: 0 6px 20px rgba(0,0,0,0.4), 0 0 0 20px rgba(255,255,255,0); } }
+    @keyframes pulseMarker { 0%, 100% { box-shadow: 0 6px 20px rgba(0,0,0,0.4); } 50% { box-shadow: 0 6px 20px rgba(0,0,0,0.4), 0 0 0 15px rgba(102, 126, 234, 0.15); } }
+
+    /* Balloon marker styles */
     .balloon-marker { cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-    .balloon-marker:hover { transform: scale(1.1); z-index: 10000 !important; }
-    .location-dot-container { z-index: 1; }
-    .location-dot { animation: dotPulse 2s ease-in-out infinite; }
-    @keyframes dotPulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.8; } }
-    .tether-line { pointer-events: none; animation: tetherPulse 3s ease-in-out infinite; }
-    @keyframes tetherPulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 0.3; } }
+    .balloon-marker:hover { transform: scale(1.08) translateY(-4px); z-index: 10000 !important; }
+    .balloon-marker.is-me .balloon-avatar { animation: pulseAvatar 2.5s ease-in-out infinite; }
+    @keyframes pulseAvatar { 0%, 100% { box-shadow: 0 4px 16px rgba(0,0,0,0.35); } 50% { box-shadow: 0 4px 16px rgba(0,0,0,0.35), 0 0 0 12px rgba(102, 126, 234, 0.2); } }
+
+    /* Location dot styles */
+    .location-dot-container { z-index: 1 !important; }
+    .location-dot { animation: dotPulse 2s ease-in-out infinite; transition: all 0.3s ease; }
+    @keyframes dotPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+
+    /* Tether line animation */
+    .tether-line { pointer-events: none; }
+
+    /* Popup responsive */
     .leaflet-popup-content-wrapper { max-width: 95vw !important; }
     @media (max-width: 480px) { .leaflet-popup-content-wrapper { max-width: 90vw !important; } }
+
+    /* Member marker container positioning fix */
+    .member-marker-container { overflow: visible !important; }
+    .balloon-marker-container { overflow: visible !important; }
 `;
 document.head.appendChild(style);
 
