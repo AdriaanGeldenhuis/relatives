@@ -59,9 +59,10 @@ class TrackingMapProfessional {
                     zoomOffset: -1
                 },
                 dark: {
-                    url: `https://api.mapbox.com/styles/v1/mapbox/navigation-night-v1/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+                    // dark-v11 has full street names and labels
+                    url: `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
                     attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>',
-                    name: 'Night',
+                    name: 'Dark',
                     tileSize: 512,
                     zoomOffset: -1
                 },
