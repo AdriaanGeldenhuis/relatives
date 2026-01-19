@@ -1641,27 +1641,18 @@ class TrackingMapProfessional {
             return { lat: centerLat, lng: centerLng };
         }
 
-        // Much larger base offset that scales inversely with zoom
-        // At zoom 18: small offset, at zoom 12: large offset
-        const zoom = this.map ? this.map.getZoom() : 14;
+        // Small offset - just enough to see each avatar (~50-70 meters)
+        // 0.0005 degrees ≈ 55 meters
+        const baseOffset = 0.0005;
 
-        // Base offset in degrees - much larger for better visibility
-        // This formula gives bigger spread when zoomed out
-        const baseOffset = 0.0015 * Math.pow(2, (16 - zoom) * 0.5);
-
-        // Minimum offset to ensure avatars never overlap
-        const minOffset = 0.0003;
-        const effectiveOffset = Math.max(baseOffset, minOffset);
-
-        // Distribute evenly in a circle, starting from top-right
-        // Each member gets equal angle spacing
+        // Distribute evenly in a circle
         const angleStep = (2 * Math.PI) / total;
-        const startAngle = -Math.PI / 4; // Start from top-right (45 degrees)
+        const startAngle = -Math.PI / 2; // Start from top
         const angle = startAngle + (index * angleStep);
 
         // Calculate offset position
-        const lat = centerLat + Math.sin(angle) * effectiveOffset;
-        const lng = centerLng + Math.cos(angle) * effectiveOffset * 1.5; // Wider horizontally
+        const lat = centerLat + Math.sin(angle) * baseOffset;
+        const lng = centerLng + Math.cos(angle) * baseOffset * 1.2;
 
         return { lat, lng };
     }
