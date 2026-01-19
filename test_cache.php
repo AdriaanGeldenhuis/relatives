@@ -117,6 +117,48 @@ if ($cacheType === 'memcached') {
     echo "   This still works but is slower\n";
 }
 
+// Test 5: Recent Location Entries (CRITICAL!)
+echo "\n5. Recent Location Entries:\n";
+try {
+    $stmt = $db->query("
+        SELECT u.full_name, l.latitude, l.longitude, l.created_at,
+               TIMESTAMPDIFF(MINUTE, l.created_at, NOW()) AS minutes_ago
+        FROM tracking_locations l
+        JOIN users u ON l.user_id = u.id
+        ORDER BY l.created_at DESC
+        LIMIT 10
+    ");
+    $recent = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (count($recent) > 0) {
+        echo "   Last 10 location entries:\n";
+        foreach ($recent as $r) {
+            echo "   - {$r['full_name']}: {$r['minutes_ago']} min ago ({$r['created_at']})\n";
+        }
+    } else {
+        echo "   ❌ NO location entries found!\n";
+    }
+} catch (Exception $e) {
+    echo "   ❌ Error: " . $e->getMessage() . "\n";
+}
+
+// Test 6: Check if there's any blocking issue
+echo "\n6. Subscription Status Check:\n";
+try {
+    require_once __DIR__ . '/core/SubscriptionManager.php';
+    $subMgr = new SubscriptionManager($db);
+
+    // Check first family
+    $stmt = $db->query("SELECT id FROM families LIMIT 1");
+    $family = $stmt->fetch();
+    if ($family) {
+        $isLocked = $subMgr->isFamilyLocked($family['id']);
+        echo "   - Family {$family['id']} locked: " . ($isLocked ? "❌ YES (this blocks updates!)" : "✅ NO") . "\n";
+    }
+} catch (Exception $e) {
+    echo "   ❌ Error: " . $e->getMessage() . "\n";
+}
+
 echo "\n</pre>";
 echo "<p><strong>Delete this file after testing!</strong></p>";
 ?>
