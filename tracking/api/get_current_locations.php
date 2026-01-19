@@ -3,13 +3,19 @@ declare(strict_types=1);
 
 /**
  * ============================================
- * GET CURRENT LOCATIONS - With Redis Cache
+ * GET CURRENT LOCATIONS v2.0
  * ============================================
  *
- * Optimized for speed:
- * 1. Try Redis cache first (if available)
- * 2. Fallback to MySQL if cache miss
- * 3. Return consistent response format
+ * Flow:
+ * 1. Get family users
+ * 2. For each user: try cache first
+ * 3. If cache miss: fetch from DB
+ * 4. Return unified list
+ *
+ * Rules:
+ * - Cache is a performance hint, not authority
+ * - Missing cache is NOT an error
+ * - DB is always the fallback
  */
 
 error_reporting(E_ALL);
@@ -26,7 +32,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../../core/bootstrap.php';
-require_once __DIR__ . '/../../core/RedisClient.php';
+require_once __DIR__ . '/../../core/Cache.php';
 
 try {
     $userId = (int)$_SESSION['user_id'];
@@ -44,7 +50,7 @@ try {
 
     $familyId = (int)$user['family_id'];
 
-    // Get family members (always from DB - this is lightweight)
+    // Get family members (always from DB - lightweight query)
     $stmt = $db->prepare("
         SELECT
             u.id AS user_id,
@@ -66,61 +72,14 @@ try {
 
     $memberIds = array_column($members, 'user_id');
 
-    // ========== TRY REDIS CACHE FIRST ==========
-    $redis = RedisClient::getInstance();
-    $cacheHit = false;
-    $cachedLocations = null;
-
-    if ($redis->isAvailable() && !empty($memberIds)) {
-        $cachedLocations = $redis->getFamilyLocations($familyId, $memberIds);
-        if ($cachedLocations !== null) {
-            $cacheHit = true;
-        }
-    }
-
-    // ========== FALLBACK TO MYSQL IF CACHE MISS ==========
-    $locationData = [];
-
-    if (!$cacheHit) {
-        // Get latest location for each family member
-        $stmt = $db->prepare("
-            SELECT
-                l.user_id,
-                l.device_id,
-                l.latitude,
-                l.longitude,
-                l.accuracy_m,
-                l.speed_kmh,
-                l.heading_deg,
-                l.battery_level,
-                l.is_moving,
-                l.source,
-                l.created_at,
-                TIMESTAMPDIFF(SECOND, l.created_at, NOW()) AS seconds_ago,
-                d.device_name,
-                d.platform
-            FROM tracking_locations l
-            INNER JOIN (
-                SELECT user_id, MAX(created_at) AS max_created
-                FROM tracking_locations
-                WHERE family_id = ?
-                GROUP BY user_id
-            ) latest ON l.user_id = latest.user_id AND l.created_at = latest.max_created
-            LEFT JOIN tracking_devices d ON l.device_id = d.id
-            WHERE l.family_id = ?
-        ");
-        $stmt->execute([$familyId, $familyId]);
-        $locations = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        foreach ($locations as $loc) {
-            $locationData[(int)$loc['user_id']] = $loc;
-        }
-    }
+    // Initialize cache
+    $cache = Cache::init($db);
+    $cacheType = $cache->getType();
 
     // ========== BUILD RESPONSE ==========
     $response = [
         'success' => true,
-        'cache_hit' => $cacheHit,
+        'cache_type' => $cacheType,
         'members' => []
     ];
 
@@ -132,34 +91,65 @@ try {
         $onlineThreshold = max($updateInterval * 2, 300); // At least 5 min
         $staleThreshold = 3600; // 60 minutes
 
-        // Get location data from cache or DB
         $loc = null;
         $secondsAgo = null;
+        $fromCache = false;
 
-        if ($cacheHit && isset($cachedLocations[$memberId])) {
-            // From Redis cache
-            $cached = $cachedLocations[$memberId];
-            $createdAt = $cached['created_at'] ?? null;
+        // ========== TRY CACHE FIRST ==========
+        $cached = $cache->getUserLocation($familyId, $memberId);
+
+        if ($cached !== null && isset($cached['lat']) && isset($cached['lng'])) {
+            $fromCache = true;
+            $createdAt = $cached['ts'] ?? null;
+
             if ($createdAt) {
                 $secondsAgo = time() - strtotime($createdAt);
             }
+
             $loc = [
-                'latitude' => $cached['lat'] ?? null,
-                'longitude' => $cached['lng'] ?? null,
-                'accuracy_m' => $cached['accuracy_m'] ?? null,
-                'speed_kmh' => $cached['speed_kmh'] ?? null,
-                'heading_deg' => $cached['heading_deg'] ?? null,
-                'battery_level' => $cached['battery_level'] ?? null,
-                'is_moving' => $cached['is_moving'] ?? 0,
-                'source' => $cached['source'] ?? 'native',
+                'latitude' => $cached['lat'],
+                'longitude' => $cached['lng'],
+                'accuracy_m' => $cached['accuracy'] ?? null,
+                'speed_kmh' => $cached['speed'] ?? null,
+                'heading_deg' => null,
+                'battery_level' => $cached['battery'] ?? null,
+                'is_moving' => $cached['moving'] ?? false,
+                'source' => 'cache',
                 'created_at' => $createdAt,
-                'device_name' => null, // Not in cache
+                'device_name' => null,
                 'platform' => null
             ];
-        } elseif (isset($locationData[$memberId])) {
-            // From MySQL
-            $loc = $locationData[$memberId];
-            $secondsAgo = $loc['seconds_ago'] !== null ? (int)$loc['seconds_ago'] : null;
+        }
+
+        // ========== FALLBACK TO DB IF CACHE MISS ==========
+        if ($loc === null) {
+            $stmt = $db->prepare("
+                SELECT
+                    l.latitude,
+                    l.longitude,
+                    l.accuracy_m,
+                    l.speed_kmh,
+                    l.heading_deg,
+                    l.battery_level,
+                    l.is_moving,
+                    l.source,
+                    l.created_at,
+                    TIMESTAMPDIFF(SECOND, l.created_at, NOW()) AS seconds_ago,
+                    d.device_name,
+                    d.platform
+                FROM tracking_locations l
+                LEFT JOIN tracking_devices d ON l.device_id = d.id
+                WHERE l.user_id = ? AND l.family_id = ?
+                ORDER BY l.created_at DESC
+                LIMIT 1
+            ");
+            $stmt->execute([$memberId, $familyId]);
+            $dbLoc = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($dbLoc) {
+                $loc = $dbLoc;
+                $secondsAgo = $dbLoc['seconds_ago'] !== null ? (int)$dbLoc['seconds_ago'] : null;
+            }
         }
 
         // Determine status
@@ -186,13 +176,13 @@ try {
             'seconds_ago' => $secondsAgo,
             'update_interval' => $updateInterval,
             'location' => null,
+            'from_cache' => $fromCache,
             'diagnostics' => [
                 'device_name' => $loc['device_name'] ?? null,
                 'platform' => $loc['platform'] ?? null,
                 'source' => $loc['source'] ?? null,
                 'online_threshold' => $onlineThreshold,
-                'stale_threshold' => $staleThreshold,
-                'cache_hit' => $cacheHit
+                'stale_threshold' => $staleThreshold
             ]
         ];
 

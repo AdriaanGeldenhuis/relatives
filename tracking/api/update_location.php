@@ -179,8 +179,8 @@ if (!$bootstrapLoaded) {
     require_once __DIR__ . '/../../core/bootstrap.php';
 }
 
-// Load Redis client (optional - gracefully handles missing Redis)
-require_once __DIR__ . '/../../core/RedisClient.php';
+// Load Cache (Memcached with MySQL fallback)
+require_once __DIR__ . '/../../core/Cache.php';
 
 try {
     $input = $inputData ?? json_decode($rawInput, true);
@@ -371,27 +371,22 @@ try {
 
         $locationId = (int)$db->lastInsertId();
 
-        // ========== REDIS CACHE UPDATE ==========
+        // ========== CACHE UPDATE (Memcached or MySQL) ==========
         try {
-            $redis = RedisClient::getInstance();
-            if ($redis->isAvailable()) {
-                $cacheData = [
-                    'lat' => $latitude,
-                    'lng' => $longitude,
-                    'accuracy_m' => $accuracyM,
-                    'speed_kmh' => $speedKmh,
-                    'heading_deg' => $headingDeg,
-                    'battery_level' => $batteryLevel,
-                    'is_moving' => $isMoving,
-                    'created_at' => date('Y-m-d H:i:s'),
-                    'device_id' => $deviceId,
-                    'source' => $source
-                ];
-                $redis->setUserLocation($familyId, $userId, $cacheData);
-            }
+            $cache = Cache::init($db);
+            $cacheData = [
+                'lat' => $latitude,
+                'lng' => $longitude,
+                'speed' => $speedKmh,
+                'accuracy' => $accuracyM,
+                'battery' => $batteryLevel,
+                'moving' => (bool)$isMoving,
+                'ts' => date('Y-m-d H:i:s')
+            ];
+            $cache->setUserLocation($familyId, $userId, $cacheData);
         } catch (Exception $e) {
-            // Redis errors are non-fatal
-            error_log('Redis cache update error: ' . $e->getMessage());
+            // Cache errors are non-fatal
+            error_log('Cache update error: ' . $e->getMessage());
         }
 
         // ========== QUEUE FOR ASYNC GEOFENCE PROCESSING ==========
