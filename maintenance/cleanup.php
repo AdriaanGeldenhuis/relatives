@@ -24,7 +24,7 @@ try {
     
     // Clean up expired cache entries if Cache class exists
     if (class_exists('Cache')) {
-        $cache = new Cache($db);
+        $cache = Cache::init($db);
         $cache->clearExpired();
         echo "Cleaned up expired cache entries\n";
     }

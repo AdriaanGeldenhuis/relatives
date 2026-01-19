@@ -124,7 +124,7 @@ try {
     
     // Initialize cache if available
     if (class_exists('Cache')) {
-        $cache = new Cache($db);
+        $cache = Cache::init($db);
     } else {
         $cache = new class {
             public function get($key) { return null; }
