@@ -523,7 +523,10 @@ class TrackingMapProfessional {
                     }
                 }
 
-                marker.getPopup().setContent(this.createPopupContent(member));
+                const popup = marker.getPopup();
+                if (popup) {
+                    popup.setContent(this.createPopupContent(member));
+                }
 
             } else {
                 this.createMarker(member, position, isClustered, membersAtLocation);
