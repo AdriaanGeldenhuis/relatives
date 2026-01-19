@@ -15,8 +15,12 @@ class TrackingJsInterface(private val context: Context) {
 
     companion object {
         private const val TAG = "TrackingJsInterface"
-        // Minimum interval when actively viewing tracking (30s is reasonable)
-        private const val VIEWING_INTERVAL_SECONDS = 30
+        // Interval when actively viewing tracking map (fast updates for smooth movement)
+        private const val VIEWING_INTERVAL_SECONDS = 10
+        // Minimum allowed interval (prevent battery drain from too-fast updates)
+        private const val MIN_INTERVAL_SECONDS = 5
+        // Maximum allowed interval (safety cap)
+        private const val MAX_INTERVAL_SECONDS = 300
     }
 
     // Store the user's original interval so we can restore it
@@ -48,8 +52,8 @@ class TrackingJsInterface(private val context: Context) {
 
     @JavascriptInterface
     fun requestLocationBoost(intervalSeconds: Int) {
-        // Only allow reasonable intervals (minimum 30s to prevent battery drain)
-        val safeInterval = intervalSeconds.coerceAtLeast(30)
+        // Allow faster intervals (5-300s) for smooth map movement when viewing
+        val safeInterval = intervalSeconds.coerceIn(MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS)
         Log.d(TAG, "Location boost requested: ${intervalSeconds}s -> using ${safeInterval}s")
         setIntervalSilently(safeInterval)
     }

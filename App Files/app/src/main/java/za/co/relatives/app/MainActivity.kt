@@ -39,6 +39,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import za.co.relatives.app.network.ApiClient
 import za.co.relatives.app.services.TrackingLocationService
 import za.co.relatives.app.ui.SubscriptionActivity
@@ -46,6 +47,16 @@ import za.co.relatives.app.ui.TrackingJsInterface
 import za.co.relatives.app.ui.VoiceAssistantBridge
 import za.co.relatives.app.ui.theme.RelativesTheme
 import za.co.relatives.app.utils.PreferencesManager
+
+// Safe extension to get Activity from Context
+fun Context.findActivity(): Activity? {
+    var context = this
+    while (context is android.content.ContextWrapper) {
+        if (context is Activity) return context
+        context = context.baseContext
+    }
+    return null
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -579,19 +590,30 @@ fun WebViewScreen(
     onPageTrackingCheck: (String) -> Unit,
     onPageFinishedForToken: () -> Unit
 ) {
-    val context = LocalContext.current as Activity
+    val context = LocalContext.current
+    val activity = context.findActivity() ?: return
     var uploadMessageCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
-    
+
     val webView = remember {
         WebView(context).also(onWebViewReady)
     }
 
     val voiceAssistantBridge = remember(context, webView) {
-        VoiceAssistantBridge(context, webView)
+        VoiceAssistantBridge(activity, webView)
     }
 
     DisposableEffect(voiceAssistantBridge) {
         onDispose { voiceAssistantBridge.cleanup() }
+    }
+
+    // Handle back button - navigate back in WebView instead of exiting app
+    BackHandler(enabled = true) {
+        if (webView.canGoBack()) {
+            webView.goBack()
+        } else {
+            // If can't go back, let the system handle it (exit app)
+            activity.moveTaskToBack(true)
+        }
     }
 
     val fileChooserLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
