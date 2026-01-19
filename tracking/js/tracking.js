@@ -488,40 +488,36 @@ class TrackingMapProfessional {
             if (this.markers.has(member.user_id)) {
                 const marker = this.markers.get(member.user_id);
 
-                if (this.balloonMarkers.has(member.user_id)) {
-                    // Update dot marker at actual position
-                    this.animateMarker(marker, position);
-
-                    // Update balloon marker with spiral offset
-                    const balloonMarker = this.balloonMarkers.get(member.user_id);
-                    const memberIndex = membersAtLocation.findIndex(m => m.user_id === member.user_id);
-                    const { lat: balloonLat, lng: balloonLng } = this.calculateSpiralOffset(
-                        position[0], position[1], memberIndex, membersAtLocation.length
-                    );
-                    this.animateMarker(balloonMarker, [balloonLat, balloonLng]);
-
-                    // Update tether line
-                    if (this.tetherLines.has(member.user_id)) {
-                        const tetherLine = this.tetherLines.get(member.user_id);
-                        tetherLine.setLatLngs([position, [balloonLat, balloonLng]]);
-                    }
+                // Check if cluster status changed - if so, recreate marker
+                const wasInCluster = marker._wasInCluster || false;
+                if (wasInCluster !== isClustered || (isClustered && membersAtLocation.length !== (marker._clusterSize || 0))) {
+                    // Cluster status changed - remove and recreate
+                    this.removeMarker(member.user_id);
+                    this.createMarker(member, position, isClustered, membersAtLocation);
                 } else {
+                    // Just update position
                     this.animateMarker(marker, position);
-                }
 
-                if (this.accuracyCircles.has(member.user_id)) {
-                    const circle = this.accuracyCircles.get(member.user_id);
-                    circle.setLatLng(position);
-                    circle.setRadius(member.location.accuracy_m || 20);
-                }
+                    if (this.accuracyCircles.has(member.user_id)) {
+                        const circle = this.accuracyCircles.get(member.user_id);
+                        circle.setLatLng(position);
+                        circle.setRadius(member.location.accuracy_m || 20);
+                    }
 
-                const popup = marker.getPopup();
-                if (popup) {
-                    popup.setContent(this.createPopupContent(member));
+                    const popup = marker.getPopup();
+                    if (popup) {
+                        popup.setContent(this.createPopupContent(member));
+                    }
                 }
-
             } else {
                 this.createMarker(member, position, isClustered, membersAtLocation);
+            }
+
+            // Store cluster state on marker for next update
+            if (this.markers.has(member.user_id)) {
+                const marker = this.markers.get(member.user_id);
+                marker._wasInCluster = isClustered;
+                marker._clusterSize = membersAtLocation.length;
             }
         });
 
@@ -536,70 +532,45 @@ class TrackingMapProfessional {
         const isMe = member.user_id === this.config.userId;
         const color = member.avatar_color || '#667eea';
 
-        if (isClustered) {
-            // Create small dot marker at actual position
-            const dotHtml = `
-                <div class="location-dot" style="
-                    width: 14px;
-                    height: 14px;
-                    border-radius: 50%;
-                    background: ${color};
-                    border: 3px solid white;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
-                "></div>
-            `;
+        // Get marker content (avatar image or initial)
+        let markerContent;
+        if (member.has_avatar && member.avatar_url) {
+            markerContent = `<img src="${member.avatar_url}" alt="${member.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        } else {
+            markerContent = member.name ? member.name.charAt(0).toUpperCase() : '?';
+        }
 
-            const dotIcon = L.divIcon({
-                html: dotHtml,
-                className: 'location-dot-container',
-                iconSize: [14, 14],
-                iconAnchor: [7, 7]
-            });
+        const avatarSize = isMe ? 52 : 46;
+        const stemLength = isClustered ? 45 : 0; // Stem only when clustered
+        const totalHeight = avatarSize + stemLength + (isClustered ? 10 : 0); // 10 for the point
 
-            const dotMarker = L.marker(position, {
-                icon: dotIcon,
-                zIndexOffset: isMe ? 500 : 0
-            }).addTo(this.map);
-
-            this.markers.set(member.user_id, dotMarker);
-
-            // Create balloon avatar marker with spiral offset
-            let markerContent;
-            if (member.has_avatar && member.avatar_url) {
-                markerContent = `<img src="${member.avatar_url}" alt="${member.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
-            } else {
-                markerContent = member.name ? member.name.charAt(0).toUpperCase() : '?';
-            }
-
+        // Calculate rotation angle for this member (spread around the point)
+        let rotationAngle = 0;
+        if (isClustered && membersAtLocation.length > 1) {
             const memberIndex = membersAtLocation.findIndex(m => m.user_id === member.user_id);
-            const { lat: balloonLat, lng: balloonLng } = this.calculateSpiralOffset(
-                position[0], position[1], memberIndex, membersAtLocation.length
-            );
-            const balloonPosition = [balloonLat, balloonLng];
+            // Spread evenly in a circle, offset so first isn't straight up
+            rotationAngle = (360 / membersAtLocation.length) * memberIndex - 45;
+        }
 
-            // Create tether line with gradient effect
-            const tetherLine = L.polyline([position, balloonPosition], {
-                color: color,
-                weight: 2,
-                opacity: 0.7,
-                dashArray: '6, 4',
-                className: 'tether-line'
-            }).addTo(this.map);
-
-            this.tetherLines.set(member.user_id, tetherLine);
-
-            const avatarSize = isMe ? 56 : 50;
-            const borderWidth = isMe ? 4 : 3;
-            const totalSize = avatarSize + (borderWidth * 2);
-
-            // Avatar centered in container, line connects to bottom center
-            const balloonHtml = `
-                <div class="balloon-marker-container" style="
-                    position: relative;
-                    width: ${totalSize}px;
-                    height: ${totalSize}px;
+        // Create pin marker HTML with rotation
+        const pinHtml = `
+            <div class="pin-marker-wrapper" style="
+                width: ${avatarSize + 20}px;
+                height: ${totalHeight + 20}px;
+                position: relative;
+            ">
+                <div class="pin-marker ${isMe ? 'is-me' : ''}" style="
+                    position: absolute;
+                    bottom: 0;
+                    left: 50%;
+                    transform-origin: bottom center;
+                    transform: translateX(-50%) rotate(${rotationAngle}deg);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
                 ">
-                    <div class="balloon-avatar ${isMe ? 'is-me' : ''}" style="
+                    <!-- Avatar (counter-rotate to stay upright) -->
+                    <div class="pin-avatar" style="
                         width: ${avatarSize}px;
                         height: ${avatarSize}px;
                         border-radius: 50%;
@@ -607,165 +578,123 @@ class TrackingMapProfessional {
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        font-size: ${isMe ? 26 : 22}px;
+                        font-size: ${isMe ? 24 : 20}px;
                         font-weight: 900;
                         color: white;
                         background: ${color};
-                        border: ${borderWidth}px solid white;
-                        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+                        border: 3px solid white;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.35);
+                        transform: rotate(${-rotationAngle}deg);
+                        position: relative;
+                        z-index: 2;
                     ">
                         ${markerContent}
                     </div>
+
+                    ${isClustered ? `
+                    <!-- Stem -->
+                    <div class="pin-stem" style="
+                        width: 3px;
+                        height: ${stemLength}px;
+                        background: linear-gradient(to bottom, ${color}, ${color}88);
+                        margin-top: -2px;
+                    "></div>
+
+                    <!-- Point -->
+                    <div class="pin-point" style="
+                        width: 12px;
+                        height: 12px;
+                        background: ${color};
+                        border: 3px solid white;
+                        border-radius: 50%;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                        margin-top: -2px;
+                    "></div>
+                    ` : ''}
+
+                    <!-- Status indicator -->
                     ${member.status === 'online' || member.status === 'stale' ? `
                         <div style="
                             position: absolute;
-                            bottom: 0;
-                            right: 0;
-                            width: 16px;
-                            height: 16px;
+                            top: ${avatarSize - 14}px;
+                            right: -2px;
+                            width: 14px;
+                            height: 14px;
                             background: ${member.status === 'online' ? '#43e97b' : '#ffa502'};
-                            border: 3px solid white;
+                            border: 2px solid white;
                             border-radius: 50%;
-                            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                            transform: rotate(${-rotationAngle}deg);
+                            z-index: 3;
                         "></div>
                     ` : ''}
+
+                    <!-- YOU badge -->
                     ${isMe ? `
                         <div style="
                             position: absolute;
-                            top: -20px;
+                            top: -18px;
                             left: 50%;
-                            transform: translateX(-50%);
+                            transform: translateX(-50%) rotate(${-rotationAngle}deg);
                             background: linear-gradient(135deg, #667eea, #764ba2);
                             color: white;
-                            padding: 3px 10px;
-                            border-radius: 10px;
-                            font-size: 10px;
+                            padding: 2px 8px;
+                            border-radius: 8px;
+                            font-size: 9px;
                             font-weight: 800;
                             white-space: nowrap;
-                            box-shadow: 0 2px 8px rgba(102,126,234,0.4);
+                            box-shadow: 0 2px 6px rgba(102,126,234,0.4);
+                            z-index: 3;
                         ">YOU</div>
                     ` : ''}
                 </div>
-            `;
+            </div>
+        `;
 
-            // Anchor at bottom center of avatar - this is where line connects
-            const balloonIcon = L.divIcon({
-                html: balloonHtml,
-                className: `balloon-marker ${isMe ? 'is-me' : ''}`,
-                iconSize: [totalSize, totalSize],
-                iconAnchor: [totalSize / 2, totalSize], // Bottom center
-                popupAnchor: [0, -totalSize]
-            });
+        // Icon anchor at the bottom center (where the point is)
+        const icon = L.divIcon({
+            html: pinHtml,
+            className: `location-pin ${isMe ? 'is-me' : ''}`,
+            iconSize: [avatarSize + 20, totalHeight + 20],
+            iconAnchor: [(avatarSize + 20) / 2, totalHeight + 10], // Bottom center at the point
+            popupAnchor: [0, -totalHeight]
+        });
 
-            const balloonMarker = L.marker(balloonPosition, {
-                icon: balloonIcon,
-                zIndexOffset: isMe ? 1000 : 100,
-                riseOnHover: true
-            }).addTo(this.map);
-
-            balloonMarker.bindPopup(this.createPopupContent(member), {
-                closeButton: true,
-                maxWidth: this.getResponsivePopupWidth(),
-                minWidth: 240,
-                className: 'custom-popup',
-                autoPan: true,
-                autoPanPadding: [50, 50]
-            });
-
-            balloonMarker.on('click', () => {
-                this.isViewingMember = true;
-                this.restartPolling();
-                setTimeout(() => this.centerOnMember(member.user_id), 100);
-            });
-
-            this.balloonMarkers.set(member.user_id, balloonMarker);
-
-        } else {
-            // Standard marker
-            let markerContent;
-            if (member.has_avatar && member.avatar_url) {
-                markerContent = `<img src="${member.avatar_url}" alt="${member.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
-            } else {
-                markerContent = member.name ? member.name.charAt(0).toUpperCase() : '?';
-            }
-
-            const iconHtml = `
-                <div class="custom-marker ${isMe ? 'is-me' : ''}" style="
-                    width: ${isMe ? '64px' : '56px'};
-                    height: ${isMe ? '64px' : '56px'};
-                    border-radius: 50%;
-                    background: ${color};
-                    border: ${isMe ? '4px' : '3px'} solid white;
-                    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: ${isMe ? '28px' : '24px'};
-                    font-weight: 900;
-                    color: white;
-                    font-family: 'Plus Jakarta Sans', sans-serif;
-                    position: relative;
-                    overflow: hidden;
-                ">
-                    ${markerContent}
-                    ${member.status === 'online' || member.status === 'stale' ? `
-                        <div style="
-                            position: absolute;
-                            bottom: 0;
-                            right: 0;
-                            width: 18px;
-                            height: 18px;
-                            background: ${member.status === 'online' ? '#43e97b' : '#ffa502'};
-                            border: 3px solid white;
-                            border-radius: 50%;
-                        "></div>
-                    ` : ''}
-                </div>
-            `;
-
-            const icon = L.divIcon({
-                html: iconHtml,
-                className: 'member-marker-container',
-                iconSize: [isMe ? 64 : 56, isMe ? 64 : 56],
-                iconAnchor: [isMe ? 32 : 28, isMe ? 32 : 28],
-                popupAnchor: [0, isMe ? -32 : -28]
-            });
-
-            const marker = L.marker(position, {
-                icon,
-                zIndexOffset: isMe ? 1000 : 0,
-                riseOnHover: true
-            }).addTo(this.map);
-
-            marker.bindPopup(this.createPopupContent(member), {
-                closeButton: true,
-                maxWidth: this.getResponsivePopupWidth(),
-                minWidth: 240,
-                className: 'custom-popup',
-                autoPan: true,
-                autoPanPadding: [50, 50]
-            });
-
-            marker.on('click', () => {
-                this.isViewingMember = true;
-                this.restartPolling();
-                setTimeout(() => this.centerOnMember(member.user_id), 100);
-            });
-
-            this.markers.set(member.user_id, marker);
-        }
-
-        // Accuracy circle
-        const circle = L.circle(position, {
-            radius: member.location.accuracy_m || 20,
-            color: color,
-            fillColor: color,
-            fillOpacity: 0.08,
-            weight: 1.5,
-            opacity: 0.4
+        const marker = L.marker(position, {
+            icon: icon,
+            zIndexOffset: isMe ? 1000 : (isClustered ? 100 + (membersAtLocation.findIndex(m => m.user_id === member.user_id) || 0) : 50),
+            riseOnHover: true
         }).addTo(this.map);
 
-        this.accuracyCircles.set(member.user_id, circle);
+        marker.bindPopup(this.createPopupContent(member), {
+            closeButton: true,
+            maxWidth: this.getResponsivePopupWidth(),
+            minWidth: 240,
+            className: 'custom-popup',
+            autoPan: true,
+            autoPanPadding: [50, 50]
+        });
+
+        marker.on('click', () => {
+            this.isViewingMember = true;
+            this.restartPolling();
+            setTimeout(() => this.centerOnMember(member.user_id), 100);
+        });
+
+        this.markers.set(member.user_id, marker);
+
+        // Add accuracy circle if configured
+        if (this.settings?.show_accuracy && member.location?.accuracy_m) {
+            const circle = L.circle(position, {
+                radius: member.location.accuracy_m,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.1,
+                weight: 1,
+                opacity: 0.3
+            }).addTo(this.map);
+            this.accuracyCircles.set(member.user_id, circle);
+        }
 
         this.updateMemberCardStatus(member.user_id, true);
     }
