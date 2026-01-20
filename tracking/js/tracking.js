@@ -115,7 +115,6 @@ class TrackingMapProfessional {
             this.fetchCurrentLocations();
             this.startPolling();
             this.loadSettings();
-            this.detectThemePreference();
             this.notifyAndroidTrackingVisible();
             this.requestLocationBoost(5);
 
@@ -157,7 +156,9 @@ class TrackingMapProfessional {
             tapTolerance: 15
         }).setView(this.config.defaultCenter || [-26.2041, 28.0473], this.config.defaultZoom || 12);
 
-        this.setMapStyle('light');
+        // Load saved map style or default to 'light'
+        const savedStyle = localStorage.getItem('mapStyle');
+        this.setMapStyle((savedStyle && this.mapStyles[savedStyle]) ? savedStyle : 'light');
 
         this.map.zoomControl.setPosition('bottomright');
 
