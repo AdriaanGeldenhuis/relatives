@@ -662,7 +662,22 @@ async function startRecording() {
         
     } catch (error) {
         console.error('Error accessing microphone:', error);
-        showToast('Could not access microphone. Please check permissions.', 'error');
+
+        let errorMessage = 'Could not access microphone.';
+
+        if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+            errorMessage = 'No microphone found. Please connect a microphone and try again.';
+        } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            errorMessage = 'Microphone permission denied. Please allow microphone access in your browser settings.';
+        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+            errorMessage = 'Microphone is in use by another application. Please close other apps using the microphone.';
+        } else if (error.name === 'OverconstrainedError') {
+            errorMessage = 'No suitable microphone found for the requested settings.';
+        } else if (error.name === 'TypeError') {
+            errorMessage = 'Your browser does not support audio recording.';
+        }
+
+        showToast(errorMessage, 'error');
     }
 }
 
