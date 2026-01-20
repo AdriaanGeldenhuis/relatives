@@ -35,8 +35,8 @@ try {
 $familyMembers = [];
 try {
     $stmt = $db->prepare("
-        SELECT id, full_name, avatar_color, last_login
-        FROM users 
+        SELECT id, full_name, avatar_color, has_avatar, last_login
+        FROM users
         WHERE family_id = ? AND status = 'active' AND id != ?
         ORDER BY full_name
     ");
@@ -91,8 +91,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                     
                     <!-- Current User -->
                     <div class="member-item current-user">
-                        <div class="member-avatar" style="background: <?php echo htmlspecialchars($user['avatar_color']); ?>">
-                            <?php echo strtoupper(substr($user['name'], 0, 2)); ?>
+                        <div class="member-avatar" style="background: <?php echo $user['has_avatar'] ? 'transparent' : htmlspecialchars($user['avatar_color']); ?>">
+                            <?php
+                            $myAvatarPath = __DIR__ . "/../saves/{$user['id']}/avatar/avatar.webp";
+                            if (file_exists($myAvatarPath)):
+                            ?>
+                                <img src="/saves/<?php echo $user['id']; ?>/avatar/avatar.webp" alt="You">
+                            <?php else: ?>
+                                <?php echo strtoupper(substr($user['name'], 0, 2)); ?>
+                            <?php endif; ?>
                         </div>
                         <div class="member-info">
                             <div class="member-name">You</div>
@@ -101,18 +108,24 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </div>
 
                     <!-- Family Members -->
-                    <?php foreach ($familyMembers as $member): 
+                    <?php foreach ($familyMembers as $member):
                         $lastSeen = $member['last_login'] ? new DateTime($member['last_login']) : null;
                         $isOnline = $lastSeen && (time() - $lastSeen->getTimestamp()) < 300;
+                        $memberAvatarPath = __DIR__ . "/../saves/{$member['id']}/avatar/avatar.webp";
+                        $memberHasAvatar = file_exists($memberAvatarPath);
                     ?>
                         <div class="member-item" data-user-id="<?php echo $member['id']; ?>">
-                            <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
-                                <?php echo strtoupper(substr($member['full_name'], 0, 2)); ?>
+                            <div class="member-avatar" style="background: <?php echo $memberHasAvatar ? 'transparent' : htmlspecialchars($member['avatar_color']); ?>">
+                                <?php if ($memberHasAvatar): ?>
+                                    <img src="/saves/<?php echo $member['id']; ?>/avatar/avatar.webp" alt="<?php echo htmlspecialchars($member['full_name']); ?>">
+                                <?php else: ?>
+                                    <?php echo strtoupper(substr($member['full_name'], 0, 2)); ?>
+                                <?php endif; ?>
                             </div>
                             <div class="member-info">
                                 <div class="member-name"><?php echo htmlspecialchars($member['full_name']); ?></div>
                                 <div class="member-status <?php echo $isOnline ? 'online' : 'offline'; ?>">
-                                    <?php 
+                                    <?php
                                     if ($isOnline) {
                                         echo 'Online';
                                     } elseif ($lastSeen) {

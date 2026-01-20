@@ -72,7 +72,7 @@ try {
     if ($since > 0) {
         // Fetch only new messages since last ID
         $stmt = $db->prepare("
-            SELECT 
+            SELECT
                 m.id,
                 m.user_id,
                 m.content,
@@ -83,10 +83,11 @@ try {
                 m.edited_at,
                 u.full_name,
                 u.avatar_color,
+                u.has_avatar,
                 (SELECT content FROM messages WHERE id = m.reply_to_message_id LIMIT 1) as reply_to_content
             FROM messages m
             JOIN users u ON m.user_id = u.id
-            WHERE m.family_id = ? 
+            WHERE m.family_id = ?
             AND m.id > ?
             AND m.deleted_at IS NULL
             ORDER BY m.created_at ASC
@@ -96,7 +97,7 @@ try {
     } else {
         // Fetch initial load - last 100 messages
         $stmt = $db->prepare("
-            SELECT 
+            SELECT
                 m.id,
                 m.user_id,
                 m.content,
@@ -107,6 +108,7 @@ try {
                 m.edited_at,
                 u.full_name,
                 u.avatar_color,
+                u.has_avatar,
                 (SELECT content FROM messages WHERE id = m.reply_to_message_id LIMIT 1) as reply_to_content
             FROM messages m
             JOIN users u ON m.user_id = u.id

@@ -1332,12 +1332,12 @@ async function showWeekView() {
                 <div class="week-day ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}"
                      onclick="goToDate('${dateStr}')">
                     <div class="week-day-header">
-                        <span class="week-day-name">${day.toLocaleDateString('en-US', { weekday: 'short' })}</span>
-                        <span class="week-day-number">${day.getDate()}</span>
+                        <span class="week-day-name">${day.toLocaleDateString('en-US', { weekday: 'long' })}</span>
+                        <span class="week-day-number">${day.getDate()} ${day.toLocaleDateString('en-US', { month: 'short' })}</span>
                     </div>
                     <div class="week-day-events">
-                        ${dayEvents.length === 0 ? '<span class="no-events">No events</span>' :
-                            dayEvents.slice(0, 4).map(event => {
+                        ${dayEvents.length === 0 ? '<span class="no-events">No events scheduled</span>' :
+                            dayEvents.map(event => {
                                 const startTime = new Date(event.starts_at);
                                 const typeColor = window.ScheduleApp.types[event.kind]?.color || '#667eea';
                                 return `
@@ -1347,9 +1347,8 @@ async function showWeekView() {
                                     </div>
                                 `;
                             }).join('')}
-                        ${dayEvents.length > 4 ? `<span class="more-events">+${dayEvents.length - 4} more</span>` : ''}
                     </div>
-                    <div class="week-day-count">${dayEvents.length} events</div>
+                    <div class="week-day-count">${dayEvents.length} event${dayEvents.length !== 1 ? 's' : ''}</div>
                 </div>
             `;
         });

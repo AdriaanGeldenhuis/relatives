@@ -115,7 +115,6 @@ class TrackingMapProfessional {
             this.fetchCurrentLocations();
             this.startPolling();
             this.loadSettings();
-            this.detectThemePreference();
             this.notifyAndroidTrackingVisible();
             this.requestLocationBoost(5);
 
@@ -157,7 +156,9 @@ class TrackingMapProfessional {
             tapTolerance: 15
         }).setView(this.config.defaultCenter || [-26.2041, 28.0473], this.config.defaultZoom || 12);
 
-        this.setMapStyle('light');
+        // Load saved map style or default to 'light'
+        const savedStyle = localStorage.getItem('mapStyle');
+        this.setMapStyle((savedStyle && this.mapStyles[savedStyle]) ? savedStyle : 'light');
 
         this.map.zoomControl.setPosition('bottomright');
 
@@ -873,19 +874,7 @@ class TrackingMapProfessional {
                 memberCard.setAttribute('data-tracking', isTracking ? 'true' : 'false');
                 memberCard.setAttribute('data-status', status);
 
-                const statusDot = memberCard.querySelector('.member-status-dot');
-                if (statusDot) {
-                    if (isTracking) {
-                        statusDot.style.background = '#43e97b';
-                        statusDot.style.boxShadow = '0 0 12px rgba(67, 233, 123, 0.6)';
-                    } else if (isStale) {
-                        statusDot.style.background = '#ffa502';
-                        statusDot.style.boxShadow = '0 0 12px rgba(255, 165, 2, 0.4)';
-                    } else {
-                        statusDot.style.background = '#6c757d';
-                        statusDot.style.boxShadow = 'none';
-                    }
-                }
+                // Status dot styling is handled by CSS via data-status attribute
 
                 const statusText = memberCard.querySelector('.member-status span');
                 if (statusText) {
@@ -1170,7 +1159,23 @@ class TrackingMapProfessional {
             return;
         }
 
-        const coordinates = points.map(p => [p.latitude, p.longitude]);
+        // Filter out points with invalid coordinates
+        const validPoints = points.filter(p =>
+            p &&
+            p.latitude !== null &&
+            p.latitude !== undefined &&
+            p.longitude !== null &&
+            p.longitude !== undefined &&
+            !isNaN(parseFloat(p.latitude)) &&
+            !isNaN(parseFloat(p.longitude))
+        );
+
+        if (validPoints.length === 0) {
+            resultsDiv.innerHTML = `<div class="empty-state"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><p style="margin-top: 20px; color: var(--text-secondary); font-weight: 700;">No valid location data for this date</p></div>`;
+            return;
+        }
+
+        const coordinates = validPoints.map(p => [parseFloat(p.latitude), parseFloat(p.longitude)]);
         const polyline = L.polyline(coordinates, {
             color: '#667eea',
             weight: 4,
@@ -1192,7 +1197,7 @@ class TrackingMapProfessional {
             fillOpacity: 1
         }).addTo(this.map);
 
-        startMarker.bindPopup(`<div style="padding: 14px; text-align: center; background: var(--bg-secondary); color: var(--text-primary);"><div style="font-size: 28px; margin-bottom: 8px;">🚀</div><div style="font-weight: 800;">Start</div><div style="font-size: 12px; color: var(--text-secondary);">${points[0].timestamp ? new Date(points[0].timestamp).toLocaleTimeString() : ''}</div></div>`);
+        startMarker.bindPopup(`<div style="padding: 14px; text-align: center; background: var(--bg-secondary); color: var(--text-primary);"><div style="font-size: 28px; margin-bottom: 8px;">🚀</div><div style="font-weight: 800;">Start</div><div style="font-size: 12px; color: var(--text-secondary);">${validPoints[0].timestamp ? new Date(validPoints[0].timestamp).toLocaleTimeString() : ''}</div></div>`);
         this.historyPolylines.push(startMarker);
 
         // End marker
@@ -1205,13 +1210,22 @@ class TrackingMapProfessional {
             fillOpacity: 1
         }).addTo(this.map);
 
-        endMarker.bindPopup(`<div style="padding: 14px; text-align: center; background: var(--bg-secondary); color: var(--text-primary);"><div style="font-size: 28px; margin-bottom: 8px;">🏁</div><div style="font-weight: 800;">End</div><div style="font-size: 12px; color: var(--text-secondary);">${points[points.length - 1].timestamp ? new Date(points[points.length - 1].timestamp).toLocaleTimeString() : ''}</div></div>`);
+        endMarker.bindPopup(`<div style="padding: 14px; text-align: center; background: var(--bg-secondary); color: var(--text-primary);"><div style="font-size: 28px; margin-bottom: 8px;">🏁</div><div style="font-weight: 800;">End</div><div style="font-size: 12px; color: var(--text-secondary);">${validPoints[validPoints.length - 1].timestamp ? new Date(validPoints[validPoints.length - 1].timestamp).toLocaleTimeString() : ''}</div></div>`);
         this.historyPolylines.push(endMarker);
 
-        // Stop markers
+        // Stop markers - filter valid stops only
         if (stops && stops.length > 0) {
-            stops.forEach(stop => {
-                const stopMarker = L.circleMarker([stop.latitude, stop.longitude], {
+            const validStops = stops.filter(s =>
+                s &&
+                s.latitude !== null &&
+                s.latitude !== undefined &&
+                s.longitude !== null &&
+                s.longitude !== undefined &&
+                !isNaN(parseFloat(s.latitude)) &&
+                !isNaN(parseFloat(s.longitude))
+            );
+            validStops.forEach(stop => {
+                const stopMarker = L.circleMarker([parseFloat(stop.latitude), parseFloat(stop.longitude)], {
                     radius: 10,
                     fillColor: '#ffa502',
                     color: 'white',
@@ -1230,7 +1244,7 @@ class TrackingMapProfessional {
         const distance = this.calculateDistance(coordinates);
         const totalDuration = stops?.length > 0 ? stops.reduce((sum, s) => sum + s.duration_minutes, 0) : 0;
 
-        resultsDiv.innerHTML = `<div style="background: var(--bg-tertiary); border: 1px solid var(--glass-border); border-radius: 16px; padding: 24px; margin-top: 20px;"><div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#667eea" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg><h3 style="font-size: 18px; font-weight: 900; color: var(--text-primary);">Route Summary - ${userName}</h3></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px;"><div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">📍 Points</div><div style="font-size: 28px; font-weight: 900; color: var(--text-primary);">${points.length}</div></div><div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">⏸️ Stops</div><div style="font-size: 28px; font-weight: 900; color: #ffa502;">${stops?.length || 0}</div></div><div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">🛣️ Distance</div><div style="font-size: 28px; font-weight: 900; color: #667eea;">${distance.toFixed(1)} km</div></div>${totalDuration > 0 ? `<div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">⏱️ Stop Time</div><div style="font-size: 28px; font-weight: 900; color: var(--text-primary);">${this.formatDuration(totalDuration)}</div></div>` : ''}</div></div>`;
+        resultsDiv.innerHTML = `<div style="background: var(--bg-tertiary); border: 1px solid var(--glass-border); border-radius: 16px; padding: 24px; margin-top: 20px;"><div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#667eea" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg><h3 style="font-size: 18px; font-weight: 900; color: var(--text-primary);">Route Summary - ${userName}</h3></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px;"><div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">📍 Points</div><div style="font-size: 28px; font-weight: 900; color: var(--text-primary);">${validPoints.length}</div></div><div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">⏸️ Stops</div><div style="font-size: 28px; font-weight: 900; color: #ffa502;">${stops?.length || 0}</div></div><div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">🛣️ Distance</div><div style="font-size: 28px; font-weight: 900; color: #667eea;">${distance.toFixed(1)} km</div></div>${totalDuration > 0 ? `<div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">⏱️ Stop Time</div><div style="font-size: 28px; font-weight: 900; color: var(--text-primary);">${this.formatDuration(totalDuration)}</div></div>` : ''}</div></div>`;
     }
 
     clearHistory() {

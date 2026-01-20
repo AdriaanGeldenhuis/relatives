@@ -438,10 +438,16 @@ function createMessageElement(msg) {
     div.className = `message ${isOwn ? 'own' : ''}`;
     div.dataset.messageId = msg.id;
     div.dataset.userId = msg.user_id;
-    
+
+    // Avatar with image support
+    const avatarContent = msg.has_avatar
+        ? `<img src="/saves/${msg.user_id}/avatar/avatar.webp" alt="${escapeHtml(msg.full_name)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+           <span class="avatar-fallback" style="display:none; background: ${msg.avatar_color}; width:100%; height:100%; align-items:center; justify-content:center; border-radius:50%;">${msg.full_name.substring(0, 2).toUpperCase()}</span>`
+        : msg.full_name.substring(0, 2).toUpperCase();
+
     const avatar = `
-        <div class="message-avatar" style="background: ${msg.avatar_color}">
-            ${msg.full_name.substring(0, 2).toUpperCase()}
+        <div class="message-avatar" style="background: ${msg.has_avatar ? 'transparent' : msg.avatar_color}">
+            ${avatarContent}
         </div>
     `;
     
@@ -758,23 +764,75 @@ function openMediaViewer(mediaPath, type) {
     viewer.innerHTML = `
         <div class="media-viewer">
             <button onclick="this.parentElement.parentElement.remove()" class="media-viewer-close">✖️</button>
-            ${type === 'image' ? 
+            ${type === 'image' ?
                 `<img src="${mediaPath}" alt="Full size image">` :
                 `<video src="${mediaPath}" controls autoplay></video>`
             }
             <div class="media-viewer-actions">
-                <a href="${mediaPath}" download class="media-action-btn">⬇️ Download</a>
+                <button onclick="downloadMedia('${mediaPath}')" class="media-action-btn">⬇️ Download</button>
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(viewer);
-    
+
     viewer.addEventListener('click', function(e) {
         if (e.target === viewer) {
             viewer.remove();
         }
     });
+}
+
+// Download media function that works on mobile
+async function downloadMedia(url) {
+    try {
+        // Show loading state
+        const btn = document.querySelector('.media-viewer-actions .media-action-btn');
+        if (btn) {
+            btn.textContent = '⏳ Downloading...';
+            btn.disabled = true;
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Download failed');
+
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        // Extract filename from URL
+        const filename = url.split('/').pop() || 'download';
+
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Cleanup blob URL after a delay
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+
+        // Reset button
+        if (btn) {
+            btn.textContent = '✅ Downloaded';
+            setTimeout(() => {
+                btn.textContent = '⬇️ Download';
+                btn.disabled = false;
+            }, 2000);
+        }
+    } catch (error) {
+        console.error('Download error:', error);
+
+        // Fallback: open in new tab (mobile can then long-press to save)
+        window.open(url, '_blank');
+
+        const btn = document.querySelector('.media-viewer-actions .media-action-btn');
+        if (btn) {
+            btn.textContent = '⬇️ Download';
+            btn.disabled = false;
+        }
+    }
 }
 
 // ============================================

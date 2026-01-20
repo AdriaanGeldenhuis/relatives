@@ -983,9 +983,9 @@ require_once __DIR__ . '/../shared/components/header.php';
     </div>
 </div>
 
-<!-- Week View Modal -->
+<!-- Week View Modal - Fullscreen -->
 <div id="weekViewModal" class="modal">
-    <div class="modal-content modal-large">
+    <div class="modal-content modal-week-fullscreen">
         <div class="modal-header">
             <h2>🗓️ Week View</h2>
             <button onclick="closeModal('weekViewModal')" class="modal-close">&times;</button>

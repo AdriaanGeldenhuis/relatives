@@ -153,11 +153,10 @@ async function createNote(event, type) {
         if (data.success) {
             showToast('Note created successfully!', 'success');
             closeModal(type === 'text' ? 'createTextNoteModal' : 'createVoiceNoteModal');
-            
-            // Reload page to show new note
-            setTimeout(() => {
-                location.reload();
-            }, 500);
+
+            // Add note to DOM in real-time
+            addNoteToDOM(data.note);
+            updateStats();
         } else {
             showToast(data.error || 'Failed to create note', 'error');
         }
@@ -279,7 +278,7 @@ async function deleteNote(noteId) {
         
         if (data.success) {
             showToast('Note deleted successfully', 'success');
-            
+
             // Animate out and remove
             const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
             if (noteCard) {
@@ -287,11 +286,11 @@ async function deleteNote(noteId) {
                 setTimeout(() => {
                     noteCard.remove();
                     updateStats();
-                    
-                    // Check if no notes left
+
+                    // Check if no notes left - show empty state
                     const allCards = document.querySelectorAll('.note-card');
                     if (allCards.length === 0) {
-                        location.reload();
+                        showEmptyState();
                     }
                 }, 300);
             }
@@ -312,18 +311,29 @@ async function togglePin(noteId) {
     const formData = new FormData();
     formData.append('action', 'toggle_pin');
     formData.append('note_id', noteId);
-    
+
     try {
         const response = await fetch('/notes/', {
             method: 'POST',
             body: formData
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
-            // Reload to re-organize sections
-            location.reload();
+            // Update pin state in DOM
+            const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
+            if (noteCard) {
+                const pinBtn = noteCard.querySelector('.note-pin');
+                if (data.pinned) {
+                    pinBtn.classList.add('active');
+                    showToast('Note pinned!', 'success');
+                } else {
+                    pinBtn.classList.remove('active');
+                    showToast('Note unpinned', 'info');
+                }
+                updateStats();
+            }
         } else {
             showToast(data.error || 'Failed to toggle pin', 'error');
         }
@@ -611,73 +621,185 @@ function resetVoiceRecorder() {
     }
 }
 
+// Detect native app environment
+const isNativeApp = navigator.userAgent.includes('RelativesAndroidApp') ||
+                    window.matchMedia('(display-mode: standalone)').matches ||
+                    window.navigator.standalone ||
+                    window.AndroidInterface !== undefined ||
+                    window.Android !== undefined;
+
 async function startRecording() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
+        let stream;
+
+        // Check for native app audio recording interface
+        if (isNativeApp && window.AndroidRecorder && typeof window.AndroidRecorder.startRecording === 'function') {
+            // Use native Android recording
+            try {
+                window.AndroidRecorder.startRecording();
+                updateUIForRecording();
+                return;
+            } catch (nativeError) {
+                console.warn('Native recording failed, falling back to web API:', nativeError);
+            }
+        }
+
+        // Request microphone permission - handle native WebView quirks
+        if (isNativeApp && window.Android && typeof window.Android.requestMicrophonePermission === 'function') {
+            // Request permission through native bridge
+            const permissionGranted = await new Promise((resolve) => {
+                window.onMicrophonePermissionResult = (granted) => {
+                    resolve(granted);
+                };
+                window.Android.requestMicrophonePermission();
+                // Timeout fallback
+                setTimeout(() => resolve(false), 5000);
+            });
+
+            if (!permissionGranted) {
+                showToast('Microphone permission denied. Please allow microphone access in app settings.', 'error');
+                return;
+            }
+        }
+
+        // Standard Web API
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
-        
+
         mediaRecorder.ondataavailable = (event) => {
             audioChunks.push(event.data);
         };
-        
+
         mediaRecorder.onstop = () => {
             recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
             const audioUrl = URL.createObjectURL(recordedBlob);
-            
+
             const audio = document.getElementById('recordedAudio');
             audio.src = audioUrl;
             audio.style.display = 'block';
-            
+
             document.getElementById('playRecordBtn').style.display = 'inline-flex';
             document.getElementById('voiceNoteForm').style.display = 'block';
-            
+
             // Stop all tracks
             stream.getTracks().forEach(track => track.stop());
-            
+
             if (animationId) {
                 cancelAnimationFrame(animationId);
             }
-            
+
             const canvas = document.getElementById('visualizerCanvas');
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         };
-        
+
         mediaRecorder.start();
-        
-        // Update UI
-        document.getElementById('startRecordBtn').style.display = 'none';
-        document.getElementById('stopRecordBtn').style.display = 'inline-flex';
-        document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '⏺️';
-        document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording...';
-        
+        updateUIForRecording();
+
         // Start timer
         recordingStartTime = Date.now();
         recordingTimer = setInterval(updateRecordingTimer, 100);
-        
+
         // Start visualizer
         setupVisualizer(stream);
-        
+
     } catch (error) {
         console.error('Error accessing microphone:', error);
-        showToast('Could not access microphone. Please check permissions.', 'error');
+
+        let errorMessage = 'Could not access microphone.';
+
+        if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+            errorMessage = 'No microphone found. Please connect a microphone and try again.';
+        } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            if (isNativeApp) {
+                errorMessage = 'Microphone permission denied. Please allow microphone access in your device settings for this app.';
+            } else {
+                errorMessage = 'Microphone permission denied. Please allow microphone access in your browser settings.';
+            }
+        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+            errorMessage = 'Microphone is in use by another application. Please close other apps using the microphone.';
+        } else if (error.name === 'OverconstrainedError') {
+            errorMessage = 'No suitable microphone found for the requested settings.';
+        } else if (error.name === 'TypeError') {
+            errorMessage = 'Your browser does not support audio recording.';
+        } else if (error.name === 'AbortError' || error.name === 'SecurityError') {
+            if (isNativeApp) {
+                errorMessage = 'Recording not available. Please check app permissions in your device settings.';
+            } else {
+                errorMessage = 'Recording blocked due to security settings. Please use HTTPS.';
+            }
+        }
+
+        showToast(errorMessage, 'error');
     }
 }
 
-function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-        
-        // Stop timer
-        clearInterval(recordingTimer);
-        
-        // Update UI
+function updateUIForRecording() {
+    document.getElementById('startRecordBtn').style.display = 'none';
+    document.getElementById('stopRecordBtn').style.display = 'inline-flex';
+    document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '⏺️';
+    document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording...';
+}
+
+// Callback for native app to provide recorded audio
+window.onNativeRecordingComplete = function(base64Audio) {
+    try {
+        // Convert base64 to blob
+        const byteCharacters = atob(base64Audio);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        recordedBlob = new Blob([byteArray], { type: 'audio/webm' });
+
+        const audioUrl = URL.createObjectURL(recordedBlob);
+        const audio = document.getElementById('recordedAudio');
+        audio.src = audioUrl;
+        audio.style.display = 'block';
+
+        document.getElementById('playRecordBtn').style.display = 'inline-flex';
+        document.getElementById('voiceNoteForm').style.display = 'block';
         document.getElementById('stopRecordBtn').style.display = 'none';
         document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '✅';
         document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording complete';
+
+        clearInterval(recordingTimer);
+    } catch (error) {
+        console.error('Error processing native recording:', error);
+        showToast('Failed to process recording', 'error');
     }
+};
+
+// Callback for native recording error
+window.onNativeRecordingError = function(errorMessage) {
+    showToast(errorMessage || 'Recording failed', 'error');
+    resetVoiceRecorder();
+};
+
+function stopRecording() {
+    // Handle native app recording
+    if (isNativeApp && window.AndroidRecorder && typeof window.AndroidRecorder.stopRecording === 'function') {
+        try {
+            window.AndroidRecorder.stopRecording();
+        } catch (e) {
+            console.error('Native stopRecording failed:', e);
+        }
+    }
+
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
+
+    // Stop timer
+    clearInterval(recordingTimer);
+
+    // Update UI
+    document.getElementById('stopRecordBtn').style.display = 'none';
+    document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '✅';
+    document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording complete';
 }
 
 function playRecording() {
@@ -742,6 +864,243 @@ function setupVisualizer(stream) {
     }
     
     draw();
+}
+
+// ============================================
+// FULLSCREEN NOTE VIEW
+// ============================================
+
+let currentFullscreenNoteId = null;
+
+function openFullscreenNote(noteId) {
+    const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
+    if (!noteCard) return;
+
+    currentFullscreenNoteId = noteId;
+
+    const noteType = noteCard.dataset.noteType;
+    const title = noteCard.querySelector('.note-title')?.textContent || '';
+    const body = noteCard.querySelector('.note-body')?.innerHTML || '';
+    const author = noteCard.querySelector('.note-author span')?.textContent || '';
+    const avatarEl = noteCard.querySelector('.author-avatar-mini');
+    const avatarColor = avatarEl?.style.background || '#667eea';
+    const avatarInitial = avatarEl?.textContent?.trim() || '?';
+    const date = noteCard.querySelector('.note-date')?.textContent || '';
+    const isPinned = noteCard.querySelector('.note-pin.active') !== null;
+    const audioEl = noteCard.querySelector('.note-voice audio');
+    const audioSrc = audioEl?.querySelector('source')?.src || audioEl?.src || '';
+    const noteColor = noteCard.style.background;
+
+    let contentHtml = '';
+
+    if (noteType === 'voice') {
+        contentHtml = `
+            <div class="fullscreen-note-voice">
+                <div class="fullscreen-voice-icon">🎤</div>
+                <div style="font-size: 1.2rem; color: rgba(255,255,255,0.8);">Voice Note</div>
+                ${audioSrc ? `<audio controls autoplay style="width: 100%; max-width: 400px;"><source src="${audioSrc}" type="audio/webm"></audio>` : '<div style="color: rgba(255,255,255,0.5);">Audio not available</div>'}
+            </div>
+        `;
+    } else {
+        contentHtml = `
+            ${title ? `<div class="fullscreen-note-title">${escapeHtml(title)}</div>` : ''}
+            <div class="fullscreen-note-body">${body}</div>
+        `;
+    }
+
+    const fullContent = `
+        <div style="background: ${noteColor}; border-radius: var(--radius-lg); padding: 4px; margin: -4px;">
+            ${contentHtml}
+        </div>
+        <div class="fullscreen-note-meta">
+            <div class="fullscreen-note-author">
+                <div class="fullscreen-author-avatar" style="background: ${avatarColor}">${avatarInitial}</div>
+                <span>${escapeHtml(author)}</span>
+            </div>
+            <div class="fullscreen-note-date">${escapeHtml(date)}</div>
+        </div>
+    `;
+
+    document.getElementById('fullscreenNoteContent').innerHTML = fullContent;
+
+    // Build action buttons
+    const editBtn = noteType === 'text' ? `
+        <button onclick="closeFullscreenNote(); editNote(${noteId});" class="fullscreen-action-btn edit-btn">
+            <span>✏️</span>
+            <span>Edit</span>
+        </button>
+    ` : '';
+
+    const actionsHtml = `
+        <button onclick="closeFullscreenNote(); togglePin(${noteId});" class="fullscreen-action-btn pin-btn">
+            <span>📌</span>
+            <span>${isPinned ? 'Unpin' : 'Pin'}</span>
+        </button>
+        ${editBtn}
+        <button onclick="closeFullscreenNote(); duplicateNote(${noteId});" class="fullscreen-action-btn">
+            <span>📋</span>
+            <span>Duplicate</span>
+        </button>
+        <button onclick="closeFullscreenNote(); shareNote(${noteId});" class="fullscreen-action-btn share-btn">
+            <span>📤</span>
+            <span>Share</span>
+        </button>
+        <button onclick="closeFullscreenNote(); deleteNote(${noteId});" class="fullscreen-action-btn delete-btn">
+            <span>🗑️</span>
+            <span>Delete</span>
+        </button>
+    `;
+
+    document.getElementById('fullscreenNoteActions').innerHTML = actionsHtml;
+
+    // Show overlay
+    document.getElementById('fullscreenNoteModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeFullscreenNote() {
+    document.getElementById('fullscreenNoteModal').classList.remove('active');
+    document.body.style.overflow = '';
+    currentFullscreenNoteId = null;
+}
+
+// Close fullscreen on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('fullscreenNoteModal').classList.contains('active')) {
+        closeFullscreenNote();
+    }
+});
+
+// Close fullscreen on backdrop click
+document.getElementById('fullscreenNoteModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeFullscreenNote();
+    }
+});
+
+// ============================================
+// REAL-TIME DOM HELPERS
+// ============================================
+
+function addNoteToDOM(note) {
+    // Remove empty state if present
+    const emptyState = document.querySelector('.empty-state');
+    if (emptyState) {
+        emptyState.remove();
+    }
+
+    // Find or create notes grid
+    let notesGrid = document.querySelector('.notes-section .notes-grid');
+    if (!notesGrid) {
+        const notesSection = document.querySelector('.notes-section');
+        if (notesSection) {
+            notesGrid = document.createElement('div');
+            notesGrid.className = 'notes-grid';
+            notesSection.appendChild(notesGrid);
+        }
+    }
+
+    if (!notesGrid) return;
+
+    // Create note card HTML
+    const noteCard = document.createElement('div');
+    noteCard.className = 'note-card';
+    noteCard.dataset.noteId = note.id;
+    noteCard.dataset.noteType = note.type;
+    noteCard.style.background = note.color;
+    noteCard.style.cursor = 'pointer';
+    noteCard.style.animation = 'noteAppear 0.4s ease backwards';
+    noteCard.onclick = () => openFullscreenNote(note.id);
+
+    const titleHtml = note.title ? `<div class="note-title">${escapeHtml(note.title)}</div>` : '';
+
+    let contentHtml = '';
+    if (note.type === 'text') {
+        contentHtml = `<div class="note-body">${escapeHtml(note.body).replace(/\n/g, '<br>')}</div>`;
+    } else {
+        contentHtml = `
+            <div class="note-voice" onclick="event.stopPropagation();">
+                <div class="voice-icon">🎤</div>
+                <div class="voice-label">Voice Note</div>
+                ${note.audio_path ? `
+                    <audio controls onclick="event.stopPropagation();">
+                        <source src="${escapeHtml(note.audio_path)}" type="audio/webm">
+                        Your browser does not support audio playback.
+                    </audio>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    const editBtn = note.type === 'text' ? `
+        <button onclick="event.stopPropagation(); editNote(${note.id})" class="note-action" title="Edit">✏️</button>
+    ` : '';
+
+    noteCard.innerHTML = `
+        <div class="note-header">
+            <button onclick="event.stopPropagation(); togglePin(${note.id})" class="note-pin" title="Pin">📌</button>
+            <div class="note-actions">
+                ${editBtn}
+                <button onclick="event.stopPropagation(); duplicateNote(${note.id})" class="note-action" title="Duplicate">📋</button>
+                <button onclick="event.stopPropagation(); shareNote(${note.id})" class="note-action" title="Share">📤</button>
+                <button onclick="event.stopPropagation(); deleteNote(${note.id})" class="note-action" title="Delete">🗑️</button>
+            </div>
+        </div>
+        ${titleHtml}
+        ${contentHtml}
+        <div class="note-footer">
+            <div class="note-author">
+                <div class="author-avatar-mini" style="background: ${escapeHtml(note.avatar_color)}">
+                    ${note.user_name.substring(0, 1).toUpperCase()}
+                </div>
+                <span>${escapeHtml(note.user_name)}</span>
+            </div>
+            <div class="note-date">Just now</div>
+        </div>
+    `;
+
+    // Add to beginning of grid
+    notesGrid.insertBefore(noteCard, notesGrid.firstChild);
+}
+
+function showEmptyState() {
+    const notesSection = document.querySelector('.notes-section');
+    if (!notesSection) return;
+
+    // Remove notes grid
+    const notesGrid = notesSection.querySelector('.notes-grid');
+    if (notesGrid) {
+        notesGrid.remove();
+    }
+
+    // Add empty state
+    const emptyState = document.createElement('div');
+    emptyState.className = 'empty-state glass-card';
+    emptyState.innerHTML = `
+        <div class="empty-icon">📝</div>
+        <h2>No notes yet</h2>
+        <p>Start capturing your family's ideas and reminders</p>
+        <div class="empty-actions">
+            <button onclick="showCreateNoteModal('text')" class="btn btn-primary btn-lg">
+                <span class="btn-icon">📝</span>
+                <span>Create First Note</span>
+            </button>
+            <button onclick="showCreateNoteModal('voice')" class="btn btn-voice btn-lg">
+                <span class="btn-icon">🎤</span>
+                <span>Record Voice Note</span>
+            </button>
+        </div>
+    `;
+    emptyState.style.animation = 'noteAppear 0.4s ease backwards';
+
+    notesSection.appendChild(emptyState);
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // ============================================

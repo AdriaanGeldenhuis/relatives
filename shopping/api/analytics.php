@@ -3,6 +3,8 @@
  * Shopping Analytics API
  */
 
+session_start();
+
 require_once __DIR__ . '/../../core/bootstrap.php';
 
 header('Content-Type: application/json');
