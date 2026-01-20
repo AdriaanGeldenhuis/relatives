@@ -214,6 +214,8 @@ class MainActivity : ComponentActivity() {
                             Log.d("MainActivity", "Session token saved successfully")
                             // Auto-start tracking now that we have a token
                             runOnUiThread { startTrackingService() }
+                            // Sync FCM token to server for push notifications
+                            syncFcmTokenToServer(cookies)
                         }
                     }
                 }
@@ -222,6 +224,54 @@ class MainActivity : ComponentActivity() {
                 Log.e("MainActivity", "Failed to fetch session token", e)
             }
         }.start()
+    }
+
+    /**
+     * Sync FCM token to server for push notifications
+     * Called after successful session token fetch
+     */
+    private fun syncFcmTokenToServer(cookies: String) {
+        try {
+            val fcmPrefs = getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
+            val fcmToken = fcmPrefs.getString("fcm_token", null)
+            val needsSync = fcmPrefs.getBoolean("token_needs_sync", true)
+
+            if (fcmToken.isNullOrBlank()) {
+                Log.d("MainActivity", "No FCM token to sync")
+                return
+            }
+
+            // Always sync on app start to ensure server has current token
+            Log.d("MainActivity", "Syncing FCM token to server...")
+
+            val url = java.net.URL("$BASE_URL/notifications/api/preferences.php")
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Cookie", cookies)
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            connection.doOutput = true
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+
+            val postData = "action=register_fcm_token&token=${java.net.URLEncoder.encode(fcmToken, "UTF-8")}&device_type=android"
+            connection.outputStream.bufferedWriter().use { it.write(postData) }
+
+            if (connection.responseCode == 200) {
+                val response = connection.inputStream.bufferedReader().readText()
+                val json = org.json.JSONObject(response)
+                if (json.optBoolean("success")) {
+                    Log.d("MainActivity", "FCM token synced successfully")
+                    fcmPrefs.edit().putBoolean("token_needs_sync", false).apply()
+                } else {
+                    Log.e("MainActivity", "FCM sync failed: ${json.optString("error")}")
+                }
+            } else {
+                Log.e("MainActivity", "FCM sync HTTP error: ${connection.responseCode}")
+            }
+            connection.disconnect()
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to sync FCM token", e)
+        }
     }
 
     private fun checkBatteryOptimization() {
