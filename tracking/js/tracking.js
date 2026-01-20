@@ -874,19 +874,7 @@ class TrackingMapProfessional {
                 memberCard.setAttribute('data-tracking', isTracking ? 'true' : 'false');
                 memberCard.setAttribute('data-status', status);
 
-                const statusDot = memberCard.querySelector('.member-status-dot');
-                if (statusDot) {
-                    if (isTracking) {
-                        statusDot.style.background = '#43e97b';
-                        statusDot.style.boxShadow = '0 0 12px rgba(67, 233, 123, 0.6)';
-                    } else if (isStale) {
-                        statusDot.style.background = '#ffa502';
-                        statusDot.style.boxShadow = '0 0 12px rgba(255, 165, 2, 0.4)';
-                    } else {
-                        statusDot.style.background = '#6c757d';
-                        statusDot.style.boxShadow = 'none';
-                    }
-                }
+                // Status dot styling is handled by CSS via data-status attribute
 
                 const statusText = memberCard.querySelector('.member-status span');
                 if (statusText) {
