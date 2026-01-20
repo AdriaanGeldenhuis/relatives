@@ -522,7 +522,8 @@
 }
 
 .member-card[data-status="stale"] {
-    border-color: rgba(255, 165, 2, 0.3);
+    border-color: rgba(255, 165, 2, 0.4);
+    background: linear-gradient(135deg, var(--bg-tertiary), rgba(255, 165, 2, 0.08));
 }
 
 .member-avatar {
