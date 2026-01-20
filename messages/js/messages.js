@@ -438,10 +438,16 @@ function createMessageElement(msg) {
     div.className = `message ${isOwn ? 'own' : ''}`;
     div.dataset.messageId = msg.id;
     div.dataset.userId = msg.user_id;
-    
+
+    // Avatar with image support
+    const avatarContent = msg.has_avatar
+        ? `<img src="/saves/${msg.user_id}/avatar/avatar.webp" alt="${escapeHtml(msg.full_name)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+           <span class="avatar-fallback" style="display:none; background: ${msg.avatar_color}; width:100%; height:100%; align-items:center; justify-content:center; border-radius:50%;">${msg.full_name.substring(0, 2).toUpperCase()}</span>`
+        : msg.full_name.substring(0, 2).toUpperCase();
+
     const avatar = `
-        <div class="message-avatar" style="background: ${msg.avatar_color}">
-            ${msg.full_name.substring(0, 2).toUpperCase()}
+        <div class="message-avatar" style="background: ${msg.has_avatar ? 'transparent' : msg.avatar_color}">
+            ${avatarContent}
         </div>
     `;
     

@@ -267,7 +267,7 @@ html, body {
 .member-avatar {
     width: 48px;
     height: 48px;
-    border-radius: var(--radius-md);
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -277,6 +277,14 @@ html, body {
     flex-shrink: 0;
     box-shadow: var(--shadow-md);
     transition: all var(--transition-bounce);
+    overflow: hidden;
+}
+
+.member-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
 }
 
 .member-item:hover .member-avatar {
@@ -465,9 +473,9 @@ html, body {
 }
 
 .message-avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: var(--radius-md);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -477,6 +485,15 @@ html, body {
     flex-shrink: 0;
     box-shadow: var(--shadow-md);
     align-self: flex-end;
+    overflow: hidden;
+    position: relative;
+}
+
+.message-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
 }
 
 .message-content {
