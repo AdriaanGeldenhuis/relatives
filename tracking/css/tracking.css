@@ -560,6 +560,11 @@
     animation: statusDotPulse 2s ease-in-out infinite;
 }
 
+.member-card[data-status="stale"] .member-status-dot {
+    background: var(--warning);
+    box-shadow: 0 0 12px rgba(255, 165, 2, 0.6);
+}
+
 @keyframes statusDotPulse {
     0%, 100% {
         transform: scale(1);
