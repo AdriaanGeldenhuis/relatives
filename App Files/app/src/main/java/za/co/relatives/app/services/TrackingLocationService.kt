@@ -39,6 +39,8 @@ import za.co.relatives.app.utils.PreferencesManager
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 class TrackingLocationService : Service() {
 
@@ -73,22 +75,63 @@ class TrackingLocationService : Service() {
     private var isLowBatteryMode = false
 
     // Offline Queue - store locations when network unavailable
+    // Now persisted to SharedPreferences to survive service restarts
     private val offlineQueue = mutableListOf<QueuedLocation>()
     private val MAX_QUEUE_SIZE = 50
+    private val gson = Gson()
 
     // Exponential backoff for retries
     private var retryDelayMs = 2000L  // Start at 2 seconds
     private val MAX_RETRY_DELAY_MS = 60000L  // Max 60 seconds
     private var consecutiveFailures = 0
 
-    private data class QueuedLocation(
-        val location: Location,
+    // Fix #5: Token refresh race condition prevention
+    @Volatile
+    private var isRefreshingToken = false
+    private val tokenRefreshLock = Object()
+
+    // Serializable version of QueuedLocation for persistence
+    // Using lat/lng instead of Location object for JSON serialization
+    data class QueuedLocation(
+        val latitude: Double,
+        val longitude: Double,
+        val accuracy: Float,
+        val altitude: Double?,
+        val bearing: Float?,
+        val speed: Float?,
         val isMoving: Boolean,
         val speedKmh: Float,
         val timestamp: Long,
         val clientEventId: String = UUID.randomUUID().toString(),  // For idempotent uploads
         val retryCount: Int = 0  // Track retry attempts
-    )
+    ) {
+        companion object {
+            fun fromLocation(location: Location, isMoving: Boolean, speedKmh: Float): QueuedLocation {
+                return QueuedLocation(
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    accuracy = location.accuracy,
+                    altitude = if (location.hasAltitude()) location.altitude else null,
+                    bearing = if (location.hasBearing()) location.bearing else null,
+                    speed = if (location.hasSpeed()) location.speed else null,
+                    isMoving = isMoving,
+                    speedKmh = speedKmh,
+                    timestamp = System.currentTimeMillis()
+                )
+            }
+        }
+
+        fun toLocation(): Location {
+            return Location("queued").apply {
+                latitude = this@QueuedLocation.latitude
+                longitude = this@QueuedLocation.longitude
+                accuracy = this@QueuedLocation.accuracy
+                this@QueuedLocation.altitude?.let { altitude = it }
+                this@QueuedLocation.bearing?.let { bearing = it }
+                this@QueuedLocation.speed?.let { speed = it }
+            }
+        }
+    }
 
     companion object {
         const val ACTION_START_TRACKING = "ACTION_START_TRACKING"
@@ -127,6 +170,43 @@ class TrackingLocationService : Service() {
                     uploadLocation(location)
                 }
             }
+        }
+
+        // Fix #6: Load persisted offline queue on service start
+        loadPersistedQueue()
+    }
+
+    // ========== Fix #6: Persist offline queue to survive service restarts ==========
+
+    private fun loadPersistedQueue() {
+        try {
+            val prefs = getSharedPreferences("tracking_queue", Context.MODE_PRIVATE)
+            val json = prefs.getString("offline_queue", null) ?: return
+            val type = object : TypeToken<List<QueuedLocation>>() {}.type
+            val loaded: List<QueuedLocation> = gson.fromJson(json, type) ?: emptyList()
+            synchronized(offlineQueue) {
+                offlineQueue.clear()
+                offlineQueue.addAll(loaded)
+            }
+            Log.d(TAG, "Loaded ${loaded.size} queued locations from persistence")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load persisted queue", e)
+        }
+    }
+
+    private fun persistQueue() {
+        try {
+            val prefs = getSharedPreferences("tracking_queue", Context.MODE_PRIVATE)
+            synchronized(offlineQueue) {
+                if (offlineQueue.isEmpty()) {
+                    prefs.edit().remove("offline_queue").apply()
+                } else {
+                    val json = gson.toJson(offlineQueue.toList())
+                    prefs.edit().putString("offline_queue", json).apply()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to persist queue", e)
         }
     }
 
@@ -392,8 +472,8 @@ class TrackingLocationService : Service() {
 
     private fun queueLocationForLater(location: Location, isMoving: Boolean, speedKmh: Float) {
         synchronized(offlineQueue) {
-            // Add to queue
-            offlineQueue.add(QueuedLocation(location, isMoving, speedKmh, System.currentTimeMillis()))
+            // Add to queue using serializable format
+            offlineQueue.add(QueuedLocation.fromLocation(location, isMoving, speedKmh))
 
             // Trim queue if too large (keep most recent)
             while (offlineQueue.size > MAX_QUEUE_SIZE) {
@@ -401,6 +481,9 @@ class TrackingLocationService : Service() {
             }
 
             Log.d(TAG, "Location queued for later upload (queue size: ${offlineQueue.size})")
+
+            // Persist queue to survive service restarts
+            persistQueue()
         }
     }
 
@@ -408,31 +491,78 @@ class TrackingLocationService : Service() {
         synchronized(offlineQueue) {
             if (offlineQueue.isEmpty()) return
 
-            Log.d(TAG, "Sending ${offlineQueue.size} queued locations")
+            val queueSize = offlineQueue.size
+            Log.d(TAG, "Sending $queueSize queued locations")
 
-            // Send each queued location (oldest first)
+            // Fix #7: Use batch upload when there are multiple items (more efficient)
+            if (queueSize > 3) {
+                sendQueuedLocationsBatch()
+            } else {
+                sendQueuedLocationsIndividually()
+            }
+        }
+    }
+
+    // Fix #7: Batch upload for efficient queue flush
+    private fun sendQueuedLocationsBatch() {
+        synchronized(offlineQueue) {
             val toSend = offlineQueue.toList()
             offlineQueue.clear()
+            persistQueue()
+
+            Log.d(TAG, "Using batch upload for ${toSend.size} locations")
+
+            uploader.uploadLocationBatch(
+                locations = toSend,
+                onSuccess = { serverSettings ->
+                    consecutiveAuthFailures = 0
+                    consecutiveFailures = 0
+                    retryDelayMs = 2000L
+                    PreferencesManager.lastUploadTime = System.currentTimeMillis()
+                    applyServerSettings(serverSettings)
+                    Log.d(TAG, "Batch upload successful (${toSend.size} locations)")
+                },
+                onPartialSuccess = { failedItems ->
+                    // Some items failed - re-queue only the failed ones
+                    Log.w(TAG, "Batch upload partial success - ${failedItems.size} items failed")
+                    failedItems.forEach { reQueueLocationWithBackoff(it) }
+                },
+                onAuthFailure = {
+                    Log.w(TAG, "Batch upload auth failure - re-queuing all")
+                    toSend.forEach { reQueueLocationWithBackoff(it) }
+                    refreshSessionToken()
+                },
+                onTransientFailure = {
+                    Log.w(TAG, "Batch upload transient failure - re-queuing all with backoff")
+                    toSend.forEach { reQueueLocationWithBackoff(it) }
+                }
+            )
+        }
+    }
+
+    private fun sendQueuedLocationsIndividually() {
+        synchronized(offlineQueue) {
+            val toSend = offlineQueue.toList()
+            offlineQueue.clear()
+            persistQueue()
 
             toSend.forEach { queued ->
                 uploader.uploadLocation(
-                    location = queued.location,
+                    location = queued.toLocation(),
                     isMoving = queued.isMoving,
                     speedKmh = queued.speedKmh,
-                    clientEventId = queued.clientEventId,  // Preserve ID for idempotency on retry
+                    clientEventId = queued.clientEventId,
                     onSuccess = {
                         consecutiveAuthFailures = 0
                         consecutiveFailures = 0
-                        retryDelayMs = 2000L  // Reset backoff on success
+                        retryDelayMs = 2000L
                         Log.d(TAG, "Queued location uploaded successfully (id=${queued.clientEventId})")
                     },
                     onAuthFailure = {
-                        // Re-queue on auth failure - preserve clientEventId for retry
                         Log.w(TAG, "Queued location auth failure - re-queuing (id=${queued.clientEventId})")
                         reQueueLocationWithBackoff(queued)
                     },
                     onTransientFailure = {
-                        // Re-queue on transient failure with exponential backoff
                         Log.w(TAG, "Queued location transient failure - re-queuing with backoff (id=${queued.clientEventId}, retry=${queued.retryCount})")
                         reQueueLocationWithBackoff(queued)
                     }
@@ -447,6 +577,7 @@ class TrackingLocationService : Service() {
             while (offlineQueue.size > MAX_QUEUE_SIZE) {
                 offlineQueue.removeAt(0)
             }
+            persistQueue()  // Persist after re-queue
         }
     }
 
@@ -463,6 +594,8 @@ class TrackingLocationService : Service() {
             while (offlineQueue.size > MAX_QUEUE_SIZE) {
                 offlineQueue.removeAt(0)
             }
+
+            persistQueue()  // Persist after re-queue
 
             Log.d(TAG, "Re-queued with backoff: ${retryDelayMs}ms delay, retry #${updatedQueued.retryCount}, queue size: ${offlineQueue.size}")
 
@@ -553,54 +686,77 @@ class TrackingLocationService : Service() {
     }
 
     private fun refreshSessionToken() {
+        // Fix #5: Prevent race condition with synchronized lock
+        synchronized(tokenRefreshLock) {
+            if (isRefreshingToken) {
+                Log.d(TAG, "Token refresh already in progress, skipping")
+                return
+            }
+            isRefreshingToken = true
+        }
+
         // Prevent infinite retry loops
         if (consecutiveAuthFailures >= MAX_AUTH_FAILURES) {
             Log.e(TAG, "Too many auth failures ($consecutiveAuthFailures) - user needs to re-login")
             showAuthFailureNotification()
+            synchronized(tokenRefreshLock) { isRefreshingToken = false }
             return
         }
         consecutiveAuthFailures++
 
-        // Try to get a fresh token from the server using WebView cookies
-        Thread {
+        // Fix #12: Get cookies on main thread first (some Android versions require this)
+        mainHandler.post {
             try {
                 val cookieManager = android.webkit.CookieManager.getInstance()
                 val cookies = cookieManager.getCookie("https://www.relatives.co.za")
+
                 if (cookies.isNullOrBlank()) {
                     Log.w(TAG, "No cookies available for token refresh - user needs to open app and login")
                     showAuthFailureNotification()
-                    return@Thread
+                    synchronized(tokenRefreshLock) { isRefreshingToken = false }
+                    return@post
                 }
 
-                val url = java.net.URL("https://www.relatives.co.za/api/session-token.php")
-                val connection = url.openConnection() as java.net.HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.setRequestProperty("Cookie", cookies)
-                connection.connectTimeout = 10000
-                connection.readTimeout = 10000
+                // Now do network call in background thread
+                Thread {
+                    try {
+                        val url = java.net.URL("https://www.relatives.co.za/api/session-token.php")
+                        val connection = url.openConnection() as java.net.HttpURLConnection
+                        connection.requestMethod = "GET"
+                        connection.setRequestProperty("Cookie", cookies)
+                        connection.connectTimeout = 10000
+                        connection.readTimeout = 10000
 
-                if (connection.responseCode == 200) {
-                    val response = connection.inputStream.bufferedReader().readText()
-                    val json = org.json.JSONObject(response)
-                    if (json.optBoolean("success")) {
-                        val token = json.optString("session_token")
-                        if (token.isNotBlank()) {
-                            PreferencesManager.sessionToken = token
-                            Log.d(TAG, "Session token refreshed successfully - retrying queued locations")
-                            consecutiveAuthFailures = 0  // Reset on success
-                            hasShownAuthFailureNotification = false  // Reset notification flag
-                            // Now retry any queued locations with the fresh token
-                            mainHandler.post { sendQueuedLocations() }
+                        if (connection.responseCode == 200) {
+                            val response = connection.inputStream.bufferedReader().readText()
+                            val json = org.json.JSONObject(response)
+                            if (json.optBoolean("success")) {
+                                val token = json.optString("session_token")
+                                if (token.isNotBlank()) {
+                                    PreferencesManager.sessionToken = token
+                                    Log.d(TAG, "Session token refreshed successfully - retrying queued locations")
+                                    consecutiveAuthFailures = 0  // Reset on success
+                                    hasShownAuthFailureNotification = false  // Reset notification flag
+                                    // Now retry any queued locations with the fresh token
+                                    mainHandler.post { sendQueuedLocations() }
+                                }
+                            }
+                        } else if (connection.responseCode == 401) {
+                            Log.w(TAG, "Session token refresh got 401 - session expired, user needs to re-login")
+                            mainHandler.post { showAuthFailureNotification() }
                         }
+                        connection.disconnect()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to refresh session token", e)
+                    } finally {
+                        synchronized(tokenRefreshLock) { isRefreshingToken = false }
                     }
-                } else if (connection.responseCode == 401) {
-                    Log.w(TAG, "Session token refresh got 401 - session expired, user needs to re-login")
-                }
-                connection.disconnect()
+                }.start()
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to refresh session token", e)
+                Log.e(TAG, "Failed to get cookies for token refresh", e)
+                synchronized(tokenRefreshLock) { isRefreshingToken = false }
             }
-        }.start()
+        }
     }
 
     private fun requestHeartbeatLocation() {
@@ -889,6 +1045,118 @@ class TrackingLocationService : Service() {
             
             Log.d(TAG, "Uploading heartbeat (state-only)")
             httpClient.newCall(request).enqueue(createCallback(onSuccess, onAuthFailure, onTransientFailure))
+        }
+
+        // Fix #7: Batch upload for efficient queue flush
+        private val BATCH_UPLOAD_URL = "https://www.relatives.co.za/tracking/api/update_location_batch.php"
+
+        fun uploadLocationBatch(
+            locations: List<QueuedLocation>,
+            onSuccess: (serverSettings: JSONObject?) -> Unit,
+            onPartialSuccess: (failedItems: List<QueuedLocation>) -> Unit,
+            onAuthFailure: () -> Unit,
+            onTransientFailure: () -> Unit
+        ) {
+            val deviceUuid = PreferencesManager.getDeviceUuid()
+            val sessionToken = PreferencesManager.sessionToken
+            if (sessionToken.isNullOrBlank()) {
+                onAuthFailure()
+                return
+            }
+
+            // Build locations array
+            val locationsArray = org.json.JSONArray()
+            val locationMap = mutableMapOf<String, QueuedLocation>()  // Map client_event_id to QueuedLocation
+
+            locations.forEach { queued ->
+                locationMap[queued.clientEventId] = queued
+                locationsArray.put(JSONObject().apply {
+                    put("latitude", queued.latitude)
+                    put("longitude", queued.longitude)
+                    put("accuracy_m", queued.accuracy.toInt())
+                    put("speed_kmh", queued.speedKmh)
+                    put("heading_deg", queued.bearing ?: 0)
+                    put("altitude_m", queued.altitude ?: JSONObject.NULL)
+                    put("is_moving", queued.isMoving)
+                    put("battery_level", getBatteryLevel() ?: JSONObject.NULL)
+                    put("client_event_id", queued.clientEventId)
+                    put("client_timestamp", queued.timestamp)
+                })
+            }
+
+            val body = JSONObject().apply {
+                put("device_uuid", deviceUuid)
+                put("platform", "android")
+                put("device_name", Build.MODEL)
+                put("source", "native")
+                put("session_token", sessionToken)
+                put("locations", locationsArray)
+            }
+
+            val request = Request.Builder()
+                .url(BATCH_UPLOAD_URL)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Authorization", "Bearer $sessionToken")
+                .addHeader("User-Agent", "RelativesAndroid/1.0")
+                .post(body.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            Log.d(TAG, "Uploading batch of ${locations.size} locations")
+
+            httpClient.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.e(TAG, "Batch upload network error: ${e.message}", e)
+                    onTransientFailure()
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use { resp ->
+                        val responseBody = try { resp.body?.string() } catch (e: Exception) { null }
+
+                        when {
+                            resp.isSuccessful -> {
+                                try {
+                                    val json = JSONObject(responseBody ?: "{}")
+                                    val serverSettings = json.optJSONObject("server_settings")
+
+                                    // Check for partial failures
+                                    val results = json.optJSONArray("results")
+                                    val failedItems = mutableListOf<QueuedLocation>()
+
+                                    if (results != null) {
+                                        for (i in 0 until results.length()) {
+                                            val result = results.getJSONObject(i)
+                                            val clientEventId = result.optString("client_event_id")
+                                            val success = result.optBoolean("success", false)
+
+                                            if (!success && clientEventId.isNotEmpty()) {
+                                                locationMap[clientEventId]?.let { failedItems.add(it) }
+                                            }
+                                        }
+                                    }
+
+                                    if (failedItems.isEmpty()) {
+                                        onSuccess(serverSettings)
+                                    } else {
+                                        onPartialSuccess(failedItems)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Failed to parse batch response: ${e.message}")
+                                    onSuccess(null)
+                                }
+                            }
+                            resp.code in listOf(401, 402, 403) -> {
+                                Log.e(TAG, "Batch upload auth failure (${resp.code}): $responseBody")
+                                onAuthFailure()
+                            }
+                            else -> {
+                                Log.e(TAG, "Batch upload failed (${resp.code}): $responseBody")
+                                onTransientFailure()
+                            }
+                        }
+                    }
+                }
+            })
         }
 
         private fun createCallback(

@@ -124,6 +124,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkSubscription()
+        fetchTrackingSettings()  // Fix #8: Sync server settings on app resume
     }
     
     @Composable
@@ -402,6 +403,49 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // Fix #8: Fetch tracking settings from server on app start
+    private fun fetchTrackingSettings() {
+        Thread {
+            try {
+                val cookieManager = CookieManager.getInstance()
+                val cookies = cookieManager.getCookie("https://www.relatives.co.za")
+
+                if (cookies.isNullOrBlank()) {
+                    Log.d("MainActivity", "No cookies available for settings fetch")
+                    return@Thread
+                }
+
+                val url = java.net.URL("https://www.relatives.co.za/tracking/api/get_settings.php")
+                val connection = url.openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.setRequestProperty("Cookie", cookies)
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
+
+                if (connection.responseCode == 200) {
+                    val response = connection.inputStream.bufferedReader().readText()
+                    val json = org.json.JSONObject(response)
+
+                    if (json.optBoolean("success")) {
+                        val settings = json.optJSONObject("settings")
+                        settings?.let {
+                            // Apply server settings to PreferencesManager
+                            it.optInt("update_interval_seconds", 0).takeIf { v -> v > 0 }?.let { interval ->
+                                PreferencesManager.setUpdateInterval(interval)
+                            }
+                            // Note: Other settings like idle_heartbeat_seconds are applied
+                            // when TrackingLocationService receives them in upload response
+                            Log.d("MainActivity", "Applied server tracking settings: interval=${PreferencesManager.getUpdateInterval()}s")
+                        }
+                    }
+                }
+                connection.disconnect()
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Failed to fetch tracking settings", e)
+            }
+        }.start()
     }
     
     private fun applySubscriptionStatus(status: ApiClient.SubscriptionStatus) {

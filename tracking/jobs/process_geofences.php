@@ -75,11 +75,13 @@ try {
         }
 
         // Fetch batch of pending items
+        // Fix #11: Also retry failed items from the last hour (up to 3 implicit retries via time window)
         $stmt = $db->prepare("
             SELECT q.*, u.full_name
             FROM tracking_geofence_queue q
             JOIN users u ON q.user_id = u.id
             WHERE q.status = 'pending'
+               OR (q.status = 'failed' AND q.created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR))
             ORDER BY q.created_at ASC
             LIMIT ?
         ");
@@ -243,16 +245,29 @@ try {
     } while (count($items) === $batchSize);
 
     // ========== CLEANUP OLD QUEUE ITEMS ==========
+    // Fix #11: Different cleanup windows for processed vs failed items
     try {
+        // Processed items: keep for 24 hours for debugging
         $stmt = $db->prepare("
             DELETE FROM tracking_geofence_queue
-            WHERE status IN ('processed', 'failed')
+            WHERE status = 'processed'
               AND created_at < DATE_SUB(NOW(), INTERVAL 24 HOUR)
         ");
         $stmt->execute();
-        $deleted = $stmt->rowCount();
+        $deletedProcessed = $stmt->rowCount();
+
+        // Failed items: cleanup after 1 hour (they've already been retried)
+        $stmt = $db->prepare("
+            DELETE FROM tracking_geofence_queue
+            WHERE status = 'failed'
+              AND created_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)
+        ");
+        $stmt->execute();
+        $deletedFailed = $stmt->rowCount();
+
+        $deleted = $deletedProcessed + $deletedFailed;
         if ($deleted > 0) {
-            echo "[" . date('Y-m-d H:i:s') . "] Cleaned up $deleted old queue items.\n";
+            echo "[" . date('Y-m-d H:i:s') . "] Cleaned up $deleted old queue items (processed: $deletedProcessed, failed: $deletedFailed).\n";
         }
     } catch (Exception $e) {
         // Cleanup errors are non-fatal

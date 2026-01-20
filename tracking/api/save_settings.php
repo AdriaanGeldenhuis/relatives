@@ -69,8 +69,8 @@ try {
     }
     // ========== END SUBSCRIPTION LOCK ==========
     
-    // Prepare values with validation (default 60s for battery efficiency)
-    $updateInterval = isset($input['update_interval_seconds']) ? (int)$input['update_interval_seconds'] : 60;
+    // Prepare values with validation (default 30s - matches TrackingSettings.php)
+    $updateInterval = isset($input['update_interval_seconds']) ? (int)$input['update_interval_seconds'] : 30;
     $historyRetention = isset($input['history_retention_days']) ? (int)$input['history_retention_days'] : 30;
     $showSpeed = isset($input['show_speed']) ? (int)(bool)$input['show_speed'] : 1;
     $showBattery = isset($input['show_battery']) ? (int)(bool)$input['show_battery'] : 1;
@@ -79,9 +79,9 @@ try {
     $highAccuracyMode = isset($input['high_accuracy_mode']) ? (int)(bool)$input['high_accuracy_mode'] : 1;
     $backgroundTracking = isset($input['background_tracking']) ? (int)(bool)$input['background_tracking'] : 1;
     
-    // Validate ranges
-    if ($updateInterval < 5) $updateInterval = 5;
-    if ($updateInterval > 300) $updateInterval = 300;
+    // Validate ranges (must match TrackingSettings.php constants)
+    if ($updateInterval < 10) $updateInterval = 10;  // TRACKING_UPDATE_INTERVAL_MIN
+    if ($updateInterval > 300) $updateInterval = 300; // TRACKING_UPDATE_INTERVAL_MAX
     if ($historyRetention < 1) $historyRetention = 1;
     if ($historyRetention > 365) $historyRetention = 365;
     

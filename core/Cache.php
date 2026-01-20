@@ -230,6 +230,8 @@ class Cache {
             'lng' => (float)($locationData['lng'] ?? $locationData['longitude'] ?? 0),
             'speed' => (float)($locationData['speed'] ?? 0),
             'accuracy' => (float)($locationData['accuracy'] ?? 0),
+            'heading' => isset($locationData['heading']) ? (float)$locationData['heading'] : null,
+            'altitude' => isset($locationData['altitude']) ? (float)$locationData['altitude'] : null,
             'battery' => (int)($locationData['battery'] ?? 0),
             'moving' => (bool)($locationData['moving'] ?? $locationData['is_moving'] ?? false),
             'ts' => $locationData['ts'] ?? $locationData['timestamp'] ?? date('Y-m-d H:i:s')

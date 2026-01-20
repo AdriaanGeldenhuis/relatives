@@ -44,9 +44,9 @@ try {
     $settings = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$settings) {
-        // Return defaults - 60 seconds recommended for battery efficiency
+        // Return defaults - must match TrackingSettings.php and Android PreferencesManager.kt
         $settings = [
-            'update_interval_seconds' => 60,
+            'update_interval_seconds' => 30,  // Matches TRACKING_DEFAULT_UPDATE_INTERVAL
             'history_retention_days' => 30,
             'show_speed' => 1,
             'show_battery' => 1,
