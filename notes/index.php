@@ -237,10 +237,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <span class="qa-icon">🔍</span>
                         <span>Search</span>
                     </button>
-                    <button onclick="RelativesVoice.openModal()" class="quick-action-btn">
-                        <span class="qa-icon">🎙️</span>
-                        <span>Voice Command</span>
-                    </button>
                 </div>
             </div>
         </div>
