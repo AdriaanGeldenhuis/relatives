@@ -1181,6 +1181,19 @@ body {
     max-width: 800px;
 }
 
+/* Week View Modal - Fullscreen */
+.modal-content.modal-week-fullscreen {
+    position: fixed;
+    inset: 0;
+    max-width: 100%;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .modal-header {
     padding: var(--space-xl);
     border-bottom: 1px solid var(--glass-border);
@@ -1631,14 +1644,7 @@ textarea.form-control {
         bottom: 20px;
     }
 
-    /* Week View - Mobile */
-    .week-view-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .week-day {
-        min-height: 120px;
-    }
+    /* Week View - Mobile - already vertical */
 }
 
 @media (max-width: 480px) {
@@ -1699,14 +1705,7 @@ textarea.form-control {
         font-size: 3.5rem;
     }
 
-    /* Week View - Very Small Screens */
-    .week-view-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .week-day {
-        min-height: 100px;
-    }
+    /* Week View - Very Small Screens - already vertical */
 
     /* Rating Stars - Small Screens */
     .star-btn {
@@ -1954,21 +1953,28 @@ textarea.form-control {
 }
 
 /* ============================================
-   WEEK VIEW MODAL
+   WEEK VIEW MODAL - FULLSCREEN WITH VERTICAL DAYS
    ============================================ */
 
+/* Week view modal body - scrollable */
+#weekViewModal .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-lg);
+}
+
 .week-view-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: var(--space-sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
 }
 
 .week-day {
     background: var(--glass-light);
     border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    padding: var(--space-sm);
-    min-height: 150px;
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    min-height: auto;
     cursor: pointer;
     transition: all var(--transition-base);
     display: flex;
@@ -1992,23 +1998,24 @@ textarea.form-control {
 
 .week-day-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--space-sm);
-    padding-bottom: var(--space-xs);
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-sm);
     border-bottom: 1px solid var(--glass-border);
 }
 
 .week-day-name {
-    font-size: 0.75rem;
+    font-size: 1rem;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.8);
     text-transform: uppercase;
+    min-width: 60px;
 }
 
 .week-day-number {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 1.25rem;
+    font-size: 1.75rem;
     font-weight: 900;
     color: white;
 }
@@ -2018,22 +2025,20 @@ textarea.form-control {
 }
 
 .week-day-events {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    overflow: hidden;
+    gap: var(--space-xs);
 }
 
 .week-event {
-    background: rgba(255, 255, 255, 0.05);
-    border-left: 3px solid var(--schedule-study);
-    border-radius: 4px;
-    padding: 4px 6px;
-    font-size: 0.7rem;
+    background: rgba(255, 255, 255, 0.08);
+    border-left: 4px solid var(--schedule-study);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-md);
+    font-size: 0.9rem;
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: var(--space-md);
 }
 
 .week-event.done {
@@ -2043,36 +2048,38 @@ textarea.form-control {
 
 .week-event .event-time {
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.9);
+    min-width: 90px;
+    font-size: 0.85rem;
 }
 
 .week-event .event-name {
-    color: rgba(255, 255, 255, 0.7);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    color: white;
+    font-weight: 600;
+    flex: 1;
 }
 
 .no-events {
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.5);
     font-style: italic;
+    padding: var(--space-sm) 0;
 }
 
 .more-events {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
     font-weight: 600;
-    margin-top: 4px;
+    padding: var(--space-xs) 0;
 }
 
 .week-day-count {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
-    text-align: center;
-    margin-top: auto;
-    padding-top: var(--space-xs);
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
     border-top: 1px solid var(--glass-border);
+    font-weight: 600;
 }
 
 .week-loading,
