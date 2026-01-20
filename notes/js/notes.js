@@ -621,55 +621,90 @@ function resetVoiceRecorder() {
     }
 }
 
+// Detect native app environment
+const isNativeApp = navigator.userAgent.includes('RelativesAndroidApp') ||
+                    window.matchMedia('(display-mode: standalone)').matches ||
+                    window.navigator.standalone ||
+                    window.AndroidInterface !== undefined ||
+                    window.Android !== undefined;
+
 async function startRecording() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
+        let stream;
+
+        // Check for native app audio recording interface
+        if (isNativeApp && window.AndroidRecorder && typeof window.AndroidRecorder.startRecording === 'function') {
+            // Use native Android recording
+            try {
+                window.AndroidRecorder.startRecording();
+                updateUIForRecording();
+                return;
+            } catch (nativeError) {
+                console.warn('Native recording failed, falling back to web API:', nativeError);
+            }
+        }
+
+        // Request microphone permission - handle native WebView quirks
+        if (isNativeApp && window.Android && typeof window.Android.requestMicrophonePermission === 'function') {
+            // Request permission through native bridge
+            const permissionGranted = await new Promise((resolve) => {
+                window.onMicrophonePermissionResult = (granted) => {
+                    resolve(granted);
+                };
+                window.Android.requestMicrophonePermission();
+                // Timeout fallback
+                setTimeout(() => resolve(false), 5000);
+            });
+
+            if (!permissionGranted) {
+                showToast('Microphone permission denied. Please allow microphone access in app settings.', 'error');
+                return;
+            }
+        }
+
+        // Standard Web API
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
-        
+
         mediaRecorder.ondataavailable = (event) => {
             audioChunks.push(event.data);
         };
-        
+
         mediaRecorder.onstop = () => {
             recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
             const audioUrl = URL.createObjectURL(recordedBlob);
-            
+
             const audio = document.getElementById('recordedAudio');
             audio.src = audioUrl;
             audio.style.display = 'block';
-            
+
             document.getElementById('playRecordBtn').style.display = 'inline-flex';
             document.getElementById('voiceNoteForm').style.display = 'block';
-            
+
             // Stop all tracks
             stream.getTracks().forEach(track => track.stop());
-            
+
             if (animationId) {
                 cancelAnimationFrame(animationId);
             }
-            
+
             const canvas = document.getElementById('visualizerCanvas');
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         };
-        
+
         mediaRecorder.start();
-        
-        // Update UI
-        document.getElementById('startRecordBtn').style.display = 'none';
-        document.getElementById('stopRecordBtn').style.display = 'inline-flex';
-        document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '⏺️';
-        document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording...';
-        
+        updateUIForRecording();
+
         // Start timer
         recordingStartTime = Date.now();
         recordingTimer = setInterval(updateRecordingTimer, 100);
-        
+
         // Start visualizer
         setupVisualizer(stream);
-        
+
     } catch (error) {
         console.error('Error accessing microphone:', error);
 
@@ -678,31 +713,93 @@ async function startRecording() {
         if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
             errorMessage = 'No microphone found. Please connect a microphone and try again.';
         } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-            errorMessage = 'Microphone permission denied. Please allow microphone access in your browser settings.';
+            if (isNativeApp) {
+                errorMessage = 'Microphone permission denied. Please allow microphone access in your device settings for this app.';
+            } else {
+                errorMessage = 'Microphone permission denied. Please allow microphone access in your browser settings.';
+            }
         } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
             errorMessage = 'Microphone is in use by another application. Please close other apps using the microphone.';
         } else if (error.name === 'OverconstrainedError') {
             errorMessage = 'No suitable microphone found for the requested settings.';
         } else if (error.name === 'TypeError') {
             errorMessage = 'Your browser does not support audio recording.';
+        } else if (error.name === 'AbortError' || error.name === 'SecurityError') {
+            if (isNativeApp) {
+                errorMessage = 'Recording not available. Please check app permissions in your device settings.';
+            } else {
+                errorMessage = 'Recording blocked due to security settings. Please use HTTPS.';
+            }
         }
 
         showToast(errorMessage, 'error');
     }
 }
 
-function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-        
-        // Stop timer
-        clearInterval(recordingTimer);
-        
-        // Update UI
+function updateUIForRecording() {
+    document.getElementById('startRecordBtn').style.display = 'none';
+    document.getElementById('stopRecordBtn').style.display = 'inline-flex';
+    document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '⏺️';
+    document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording...';
+}
+
+// Callback for native app to provide recorded audio
+window.onNativeRecordingComplete = function(base64Audio) {
+    try {
+        // Convert base64 to blob
+        const byteCharacters = atob(base64Audio);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        recordedBlob = new Blob([byteArray], { type: 'audio/webm' });
+
+        const audioUrl = URL.createObjectURL(recordedBlob);
+        const audio = document.getElementById('recordedAudio');
+        audio.src = audioUrl;
+        audio.style.display = 'block';
+
+        document.getElementById('playRecordBtn').style.display = 'inline-flex';
+        document.getElementById('voiceNoteForm').style.display = 'block';
         document.getElementById('stopRecordBtn').style.display = 'none';
         document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '✅';
         document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording complete';
+
+        clearInterval(recordingTimer);
+    } catch (error) {
+        console.error('Error processing native recording:', error);
+        showToast('Failed to process recording', 'error');
     }
+};
+
+// Callback for native recording error
+window.onNativeRecordingError = function(errorMessage) {
+    showToast(errorMessage || 'Recording failed', 'error');
+    resetVoiceRecorder();
+};
+
+function stopRecording() {
+    // Handle native app recording
+    if (isNativeApp && window.AndroidRecorder && typeof window.AndroidRecorder.stopRecording === 'function') {
+        try {
+            window.AndroidRecorder.stopRecording();
+        } catch (e) {
+            console.error('Native stopRecording failed:', e);
+        }
+    }
+
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
+
+    // Stop timer
+    clearInterval(recordingTimer);
+
+    // Update UI
+    document.getElementById('stopRecordBtn').style.display = 'none';
+    document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '✅';
+    document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording complete';
 }
 
 function playRecording() {
