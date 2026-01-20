@@ -302,37 +302,38 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </h2>
                 <div class="notes-grid">
                     <?php foreach ($pinnedNotes as $note): ?>
-                        <div class="note-card" 
+                        <div class="note-card"
                              data-note-id="<?php echo $note['id']; ?>"
                              data-note-type="<?php echo $note['type']; ?>"
-                             style="background: <?php echo htmlspecialchars($note['color']); ?>;">
-                            
+                             style="background: <?php echo htmlspecialchars($note['color']); ?>; cursor: pointer;"
+                             onclick="openFullscreenNote(<?php echo $note['id']; ?>)">
+
                             <div class="note-header">
-                                <button onclick="togglePin(<?php echo $note['id']; ?>)" 
-                                        class="note-pin active" 
+                                <button onclick="event.stopPropagation(); togglePin(<?php echo $note['id']; ?>)"
+                                        class="note-pin active"
                                         title="Unpin">
                                     📌
                                 </button>
                                 <div class="note-actions">
                                     <?php if ($note['type'] === 'text'): ?>
-                                        <button onclick="editNote(<?php echo $note['id']; ?>)" 
-                                                class="note-action" 
+                                        <button onclick="event.stopPropagation(); editNote(<?php echo $note['id']; ?>)"
+                                                class="note-action"
                                                 title="Edit">
                                             ✏️
                                         </button>
                                     <?php endif; ?>
-                                    <button onclick="duplicateNote(<?php echo $note['id']; ?>)" 
-                                            class="note-action" 
+                                    <button onclick="event.stopPropagation(); duplicateNote(<?php echo $note['id']; ?>)"
+                                            class="note-action"
                                             title="Duplicate">
                                         📋
                                     </button>
-                                    <button onclick="shareNote(<?php echo $note['id']; ?>)" 
-                                            class="note-action" 
+                                    <button onclick="event.stopPropagation(); shareNote(<?php echo $note['id']; ?>)"
+                                            class="note-action"
                                             title="Share">
                                         📤
                                     </button>
-                                    <button onclick="deleteNote(<?php echo $note['id']; ?>)" 
-                                            class="note-action" 
+                                    <button onclick="event.stopPropagation(); deleteNote(<?php echo $note['id']; ?>)"
+                                            class="note-action"
                                             title="Delete">
                                         🗑️
                                     </button>
@@ -346,13 +347,13 @@ require_once __DIR__ . '/../shared/components/header.php';
                             <?php if ($note['type'] === 'text'): ?>
                                 <div class="note-body"><?php echo nl2br(htmlspecialchars($note['body'])); ?></div>
                             <?php else: ?>
-                                <div class="note-voice">
+                                <div class="note-voice" onclick="event.stopPropagation();">
                                     <div class="voice-icon">🎤</div>
                                     <div class="voice-label">Voice Note</div>
                                     <?php
                                     $audioExists = $note['audio_path'] && file_exists(__DIR__ . '/..' . $note['audio_path']);
                                     if ($audioExists): ?>
-                                        <audio controls>
+                                        <audio controls onclick="event.stopPropagation();">
                                             <source src="<?php echo htmlspecialchars($note['audio_path']); ?>" type="audio/webm">
                                             Your browser does not support audio playback.
                                         </audio>
@@ -409,37 +410,38 @@ require_once __DIR__ . '/../shared/components/header.php';
             <?php else: ?>
                 <div class="notes-grid">
                     <?php foreach ($regularNotes as $note): ?>
-                        <div class="note-card" 
+                        <div class="note-card"
                              data-note-id="<?php echo $note['id']; ?>"
                              data-note-type="<?php echo $note['type']; ?>"
-                             style="background: <?php echo htmlspecialchars($note['color']); ?>;">
-                            
+                             style="background: <?php echo htmlspecialchars($note['color']); ?>; cursor: pointer;"
+                             onclick="openFullscreenNote(<?php echo $note['id']; ?>)">
+
                             <div class="note-header">
-                                <button onclick="togglePin(<?php echo $note['id']; ?>)" 
-                                        class="note-pin" 
+                                <button onclick="event.stopPropagation(); togglePin(<?php echo $note['id']; ?>)"
+                                        class="note-pin"
                                         title="Pin">
                                     📌
                                 </button>
                                 <div class="note-actions">
                                     <?php if ($note['type'] === 'text'): ?>
-                                        <button onclick="editNote(<?php echo $note['id']; ?>)" 
-                                                class="note-action" 
+                                        <button onclick="event.stopPropagation(); editNote(<?php echo $note['id']; ?>)"
+                                                class="note-action"
                                                 title="Edit">
                                             ✏️
                                         </button>
                                     <?php endif; ?>
-                                    <button onclick="duplicateNote(<?php echo $note['id']; ?>)" 
-                                            class="note-action" 
+                                    <button onclick="event.stopPropagation(); duplicateNote(<?php echo $note['id']; ?>)"
+                                            class="note-action"
                                             title="Duplicate">
                                         📋
                                     </button>
-                                    <button onclick="shareNote(<?php echo $note['id']; ?>)" 
-                                            class="note-action" 
+                                    <button onclick="event.stopPropagation(); shareNote(<?php echo $note['id']; ?>)"
+                                            class="note-action"
                                             title="Share">
                                         📤
                                     </button>
-                                    <button onclick="deleteNote(<?php echo $note['id']; ?>)" 
-                                            class="note-action" 
+                                    <button onclick="event.stopPropagation(); deleteNote(<?php echo $note['id']; ?>)"
+                                            class="note-action"
                                             title="Delete">
                                         🗑️
                                     </button>
@@ -453,13 +455,13 @@ require_once __DIR__ . '/../shared/components/header.php';
                             <?php if ($note['type'] === 'text'): ?>
                                 <div class="note-body"><?php echo nl2br(htmlspecialchars($note['body'])); ?></div>
                             <?php else: ?>
-                                <div class="note-voice">
+                                <div class="note-voice" onclick="event.stopPropagation();">
                                     <div class="voice-icon">🎤</div>
                                     <div class="voice-label">Voice Note</div>
                                     <?php
                                     $audioExists = $note['audio_path'] && file_exists(__DIR__ . '/..' . $note['audio_path']);
                                     if ($audioExists): ?>
-                                        <audio controls>
+                                        <audio controls onclick="event.stopPropagation();">
                                             <source src="<?php echo htmlspecialchars($note['audio_path']); ?>" type="audio/webm">
                                             Your browser does not support audio playback.
                                         </audio>
@@ -708,6 +710,21 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <span>Email</span>
                 </button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Fullscreen Note View -->
+<div id="fullscreenNoteModal" class="fullscreen-note-overlay">
+    <div class="fullscreen-note-container">
+        <button onclick="closeFullscreenNote()" class="fullscreen-close-btn" title="Sluit">&times;</button>
+
+        <div class="fullscreen-note-content" id="fullscreenNoteContent">
+            <!-- Note content will be injected here -->
+        </div>
+
+        <div class="fullscreen-note-actions" id="fullscreenNoteActions">
+            <!-- Action buttons will be injected here -->
         </div>
     </div>
 </div>

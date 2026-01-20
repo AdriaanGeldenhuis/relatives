@@ -867,6 +867,118 @@ function setupVisualizer(stream) {
 }
 
 // ============================================
+// FULLSCREEN NOTE VIEW
+// ============================================
+
+let currentFullscreenNoteId = null;
+
+function openFullscreenNote(noteId) {
+    const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
+    if (!noteCard) return;
+
+    currentFullscreenNoteId = noteId;
+
+    const noteType = noteCard.dataset.noteType;
+    const title = noteCard.querySelector('.note-title')?.textContent || '';
+    const body = noteCard.querySelector('.note-body')?.innerHTML || '';
+    const author = noteCard.querySelector('.note-author span')?.textContent || '';
+    const avatarEl = noteCard.querySelector('.author-avatar-mini');
+    const avatarColor = avatarEl?.style.background || '#667eea';
+    const avatarInitial = avatarEl?.textContent?.trim() || '?';
+    const date = noteCard.querySelector('.note-date')?.textContent || '';
+    const isPinned = noteCard.querySelector('.note-pin.active') !== null;
+    const audioEl = noteCard.querySelector('.note-voice audio');
+    const audioSrc = audioEl?.querySelector('source')?.src || audioEl?.src || '';
+    const noteColor = noteCard.style.background;
+
+    let contentHtml = '';
+
+    if (noteType === 'voice') {
+        contentHtml = `
+            <div class="fullscreen-note-voice">
+                <div class="fullscreen-voice-icon">🎤</div>
+                <div style="font-size: 1.2rem; color: rgba(255,255,255,0.8);">Voice Note</div>
+                ${audioSrc ? `<audio controls autoplay style="width: 100%; max-width: 400px;"><source src="${audioSrc}" type="audio/webm"></audio>` : '<div style="color: rgba(255,255,255,0.5);">Audio not available</div>'}
+            </div>
+        `;
+    } else {
+        contentHtml = `
+            ${title ? `<div class="fullscreen-note-title">${escapeHtml(title)}</div>` : ''}
+            <div class="fullscreen-note-body">${body}</div>
+        `;
+    }
+
+    const fullContent = `
+        <div style="background: ${noteColor}; border-radius: var(--radius-lg); padding: 4px; margin: -4px;">
+            ${contentHtml}
+        </div>
+        <div class="fullscreen-note-meta">
+            <div class="fullscreen-note-author">
+                <div class="fullscreen-author-avatar" style="background: ${avatarColor}">${avatarInitial}</div>
+                <span>${escapeHtml(author)}</span>
+            </div>
+            <div class="fullscreen-note-date">${escapeHtml(date)}</div>
+        </div>
+    `;
+
+    document.getElementById('fullscreenNoteContent').innerHTML = fullContent;
+
+    // Build action buttons
+    const editBtn = noteType === 'text' ? `
+        <button onclick="closeFullscreenNote(); editNote(${noteId});" class="fullscreen-action-btn edit-btn">
+            <span>✏️</span>
+            <span>Edit</span>
+        </button>
+    ` : '';
+
+    const actionsHtml = `
+        <button onclick="closeFullscreenNote(); togglePin(${noteId});" class="fullscreen-action-btn pin-btn">
+            <span>📌</span>
+            <span>${isPinned ? 'Unpin' : 'Pin'}</span>
+        </button>
+        ${editBtn}
+        <button onclick="closeFullscreenNote(); duplicateNote(${noteId});" class="fullscreen-action-btn">
+            <span>📋</span>
+            <span>Duplicate</span>
+        </button>
+        <button onclick="closeFullscreenNote(); shareNote(${noteId});" class="fullscreen-action-btn share-btn">
+            <span>📤</span>
+            <span>Share</span>
+        </button>
+        <button onclick="closeFullscreenNote(); deleteNote(${noteId});" class="fullscreen-action-btn delete-btn">
+            <span>🗑️</span>
+            <span>Delete</span>
+        </button>
+    `;
+
+    document.getElementById('fullscreenNoteActions').innerHTML = actionsHtml;
+
+    // Show overlay
+    document.getElementById('fullscreenNoteModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeFullscreenNote() {
+    document.getElementById('fullscreenNoteModal').classList.remove('active');
+    document.body.style.overflow = '';
+    currentFullscreenNoteId = null;
+}
+
+// Close fullscreen on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('fullscreenNoteModal').classList.contains('active')) {
+        closeFullscreenNote();
+    }
+});
+
+// Close fullscreen on backdrop click
+document.getElementById('fullscreenNoteModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeFullscreenNote();
+    }
+});
+
+// ============================================
 // REAL-TIME DOM HELPERS
 // ============================================
 
@@ -896,7 +1008,9 @@ function addNoteToDOM(note) {
     noteCard.dataset.noteId = note.id;
     noteCard.dataset.noteType = note.type;
     noteCard.style.background = note.color;
+    noteCard.style.cursor = 'pointer';
     noteCard.style.animation = 'noteAppear 0.4s ease backwards';
+    noteCard.onclick = () => openFullscreenNote(note.id);
 
     const titleHtml = note.title ? `<div class="note-title">${escapeHtml(note.title)}</div>` : '';
 
@@ -905,11 +1019,11 @@ function addNoteToDOM(note) {
         contentHtml = `<div class="note-body">${escapeHtml(note.body).replace(/\n/g, '<br>')}</div>`;
     } else {
         contentHtml = `
-            <div class="note-voice">
+            <div class="note-voice" onclick="event.stopPropagation();">
                 <div class="voice-icon">🎤</div>
                 <div class="voice-label">Voice Note</div>
                 ${note.audio_path ? `
-                    <audio controls>
+                    <audio controls onclick="event.stopPropagation();">
                         <source src="${escapeHtml(note.audio_path)}" type="audio/webm">
                         Your browser does not support audio playback.
                     </audio>
@@ -919,17 +1033,17 @@ function addNoteToDOM(note) {
     }
 
     const editBtn = note.type === 'text' ? `
-        <button onclick="editNote(${note.id})" class="note-action" title="Edit">✏️</button>
+        <button onclick="event.stopPropagation(); editNote(${note.id})" class="note-action" title="Edit">✏️</button>
     ` : '';
 
     noteCard.innerHTML = `
         <div class="note-header">
-            <button onclick="togglePin(${note.id})" class="note-pin" title="Pin">📌</button>
+            <button onclick="event.stopPropagation(); togglePin(${note.id})" class="note-pin" title="Pin">📌</button>
             <div class="note-actions">
                 ${editBtn}
-                <button onclick="duplicateNote(${note.id})" class="note-action" title="Duplicate">📋</button>
-                <button onclick="shareNote(${note.id})" class="note-action" title="Share">📤</button>
-                <button onclick="deleteNote(${note.id})" class="note-action" title="Delete">🗑️</button>
+                <button onclick="event.stopPropagation(); duplicateNote(${note.id})" class="note-action" title="Duplicate">📋</button>
+                <button onclick="event.stopPropagation(); shareNote(${note.id})" class="note-action" title="Share">📤</button>
+                <button onclick="event.stopPropagation(); deleteNote(${note.id})" class="note-action" title="Delete">🗑️</button>
             </div>
         </div>
         ${titleHtml}
