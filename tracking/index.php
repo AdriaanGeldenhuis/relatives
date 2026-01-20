@@ -142,19 +142,6 @@ require_once __DIR__ . '/../shared/components/header.php';
         </button>
     </div>
     
-    <!-- Status Bar -->
-    <div class="tracking-status-bar" id="statusBar">
-        <div class="status-indicator">
-            <div class="status-pulse"></div>
-            <span class="status-text">Tracking Active</span>
-        </div>
-        <div class="status-info">
-            <span id="memberCount"><?= count($familyMembers) ?> members</span>
-            <span class="status-divider">•</span>
-            <span id="lastUpdate">Just now</span>
-        </div>
-    </div>
-    
     <!-- Enhanced Sidebar -->
     <div class="tracking-sidebar" id="trackingSidebar">
         <div class="sidebar-header">
