@@ -51,6 +51,7 @@ try {
     $familyId = (int)$user['family_id'];
 
     // Get family members (always from DB - lightweight query)
+    // Fix #10: Include offline_threshold_seconds and stale_threshold_seconds for proper status calculation
     $stmt = $db->prepare("
         SELECT
             u.id AS user_id,
@@ -59,7 +60,9 @@ try {
             u.has_avatar,
             u.location_sharing,
             ts.is_tracking_enabled,
-            ts.update_interval_seconds
+            ts.update_interval_seconds,
+            ts.offline_threshold_seconds,
+            ts.stale_threshold_seconds
         FROM users u
         LEFT JOIN tracking_settings ts ON u.id = ts.user_id
         WHERE u.family_id = ?
@@ -85,11 +88,16 @@ try {
 
     foreach ($members as $member) {
         $memberId = (int)$member['user_id'];
-        $updateInterval = (int)($member['update_interval_seconds'] ?? 60);
+        $updateInterval = (int)($member['update_interval_seconds'] ?? 30);  // Default 30s
 
-        // Smart thresholds based on user's update interval
-        $onlineThreshold = max($updateInterval * 2, 300); // At least 5 min
-        $staleThreshold = 3600; // 60 minutes
+        // Fix #10: Use server settings for thresholds instead of hardcoded values
+        // Default values from TrackingSettings.php: offline=720s (12 min), stale=3600s (1 hr)
+        $offlineThreshold = (int)($member['offline_threshold_seconds'] ?? 720);
+        $staleThreshold = (int)($member['stale_threshold_seconds'] ?? 3600);
+
+        // Online threshold: either from settings or calculate from update interval
+        // At minimum, use 2x update interval (but not less than offline threshold)
+        $onlineThreshold = min($offlineThreshold, max($updateInterval * 2, 120));
 
         $loc = null;
         $secondsAgo = null;
@@ -111,7 +119,8 @@ try {
                 'longitude' => $cached['lng'],
                 'accuracy_m' => $cached['accuracy'] ?? null,
                 'speed_kmh' => $cached['speed'] ?? null,
-                'heading_deg' => null,
+                'heading_deg' => $cached['heading'] ?? null,   // Now reads from cache
+                'altitude_m' => $cached['altitude'] ?? null,   // Added altitude
                 'battery_level' => $cached['battery'] ?? null,
                 'is_moving' => $cached['moving'] ?? false,
                 'source' => 'cache',
@@ -152,15 +161,20 @@ try {
             }
         }
 
-        // Determine status
+        // Determine status using configurable thresholds
+        // online: within onlineThreshold (2x update interval, min 2 min)
+        // stale: between offline threshold and stale threshold
+        // offline: beyond stale threshold
         if ($secondsAgo === null || $loc === null || $loc['latitude'] === null) {
             $status = 'no_location';
         } elseif ($secondsAgo < $onlineThreshold) {
             $status = 'online';
+        } elseif ($secondsAgo < $offlineThreshold) {
+            $status = 'stale';  // Recent but not real-time
         } elseif ($secondsAgo < $staleThreshold) {
-            $status = 'stale';
+            $status = 'stale';  // Last seen within stale threshold
         } else {
-            $status = 'offline';
+            $status = 'offline';  // Beyond stale threshold - truly offline
         }
 
         $memberData = [

@@ -20,7 +20,8 @@ declare(strict_types=1);
  */
 
 // ====== DEFAULT CONSTANTS (single source of truth) ======
-const TRACKING_DEFAULT_UPDATE_INTERVAL = 60;      // 1 minute
+// NOTE: These must match Android PreferencesManager.kt defaults
+const TRACKING_DEFAULT_UPDATE_INTERVAL = 30;      // 30 seconds (matches Android default)
 const TRACKING_DEFAULT_IDLE_HEARTBEAT = 600;      // 10 minutes
 const TRACKING_DEFAULT_OFFLINE_THRESHOLD = 720;   // 12 minutes
 const TRACKING_DEFAULT_STALE_THRESHOLD = 3600;    // 1 hour

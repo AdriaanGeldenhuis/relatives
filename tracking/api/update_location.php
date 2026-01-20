@@ -308,27 +308,13 @@ try {
         $deviceId = (int)$db->lastInsertId();
     }
 
-    // ========== RATE LIMITING (5 second minimum) ==========
-    $stmt = $db->prepare("
-        SELECT id, created_at,
-               TIMESTAMPDIFF(SECOND, created_at, NOW()) AS seconds_ago
-        FROM tracking_locations
-        WHERE user_id = ? AND device_id = ?
-        ORDER BY created_at DESC
-        LIMIT 1
-    ");
-    $stmt->execute([$userId, $deviceId]);
-    $lastLocation = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    $rateLimited = false;
-    if ($lastLocation && $lastLocation['seconds_ago'] !== null && $lastLocation['seconds_ago'] < 5) {
-        $rateLimited = true;
-        $locationId = (int)$lastLocation['id'];
-    }
-
-    // ========== IDEMPOTENCY CHECK ==========
+    // ========== IDEMPOTENCY CHECK (must be FIRST!) ==========
+    // Check idempotency before rate limiting to ensure queued locations
+    // that get retried are properly recognized as duplicates
     $isDuplicate = false;
-    if (!$rateLimited && $clientEventId) {
+    $locationId = null;
+
+    if ($clientEventId) {
         $stmt = $db->prepare("
             SELECT id FROM tracking_locations
             WHERE user_id = ? AND client_event_id = ?
@@ -339,6 +325,27 @@ try {
         if ($existing) {
             $isDuplicate = true;
             $locationId = (int)$existing['id'];
+        }
+    }
+
+    // ========== RATE LIMITING (5 second minimum) ==========
+    // Only check rate limiting if this is not already a known duplicate
+    $rateLimited = false;
+    if (!$isDuplicate) {
+        $stmt = $db->prepare("
+            SELECT id, created_at,
+                   TIMESTAMPDIFF(SECOND, created_at, NOW()) AS seconds_ago
+            FROM tracking_locations
+            WHERE user_id = ? AND device_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$userId, $deviceId]);
+        $lastLocation = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($lastLocation && $lastLocation['seconds_ago'] !== null && $lastLocation['seconds_ago'] < 5) {
+            $rateLimited = true;
+            // Note: we don't set locationId here anymore - let the response indicate rate_limited
         }
     }
 
@@ -379,6 +386,8 @@ try {
                 'lng' => $longitude,
                 'speed' => $speedKmh,
                 'accuracy' => $accuracyM,
+                'heading' => $headingDeg,   // Added: was missing from cache
+                'altitude' => $altitudeM,   // Added: useful for completeness
                 'battery' => $batteryLevel,
                 'moving' => (bool)$isMoving,
                 'ts' => date('Y-m-d H:i:s')
