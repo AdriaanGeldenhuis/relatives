@@ -1003,32 +1003,36 @@ html, body {
     .container {
         padding: 0 var(--space-md);
     }
-    
+
     .messages-container {
         grid-template-columns: 1fr;
         border-radius: var(--radius-lg);
     }
-    
+
     .messages-sidebar {
         display: none;
     }
-    
+
     .message {
         max-width: 90%;
     }
-    
+
     .messages-list {
         padding: var(--space-md);
     }
-    
+
     .message-input-container {
         padding: var(--space-sm) var(--space-md);
     }
-    
+
+    #messageInput {
+        max-height: 100px;
+    }
+
     .emoji-picker {
         right: var(--space-md);
     }
-    
+
     .emoji-grid {
         grid-template-columns: repeat(6, 1fr);
     }
@@ -1038,7 +1042,7 @@ html, body {
     .input-wrapper {
         padding: var(--space-xs);
     }
-    
+
     .attachment-btn,
     .emoji-btn,
     .send-btn {
@@ -1046,14 +1050,46 @@ html, body {
         height: 36px;
         font-size: 1rem;
     }
-    
+
+    #messageInput {
+        font-size: 16px; /* Prevents iOS zoom on focus */
+        max-height: 80px;
+        padding: var(--space-xs);
+    }
+
     .emoji-grid {
         grid-template-columns: repeat(5, 1fr);
     }
-    
+
     .message-media img,
     .message-media video {
         max-width: 280px;
+    }
+}
+
+/* Very small screens */
+@media (max-width: 380px) {
+    .message-input-container {
+        padding: var(--space-xs) var(--space-sm);
+    }
+
+    .input-wrapper {
+        gap: 4px;
+        padding: 4px;
+    }
+
+    .attachment-btn,
+    .emoji-btn,
+    .send-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
+    }
+
+    #messageInput {
+        font-size: 16px;
+        max-height: 60px;
+        padding: 4px;
     }
 }
 
