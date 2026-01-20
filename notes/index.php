@@ -79,7 +79,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     error_log('Note notification error: ' . $e->getMessage());
                 }
 
-                echo json_encode(['success' => true, 'note_id' => $noteId]);
+                // Return full note data for real-time DOM update
+                $audioPath = null;
+                if ($type === 'voice' && isset($_FILES['audio'])) {
+                    $stmt = $db->prepare("SELECT audio_path FROM notes WHERE id = ?");
+                    $stmt->execute([$noteId]);
+                    $audioPath = $stmt->fetchColumn();
+                }
+
+                echo json_encode([
+                    'success' => true,
+                    'note_id' => $noteId,
+                    'note' => [
+                        'id' => $noteId,
+                        'type' => $type,
+                        'title' => $title,
+                        'body' => $body,
+                        'color' => $color,
+                        'pinned' => 0,
+                        'audio_path' => $audioPath,
+                        'user_name' => $user['full_name'],
+                        'avatar_color' => $user['avatar_color'],
+                        'created_at' => date('Y-m-d H:i:s')
+                    ]
+                ]);
                 exit;
             
             case 'update_note':

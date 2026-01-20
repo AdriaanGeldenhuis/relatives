@@ -153,11 +153,10 @@ async function createNote(event, type) {
         if (data.success) {
             showToast('Note created successfully!', 'success');
             closeModal(type === 'text' ? 'createTextNoteModal' : 'createVoiceNoteModal');
-            
-            // Reload page to show new note
-            setTimeout(() => {
-                location.reload();
-            }, 500);
+
+            // Add note to DOM in real-time
+            addNoteToDOM(data.note);
+            updateStats();
         } else {
             showToast(data.error || 'Failed to create note', 'error');
         }
@@ -279,7 +278,7 @@ async function deleteNote(noteId) {
         
         if (data.success) {
             showToast('Note deleted successfully', 'success');
-            
+
             // Animate out and remove
             const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
             if (noteCard) {
@@ -287,11 +286,11 @@ async function deleteNote(noteId) {
                 setTimeout(() => {
                     noteCard.remove();
                     updateStats();
-                    
-                    // Check if no notes left
+
+                    // Check if no notes left - show empty state
                     const allCards = document.querySelectorAll('.note-card');
                     if (allCards.length === 0) {
-                        location.reload();
+                        showEmptyState();
                     }
                 }, 300);
             }
@@ -312,18 +311,29 @@ async function togglePin(noteId) {
     const formData = new FormData();
     formData.append('action', 'toggle_pin');
     formData.append('note_id', noteId);
-    
+
     try {
         const response = await fetch('/notes/', {
             method: 'POST',
             body: formData
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
-            // Reload to re-organize sections
-            location.reload();
+            // Update pin state in DOM
+            const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
+            if (noteCard) {
+                const pinBtn = noteCard.querySelector('.note-pin');
+                if (data.pinned) {
+                    pinBtn.classList.add('active');
+                    showToast('Note pinned!', 'success');
+                } else {
+                    pinBtn.classList.remove('active');
+                    showToast('Note unpinned', 'info');
+                }
+                updateStats();
+            }
         } else {
             showToast(data.error || 'Failed to toggle pin', 'error');
         }
@@ -757,6 +767,129 @@ function setupVisualizer(stream) {
     }
     
     draw();
+}
+
+// ============================================
+// REAL-TIME DOM HELPERS
+// ============================================
+
+function addNoteToDOM(note) {
+    // Remove empty state if present
+    const emptyState = document.querySelector('.empty-state');
+    if (emptyState) {
+        emptyState.remove();
+    }
+
+    // Find or create notes grid
+    let notesGrid = document.querySelector('.notes-section .notes-grid');
+    if (!notesGrid) {
+        const notesSection = document.querySelector('.notes-section');
+        if (notesSection) {
+            notesGrid = document.createElement('div');
+            notesGrid.className = 'notes-grid';
+            notesSection.appendChild(notesGrid);
+        }
+    }
+
+    if (!notesGrid) return;
+
+    // Create note card HTML
+    const noteCard = document.createElement('div');
+    noteCard.className = 'note-card';
+    noteCard.dataset.noteId = note.id;
+    noteCard.dataset.noteType = note.type;
+    noteCard.style.background = note.color;
+    noteCard.style.animation = 'noteAppear 0.4s ease backwards';
+
+    const titleHtml = note.title ? `<div class="note-title">${escapeHtml(note.title)}</div>` : '';
+
+    let contentHtml = '';
+    if (note.type === 'text') {
+        contentHtml = `<div class="note-body">${escapeHtml(note.body).replace(/\n/g, '<br>')}</div>`;
+    } else {
+        contentHtml = `
+            <div class="note-voice">
+                <div class="voice-icon">🎤</div>
+                <div class="voice-label">Voice Note</div>
+                ${note.audio_path ? `
+                    <audio controls>
+                        <source src="${escapeHtml(note.audio_path)}" type="audio/webm">
+                        Your browser does not support audio playback.
+                    </audio>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    const editBtn = note.type === 'text' ? `
+        <button onclick="editNote(${note.id})" class="note-action" title="Edit">✏️</button>
+    ` : '';
+
+    noteCard.innerHTML = `
+        <div class="note-header">
+            <button onclick="togglePin(${note.id})" class="note-pin" title="Pin">📌</button>
+            <div class="note-actions">
+                ${editBtn}
+                <button onclick="duplicateNote(${note.id})" class="note-action" title="Duplicate">📋</button>
+                <button onclick="shareNote(${note.id})" class="note-action" title="Share">📤</button>
+                <button onclick="deleteNote(${note.id})" class="note-action" title="Delete">🗑️</button>
+            </div>
+        </div>
+        ${titleHtml}
+        ${contentHtml}
+        <div class="note-footer">
+            <div class="note-author">
+                <div class="author-avatar-mini" style="background: ${escapeHtml(note.avatar_color)}">
+                    ${note.user_name.substring(0, 1).toUpperCase()}
+                </div>
+                <span>${escapeHtml(note.user_name)}</span>
+            </div>
+            <div class="note-date">Just now</div>
+        </div>
+    `;
+
+    // Add to beginning of grid
+    notesGrid.insertBefore(noteCard, notesGrid.firstChild);
+}
+
+function showEmptyState() {
+    const notesSection = document.querySelector('.notes-section');
+    if (!notesSection) return;
+
+    // Remove notes grid
+    const notesGrid = notesSection.querySelector('.notes-grid');
+    if (notesGrid) {
+        notesGrid.remove();
+    }
+
+    // Add empty state
+    const emptyState = document.createElement('div');
+    emptyState.className = 'empty-state glass-card';
+    emptyState.innerHTML = `
+        <div class="empty-icon">📝</div>
+        <h2>No notes yet</h2>
+        <p>Start capturing your family's ideas and reminders</p>
+        <div class="empty-actions">
+            <button onclick="showCreateNoteModal('text')" class="btn btn-primary btn-lg">
+                <span class="btn-icon">📝</span>
+                <span>Create First Note</span>
+            </button>
+            <button onclick="showCreateNoteModal('voice')" class="btn btn-voice btn-lg">
+                <span class="btn-icon">🎤</span>
+                <span>Record Voice Note</span>
+            </button>
+        </div>
+    `;
+    emptyState.style.animation = 'noteAppear 0.4s ease backwards';
+
+    notesSection.appendChild(emptyState);
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // ============================================
