@@ -632,6 +632,10 @@
     color: #6c757d;
 }
 
+.member-card[data-status="stale"] .member-status {
+    color: var(--warning);
+}
+
 .member-details {
     display: flex;
     flex-direction: column;
