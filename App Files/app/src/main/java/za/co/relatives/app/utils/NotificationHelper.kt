@@ -45,7 +45,7 @@ object NotificationHelper {
         }
     }
 
-    fun buildTrackingNotification(context: Context): Notification {
+    fun buildTrackingNotification(context: Context, isPaused: Boolean): Notification {
         // 1. Content Intent: Open App on Click
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -57,31 +57,55 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 2. Action Intent: Stop Tracking
-        val stopIntent = Intent(context, TrackingLocationService::class.java).apply {
-            action = TrackingLocationService.ACTION_STOP_TRACKING
-        }
-        // explicit intent to service
-        val stopPendingIntent = PendingIntent.getService(
-            context,
-            1,
-            stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("Location tracking active")
             .setContentText("Your location is being shared with your family.")
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true) // Prevents swiping away
+            .setCategory(NotificationCompat.CATEGORY_SERVICE) // Tells system this is a service notification
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE) // Show immediately
             .setContentIntent(contentPendingIntent)
-            .addAction(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                "Stop Tracking",
-                stopPendingIntent
+
+        if (isPaused) {
+            val resumeIntent = Intent(context, TrackingLocationService::class.java).apply {
+                action = TrackingLocationService.ACTION_RESUME_TRACKING
+            }
+            val resumePendingIntent = PendingIntent.getService(
+                context,
+                2,
+                resumeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            .build()
+            builder.addAction(
+                android.R.drawable.ic_media_play,
+                "Resume Tracking",
+                resumePendingIntent
+            ).setContentText("Tracking is paused.")
+        } else {
+            val pauseIntent = Intent(context, TrackingLocationService::class.java).apply {
+                action = TrackingLocationService.ACTION_PAUSE_TRACKING
+            }
+            val pausePendingIntent = PendingIntent.getService(
+                context,
+                1,
+                pauseIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(
+                android.R.drawable.ic_media_pause,
+                "Pause Tracking",
+                pausePendingIntent
+            )
+        }
+
+        return builder.build()
+    }
+
+    fun updateTrackingNotification(context: Context, isPaused: Boolean) {
+        val notification = buildTrackingNotification(context, isPaused)
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
     fun showNewMessageNotification(context: Context, unreadCount: Int, latestTitle: String? = null, latestMessage: String? = null) {
@@ -91,17 +115,17 @@ object NotificationHelper {
             // We can add data to tell MainActivity to open /notifications/
             putExtra("open_url", "https://www.relatives.co.za/notifications/")
         }
-        
+
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
-            context, 
-            0, 
-            intent, 
+            context,
+            0,
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         // Use custom title/message if provided, otherwise generic fallback
         val title = if (!latestTitle.isNullOrEmpty()) latestTitle else "New Notification"
-        
+
         val text = if (!latestMessage.isNullOrEmpty()) {
             latestMessage
         } else {
