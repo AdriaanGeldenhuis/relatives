@@ -16,7 +16,7 @@ declare(strict_types=1);
  * 1. Existing PHP session
  * 2. Authorization: Bearer <token>
  * 3. RELATIVES_SESSION cookie
- * (body token removed for security - use Bearer header)
+ * 4. session_token in request body (fallback for some Android devices/proxies)
  */
 
 error_reporting(E_ALL);
@@ -140,9 +140,27 @@ if (!isset($_SESSION['user_id'])) {
     }
 }
 
-// Read input for later use (removed body token auth for security - use Bearer header instead)
+// Read input early for body token auth (needed as fallback for some Android devices/proxies that strip headers)
 $rawInput = file_get_contents('php://input');
 $inputData = json_decode($rawInput, true);
+
+// 4. Try session_token in request body (fallback for devices where Authorization header is stripped)
+if (!isset($_SESSION['user_id'])) {
+    if ($inputData && isset($inputData['session_token']) && !empty($inputData['session_token'])) {
+        try {
+            if (!$bootstrapLoaded) {
+                require_once __DIR__ . '/../../core/bootstrap.php';
+                $bootstrapLoaded = true;
+            }
+
+            if (validateSessionToken($db, $inputData['session_token'])) {
+                $authMethod = 'body';
+            }
+        } catch (Exception $e) {
+            error_log("TRACKING_UPDATE: body token auth error - " . $e->getMessage());
+        }
+    }
+}
 
 // Debug headers
 header("X-Tracking-Auth: {$authMethod}");
@@ -153,7 +171,7 @@ if (!isset($_SESSION['user_id'])) {
     echo json_encode([
         'success' => false,
         'error' => 'unauthorized',
-        'hint' => 'Use Authorization: Bearer <token> header'
+        'hint' => 'Use Authorization: Bearer <token> or include session_token in body'
     ]);
     exit;
 }
