@@ -208,13 +208,6 @@ try {
     $longitude = (float)$input['longitude'];
     $accuracyM = isset($input['accuracy_m']) ? (int)$input['accuracy_m'] : null;
     $speedKmh = isset($input['speed_kmh']) ? (float)$input['speed_kmh'] : null;
-
-    // SANITY CHECK: Cap speed at 250 km/h (GPS glitches can report 400+ km/h)
-    if ($speedKmh !== null && $speedKmh > 250) {
-        error_log("TRACKING_UPDATE: Speed sanity check - {$speedKmh} km/h capped to 0 for device {$deviceUuid}");
-        $speedKmh = 0;
-    }
-
     $headingDeg = isset($input['heading_deg']) ? (float)$input['heading_deg'] : null;
     $altitudeM = isset($input['altitude_m']) ? (float)$input['altitude_m'] : null;
     $isMoving = isset($input['is_moving']) ? (int)(bool)$input['is_moving'] : 0;
