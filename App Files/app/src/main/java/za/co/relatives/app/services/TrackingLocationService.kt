@@ -79,6 +79,7 @@ class TrackingLocationService : Service() {
     private val DISTANCE_THRESHOLD_M = 50.0f  // Consider moving if moved > 50m
     private val IDLE_COUNT_THRESHOLD = 3  // Need 3 consecutive slow readings to switch to idle
     private val MOVING_STATUS_HOLD_COUNT = 5  // Keep reporting "moving" for 5 readings after stopping (prevents traffic light flicker)
+    private val MAX_REASONABLE_SPEED_KMH = 250.0f  // Cap speed at 250 km/h (faster = GPS glitch)
 
     // Smart Battery Mode
     private val LOW_BATTERY_THRESHOLD = 20
@@ -402,6 +403,13 @@ class TrackingLocationService : Service() {
             location.speed * 3.6f
         } else {
             calculateSpeedFromDistance(location)
+        }
+
+        // SANITY CHECK: Cap speed at reasonable maximum (GPS glitches can cause 400+ km/h readings)
+        // Also ignore high speeds when GPS accuracy is poor (> 100m)
+        if (speedKmh > MAX_REASONABLE_SPEED_KMH || (speedKmh > 100 && location.accuracy > 100)) {
+            Log.w(TAG, "Speed sanity check: ${speedKmh.toInt()} km/h capped (accuracy: ${location.accuracy}m)")
+            speedKmh = 0f  // Reset to 0 - clearly a GPS glitch
         }
 
         // Also check if we've moved significant distance (for cell tower positioning)
