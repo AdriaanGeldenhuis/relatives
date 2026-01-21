@@ -333,7 +333,7 @@ class TrackingLocationService : Service() {
         // Cancel WorkManager backup checker
         za.co.relatives.app.workers.TrackingServiceChecker.cancel(this)
 
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         Log.d(TAG, "Tracking stopped")
     }
