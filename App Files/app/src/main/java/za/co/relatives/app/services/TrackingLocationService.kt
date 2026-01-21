@@ -88,7 +88,7 @@ class TrackingLocationService : Service() {
     // Offline Queue - store locations when network unavailable
     // Now persisted to SharedPreferences to survive service restarts
     private val offlineQueue = mutableListOf<QueuedLocation>()
-    private val MAX_QUEUE_SIZE = 50
+    private val MAX_QUEUE_SIZE = 100  // Increased from 50 to match server batch limit
     private val gson = Gson()
 
     // Exponential backoff for retries
