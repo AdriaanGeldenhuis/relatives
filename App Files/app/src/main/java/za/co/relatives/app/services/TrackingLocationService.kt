@@ -375,10 +375,12 @@ class TrackingLocationService : Service() {
                     .build()
             }
             else -> {
-                // Idle: Check for movement every 2 min
-                Log.d(TAG, "Starting IDLE updates (interval: ${IDLE_INTERVAL_MS/1000}s)")
-                LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, IDLE_INTERVAL_MS)
-                    .setMinUpdateIntervalMillis(60 * 1000L)
+                // Idle: Check for movement every 60 seconds
+                // IMPORTANT: Still use HIGH_ACCURACY to avoid cell tower jumps (300m+ errors)
+                // Family tracking needs accuracy more than battery savings
+                Log.d(TAG, "Starting IDLE updates (interval: ${IDLE_INTERVAL_MS/1000}s, HIGH_ACCURACY)")
+                LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, IDLE_INTERVAL_MS)
+                    .setMinUpdateIntervalMillis(30 * 1000L)
                     .build()
             }
         }
@@ -397,6 +399,20 @@ class TrackingLocationService : Service() {
     }
 
     private fun uploadLocation(location: Location) {
+        // ACCURACY FILTER: Skip cell tower readings (typically 300m+ accuracy)
+        // These cause the "jumping 300m over houses" problem when app is in background
+        val accuracyM = location.accuracy
+        if (accuracyM > 100) {
+            // Bad accuracy - likely cell tower, not GPS
+            // Only skip if we have a recent good location (within 5 min)
+            val timeSinceLastGood = System.currentTimeMillis() - lastLocationTime
+            if (lastLocation != null && timeSinceLastGood < 5 * 60 * 1000) {
+                Log.w(TAG, "Skipping low-accuracy location: ${accuracyM.toInt()}m (cell tower?) - keeping last good GPS position")
+                return  // Skip this bad reading, keep the last good position
+            }
+            Log.w(TAG, "Using low-accuracy location: ${accuracyM.toInt()}m (no recent good GPS)")
+        }
+
         // Calculate speed - prefer GPS speed, but calculate from distance if unavailable
         var speedKmh = if (location.hasSpeed() && location.speed > 0) {
             location.speed * 3.6f
