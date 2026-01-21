@@ -11,11 +11,13 @@ object PreferencesManager {
     private const val KEY_TRACKING_ENABLED = "tracking_enabled"
     private const val KEY_UPDATE_INTERVAL = "update_interval"
     private const val KEY_LAST_NOTIF_COUNT = "last_notif_count"
-    private const val KEY_SESSION_TOKEN = "session_token"
-    private const val KEY_IDLE_HEARTBEAT_SECONDS = "idle_heartbeat_seconds"
-    private const val KEY_OFFLINE_THRESHOLD_SECONDS = "offline_threshold_seconds"
-    private const val KEY_STALE_THRESHOLD_SECONDS = "stale_threshold_seconds"
+    const val KEY_SESSION_TOKEN = "session_token"
+    const val KEY_IDLE_HEARTBEAT_SECONDS = "idle_heartbeat_seconds"
+    const val KEY_OFFLINE_THRESHOLD_SECONDS = "offline_threshold_seconds"
+    const val KEY_STALE_THRESHOLD_SECONDS = "stale_threshold_seconds"
+    private const val KEY_BATTERY_DIALOG_DISMISSED_AT = "battery_dialog_dismissed_at"
     private const val KEY_LAST_UPLOAD_TIME = "last_upload_time"
+    private const val BATTERY_DIALOG_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000L  // 7 days
 
     private lateinit var prefs: SharedPreferences
 
@@ -28,12 +30,10 @@ object PreferencesManager {
         }
     }
 
-    // Session token for Bearer auth (more reliable than cookies)
     var sessionToken: String?
         get() = prefs.getString(KEY_SESSION_TOKEN, null)
         set(value) = prefs.edit { putString(KEY_SESSION_TOKEN, value) }
 
-    // Server-configurable thresholds
     var idleHeartbeatSeconds: Int
         get() = prefs.getInt(KEY_IDLE_HEARTBEAT_SECONDS, 600)  // Default 10 min
         set(value) = prefs.edit { putInt(KEY_IDLE_HEARTBEAT_SECONDS, value) }
@@ -46,10 +46,6 @@ object PreferencesManager {
         get() = prefs.getInt(KEY_STALE_THRESHOLD_SECONDS, 3600)  // Default 60 min
         set(value) = prefs.edit { putInt(KEY_STALE_THRESHOLD_SECONDS, value) }
 
-    // Last successful upload time (for WorkManager service checker)
-    var lastUploadTime: Long
-        get() = prefs.getLong(KEY_LAST_UPLOAD_TIME, 0L)
-        set(value) = prefs.edit { putLong(KEY_LAST_UPLOAD_TIME, value) }
 
     fun getDeviceUuid(): String {
         return prefs.getString(KEY_DEVICE_UUID, "") ?: ""
@@ -80,4 +76,19 @@ object PreferencesManager {
     fun getLastNotificationCount(): Int {
         return prefs.getInt(KEY_LAST_NOTIF_COUNT, 0)
     }
+
+    fun setBatteryDialogDismissed() {
+        prefs.edit { putLong(KEY_BATTERY_DIALOG_DISMISSED_AT, System.currentTimeMillis()) }
+    }
+
+    fun shouldShowBatteryDialog(): Boolean {
+        val dismissedAt = prefs.getLong(KEY_BATTERY_DIALOG_DISMISSED_AT, 0L)
+        if (dismissedAt == 0L) return true  // Never dismissed
+        val elapsed = System.currentTimeMillis() - dismissedAt
+        return elapsed > BATTERY_DIALOG_SNOOZE_MS  // Show again after snooze period
+    }
+
+    var lastUploadTime: Long
+        get() = prefs.getLong(KEY_LAST_UPLOAD_TIME, 0L)
+        set(value) = prefs.edit { putLong(KEY_LAST_UPLOAD_TIME, value) }
 }

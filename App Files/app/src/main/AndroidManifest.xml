@@ -9,9 +9,6 @@
     <!-- Wake Lock to keep service alive -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Boot completed to restart tracking -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
     <!-- Location Permissions -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -20,10 +17,13 @@
     <!-- Service Permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    
+
     <!-- Notifications (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    
+
+    <!-- Boot completed to restart tracking -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Microphone (Future feature) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
@@ -38,7 +38,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Relatives"
         tools:targetApi="31">
-        
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -51,7 +51,7 @@
         </activity>
 
         <!-- Registered Subscription Activity -->
-        <activity 
+        <activity
             android:name=".ui.SubscriptionActivity"
             android:exported="false"
             android:screenOrientation="portrait"
@@ -75,6 +75,30 @@
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <!-- Firebase Cloud Messaging Service -->
+        <service
+            android:name=".services.RelativesFirebaseService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- FCM default notification channel -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="relatives_alerts" />
+
+        <!-- FCM default notification icon (uses launcher icon) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+
+        <!-- FCM default notification color -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
 
     </application>
 
