@@ -19,6 +19,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.webkit.CookieManager
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -34,6 +35,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
+import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.utils.NotificationHelper
 import za.co.relatives.app.utils.PreferencesManager
 import java.io.IOException
@@ -55,6 +57,15 @@ class TrackingLocationService : Service() {
     private var serviceHandler: Handler? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var heartbeatRunnable: Runnable? = null
+
+    // Notification Polling (existing - works 100%)
+    private val notificationHandler = Handler(Looper.getMainLooper())
+    private val notificationRunnable = object : Runnable {
+        override fun run() {
+            checkNotifications()
+            notificationHandler.postDelayed(this, 30000) // Check every 30 seconds
+        }
+    }
 
     private enum class TrackingMode { MOVING, IDLE }
     private var currentMode = TrackingMode.IDLE
@@ -140,6 +151,8 @@ class TrackingLocationService : Service() {
         const val ACTION_RESUME_TRACKING = "ACTION_RESUME_TRACKING"
         const val ACTION_UPDATE_INTERVAL = "ACTION_UPDATE_INTERVAL"
         private const val TAG = "TrackingService"
+        private const val NOTIF_COUNT_URL = "https://www.relatives.co.za/notifications/api/count.php"
+        private const val BASE_URL = "https://www.relatives.co.za"
 
         // MOVING: Fast updates when traveling (30s like Life360)
         private const val DEFAULT_MOVING_INTERVAL_MS = 30 * 1000L
@@ -174,6 +187,15 @@ class TrackingLocationService : Service() {
 
         // Fix #6: Load persisted offline queue on service start
         loadPersistedQueue()
+
+        // Start notification polling (existing functionality - works 100%)
+        notificationHandler.post(notificationRunnable)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        notificationHandler.removeCallbacks(notificationRunnable)
+        serviceLooper?.quit()
     }
 
     // ========== Fix #6: Persist offline queue to survive service restarts ==========
@@ -920,11 +942,6 @@ class TrackingLocationService : Service() {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        serviceLooper?.quit()
-    }
-
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         // If user swipes app from recents while tracking is enabled, restart the service
@@ -949,6 +966,70 @@ class TrackingLocationService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    // ========== NOTIFICATION POLLING (existing - works 100%) ==========
+
+    private fun checkNotifications() {
+        // Get cookies from WebView store
+        var cookie = CookieManager.getInstance().getCookie(NOTIF_COUNT_URL)
+        if (cookie.isNullOrEmpty()) {
+            cookie = CookieManager.getInstance().getCookie(BASE_URL)
+        }
+
+        if (cookie.isNullOrEmpty()) {
+            Log.w(TAG, "Skipping notification check - no cookie")
+            return
+        }
+
+        val request = Request.Builder()
+            .url(NOTIF_COUNT_URL)
+            .addHeader("Cookie", cookie)
+            .get()
+            .build()
+
+        NetworkClient.client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "Failed to check notifications", e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    val body = it.body?.string()
+                    if (it.isSuccessful && !body.isNullOrEmpty()) {
+                        try {
+                            val json = JSONObject(body)
+                            if (json.has("count")) {
+                                val count = json.getInt("count")
+                                val lastCount = PreferencesManager.getLastNotificationCount()
+
+                                // Look for optional latest message details
+                                val latestTitle = if (json.has("latest_title")) json.getString("latest_title") else null
+                                val latestMessage = if (json.has("latest_message")) json.getString("latest_message") else null
+
+                                // Alert if count > 0 and either:
+                                // 1. It's the first run (lastCount == 0)
+                                // 2. The count has increased
+                                if (count > 0 && count > lastCount) {
+                                    NotificationHelper.showNewMessageNotification(
+                                        this@TrackingLocationService,
+                                        count,
+                                        latestTitle,
+                                        latestMessage
+                                    )
+                                }
+
+                                PreferencesManager.setLastNotificationCount(count)
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error parsing notification count: $body", e)
+                        }
+                    } else {
+                        Log.w(TAG, "Notification check failed: ${it.code} - $body")
+                    }
+                }
+            }
+        })
+    }
 
     private inner class LocationUploader(private val context: Context) {
         private val httpClient = OkHttpClient.Builder()
