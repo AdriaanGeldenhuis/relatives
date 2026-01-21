@@ -145,7 +145,12 @@ try {
                     l.created_at,
                     TIMESTAMPDIFF(SECOND, l.created_at, NOW()) AS seconds_ago,
                     d.device_name,
-                    d.platform
+                    d.platform,
+                    d.location_status,
+                    d.permission_status,
+                    d.network_status,
+                    d.app_state,
+                    d.last_seen AS device_last_seen
                 FROM tracking_locations l
                 LEFT JOIN tracking_devices d ON l.device_id = d.id
                 WHERE l.user_id = ? AND l.family_id = ?
@@ -196,7 +201,13 @@ try {
                 'platform' => $loc['platform'] ?? null,
                 'source' => $loc['source'] ?? null,
                 'online_threshold' => $onlineThreshold,
-                'stale_threshold' => $staleThreshold
+                'stale_threshold' => $staleThreshold,
+                // Device state - helps diagnose why location isn't updating
+                'location_status' => $loc['location_status'] ?? null,
+                'permission_status' => $loc['permission_status'] ?? null,
+                'network_status' => $loc['network_status'] ?? null,
+                'app_state' => $loc['app_state'] ?? null,
+                'device_last_seen' => $loc['device_last_seen'] ?? null
             ]
         ];
 
