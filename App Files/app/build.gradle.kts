@@ -62,6 +62,9 @@ dependencies {
     // Gson
     implementation("com.google.code.gson:gson:2.10.1")
 
+    // WorkManager for background service checking
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
