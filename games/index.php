@@ -70,8 +70,37 @@ try {
     $stmt->execute([$user['id']]);
     $userStats['games_today'] = (int)$stmt->fetchColumn();
 
+    // Flash Challenge stats
+    try {
+        $stmt = $db->prepare("
+            SELECT COUNT(*) as total_flash, MAX(score) as best_flash_score
+            FROM flash_attempts
+            WHERE user_id = ?
+        ");
+        $stmt->execute([$user['id']]);
+        $flashStats = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($flashStats) {
+            $userStats['total_games'] += (int)($flashStats['total_flash'] ?? 0);
+            $userStats['total_score'] += (int)($flashStats['best_flash_score'] ?? 0);
+        }
+    } catch (Exception $e) {
+        // Flash tables may not exist yet
+    }
+
 } catch (Exception $e) {
     error_log('Game stats error: ' . $e->getMessage());
+}
+
+// Check if user has played Flash Challenge today
+$flashPlayedToday = false;
+try {
+    $today = (new DateTime('now', new DateTimeZone('Africa/Johannesburg')))->format('Y-m-d');
+    $stmt = $db->prepare("SELECT 1 FROM flash_attempts WHERE user_id = ? AND challenge_date = ? LIMIT 1");
+    $stmt->execute([$user['id'], $today]);
+    $flashPlayedToday = (bool)$stmt->fetchColumn();
+} catch (Exception $e) {
+    // Flash tables may not exist yet
 }
 
 // Get family leaderboard (top 5)
@@ -94,6 +123,18 @@ try {
 
 // Available games
 $games = [
+    [
+        'id' => 'flash',
+        'name' => 'Flash Challenge',
+        'icon' => '⚡',
+        'description' => 'Daily 30-second trivia! Answer fast, compete with family, climb the leaderboard.',
+        'url' => '/games/flash_challenge/',
+        'color' => '#667eea',
+        'features' => ['Voice Input', 'Daily Challenge', 'Family Leaderboard'],
+        'available' => true,
+        'played_today' => $flashPlayedToday,
+        'highlight' => true
+    ],
     [
         'id' => 'snake',
         'name' => 'Snake Classic',
@@ -315,6 +356,43 @@ require_once __DIR__ . '/../shared/components/header.php';
         border-radius: 20px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
+    }
+
+    .played-today-badge {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: linear-gradient(135deg, #4ecca3, #3db892);
+        color: #1a1a2e;
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .game-card.highlight {
+        border: 2px solid rgba(102, 126, 234, 0.5);
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15));
+    }
+
+    .game-card.highlight:hover {
+        border-color: rgba(102, 126, 234, 0.8);
+        box-shadow: 0 16px 48px rgba(102, 126, 234, 0.25);
+    }
+
+    .daily-tag {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: #fff;
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-left: 8px;
     }
 
     .game-card-features {
@@ -543,18 +621,30 @@ require_once __DIR__ . '/../shared/components/header.php';
 
             <div class="games-grid">
                 <?php foreach ($games as $game): ?>
+                    <?php
+                    $cardClasses = 'game-card';
+                    if (!$game['available']) $cardClasses .= ' coming-soon';
+                    if (!empty($game['highlight'])) $cardClasses .= ' highlight';
+                    ?>
                     <?php if ($game['available']): ?>
-                        <a href="<?php echo htmlspecialchars($game['url']); ?>" class="game-card">
+                        <a href="<?php echo htmlspecialchars($game['url']); ?>" class="<?php echo $cardClasses; ?>">
                     <?php else: ?>
-                        <div class="game-card coming-soon">
+                        <div class="<?php echo $cardClasses; ?>">
                     <?php endif; ?>
 
                         <div class="game-card-header">
                             <?php if (!$game['available']): ?>
                                 <span class="coming-soon-badge">Coming Soon</span>
+                            <?php elseif (!empty($game['played_today'])): ?>
+                                <span class="played-today-badge"><span>✓</span> Played Today</span>
                             <?php endif; ?>
                             <span class="game-icon"><?php echo $game['icon']; ?></span>
-                            <h3 class="game-name"><?php echo htmlspecialchars($game['name']); ?></h3>
+                            <h3 class="game-name">
+                                <?php echo htmlspecialchars($game['name']); ?>
+                                <?php if ($game['id'] === 'flash'): ?>
+                                    <span class="daily-tag">Daily</span>
+                                <?php endif; ?>
+                            </h3>
                             <p class="game-description"><?php echo htmlspecialchars($game['description']); ?></p>
                         </div>
 
@@ -618,11 +708,19 @@ require_once __DIR__ . '/../shared/components/header.php';
 
         <!-- CTA Section -->
         <section class="cta-section">
-            <h3>🐍 Ready to Play?</h3>
-            <p>Challenge your family members and climb the leaderboard!</p>
-            <a href="/games/snake/" class="cta-btn">
-                <span>▶</span> Play Snake Classic
-            </a>
+            <?php if (!$flashPlayedToday): ?>
+                <h3>⚡ Today's Challenge Awaits!</h3>
+                <p>30 seconds. One question. Can you beat your family?</p>
+                <a href="/games/flash_challenge/" class="cta-btn">
+                    <span>▶</span> Play Flash Challenge
+                </a>
+            <?php else: ?>
+                <h3>🐍 Keep Playing!</h3>
+                <p>You've completed today's Flash Challenge. Try Snake Classic!</p>
+                <a href="/games/snake/" class="cta-btn">
+                    <span>▶</span> Play Snake Classic
+                </a>
+            <?php endif; ?>
         </section>
 
     </div>

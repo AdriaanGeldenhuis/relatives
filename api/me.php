@@ -33,10 +33,12 @@ if (!isset($_SESSION['user_id'])) {
 $userId = (int) $_SESSION['user_id'];
 $displayName = $_SESSION['display_name'] ?? 'Player';
 $familyId = isset($_SESSION['family_id']) ? (int) $_SESSION['family_id'] : null;
+$isAdmin = (bool) ($_SESSION['is_admin'] ?? false);
 
 // Return user info
 echo json_encode([
     'user_id' => $userId,
     'display_name' => $displayName,
-    'family_id' => $familyId
+    'family_id' => $familyId,
+    'is_admin' => $isAdmin
 ], JSON_THROW_ON_ERROR);
