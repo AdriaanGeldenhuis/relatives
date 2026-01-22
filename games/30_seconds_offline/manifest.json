@@ -1,0 +1,39 @@
+{
+  "name": "30 Seconds Party - Offline Mode",
+  "short_name": "30 Seconds",
+  "description": "Party game for teams of 2. Explain words in 30 seconds without saying forbidden words!",
+  "start_url": "/games/30_seconds_offline/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0c29",
+  "theme_color": "#667eea",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%23667eea'/%3E%3Cstop offset='100%25' style='stop-color:%23764ba2'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill='url(%23g)' width='512' height='512' rx='64'/%3E%3Ccircle cx='256' cy='256' r='180' fill='none' stroke='%23fff' stroke-width='16' opacity='0.3'/%3E%3Ccircle cx='256' cy='256' r='180' fill='none' stroke='%23fff' stroke-width='16' stroke-dasharray='283 1130' stroke-linecap='round' transform='rotate(-90 256 256)'/%3E%3Ctext x='256' y='280' text-anchor='middle' fill='%23fff' font-family='Arial Black' font-size='120' font-weight='bold'%3E30%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%23667eea'/%3E%3Cstop offset='100%25' style='stop-color:%23764ba2'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill='url(%23g)' width='192' height='192' rx='24'/%3E%3Ccircle cx='96' cy='96' r='68' fill='none' stroke='%23fff' stroke-width='6' opacity='0.3'/%3E%3Ccircle cx='96' cy='96' r='68' fill='none' stroke='%23fff' stroke-width='6' stroke-dasharray='107 427' stroke-linecap='round' transform='rotate(-90 96 96)'/%3E%3Ctext x='96' y='108' text-anchor='middle' fill='%23fff' font-family='Arial Black' font-size='48' font-weight='bold'%3E30%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Match",
+      "short_name": "New Match",
+      "description": "Start a new 30 Seconds party match",
+      "url": "/games/30_seconds_offline/lobby.php",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect fill='%23667eea' width='96' height='96' rx='12'/%3E%3Cpath d='M48 24v48M24 48h48' stroke='%23fff' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ]
+}
