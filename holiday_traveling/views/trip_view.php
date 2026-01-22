@@ -487,22 +487,66 @@ $isPast = strtotime($trip['end_date']) < strtotime('today');
 
         <!-- Tab Content: Calendar -->
         <div class="ht-tab-content" data-tab="calendar">
+            <?php if (!$activePlan): ?>
+            <div class="ht-empty-tab">
+                <div class="ht-empty-tab-icon">📆</div>
+                <h3>No Plan to Export</h3>
+                <p>Generate a travel plan first to export it to your calendar</p>
+            </div>
+            <?php else: ?>
             <div class="ht-calendar-export">
                 <h3 class="ht-section-title-sm">Export to Calendar</h3>
                 <p class="ht-calendar-description">
                     Add your trip itinerary to your calendar app.
                 </p>
-                <div class="ht-calendar-options">
+
+                <!-- ICS Download -->
+                <div class="ht-calendar-section">
+                    <h4 class="ht-calendar-section-title">
+                        <span class="ht-calendar-icon">📥</span>
+                        Download ICS File
+                    </h4>
+                    <p class="ht-calendar-section-desc">
+                        Works with Apple Calendar, Outlook, and most calendar apps.
+                    </p>
                     <a href="/holiday_traveling/api/calendar_export_ics.php?id=<?php echo $trip['id']; ?>" class="ht-btn ht-btn-secondary">
                         <span class="ht-btn-icon">📥</span>
-                        Download ICS File
+                        Download .ics File
                     </a>
-                    <button id="googleCalendarBtn" class="ht-btn ht-btn-outline">
-                        <span class="ht-btn-icon">📅</span>
-                        Add to Google Calendar
-                    </button>
                 </div>
+
+                <!-- Google Calendar -->
+                <div class="ht-calendar-section">
+                    <h4 class="ht-calendar-section-title">
+                        <span class="ht-calendar-icon">📅</span>
+                        Google Calendar
+                    </h4>
+                    <div id="googleCalendarStatus">
+                        <p class="ht-loading">Checking connection...</p>
+                    </div>
+                </div>
+
+                <!-- Success/Error Messages -->
+                <?php if (isset($_GET['google_sync'])): ?>
+                <div class="ht-calendar-message ht-calendar-message-<?php echo $_GET['google_sync'] === 'success' ? 'success' : 'error'; ?>">
+                    <?php if ($_GET['google_sync'] === 'success'): ?>
+                        <span class="ht-message-icon">✅</span>
+                        <?php echo (int)($_GET['events'] ?? 0); ?> events added to Google Calendar!
+                    <?php else: ?>
+                        <span class="ht-message-icon">❌</span>
+                        Failed to sync with Google Calendar. Please try again.
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+
+                <?php if (isset($_GET['error']) && $_GET['error'] === 'google_not_configured'): ?>
+                <div class="ht-calendar-message ht-calendar-message-warning">
+                    <span class="ht-message-icon">⚠️</span>
+                    Google Calendar integration is not configured. Use ICS download instead.
+                </div>
+                <?php endif; ?>
             </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>

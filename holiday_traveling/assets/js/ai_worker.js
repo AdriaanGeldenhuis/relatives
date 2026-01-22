@@ -111,6 +111,7 @@
         initModals();
         loadWalletPreview();
         loadExpensesPreview();
+        loadGoogleCalendarStatus();
     }
 
     /**
@@ -538,6 +539,82 @@
             }
         } catch (error) {
             container.innerHTML = '<p class="ht-error">Failed to load expenses</p>';
+        }
+    }
+
+    /**
+     * Load Google Calendar connection status
+     */
+    async function loadGoogleCalendarStatus() {
+        const container = document.getElementById('googleCalendarStatus');
+        if (!container || !HT.tripId) return;
+
+        try {
+            const response = await HT.API.get('calendar_google_status.php');
+            const isConnected = response.data?.connected;
+
+            if (isConnected) {
+                container.innerHTML = `
+                    <p class="ht-calendar-section-desc ht-calendar-connected">
+                        <span class="ht-status-icon">✅</span>
+                        Google Calendar connected
+                    </p>
+                    <div class="ht-calendar-actions">
+                        <button id="syncGoogleCalBtn" class="ht-btn ht-btn-primary ht-btn-sm">
+                            <span class="ht-btn-icon">🔄</span>
+                            Sync to Calendar
+                        </button>
+                        <button id="disconnectGoogleBtn" class="ht-btn ht-btn-outline ht-btn-sm">
+                            Disconnect
+                        </button>
+                    </div>
+                `;
+
+                // Bind sync button
+                document.getElementById('syncGoogleCalBtn')?.addEventListener('click', async function() {
+                    this.disabled = true;
+                    this.innerHTML = '<span class="ht-btn-icon">⏳</span> Syncing...';
+                    try {
+                        const result = await HT.API.post('calendar_google_push.php', { trip_id: HT.tripId });
+                        HT.Toast.success(result.data?.message || 'Events synced!');
+                    } catch (error) {
+                        HT.Toast.error(error.message || 'Failed to sync');
+                    } finally {
+                        this.disabled = false;
+                        this.innerHTML = '<span class="ht-btn-icon">🔄</span> Sync to Calendar';
+                    }
+                });
+
+                // Bind disconnect button
+                document.getElementById('disconnectGoogleBtn')?.addEventListener('click', async function() {
+                    if (!confirm('Disconnect Google Calendar?')) return;
+                    try {
+                        await HT.API.post('calendar_google_disconnect.php', {});
+                        HT.Toast.success('Google Calendar disconnected');
+                        loadGoogleCalendarStatus(); // Reload status
+                    } catch (error) {
+                        HT.Toast.error(error.message || 'Failed to disconnect');
+                    }
+                });
+            } else {
+                container.innerHTML = `
+                    <p class="ht-calendar-section-desc">
+                        Connect your Google account to automatically sync events.
+                    </p>
+                    <a href="/holiday_traveling/api/calendar_google_oauth_start.php?trip_id=${HT.tripId}" class="ht-btn ht-btn-outline">
+                        <span class="ht-btn-icon">🔗</span>
+                        Connect Google Calendar
+                    </a>
+                `;
+            }
+        } catch (error) {
+            // Google OAuth might not be configured
+            container.innerHTML = `
+                <p class="ht-calendar-section-desc ht-calendar-unavailable">
+                    Google Calendar integration is not available.
+                    <br><small>Use ICS download instead.</small>
+                </p>
+            `;
         }
     }
 

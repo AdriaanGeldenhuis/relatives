@@ -1912,3 +1912,84 @@
     background: rgba(56, 239, 125, 0.2);
     color: #38ef7d;
 }
+
+/* ============================================
+   CALENDAR TAB STYLES
+   ============================================ */
+.ht-calendar-section {
+    background: var(--ht-glass-light);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-md);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+
+.ht-calendar-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 8px 0;
+}
+
+.ht-calendar-icon {
+    font-size: 20px;
+}
+
+.ht-calendar-section-desc {
+    font-size: 14px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 16px 0;
+}
+
+.ht-calendar-connected {
+    color: var(--ht-success);
+}
+
+.ht-calendar-unavailable {
+    color: var(--ht-text-muted);
+}
+
+.ht-status-icon {
+    margin-right: 4px;
+}
+
+.ht-calendar-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.ht-calendar-message {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-radius: var(--ht-radius-md);
+    font-size: 14px;
+    margin-top: 16px;
+}
+
+.ht-calendar-message-success {
+    background: rgba(56, 239, 125, 0.15);
+    border: 1px solid rgba(56, 239, 125, 0.3);
+    color: #38ef7d;
+}
+
+.ht-calendar-message-error {
+    background: rgba(255, 107, 107, 0.15);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    color: #ff6b6b;
+}
+
+.ht-calendar-message-warning {
+    background: rgba(247, 151, 30, 0.15);
+    border: 1px solid rgba(247, 151, 30, 0.3);
+    color: #f7971e;
+}
+
+.ht-message-icon {
+    font-size: 16px;
+}
