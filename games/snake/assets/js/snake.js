@@ -41,27 +41,33 @@ const SnakeGame = (function() {
         },
         realistic: {
             name: 'Realistic',
-            // Grass field background
+            // Natural grass field background
             BACKGROUND: '#2d5a1d',
-            BACKGROUND_GRADIENT: ['#3d6b2d', '#2d5a1d', '#1d4a0d'],
-            GRID: '#2a5518',
-            // Real snake colors - dark green/brown python look
-            SNAKE_HEAD: '#3d4a2a',
-            SNAKE_HEAD_HIGHLIGHT: '#5a6b3a',
-            SNAKE_HEAD_SHADOW: '#2a3520',
+            BACKGROUND_GRADIENT: ['#3a7025', '#2d5a1d', '#1d4a0d'],
+            GRID: 'transparent', // No grid in realistic mode
+            // Real snake colors - olive/brown like a garden snake
+            SNAKE_BODY_DARK: '#3a3a28',
+            SNAKE_BODY_MID: '#5a5a40',
+            SNAKE_BODY_LIGHT: '#6a6a50',
+            SNAKE_BELLY: '#9a9878',
+            SNAKE_PATTERN_DARK: '#2a2a1a',
+            SNAKE_PATTERN_LIGHT: '#4a4a32',
+            // Head colors
+            SNAKE_HEAD: '#4a4a32',
+            SNAKE_HEAD_HIGHLIGHT: '#5a5a42',
+            SNAKE_HEAD_SHADOW: '#2a2a1a',
             SNAKE_HEAD_GLOW: 'transparent',
-            SNAKE_BODY: '#4a5a32',
-            SNAKE_BODY_GRADIENT: ['#5a6b3a', '#4a5a32', '#3a4a28'],
-            SNAKE_BELLY: '#8b9a6b',
-            SNAKE_PATTERN: '#2a3520',
+            SNAKE_BODY: '#4a4a32',
+            SNAKE_BODY_GRADIENT: ['#5a5a40', '#4a4a32', '#3a3a28'],
             // Shiny red apple
             FOOD: '#cc2233',
-            FOOD_INNER: '#991122',
-            FOOD_HIGHLIGHT: '#ff4455',
+            FOOD_INNER: '#881122',
+            FOOD_HIGHLIGHT: '#ff5566',
             FOOD_GLOW: 'transparent',
             FOOD_GLOW_OUTER: 'transparent',
+            // Reptile eyes
             EYE_COLOR: '#1a1a00',
-            EYE_OUTER: '#ffdd00',
+            EYE_OUTER: '#ddaa00',
             useGlow: false,
             // Enable realistic rendering
             realisticMode: true,
@@ -686,12 +692,11 @@ const SnakeGame = (function() {
     }
 
     /**
-     * Draw realistic grass background
+     * Draw realistic grass background - no grid, natural look
      */
     function drawGrassBackground(size) {
-        // Base grass color already applied
-        // Add grass texture with random grass blades
-        const grassColors = ['#2a5518', '#3d6b2d', '#1d4a0d', '#4a7a3d', '#2d5a1d'];
+        // Create natural grass base with varied patches
+        const grassColors = ['#2a5518', '#3d6b2d', '#1d4a0d', '#4a7a3d', '#2d5a1d', '#357a28'];
 
         // Seed-based random for consistent grass pattern
         const seededRandom = (x, y) => {
@@ -699,45 +704,63 @@ const SnakeGame = (function() {
             return n - Math.floor(n);
         };
 
-        // Draw grass patches
-        for (let x = 0; x < CONFIG.GRID_SIZE; x++) {
-            for (let y = 0; y < CONFIG.GRID_SIZE; y++) {
-                const px = x * cellSize;
-                const py = y * cellSize;
+        // Draw larger grass patches (not grid-aligned)
+        for (let i = 0; i < 80; i++) {
+            const px = seededRandom(i, 0) * size;
+            const py = seededRandom(0, i) * size;
+            const patchSize = 20 + seededRandom(i, i) * 40;
 
-                // Subtle variation per cell
-                const variation = seededRandom(x, y);
-                ctx.fillStyle = grassColors[Math.floor(variation * grassColors.length)];
-                ctx.globalAlpha = 0.3;
-                ctx.fillRect(px, py, cellSize, cellSize);
-                ctx.globalAlpha = 1;
+            const patchGrad = ctx.createRadialGradient(px, py, 0, px, py, patchSize);
+            patchGrad.addColorStop(0, grassColors[Math.floor(seededRandom(i, i * 2) * grassColors.length)]);
+            patchGrad.addColorStop(1, 'transparent');
+            ctx.fillStyle = patchGrad;
+            ctx.globalAlpha = 0.3;
+            ctx.fillRect(px - patchSize, py - patchSize, patchSize * 2, patchSize * 2);
+        }
+        ctx.globalAlpha = 1;
 
-                // Draw small grass blades
-                const bladeCount = 3 + Math.floor(variation * 4);
-                for (let i = 0; i < bladeCount; i++) {
-                    const bx = px + seededRandom(x + i, y) * cellSize;
-                    const by = py + cellSize - 2;
-                    const height = 3 + seededRandom(x, y + i) * 5;
+        // Draw many grass blades across the field
+        for (let i = 0; i < 300; i++) {
+            const bx = seededRandom(i * 3, i) * size;
+            const by = seededRandom(i, i * 2) * size;
+            const height = 4 + seededRandom(i * 2, i) * 8;
+            const lean = (seededRandom(i, i * 3) - 0.5) * 6;
 
-                    ctx.strokeStyle = grassColors[Math.floor(seededRandom(x * i, y) * grassColors.length)];
-                    ctx.globalAlpha = 0.4;
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.moveTo(bx, by);
-                    ctx.lineTo(bx + (seededRandom(x, y * i) - 0.5) * 3, by - height);
-                    ctx.stroke();
-                }
-                ctx.globalAlpha = 1;
-            }
+            ctx.strokeStyle = grassColors[Math.floor(seededRandom(i * 4, i) * grassColors.length)];
+            ctx.globalAlpha = 0.3 + seededRandom(i, i * 4) * 0.3;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.quadraticCurveTo(bx + lean * 0.5, by - height * 0.5, bx + lean, by - height);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+
+        // Add some dirt/earth patches
+        for (let i = 0; i < 15; i++) {
+            const dx = seededRandom(i + 100, i) * size;
+            const dy = seededRandom(i, i + 100) * size;
+            const dirtSize = 5 + seededRandom(i, i + 50) * 10;
+
+            ctx.fillStyle = 'rgba(80, 60, 40, 0.15)';
+            ctx.beginPath();
+            ctx.ellipse(dx, dy, dirtSize, dirtSize * 0.6, seededRandom(i, i) * Math.PI, 0, Math.PI * 2);
+            ctx.fill();
         }
 
-        // Add subtle shadow/depth at edges
-        const edgeGradient = ctx.createLinearGradient(0, 0, 0, size);
-        edgeGradient.addColorStop(0, 'rgba(0,0,0,0.15)');
-        edgeGradient.addColorStop(0.1, 'transparent');
-        edgeGradient.addColorStop(0.9, 'transparent');
-        edgeGradient.addColorStop(1, 'rgba(0,0,0,0.2)');
-        ctx.fillStyle = edgeGradient;
+        // Add subtle vignette for depth
+        const vignetteGrad = ctx.createRadialGradient(size/2, size/2, size * 0.3, size/2, size/2, size * 0.7);
+        vignetteGrad.addColorStop(0, 'transparent');
+        vignetteGrad.addColorStop(1, 'rgba(0, 20, 0, 0.2)');
+        ctx.fillStyle = vignetteGrad;
+        ctx.fillRect(0, 0, size, size);
+
+        // Subtle light from top-left
+        const lightGrad = ctx.createLinearGradient(0, 0, size, size);
+        lightGrad.addColorStop(0, 'rgba(255, 255, 200, 0.05)');
+        lightGrad.addColorStop(0.5, 'transparent');
+        lightGrad.addColorStop(1, 'rgba(0, 0, 0, 0.1)');
+        ctx.fillStyle = lightGrad;
         ctx.fillRect(0, 0, size, size);
     }
 
@@ -1181,18 +1204,20 @@ const SnakeGame = (function() {
             }
             ctx.closePath();
 
-            // Main body gradient - python/grass snake pattern
+            // Main body gradient - realistic olive/brown snake
             const bodyGrad = ctx.createLinearGradient(
                 points[0].x - bodyWidth, points[0].y,
                 points[0].x + bodyWidth, points[0].y
             );
-            bodyGrad.addColorStop(0, '#1a2810');
-            bodyGrad.addColorStop(0.15, '#2a3820');
-            bodyGrad.addColorStop(0.3, '#3a4830');
-            bodyGrad.addColorStop(0.5, '#4a5840');
-            bodyGrad.addColorStop(0.7, '#3a4830');
-            bodyGrad.addColorStop(0.85, '#2a3820');
-            bodyGrad.addColorStop(1, '#1a2810');
+            bodyGrad.addColorStop(0, '#2a2a1a');      // Dark edge
+            bodyGrad.addColorStop(0.1, '#3a3a28');    // Dark side
+            bodyGrad.addColorStop(0.25, '#4a4a35');   // Mid
+            bodyGrad.addColorStop(0.4, '#5a5a45');    // Light
+            bodyGrad.addColorStop(0.5, '#656550');    // Top highlight
+            bodyGrad.addColorStop(0.6, '#5a5a45');    // Light
+            bodyGrad.addColorStop(0.75, '#4a4a35');   // Mid
+            bodyGrad.addColorStop(0.9, '#3a3a28');    // Dark side
+            bodyGrad.addColorStop(1, '#2a2a1a');      // Dark edge
             ctx.fillStyle = bodyGrad;
             ctx.fill();
 
@@ -1204,8 +1229,8 @@ const SnakeGame = (function() {
                 const curr = points[i];
                 ctx.quadraticCurveTo(prev.x, prev.y, (prev.x + curr.x) / 2, (prev.y + curr.y) / 2);
             }
-            ctx.strokeStyle = 'rgba(120, 140, 100, 0.4)';
-            ctx.lineWidth = bodyWidth * 0.15;
+            ctx.strokeStyle = 'rgba(160, 155, 130, 0.35)';
+            ctx.lineWidth = bodyWidth * 0.12;
             ctx.lineCap = 'round';
             ctx.stroke();
 
@@ -1218,25 +1243,25 @@ const SnakeGame = (function() {
                 const angle = Math.atan2(dy, dx);
                 const width = bodyWidth * (1 - i / points.length * 0.5);
 
-                // Diamond scale pattern
+                // Diamond scale pattern - like real snake markings
                 if (i % 2 === 1) {
                     ctx.save();
                     ctx.translate(curr.x, curr.y);
                     ctx.rotate(angle);
 
-                    // Dark diamond pattern (like a python)
-                    ctx.fillStyle = 'rgba(20, 30, 15, 0.25)';
+                    // Dark diamond/saddle pattern (like a python/boa)
+                    ctx.fillStyle = 'rgba(30, 25, 15, 0.35)';
                     ctx.beginPath();
-                    ctx.moveTo(0, -width * 0.3);
-                    ctx.lineTo(width * 0.25, 0);
-                    ctx.lineTo(0, width * 0.3);
-                    ctx.lineTo(-width * 0.25, 0);
+                    ctx.moveTo(0, -width * 0.35);
+                    ctx.lineTo(width * 0.3, 0);
+                    ctx.lineTo(0, width * 0.35);
+                    ctx.lineTo(-width * 0.3, 0);
                     ctx.closePath();
                     ctx.fill();
 
-                    // Lighter scale edges
-                    ctx.strokeStyle = 'rgba(80, 100, 60, 0.2)';
-                    ctx.lineWidth = 1;
+                    // Tan/cream border around diamond
+                    ctx.strokeStyle = 'rgba(140, 130, 100, 0.25)';
+                    ctx.lineWidth = 1.5;
                     ctx.stroke();
 
                     ctx.restore();
@@ -1256,9 +1281,9 @@ const SnakeGame = (function() {
                 }
             }
 
-            // Belly scales (lighter underneath)
-            ctx.strokeStyle = 'rgba(180, 190, 150, 0.15)';
-            ctx.lineWidth = bodyWidth * 0.4;
+            // Belly scales (creamy/tan underneath)
+            ctx.strokeStyle = 'rgba(180, 170, 140, 0.2)';
+            ctx.lineWidth = bodyWidth * 0.35;
             ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(points[0].x, points[0].y);
@@ -1268,6 +1293,27 @@ const SnakeGame = (function() {
                 ctx.quadraticCurveTo(prev.x, prev.y, (prev.x + curr.x) / 2, (prev.y + curr.y) / 2);
             }
             ctx.stroke();
+
+            // Add subtle individual scale texture
+            for (let i = 2; i < points.length - 1; i++) {
+                const curr = points[i];
+                const prev = points[i - 1];
+                const dx = curr.x - prev.x;
+                const dy = curr.y - prev.y;
+                const len = Math.sqrt(dx * dx + dy * dy) || 1;
+                const width = bodyWidth * (1 - i / points.length * 0.5);
+
+                // Individual dorsal scales
+                ctx.fillStyle = 'rgba(50, 45, 35, 0.12)';
+                const scaleAngle = Math.atan2(dy, dx);
+                ctx.save();
+                ctx.translate(curr.x, curr.y);
+                ctx.rotate(scaleAngle);
+                ctx.beginPath();
+                ctx.ellipse(0, 0, width * 0.15, width * 0.2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
         }
 
         // Draw detailed head
@@ -1301,10 +1347,10 @@ const SnakeGame = (function() {
             headLength * 0.2, -headWidth * 0.2, 0,
             headLength * 0.3, 0, headLength
         );
-        headGrad.addColorStop(0, '#5a6840');
-        headGrad.addColorStop(0.3, '#4a5835');
-        headGrad.addColorStop(0.6, '#3a4828');
-        headGrad.addColorStop(1, '#2a3820');
+        headGrad.addColorStop(0, '#6a6a55');
+        headGrad.addColorStop(0.3, '#5a5a45');
+        headGrad.addColorStop(0.6, '#4a4a38');
+        headGrad.addColorStop(1, '#3a3a2a');
         ctx.fillStyle = headGrad;
 
         ctx.beginPath();
@@ -1327,25 +1373,25 @@ const SnakeGame = (function() {
         ctx.fill();
 
         // Head top highlight
-        ctx.fillStyle = 'rgba(100, 120, 80, 0.3)';
+        ctx.fillStyle = 'rgba(150, 145, 120, 0.25)';
         ctx.beginPath();
         ctx.ellipse(headLength * 0.3, -headWidth * 0.15, headLength * 0.35, headWidth * 0.2, -0.2, 0, Math.PI * 2);
         ctx.fill();
 
-        // Head scales pattern
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+        // Head scales pattern (large head shields like real snakes)
+        ctx.fillStyle = 'rgba(40, 35, 25, 0.12)';
         for (let i = 0; i < 4; i++) {
             const sx = headLength * 0.1 + i * headLength * 0.18;
             ctx.beginPath();
-            ctx.ellipse(sx, 0, headLength * 0.1, headWidth * 0.25, 0, 0, Math.PI * 2);
+            ctx.ellipse(sx, 0, headLength * 0.12, headWidth * 0.28, 0, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // Brow ridges
-        ctx.fillStyle = '#2a3520';
+        // Brow ridges (supraocular scales)
+        ctx.fillStyle = '#3a3a28';
         ctx.beginPath();
-        ctx.ellipse(headLength * 0.15, -headWidth * 0.35, headLength * 0.15, headWidth * 0.12, -0.3, 0, Math.PI * 2);
-        ctx.ellipse(headLength * 0.15, headWidth * 0.35, headLength * 0.15, headWidth * 0.12, 0.3, 0, Math.PI * 2);
+        ctx.ellipse(headLength * 0.15, -headWidth * 0.38, headLength * 0.15, headWidth * 0.12, -0.3, 0, Math.PI * 2);
+        ctx.ellipse(headLength * 0.15, headWidth * 0.38, headLength * 0.15, headWidth * 0.12, 0.3, 0, Math.PI * 2);
         ctx.fill();
 
         // Eyes - realistic reptile eyes
@@ -1354,11 +1400,11 @@ const SnakeGame = (function() {
         const eyeW = headWidth * 0.28;
         const eyeH = headWidth * 0.35;
 
-        // Eye socket
-        ctx.fillStyle = '#1a2515';
+        // Eye socket (darker area around eye)
+        ctx.fillStyle = '#2a2a1a';
         ctx.beginPath();
-        ctx.ellipse(eyeX, -eyeY, eyeW * 1.2, eyeH * 1.1, 0, 0, Math.PI * 2);
-        ctx.ellipse(eyeX, eyeY, eyeW * 1.2, eyeH * 1.1, 0, 0, Math.PI * 2);
+        ctx.ellipse(eyeX, -eyeY, eyeW * 1.25, eyeH * 1.15, 0, 0, Math.PI * 2);
+        ctx.ellipse(eyeX, eyeY, eyeW * 1.25, eyeH * 1.15, 0, 0, Math.PI * 2);
         ctx.fill();
 
         // Eyeball with gradient
@@ -1397,11 +1443,11 @@ const SnakeGame = (function() {
         ctx.ellipse(headLength * 0.75, headWidth * 0.08, 2.5, 2, -0.3, 0, Math.PI * 2);
         ctx.fill();
 
-        // Heat pits (like a pit viper)
-        ctx.fillStyle = '#1a2010';
+        // Heat pits (like a pit viper) - sensory organs
+        ctx.fillStyle = '#1a1a10';
         ctx.beginPath();
-        ctx.ellipse(headLength * 0.55, -headWidth * 0.25, 3, 2, 0, 0, Math.PI * 2);
-        ctx.ellipse(headLength * 0.55, headWidth * 0.25, 3, 2, 0, 0, Math.PI * 2);
+        ctx.ellipse(headLength * 0.55, -headWidth * 0.28, 3, 2.5, 0, 0, Math.PI * 2);
+        ctx.ellipse(headLength * 0.55, headWidth * 0.28, 3, 2.5, 0, 0, Math.PI * 2);
         ctx.fill();
 
         // Forked tongue - flickering
@@ -1456,9 +1502,9 @@ const SnakeGame = (function() {
             ctx.rotate(tailAngle);
 
             const tailGradient = ctx.createLinearGradient(0, -bodyWidth * 0.15, 0, bodyWidth * 0.15);
-            tailGradient.addColorStop(0, '#2a3520');
-            tailGradient.addColorStop(0.5, '#4a5a32');
-            tailGradient.addColorStop(1, '#2a3520');
+            tailGradient.addColorStop(0, '#2a2a1a');
+            tailGradient.addColorStop(0.5, '#4a4a35');
+            tailGradient.addColorStop(1, '#2a2a1a');
             ctx.fillStyle = tailGradient;
 
             ctx.beginPath();
