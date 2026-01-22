@@ -15,6 +15,11 @@ if (!class_exists('DB')) {
     require_once __DIR__ . '/../core/bootstrap.php';
 }
 
+// Load CSRF class if not already loaded (needed for HT_CSRF)
+if (!class_exists('CSRF')) {
+    require_once __DIR__ . '/../core/CSRF.php';
+}
+
 // Load module libraries (order matters due to dependencies)
 require_once __DIR__ . '/lib/response.php';
 require_once __DIR__ . '/lib/db.php';
