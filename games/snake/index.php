@@ -4,6 +4,7 @@
  *
  * Nokia 3310 style snake game with offline-first architecture.
  * Supports Solo, Family, and Global leaderboards.
+ * Multiple visual themes available.
  */
 
 session_start();
@@ -19,7 +20,7 @@ $displayName = $_SESSION['display_name'] ?? 'Player';
 $familyId = $_SESSION['family_id'] ?? null;
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="neon">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -28,17 +29,20 @@ $familyId = $_SESSION['family_id'] ?? null;
     <meta name="theme-color" content="#1a1a2e">
     <title>Snake Classic</title>
     <link rel="manifest" href="/games/snake/manifest.json">
-    <link rel="stylesheet" href="/games/snake/assets/css/snake.css">
+    <link rel="stylesheet" href="/games/snake/assets/css/snake.css?v=2.0">
 </head>
 <body>
     <div id="app">
         <!-- Header -->
         <header class="game-header">
             <div class="header-left">
-                <a href="/" class="back-btn" aria-label="Back to home">&larr;</a>
+                <a href="/games/" class="back-btn" aria-label="Back to games">&larr;</a>
             </div>
             <h1>Snake Classic</h1>
             <div class="header-right">
+                <button id="theme-btn" class="theme-btn" aria-label="Change theme" title="Change Theme">
+                    <span class="theme-icon">🎨</span>
+                </button>
                 <span id="sync-indicator" class="sync-indicator" title="Sync status">
                     <span class="sync-icon"></span>
                 </span>
@@ -120,6 +124,40 @@ $familyId = $_SESSION['family_id'] ?? null;
                     <button id="close-leaderboard-btn" class="game-btn secondary">Close</button>
                 </div>
             </div>
+
+            <!-- Theme Selector Modal -->
+            <div id="theme-screen" class="overlay-screen hidden">
+                <div class="overlay-content theme-content">
+                    <h2>Choose Theme</h2>
+                    <div class="theme-grid">
+                        <button class="theme-option" data-theme="neon">
+                            <div class="theme-preview neon-preview">
+                                <div class="preview-snake"></div>
+                                <div class="preview-food"></div>
+                            </div>
+                            <span class="theme-name">Neon Retro</span>
+                            <span class="theme-desc">Glowing cyberpunk vibes</span>
+                        </button>
+                        <button class="theme-option" data-theme="realistic">
+                            <div class="theme-preview realistic-preview">
+                                <div class="preview-snake"></div>
+                                <div class="preview-food"></div>
+                            </div>
+                            <span class="theme-name">Realistic</span>
+                            <span class="theme-desc">Natural & lifelike</span>
+                        </button>
+                        <button class="theme-option" data-theme="classic">
+                            <div class="theme-preview classic-preview">
+                                <div class="preview-snake"></div>
+                                <div class="preview-food"></div>
+                            </div>
+                            <span class="theme-name">Nokia Classic</span>
+                            <span class="theme-desc">Old school LCD</span>
+                        </button>
+                    </div>
+                    <button id="close-theme-btn" class="game-btn secondary">Close</button>
+                </div>
+            </div>
         </div>
 
         <!-- D-Pad Controls -->
@@ -156,9 +194,9 @@ $familyId = $_SESSION['family_id'] ?? null;
     </script>
 
     <!-- Scripts -->
-    <script src="/games/snake/assets/js/storage.js"></script>
-    <script src="/games/snake/assets/js/api.js"></script>
-    <script src="/games/snake/assets/js/snake.js"></script>
+    <script src="/games/snake/assets/js/storage.js?v=2.0"></script>
+    <script src="/games/snake/assets/js/api.js?v=2.0"></script>
+    <script src="/games/snake/assets/js/snake.js?v=2.0"></script>
 
     <!-- Register Service Worker -->
     <script>

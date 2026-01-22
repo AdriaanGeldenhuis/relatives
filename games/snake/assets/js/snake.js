@@ -18,19 +18,75 @@ const SnakeGame = (function() {
         SWIPE_MAX_TIME: 300      // max ms for swipe
     };
 
-    // Colors - Vibrant & Premium
-    const COLORS = {
-        BACKGROUND: '#080810',
-        GRID: '#12121f',
-        SNAKE_HEAD: '#00ffa3',
-        SNAKE_HEAD_GLOW: 'rgba(0, 255, 163, 0.4)',
-        SNAKE_BODY: '#4ecca3',
-        SNAKE_BODY_GRADIENT: ['#4ecca3', '#3db892', '#2ea881'],
-        FOOD: '#ff6b6b',
-        FOOD_INNER: '#ff4757',
-        FOOD_GLOW: 'rgba(255, 107, 107, 0.5)',
-        FOOD_GLOW_OUTER: 'rgba(255, 71, 87, 0.2)'
+    // Theme Color Configurations
+    const THEMES = {
+        neon: {
+            name: 'Neon Retro',
+            BACKGROUND: '#080810',
+            BACKGROUND_GRADIENT: ['#080810', '#0a0a14', '#080810'],
+            GRID: '#12121f',
+            SNAKE_HEAD: '#00ffa3',
+            SNAKE_HEAD_HIGHLIGHT: '#5fffd4',
+            SNAKE_HEAD_SHADOW: '#3db892',
+            SNAKE_HEAD_GLOW: 'rgba(0, 255, 163, 0.4)',
+            SNAKE_BODY: '#4ecca3',
+            SNAKE_BODY_GRADIENT: ['#4ecca3', '#3db892', '#2ea881'],
+            FOOD: '#ff6b6b',
+            FOOD_INNER: '#ff4757',
+            FOOD_HIGHLIGHT: '#ff8a8a',
+            FOOD_GLOW: 'rgba(255, 107, 107, 0.5)',
+            FOOD_GLOW_OUTER: 'rgba(255, 71, 87, 0.2)',
+            EYE_COLOR: '#fff',
+            useGlow: true
+        },
+        realistic: {
+            name: 'Realistic',
+            BACKGROUND: '#1a2f1a',
+            BACKGROUND_GRADIENT: ['#1a2f1a', '#162916', '#1a2f1a'],
+            GRID: '#243824',
+            SNAKE_HEAD: '#2d5a2d',
+            SNAKE_HEAD_HIGHLIGHT: '#4a7c4a',
+            SNAKE_HEAD_SHADOW: '#1f3d1f',
+            SNAKE_HEAD_GLOW: 'rgba(45, 90, 45, 0.3)',
+            SNAKE_BODY: '#3d6b3d',
+            SNAKE_BODY_GRADIENT: ['#4a7c4a', '#3d6b3d', '#2d5a2d'],
+            FOOD: '#c41e3a',
+            FOOD_INNER: '#8b0000',
+            FOOD_HIGHLIGHT: '#dc3545',
+            FOOD_GLOW: 'rgba(196, 30, 58, 0.3)',
+            FOOD_GLOW_OUTER: 'rgba(139, 0, 0, 0.15)',
+            EYE_COLOR: '#ffcc00',
+            useGlow: false,
+            // Realistic theme uses textures
+            snakePattern: true,
+            foodStyle: 'apple'
+        },
+        classic: {
+            name: 'Nokia Classic',
+            BACKGROUND: '#9bbc0f',
+            BACKGROUND_GRADIENT: ['#9bbc0f', '#8bac00', '#9bbc0f'],
+            GRID: '#8bac00',
+            SNAKE_HEAD: '#0f380f',
+            SNAKE_HEAD_HIGHLIGHT: '#306230',
+            SNAKE_HEAD_SHADOW: '#0a2a0a',
+            SNAKE_HEAD_GLOW: 'rgba(15, 56, 15, 0.2)',
+            SNAKE_BODY: '#0f380f',
+            SNAKE_BODY_GRADIENT: ['#0f380f', '#0f380f', '#0f380f'],
+            FOOD: '#0f380f',
+            FOOD_INNER: '#0f380f',
+            FOOD_HIGHLIGHT: '#306230',
+            FOOD_GLOW: 'rgba(15, 56, 15, 0.1)',
+            FOOD_GLOW_OUTER: 'transparent',
+            EYE_COLOR: '#9bbc0f',
+            useGlow: false,
+            // Classic theme uses simple blocks
+            blockStyle: true
+        }
     };
+
+    // Current theme (default to neon)
+    let currentTheme = 'neon';
+    let COLORS = THEMES.neon;
 
     // Direction vectors
     const DIRECTIONS = {
@@ -105,6 +161,10 @@ const SnakeGame = (function() {
         // Initialize API and load data
         SnakeAPI.init();
         SnakeAPI.onSyncStatusChange(updateSyncIndicator);
+
+        // Initialize theme
+        initTheme();
+        setupThemeControls();
 
         // Load initial scores
         updateScoreDisplay();
@@ -274,6 +334,81 @@ const SnakeGame = (function() {
                 btn.classList.add('active');
                 loadLeaderboardData(btn.dataset.tab);
             });
+        });
+    }
+
+    /**
+     * Initialize theme from localStorage
+     */
+    function initTheme() {
+        const savedTheme = localStorage.getItem('snake_theme') || 'neon';
+        setTheme(savedTheme);
+    }
+
+    /**
+     * Set the active theme
+     */
+    function setTheme(themeName) {
+        if (!THEMES[themeName]) {
+            themeName = 'neon';
+        }
+
+        currentTheme = themeName;
+        COLORS = THEMES[themeName];
+
+        // Update HTML data-theme attribute for CSS
+        document.documentElement.setAttribute('data-theme', themeName);
+
+        // Save to localStorage
+        localStorage.setItem('snake_theme', themeName);
+
+        // Update theme option buttons
+        document.querySelectorAll('.theme-option').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === themeName);
+        });
+
+        // Redraw canvas with new theme
+        draw();
+    }
+
+    /**
+     * Setup theme control event listeners
+     */
+    function setupThemeControls() {
+        // Theme button opens theme modal
+        const themeBtn = document.getElementById('theme-btn');
+        const themeScreen = document.getElementById('theme-screen');
+        const closeThemeBtn = document.getElementById('close-theme-btn');
+
+        if (themeBtn && themeScreen) {
+            themeBtn.addEventListener('click', () => {
+                themeScreen.classList.remove('hidden');
+            });
+        }
+
+        if (closeThemeBtn && themeScreen) {
+            closeThemeBtn.addEventListener('click', () => {
+                themeScreen.classList.add('hidden');
+            });
+        }
+
+        // Theme option buttons
+        document.querySelectorAll('.theme-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const themeName = btn.dataset.theme;
+                if (themeName && THEMES[themeName]) {
+                    setTheme(themeName);
+                    // Close modal after selection
+                    if (themeScreen) {
+                        themeScreen.classList.add('hidden');
+                    }
+                }
+            });
+        });
+
+        // Mark current theme as active
+        document.querySelectorAll('.theme-option').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === currentTheme);
         });
     }
 
@@ -481,16 +616,16 @@ const SnakeGame = (function() {
     }
 
     /**
-     * Draw game - Premium Graphics
+     * Draw game - Theme-aware Premium Graphics
      */
     function draw() {
         const size = canvas.width / (window.devicePixelRatio || 1);
 
-        // Clear canvas with gradient
+        // Clear canvas with theme gradient
         const bgGradient = ctx.createLinearGradient(0, 0, size, size);
-        bgGradient.addColorStop(0, '#080810');
-        bgGradient.addColorStop(0.5, '#0a0a14');
-        bgGradient.addColorStop(1, '#080810');
+        bgGradient.addColorStop(0, COLORS.BACKGROUND_GRADIENT[0]);
+        bgGradient.addColorStop(0.5, COLORS.BACKGROUND_GRADIENT[1]);
+        bgGradient.addColorStop(1, COLORS.BACKGROUND_GRADIENT[2]);
         ctx.fillStyle = bgGradient;
         ctx.fillRect(0, 0, size, size);
 
@@ -507,12 +642,77 @@ const SnakeGame = (function() {
             }
         }
 
-        // Draw food with enhanced glow effect
+        // Draw food based on theme
         if (food) {
-            const foodCenterX = food.x * cellSize + cellSize / 2;
-            const foodCenterY = food.y * cellSize + cellSize / 2;
+            drawFood();
+        }
 
-            // Outer glow (pulsing)
+        // Draw snake based on theme
+        drawSnake();
+    }
+
+    /**
+     * Draw food with theme-specific styling
+     */
+    function drawFood() {
+        const foodCenterX = food.x * cellSize + cellSize / 2;
+        const foodCenterY = food.y * cellSize + cellSize / 2;
+        const fx = food.x * cellSize + CONFIG.CELL_PADDING + 1;
+        const fy = food.y * cellSize + CONFIG.CELL_PADDING + 1;
+        const fw = cellSize - CONFIG.CELL_PADDING * 2 - 2;
+
+        // Classic theme - simple block
+        if (COLORS.blockStyle) {
+            ctx.fillStyle = COLORS.FOOD;
+            ctx.fillRect(fx, fy, fw, fw);
+            return;
+        }
+
+        // Realistic theme - apple style
+        if (COLORS.foodStyle === 'apple') {
+            // Subtle shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.beginPath();
+            ctx.ellipse(foodCenterX + 2, foodCenterY + fw * 0.4, fw * 0.35, fw * 0.15, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Apple body with gradient
+            const appleGradient = ctx.createRadialGradient(
+                foodCenterX - cellSize * 0.1, foodCenterY - cellSize * 0.1, 0,
+                foodCenterX, foodCenterY, cellSize * 0.45
+            );
+            appleGradient.addColorStop(0, COLORS.FOOD_HIGHLIGHT);
+            appleGradient.addColorStop(0.6, COLORS.FOOD);
+            appleGradient.addColorStop(1, COLORS.FOOD_INNER);
+            ctx.fillStyle = appleGradient;
+            ctx.beginPath();
+            ctx.arc(foodCenterX, foodCenterY, fw * 0.42, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Stem
+            ctx.strokeStyle = '#5d4037';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(foodCenterX, foodCenterY - fw * 0.35);
+            ctx.quadraticCurveTo(foodCenterX + 3, foodCenterY - fw * 0.5, foodCenterX + 2, foodCenterY - fw * 0.55);
+            ctx.stroke();
+
+            // Small leaf
+            ctx.fillStyle = '#4caf50';
+            ctx.beginPath();
+            ctx.ellipse(foodCenterX + 5, foodCenterY - fw * 0.45, 4, 2, Math.PI / 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(foodCenterX - fw * 0.15, foodCenterY - fw * 0.15, fw * 0.12, fw * 0.08, -Math.PI / 4, 0, Math.PI * 2);
+            ctx.fill();
+            return;
+        }
+
+        // Neon theme - glow effect
+        if (COLORS.useGlow) {
             const pulseScale = 1 + Math.sin(Date.now() / 200) * 0.15;
             const outerGlow = ctx.createRadialGradient(
                 foodCenterX, foodCenterY, 0,
@@ -525,63 +725,75 @@ const SnakeGame = (function() {
             ctx.beginPath();
             ctx.arc(foodCenterX, foodCenterY, cellSize * pulseScale, 0, Math.PI * 2);
             ctx.fill();
-
-            // Food body with gradient
-            const foodGradient = ctx.createRadialGradient(
-                foodCenterX - cellSize * 0.15, foodCenterY - cellSize * 0.15, 0,
-                foodCenterX, foodCenterY, cellSize * 0.5
-            );
-            foodGradient.addColorStop(0, '#ff8a8a');
-            foodGradient.addColorStop(0.5, COLORS.FOOD);
-            foodGradient.addColorStop(1, COLORS.FOOD_INNER);
-            ctx.fillStyle = foodGradient;
-
-            // Draw rounded food
-            const fx = food.x * cellSize + CONFIG.CELL_PADDING + 1;
-            const fy = food.y * cellSize + CONFIG.CELL_PADDING + 1;
-            const fw = cellSize - CONFIG.CELL_PADDING * 2 - 2;
-            const fr = 4;
-            ctx.beginPath();
-            ctx.moveTo(fx + fr, fy);
-            ctx.lineTo(fx + fw - fr, fy);
-            ctx.quadraticCurveTo(fx + fw, fy, fx + fw, fy + fr);
-            ctx.lineTo(fx + fw, fy + fw - fr);
-            ctx.quadraticCurveTo(fx + fw, fy + fw, fx + fw - fr, fy + fw);
-            ctx.lineTo(fx + fr, fy + fw);
-            ctx.quadraticCurveTo(fx, fy + fw, fx, fy + fw - fr);
-            ctx.lineTo(fx, fy + fr);
-            ctx.quadraticCurveTo(fx, fy, fx + fr, fy);
-            ctx.fill();
         }
 
-        // Draw snake with gradient body
+        // Food body with gradient
+        const foodGradient = ctx.createRadialGradient(
+            foodCenterX - cellSize * 0.15, foodCenterY - cellSize * 0.15, 0,
+            foodCenterX, foodCenterY, cellSize * 0.5
+        );
+        foodGradient.addColorStop(0, COLORS.FOOD_HIGHLIGHT);
+        foodGradient.addColorStop(0.5, COLORS.FOOD);
+        foodGradient.addColorStop(1, COLORS.FOOD_INNER);
+        ctx.fillStyle = foodGradient;
+
+        // Draw rounded food
+        const fr = 4;
+        ctx.beginPath();
+        ctx.moveTo(fx + fr, fy);
+        ctx.lineTo(fx + fw - fr, fy);
+        ctx.quadraticCurveTo(fx + fw, fy, fx + fw, fy + fr);
+        ctx.lineTo(fx + fw, fy + fw - fr);
+        ctx.quadraticCurveTo(fx + fw, fy + fw, fx + fw - fr, fy + fw);
+        ctx.lineTo(fx + fr, fy + fw);
+        ctx.quadraticCurveTo(fx, fy + fw, fx, fy + fw - fr);
+        ctx.lineTo(fx, fy + fr);
+        ctx.quadraticCurveTo(fx, fy, fx + fr, fy);
+        ctx.fill();
+    }
+
+    /**
+     * Draw snake with theme-specific styling
+     */
+    function drawSnake() {
+        // Draw snake segments (tail to head so head is on top)
         for (let i = snake.length - 1; i >= 0; i--) {
             const segment = snake[i];
             const x = segment.x * cellSize + CONFIG.CELL_PADDING;
             const y = segment.y * cellSize + CONFIG.CELL_PADDING;
             const w = cellSize - CONFIG.CELL_PADDING * 2;
+
+            // Classic theme - simple blocks
+            if (COLORS.blockStyle) {
+                ctx.fillStyle = COLORS.SNAKE_BODY;
+                ctx.fillRect(x, y, w, w);
+                continue;
+            }
+
             const r = i === 0 ? 5 : 3;
 
             if (i === 0) {
-                // Draw head glow
-                ctx.fillStyle = COLORS.SNAKE_HEAD_GLOW;
-                ctx.beginPath();
-                ctx.arc(x + w/2, y + w/2, w * 0.8, 0, Math.PI * 2);
-                ctx.fill();
+                // Draw head glow (if theme supports it)
+                if (COLORS.useGlow) {
+                    ctx.fillStyle = COLORS.SNAKE_HEAD_GLOW;
+                    ctx.beginPath();
+                    ctx.arc(x + w/2, y + w/2, w * 0.8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
 
-                // Head with bright gradient
+                // Head with gradient
                 const headGradient = ctx.createRadialGradient(
                     x + w * 0.3, y + w * 0.3, 0,
                     x + w/2, y + w/2, w * 0.7
                 );
-                headGradient.addColorStop(0, '#5fffd4');
+                headGradient.addColorStop(0, COLORS.SNAKE_HEAD_HIGHLIGHT);
                 headGradient.addColorStop(0.5, COLORS.SNAKE_HEAD);
-                headGradient.addColorStop(1, '#3db892');
+                headGradient.addColorStop(1, COLORS.SNAKE_HEAD_SHADOW);
                 ctx.fillStyle = headGradient;
             } else {
                 // Body segments with fading gradient
                 const progress = i / snake.length;
-                const alpha = 1 - (progress * 0.4);
+                const alpha = COLORS.snakePattern ? 1 : (1 - (progress * 0.4));
                 const colorIndex = Math.min(2, Math.floor(progress * 3));
                 ctx.fillStyle = COLORS.SNAKE_BODY_GRADIENT[colorIndex];
                 ctx.globalAlpha = alpha;
@@ -600,18 +812,27 @@ const SnakeGame = (function() {
             ctx.quadraticCurveTo(x, y, x + r, y);
             ctx.fill();
 
+            // Add scale pattern for realistic theme
+            if (COLORS.snakePattern && i > 0) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                ctx.beginPath();
+                ctx.arc(x + w * 0.3, y + w * 0.3, w * 0.1, 0, Math.PI * 2);
+                ctx.arc(x + w * 0.7, y + w * 0.7, w * 0.1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
             ctx.globalAlpha = 1;
         }
 
-        // Draw eyes on head
-        if (snake.length > 0) {
+        // Draw eyes on head (skip for classic blocky theme)
+        if (snake.length > 0 && !COLORS.blockStyle) {
             const head = snake[0];
             const hx = head.x * cellSize + cellSize / 2;
             const hy = head.y * cellSize + cellSize / 2;
             const eyeSize = cellSize * 0.12;
             const eyeOffset = cellSize * 0.2;
 
-            ctx.fillStyle = '#fff';
+            ctx.fillStyle = COLORS.EYE_COLOR;
 
             // Position eyes based on direction
             let eye1x, eye1y, eye2x, eye2y;
@@ -639,6 +860,15 @@ const SnakeGame = (function() {
             ctx.arc(eye1x, eye1y, eyeSize, 0, Math.PI * 2);
             ctx.arc(eye2x, eye2y, eyeSize, 0, Math.PI * 2);
             ctx.fill();
+
+            // Add pupils for realistic theme
+            if (COLORS.snakePattern) {
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(eye1x, eye1y, eyeSize * 0.5, 0, Math.PI * 2);
+                ctx.arc(eye2x, eye2y, eyeSize * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
     }
 
