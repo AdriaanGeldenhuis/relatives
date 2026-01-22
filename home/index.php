@@ -159,10 +159,11 @@ try {
 $recentActivity = [];
 try {
     $stmt = $db->prepare("
-        SELECT 
+        SELECT
             al.action,
             al.entity_type,
             al.created_at,
+            u.id as user_id,
             u.full_name,
             u.avatar_color
         FROM audit_log al
@@ -535,7 +536,16 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php foreach ($familyMembers as $member): ?>
                     <div class="member-card" data-tilt>
                         <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>" aria-label="<?php echo htmlspecialchars($member['full_name']); ?>">
-                            <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                            <?php
+                            $avatarPath = __DIR__ . "/../saves/{$member['id']}/avatar/avatar.webp";
+                            if (file_exists($avatarPath)):
+                            ?>
+                                <img src="/saves/<?php echo $member['id']; ?>/avatar/avatar.webp?<?php echo time(); ?>"
+                                     alt="<?php echo htmlspecialchars($member['full_name']); ?>"
+                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                            <?php else: ?>
+                                <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                            <?php endif; ?>
                             <?php
                             $lastActive = strtotime($member['last_active']);
                             $isOnline = (time() - $lastActive) < 300;
@@ -580,7 +590,16 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php foreach ($recentActivity as $index => $activity): ?>
                     <div class="activity-item" style="animation-delay: <?php echo $index * 0.05; ?>s">
                         <div class="activity-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#667eea'); ?>" aria-hidden="true">
-                            <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
+                            <?php
+                            $activityAvatarPath = __DIR__ . "/../saves/{$activity['user_id']}/avatar/avatar.webp";
+                            if (!empty($activity['user_id']) && file_exists($activityAvatarPath)):
+                            ?>
+                                <img src="/saves/<?php echo $activity['user_id']; ?>/avatar/avatar.webp?<?php echo time(); ?>"
+                                     alt="<?php echo htmlspecialchars($activity['full_name'] ?? ''); ?>"
+                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                            <?php else: ?>
+                                <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
+                            <?php endif; ?>
                         </div>
                         <div class="activity-content">
                             <div class="activity-text">
