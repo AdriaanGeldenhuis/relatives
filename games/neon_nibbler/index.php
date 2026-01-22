@@ -81,12 +81,11 @@ $cacheVersion = '1.0.0';
                     <span class="btn-icon">&#9654;</span> PLAY
                 </button>
                 <div class="start-controls-hint">
-                    Swipe or use D-pad to move
+                    Joystick to move, Boost for speed
                 </div>
                 <div class="start-options">
                     <button id="btn-theme-toggle" class="neon-btn small">Theme: Dark</button>
                     <button id="btn-sound-toggle" class="neon-btn small">Sound: On</button>
-                    <button id="btn-dpad-toggle" class="neon-btn small">D-Pad: On</button>
                 </div>
             </div>
         </div>
@@ -122,15 +121,17 @@ $cacheVersion = '1.0.0';
             <!-- Canvas -->
             <canvas id="game-canvas"></canvas>
 
-            <!-- D-Pad Split: Left cluster + Right cluster -->
-            <div id="dpad" class="dpad-landscape">
-                <div class="dpad-cluster dpad-left-cluster">
-                    <button class="dpad-btn dpad-up" data-dir="up">&#9650;</button>
-                    <button class="dpad-btn dpad-left" data-dir="left">&#9664;</button>
+            <!-- Controls: Boost left, Joystick right -->
+            <div id="game-controls" class="game-controls">
+                <div class="ctrl-left">
+                    <button id="btn-boost" class="boost-btn">BOOST</button>
                 </div>
-                <div class="dpad-cluster dpad-right-cluster">
-                    <button class="dpad-btn dpad-right" data-dir="right">&#9654;</button>
-                    <button class="dpad-btn dpad-down" data-dir="down">&#9660;</button>
+                <div class="ctrl-right">
+                    <div id="joystick" class="joystick-zone">
+                        <div class="joystick-base">
+                            <div id="joystick-knob" class="joystick-knob"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

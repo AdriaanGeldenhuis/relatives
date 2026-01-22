@@ -370,7 +370,8 @@ var NeonEngine = (function() {
         }
 
         if (player.moving) {
-            player.moveProgress += (player.speed * dt) / (TILE_SIZE * 10);
+            var boostMult = NeonInput.isBoostActive() ? 2.2 : 1.0;
+            player.moveProgress += (player.speed * boostMult * dt) / (TILE_SIZE * 10);
             if (player.moveProgress >= 1) {
                 player.moveProgress = 1;
                 player.row = player.targetRow;

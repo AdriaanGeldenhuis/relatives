@@ -374,62 +374,100 @@ html, body {
     background: transparent;
 }
 
-/* ===== D-PAD LANDSCAPE SPLIT ===== */
-.dpad-landscape {
+/* ===== GAME CONTROLS: JOYSTICK + BOOST ===== */
+.game-controls {
     position: absolute;
     inset: 40px 0 0 0;
     z-index: 60;
     display: flex;
     justify-content: space-between;
-    align-items: stretch;
+    align-items: center;
     pointer-events: none;
-    padding: 0;
+    padding: 0 12px;
 }
 
-.dpad-landscape.hidden { display: none; }
+.game-controls.hidden { display: none; }
 
-.dpad-cluster {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 12px;
-    padding: 20px 10px;
+.ctrl-left, .ctrl-right {
     pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.dpad-left-cluster {
-    align-items: flex-start;
-}
-
-.dpad-right-cluster {
-    align-items: flex-end;
-}
-
-.dpad-btn {
-    border: none;
-    width: 56px;
-    height: 56px;
+/* Boost Button */
+.boost-btn {
+    width: 72px;
+    height: 72px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1.5px solid rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 1.3rem;
+    border: 2px solid rgba(57, 255, 20, 0.4);
+    background: rgba(57, 255, 20, 0.08);
+    color: var(--neon-green);
+    font-size: 0.6rem;
+    font-weight: 900;
+    letter-spacing: 1px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     -webkit-tap-highlight-color: transparent;
-    transition: background 0.1s, border-color 0.15s, box-shadow 0.15s, transform 0.1s;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    transition: transform 0.1s, box-shadow 0.15s, background 0.15s, border-color 0.15s;
+    text-shadow: 0 0 6px var(--neon-green);
+    box-shadow: 0 0 12px rgba(57, 255, 20, 0.15), inset 0 0 12px rgba(57, 255, 20, 0.05);
 }
 
-.dpad-btn:active {
-    background: rgba(0, 245, 255, 0.2);
+.boost-btn:active, .boost-btn.active {
+    background: rgba(57, 255, 20, 0.25);
+    border-color: var(--neon-green);
+    box-shadow: 0 0 24px rgba(57, 255, 20, 0.5), inset 0 0 16px rgba(57, 255, 20, 0.2);
+    transform: scale(0.9);
+}
+
+.boost-btn.cooldown {
+    opacity: 0.3;
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.3);
+    text-shadow: none;
+    box-shadow: none;
+}
+
+/* Joystick */
+.joystick-zone {
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.joystick-base {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1.5px solid rgba(255, 255, 255, 0.12);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 0 20px rgba(0, 100, 200, 0.05);
+}
+
+.joystick-knob {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 40%, rgba(255,255,255,0.3), rgba(0, 245, 255, 0.2));
+    border: 1.5px solid rgba(0, 245, 255, 0.4);
+    box-shadow: 0 0 12px rgba(0, 245, 255, 0.2), inset 0 0 8px rgba(255,255,255,0.1);
+    position: absolute;
+    transition: box-shadow 0.15s;
+    touch-action: none;
+}
+
+.joystick-knob.active {
     border-color: var(--neon-cyan);
-    box-shadow: 0 0 16px rgba(0, 245, 255, 0.4), inset 0 0 8px rgba(0, 245, 255, 0.1);
-    color: var(--neon-cyan);
-    transform: scale(0.92);
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.5), inset 0 0 10px rgba(0, 245, 255, 0.2);
 }
 
 /* ===== OVERLAYS ===== */
@@ -597,32 +635,13 @@ html, body {
 }
 
 @media (orientation: landscape) {
-    .dpad-cluster {
-        padding: 16px 14px;
-        gap: 14px;
-    }
-    .dpad-btn {
-        width: 60px;
-        height: 60px;
-        font-size: 1.4rem;
-    }
-    .start-content {
-        gap: 12px;
-        flex-direction: column;
-    }
-    .game-logo h1 {
-        font-size: 2rem;
-    }
-    .logo-orb {
-        width: 48px;
-        height: 48px;
-        margin-bottom: 8px;
-    }
-    .overlay-box {
-        padding: 20px;
-        gap: 12px;
-        max-width: 380px;
-    }
+    .start-content { gap: 12px; }
+    .game-logo h1 { font-size: 2rem; }
+    .logo-orb { width: 48px; height: 48px; margin-bottom: 8px; }
+    .overlay-box { padding: 20px; gap: 12px; max-width: 380px; }
+    .boost-btn { width: 76px; height: 76px; }
+    .joystick-base { width: 110px; height: 110px; }
+    .joystick-knob { width: 44px; height: 44px; }
 }
 
 @media (max-height: 400px) {
@@ -631,9 +650,10 @@ html, body {
     .hud-label { font-size: 0.45rem; }
     #game-canvas { top: 32px; height: calc(100% - 32px); }
     .pulse-timer { top: 32px; }
-    .dpad-landscape { top: 32px; }
-    .dpad-btn { width: 48px; height: 48px; font-size: 1.1rem; }
-    .dpad-cluster { gap: 8px; padding: 10px 8px; }
+    .game-controls { top: 32px; }
+    .boost-btn { width: 60px; height: 60px; font-size: 0.5rem; }
+    .joystick-base { width: 80px; height: 80px; }
+    .joystick-knob { width: 32px; height: 32px; }
     .start-content { gap: 8px; }
     .logo-orb { width: 36px; height: 36px; margin-bottom: 6px; }
     .game-logo h1 { font-size: 1.6rem; letter-spacing: 3px; }

@@ -21,7 +21,6 @@
 
         // Apply preferences
         NeonUI.setTheme(prefs.theme);
-        NeonInput.setDpadVisible(prefs.dpad);
         updateToggleButtons();
 
         // Button handlers
@@ -112,21 +111,12 @@
             }
         });
 
-        // D-Pad toggle
-        document.getElementById('btn-dpad-toggle').addEventListener('click', function() {
-            prefs.dpad = !prefs.dpad;
-            NeonStorage.savePrefs(prefs);
-            NeonInput.setDpadVisible(prefs.dpad);
-            updateToggleButtons();
-            NeonAudio.menuSelect();
-        });
     }
 
     function startGame() {
         NeonEngine.reset();
         NeonUI.showScreen('game');
         NeonEngine.startLevel(1);
-        NeonInput.setDpadVisible(prefs.dpad);
 
         // Small delay before starting movement
         setTimeout(function() {
@@ -137,11 +127,9 @@
     function updateToggleButtons() {
         var themeBtn = document.getElementById('btn-theme-toggle');
         var soundBtn = document.getElementById('btn-sound-toggle');
-        var dpadBtn = document.getElementById('btn-dpad-toggle');
 
         if (themeBtn) themeBtn.textContent = 'Theme: ' + (prefs.theme === 'dark' ? 'Dark' : 'Light');
         if (soundBtn) soundBtn.textContent = 'Sound: ' + (prefs.sound ? 'On' : 'Off');
-        if (dpadBtn) dpadBtn.textContent = 'D-Pad: ' + (prefs.dpad ? 'On' : 'Off');
     }
 
     function updateStartStats() {
