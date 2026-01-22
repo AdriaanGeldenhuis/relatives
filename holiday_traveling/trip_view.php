@@ -84,6 +84,25 @@ $preferences = $trip['preferences_json'] ? json_decode($trip['preferences_json']
 // Get AI remaining requests
 $aiRemaining = HT_AI::getRemainingRequests();
 
+// Check trip timing for late mode and status
+$startTime = strtotime($trip['start_date']);
+$endTime = strtotime($trip['end_date'] . ' 23:59:59');
+$now = time();
+$hoursUntilTrip = ($startTime - $now) / 3600;
+$tripStatus = 'upcoming';
+
+if ($now > $endTime) {
+    $tripStatus = 'completed';
+} elseif ($now >= $startTime && $now <= $endTime) {
+    $tripStatus = 'active';
+} elseif ($hoursUntilTrip <= 24 && $hoursUntilTrip >= 0) {
+    $tripStatus = 'imminent'; // Late mode
+}
+
+// Calculate days until/since trip
+$daysUntil = max(0, (int) ceil(($startTime - $now) / 86400));
+$tripDuration = (int) ceil(($endTime - $startTime) / 86400);
+
 // Page setup
 $pageTitle = $trip['destination'] . ' - Trip';
 $pageCSS = ['/holiday_traveling/assets/css/holiday.css'];
@@ -98,6 +117,9 @@ ht_view('trip_view', [
     'preferences' => $preferences,
     'canEdit' => $canEdit,
     'aiRemaining' => $aiRemaining,
+    'tripStatus' => $tripStatus,
+    'daysUntil' => $daysUntil,
+    'tripDuration' => $tripDuration,
     'pageTitle' => $pageTitle,
     'pageCSS' => $pageCSS,
     'pageJS' => $pageJS

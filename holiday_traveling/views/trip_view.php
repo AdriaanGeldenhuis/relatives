@@ -7,9 +7,56 @@ $daysCount = ht_trip_duration($trip['start_date'], $trip['end_date']);
 $isUpcoming = strtotime($trip['start_date']) > time();
 $isActive = $trip['status'] === 'active';
 $isPast = strtotime($trip['end_date']) < strtotime('today');
+$isImminent = isset($tripStatus) && $tripStatus === 'imminent';
+$statusDisplay = $tripStatus ?? 'upcoming';
 ?>
 
 <div class="ht-trip-view" data-trip-id="<?php echo $trip['id']; ?>">
+    <?php if ($isImminent): ?>
+    <!-- Late Mode Banner -->
+    <div class="ht-late-mode-alert">
+        <span class="ht-late-alert-icon">⏰</span>
+        <div class="ht-late-alert-content">
+            <strong>Trip starts in less than 24 hours!</strong>
+            <p>Make sure you're packed and ready. Check your packing list and wallet items.</p>
+        </div>
+        <div class="ht-late-alert-actions">
+            <a href="/holiday_traveling/packing_view.php?id=<?php echo $trip['id']; ?>" class="ht-btn ht-btn-primary ht-btn-sm">
+                Check Packing List
+            </a>
+        </div>
+    </div>
+    <?php elseif ($statusDisplay === 'active'): ?>
+    <!-- Active Trip Banner -->
+    <div class="ht-active-trip-alert">
+        <span class="ht-active-alert-icon">🎉</span>
+        <div class="ht-active-alert-content">
+            <strong>You're on your trip!</strong>
+            <p>Enjoy <?php echo htmlspecialchars($trip['destination']); ?>! Don't forget to track expenses.</p>
+        </div>
+    </div>
+    <?php elseif ($statusDisplay === 'completed'): ?>
+    <!-- Completed Trip Banner -->
+    <div class="ht-completed-trip-alert">
+        <span class="ht-completed-alert-icon">✅</span>
+        <div class="ht-completed-alert-content">
+            <strong>Trip completed!</strong>
+            <p>Hope you had a great time. Settle up expenses with your group.</p>
+        </div>
+        <div class="ht-completed-alert-actions">
+            <a href="/holiday_traveling/expenses_view.php?id=<?php echo $trip['id']; ?>" class="ht-btn ht-btn-outline ht-btn-sm">
+                View Expenses
+            </a>
+        </div>
+    </div>
+    <?php elseif (isset($daysUntil) && $daysUntil > 0 && $daysUntil <= 7): ?>
+    <!-- Countdown Banner -->
+    <div class="ht-countdown-banner">
+        <span class="ht-countdown-number"><?php echo $daysUntil; ?></span>
+        <span class="ht-countdown-label">day<?php echo $daysUntil > 1 ? 's' : ''; ?> until your trip!</span>
+    </div>
+    <?php endif; ?>
+
     <!-- Trip Header -->
     <div class="ht-trip-header">
         <a href="/holiday_traveling/" class="ht-back-link">← Back to Trips</a>

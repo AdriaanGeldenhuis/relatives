@@ -2131,3 +2131,124 @@
 .ht-text-danger {
     color: var(--ht-danger) !important;
 }
+
+/* ============================================
+   TRIP STATUS BANNERS
+   ============================================ */
+.ht-late-mode-alert,
+.ht-active-trip-alert,
+.ht-completed-trip-alert {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    border-radius: var(--ht-radius-lg);
+    margin-bottom: 20px;
+}
+
+.ht-late-mode-alert {
+    background: linear-gradient(135deg, rgba(255, 153, 0, 0.2), rgba(255, 68, 68, 0.15));
+    border: 1px solid rgba(255, 153, 0, 0.4);
+}
+
+.ht-active-trip-alert {
+    background: linear-gradient(135deg, rgba(56, 239, 125, 0.2), rgba(17, 153, 142, 0.15));
+    border: 1px solid rgba(56, 239, 125, 0.4);
+}
+
+.ht-completed-trip-alert {
+    background: linear-gradient(135deg, rgba(150, 150, 150, 0.2), rgba(100, 100, 100, 0.15));
+    border: 1px solid rgba(150, 150, 150, 0.4);
+}
+
+.ht-late-alert-icon,
+.ht-active-alert-icon,
+.ht-completed-alert-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+}
+
+.ht-late-alert-content,
+.ht-active-alert-content,
+.ht-completed-alert-content {
+    flex: 1;
+}
+
+.ht-late-alert-content strong {
+    color: #ff9900;
+    display: block;
+    font-size: 15px;
+    margin-bottom: 4px;
+}
+
+.ht-active-alert-content strong {
+    color: #38ef7d;
+    display: block;
+    font-size: 15px;
+    margin-bottom: 4px;
+}
+
+.ht-completed-alert-content strong {
+    color: var(--ht-text-primary);
+    display: block;
+    font-size: 15px;
+    margin-bottom: 4px;
+}
+
+.ht-late-alert-content p,
+.ht-active-alert-content p,
+.ht-completed-alert-content p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--ht-text-secondary);
+}
+
+.ht-late-alert-actions,
+.ht-completed-alert-actions {
+    flex-shrink: 0;
+}
+
+.ht-countdown-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(247, 151, 30, 0.2), rgba(255, 200, 50, 0.15));
+    border: 1px solid rgba(247, 151, 30, 0.4);
+    border-radius: var(--ht-radius-lg);
+    margin-bottom: 20px;
+}
+
+.ht-countdown-number {
+    font-size: 36px;
+    font-weight: 800;
+    color: #f7971e;
+    line-height: 1;
+}
+
+.ht-countdown-label {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ht-text-primary);
+}
+
+@media (max-width: 600px) {
+    .ht-late-mode-alert,
+    .ht-active-trip-alert,
+    .ht-completed-trip-alert {
+        flex-direction: column;
+        text-align: center;
+        gap: 12px;
+    }
+
+    .ht-late-alert-actions,
+    .ht-completed-alert-actions {
+        width: 100%;
+    }
+
+    .ht-late-alert-actions .ht-btn,
+    .ht-completed-alert-actions .ht-btn {
+        width: 100%;
+    }
+}
