@@ -97,18 +97,19 @@ var NeonLevels = (function() {
     }
 
     function getLevelConfig(levelNum) {
-        // Difficulty scaling
-        var baseSpeed = 3.5;
-        var speedIncrease = Math.min(levelNum * 0.3, 3.0);
-        var pulseDuration = Math.max(8000 - (levelNum - 1) * 500, 3000);
-        var chaseInterval = Math.max(3000 - (levelNum - 1) * 200, 800);
+        // Difficulty scaling - start easy, ramp up
+        var basePlayerSpeed = 2.0;
+        var baseSentinelSpeed = 1.6;
+        var speedRamp = Math.min((levelNum - 1) * 0.4, 4.0);
+        var pulseDuration = Math.max(10000 - (levelNum - 1) * 600, 3000);
+        var chaseInterval = Math.max(4000 - (levelNum - 1) * 300, 800);
 
         return {
-            playerSpeed: baseSpeed + speedIncrease * 0.6,
-            sentinelSpeed: baseSpeed + speedIncrease * 0.5,
+            playerSpeed: basePlayerSpeed + speedRamp,
+            sentinelSpeed: baseSentinelSpeed + speedRamp * 0.85,
             pulseDuration: pulseDuration,
             chaseInterval: chaseInterval,
-            scatterDuration: Math.max(7000 - (levelNum - 1) * 300, 3000),
+            scatterDuration: Math.max(8000 - (levelNum - 1) * 400, 3000),
             levelBonus: 500,
             timeBonusPerSec: 5,
             timeBonusMax: 300

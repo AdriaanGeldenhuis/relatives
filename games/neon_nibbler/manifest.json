@@ -4,7 +4,7 @@
     "description": "Neon maze chase game - collect dots, avoid sentinels!",
     "start_url": "/games/neon_nibbler/",
     "display": "fullscreen",
-    "orientation": "portrait",
+    "orientation": "landscape",
     "background_color": "#0a0a1a",
     "theme_color": "#0a0a1a",
     "icons": [

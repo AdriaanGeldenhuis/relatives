@@ -84,14 +84,13 @@ var NeonEngine = (function() {
 
     function resize() {
         var dpr = window.devicePixelRatio || 1;
-        var wrapRect = canvas.parentElement.getBoundingClientRect();
-        var w = wrapRect.width;
-        var h = wrapRect.height;
+        var rect = canvas.getBoundingClientRect();
+        var w = rect.width;
+        var h = rect.height;
+        if (w <= 0 || h <= 0) return; // Not visible yet
 
         canvas.width = w * dpr;
         canvas.height = h * dpr;
-        canvas.style.width = w + 'px';
-        canvas.style.height = h + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         recalcLayout(w, h);
@@ -101,14 +100,15 @@ var NeonEngine = (function() {
     function recalcLayout(w, h) {
         var rows = NeonLevels.ROWS;
         var cols = NeonLevels.COLS;
-        var hudHeight = 52;
-        var dpadHeight = state === 'playing' ? 160 : 0;
-        var availH = h - hudHeight - dpadHeight;
-        var availW = w;
+        // Canvas already excludes HUD (positioned via CSS)
+        // Reserve space for D-pad buttons on sides
+        var sideMargin = 70;
+        var availW = w - sideMargin * 2;
+        var availH = h;
 
         TILE_SIZE = Math.floor(Math.min(availW / cols, availH / rows));
         OFFSET_X = Math.floor((w - cols * TILE_SIZE) / 2);
-        OFFSET_Y = hudHeight + Math.floor((availH - rows * TILE_SIZE) / 2);
+        OFFSET_Y = Math.floor((h - rows * TILE_SIZE) / 2);
     }
 
     function startLevel(levelNum) {
@@ -189,9 +189,12 @@ var NeonEngine = (function() {
     }
 
     function prerenderWalls() {
-        var w = canvas.clientWidth;
-        var h = canvas.clientHeight;
+        var rect = canvas.getBoundingClientRect();
+        var w = rect.width;
+        var h = rect.height;
+        if (w <= 0 || h <= 0) return;
         var dpr = window.devicePixelRatio || 1;
+
         wallCanvas = document.createElement('canvas');
         wallCanvas.width = w * dpr;
         wallCanvas.height = h * dpr;
@@ -199,27 +202,73 @@ var NeonEngine = (function() {
         wctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         var isLight = document.documentElement.getAttribute('data-theme') === 'light';
-        var wallColor = isLight ? '#4444aa' : '#1a1aff';
-        var glowColor = isLight ? 'rgba(68,68,170,0.3)' : 'rgba(0,100,255,0.4)';
 
+        // Draw outer glow pass first (bloom effect)
         for (var r = 0; r < maze.length; r++) {
             for (var c = 0; c < maze[r].length; c++) {
                 if (maze[r][c] !== 0) continue;
+                // Only glow edges (walls adjacent to paths)
+                if (!isEdgeWall(r, c)) continue;
+
                 var x = c * TILE_SIZE + OFFSET_X;
                 var y = r * TILE_SIZE + OFFSET_Y;
+                var cx = x + TILE_SIZE / 2;
+                var cy = y + TILE_SIZE / 2;
 
-                // Glow layer
-                wctx.shadowColor = glowColor;
-                wctx.shadowBlur = 6;
-                wctx.fillStyle = wallColor;
-                wctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
-
-                // Inner highlight
-                wctx.shadowBlur = 0;
-                wctx.fillStyle = isLight ? 'rgba(100,100,200,0.3)' : 'rgba(50,50,180,0.3)';
-                wctx.fillRect(x + 3, y + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+                wctx.shadowColor = isLight ? 'rgba(80,80,200,0.4)' : 'rgba(0,150,255,0.5)';
+                wctx.shadowBlur = 12;
+                wctx.fillStyle = 'transparent';
+                wctx.beginPath();
+                wctx.arc(cx, cy, TILE_SIZE * 0.35, 0, Math.PI * 2);
+                wctx.fill();
             }
         }
+        wctx.shadowBlur = 0;
+
+        // Draw wall tiles with edge-aware rendering
+        for (var r2 = 0; r2 < maze.length; r2++) {
+            for (var c2 = 0; c2 < maze[r2].length; c2++) {
+                if (maze[r2][c2] !== 0) continue;
+                var x2 = c2 * TILE_SIZE + OFFSET_X;
+                var y2 = r2 * TILE_SIZE + OFFSET_Y;
+                var edge = isEdgeWall(r2, c2);
+
+                if (edge) {
+                    // Edge walls: bright neon border
+                    var grad = wctx.createLinearGradient(x2, y2, x2 + TILE_SIZE, y2 + TILE_SIZE);
+                    if (isLight) {
+                        grad.addColorStop(0, 'rgba(60,60,160,0.9)');
+                        grad.addColorStop(1, 'rgba(80,80,200,0.7)');
+                    } else {
+                        grad.addColorStop(0, 'rgba(0,80,200,0.9)');
+                        grad.addColorStop(1, 'rgba(20,40,150,0.7)');
+                    }
+                    wctx.fillStyle = grad;
+                    wctx.fillRect(x2 + 1, y2 + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+
+                    // Bright edge line
+                    wctx.strokeStyle = isLight ? 'rgba(100,100,220,0.8)' : 'rgba(0,180,255,0.6)';
+                    wctx.lineWidth = 1.5;
+                    wctx.strokeRect(x2 + 1.5, y2 + 1.5, TILE_SIZE - 3, TILE_SIZE - 3);
+                } else {
+                    // Interior walls: darker fill
+                    wctx.fillStyle = isLight ? 'rgba(50,50,120,0.5)' : 'rgba(10,15,60,0.8)';
+                    wctx.fillRect(x2, y2, TILE_SIZE, TILE_SIZE);
+                }
+            }
+        }
+    }
+
+    function isEdgeWall(r, c) {
+        // A wall is an edge if it's adjacent to a non-wall cell
+        var dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+        for (var i = 0; i < dirs.length; i++) {
+            var nr = r + dirs[i][0];
+            var nc = c + dirs[i][1];
+            if (nr < 0 || nr >= maze.length || nc < 0 || nc >= maze[0].length) continue;
+            if (maze[nr][nc] !== 0) return true;
+        }
+        return false;
     }
 
     function start() {
@@ -772,13 +821,41 @@ var NeonEngine = (function() {
     }
 
     function render() {
-        var w = canvas.clientWidth;
-        var h = canvas.clientHeight;
+        var rect = canvas.getBoundingClientRect();
+        var w = rect.width;
+        var h = rect.height;
+        if (w <= 0 || h <= 0) return;
 
-        // Clear
+        // Clear with gradient background
         var isLight = document.documentElement.getAttribute('data-theme') === 'light';
-        ctx.fillStyle = isLight ? '#e8e8f0' : '#0a0a1a';
+        if (isLight) {
+            ctx.fillStyle = '#e0e0f0';
+        } else {
+            var bgGrad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w * 0.7);
+            bgGrad.addColorStop(0, '#0a0a2a');
+            bgGrad.addColorStop(0.5, '#060618');
+            bgGrad.addColorStop(1, '#030308');
+            ctx.fillStyle = bgGrad;
+        }
         ctx.fillRect(0, 0, w, h);
+
+        // Subtle grid underlay
+        if (!isLight) {
+            ctx.strokeStyle = 'rgba(0,80,180,0.04)';
+            ctx.lineWidth = 0.5;
+            for (var gx = OFFSET_X % TILE_SIZE; gx < w; gx += TILE_SIZE) {
+                ctx.beginPath();
+                ctx.moveTo(gx, 0);
+                ctx.lineTo(gx, h);
+                ctx.stroke();
+            }
+            for (var gy = OFFSET_Y % TILE_SIZE; gy < h; gy += TILE_SIZE) {
+                ctx.beginPath();
+                ctx.moveTo(0, gy);
+                ctx.lineTo(w, gy);
+                ctx.stroke();
+            }
+        }
 
         // Draw walls (prerendered)
         if (wallCanvas && wallCanvas.width > 0 && wallCanvas.height > 0) {
@@ -835,32 +912,52 @@ var NeonEngine = (function() {
 
     function renderPlayer() {
         var time = Date.now();
-        var pulse = 0.9 + Math.sin(time * 0.008) * 0.1;
+        var pulse = 0.9 + Math.sin(time * 0.006) * 0.1;
         var radius = TILE_SIZE * 0.35 * pulse;
-
         var color = pulseMode ? '#ff00ff' : '#00f5ff';
+        var color2 = pulseMode ? '#ff88ff' : '#88ffff';
 
-        // Outer glow
+        // Outer bloom (large, soft)
         ctx.shadowColor = color;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 25;
+        ctx.globalAlpha = 0.15;
         ctx.fillStyle = color;
-        ctx.globalAlpha = 0.3;
         ctx.beginPath();
-        ctx.arc(player.px, player.py, radius * 1.4, 0, Math.PI * 2);
+        ctx.arc(player.px, player.py, radius * 2.2, 0, Math.PI * 2);
         ctx.fill();
 
-        // Core
+        // Mid glow
+        ctx.shadowBlur = 15;
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.arc(player.px, player.py, radius * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Core orb with gradient
         ctx.globalAlpha = 1;
-        ctx.shadowBlur = 10;
-        var grad = ctx.createRadialGradient(player.px, player.py, 0, player.px, player.py, radius);
+        ctx.shadowBlur = 12;
+        var grad = ctx.createRadialGradient(
+            player.px - radius * 0.2, player.py - radius * 0.2, 0,
+            player.px, player.py, radius
+        );
         grad.addColorStop(0, '#ffffff');
-        grad.addColorStop(0.4, color);
-        grad.addColorStop(1, 'transparent');
+        grad.addColorStop(0.3, color2);
+        grad.addColorStop(0.7, color);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(player.px, player.py, radius, 0, Math.PI * 2);
         ctx.fill();
 
+        // Specular highlight
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(player.px - radius * 0.25, player.py - radius * 0.25, radius * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
     }
 

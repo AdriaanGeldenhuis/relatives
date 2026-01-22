@@ -49,6 +49,7 @@ $cacheVersion = '1.0.0';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="screen-orientation" content="landscape">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#0a0a1a">
@@ -60,6 +61,7 @@ $cacheVersion = '1.0.0';
     <div id="game-wrapper">
         <!-- Start Screen -->
         <div id="screen-start" class="screen active">
+            <a href="/games/" class="back-btn" id="btn-back">&#8592; Back</a>
             <div class="start-content">
                 <div class="game-logo">
                     <div class="logo-orb"></div>
@@ -120,12 +122,16 @@ $cacheVersion = '1.0.0';
             <!-- Canvas -->
             <canvas id="game-canvas"></canvas>
 
-            <!-- D-Pad -->
-            <div id="dpad" class="dpad">
-                <button class="dpad-btn dpad-up" data-dir="up">&#9650;</button>
-                <button class="dpad-btn dpad-left" data-dir="left">&#9664;</button>
-                <button class="dpad-btn dpad-right" data-dir="right">&#9654;</button>
-                <button class="dpad-btn dpad-down" data-dir="down">&#9660;</button>
+            <!-- D-Pad Split: Left cluster + Right cluster -->
+            <div id="dpad" class="dpad-landscape">
+                <div class="dpad-cluster dpad-left-cluster">
+                    <button class="dpad-btn dpad-up" data-dir="up">&#9650;</button>
+                    <button class="dpad-btn dpad-left" data-dir="left">&#9664;</button>
+                </div>
+                <div class="dpad-cluster dpad-right-cluster">
+                    <button class="dpad-btn dpad-right" data-dir="right">&#9654;</button>
+                    <button class="dpad-btn dpad-down" data-dir="down">&#9660;</button>
+                </div>
             </div>
         </div>
 
