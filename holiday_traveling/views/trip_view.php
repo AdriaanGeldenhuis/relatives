@@ -52,12 +52,15 @@ $isPast = strtotime($trip['end_date']) < strtotime('today');
             <span class="ht-version-label">Plan Version:</span>
             <select id="planVersionSelect" class="ht-version-select">
                 <?php foreach ($planVersions as $v): ?>
-                <option value="<?php echo $v['id']; ?>" <?php echo $v['version_number'] == $activePlan['_version'] ? 'selected' : ''; ?>>
+                <option value="<?php echo $v['version_number']; ?>" <?php echo $v['version_number'] == $activePlan['_version'] ? 'selected' : ''; ?>>
                     v<?php echo $v['version_number']; ?> - <?php echo ht_format_date($v['created_at'], 'M j, g:i A'); ?>
                     (<?php echo $v['created_by']; ?>)
                 </option>
                 <?php endforeach; ?>
             </select>
+            <button id="versionHistoryBtn" class="ht-btn ht-btn-outline ht-btn-xs" title="View version history">
+                📜 History
+            </button>
             <?php if ($canEdit): ?>
             <button id="restoreVersionBtn" class="ht-btn ht-btn-outline ht-btn-xs" style="display: none;">
                 Restore This Version
@@ -133,6 +136,10 @@ $isPast = strtotime($trip['end_date']) < strtotime('today');
                 <button id="packingListBtn" class="ht-btn ht-btn-outline ht-btn-sm">
                     <span class="ht-btn-icon">🎒</span>
                     Packing List
+                </button>
+                <button id="safetyBriefBtn" class="ht-btn ht-btn-outline ht-btn-sm">
+                    <span class="ht-btn-icon">🛡️</span>
+                    Safety Info
                 </button>
                 <span class="ht-ai-remaining-inline">
                     <?php echo $aiRemaining; ?> AI left
@@ -557,6 +564,40 @@ $isPast = strtotime($trip['end_date']) < strtotime('today');
         <div class="ht-ai-spinner"></div>
         <h3 class="ht-ai-loading-title" id="aiLoadingTitle">Processing...</h3>
         <p class="ht-ai-loading-text" id="aiLoadingText">AI is working on your request</p>
+    </div>
+</div>
+
+<!-- Safety Brief Modal -->
+<div id="safetyBriefModal" class="ht-modal" style="display: none;">
+    <div class="ht-modal-backdrop"></div>
+    <div class="ht-modal-content ht-modal-lg">
+        <div class="ht-modal-header">
+            <h3 class="ht-modal-title">🛡️ Safety Information</h3>
+            <button class="ht-modal-close" data-action="cancel">&times;</button>
+        </div>
+        <div class="ht-modal-body" id="safetyBriefContent">
+            <p class="ht-loading">Loading safety information...</p>
+        </div>
+        <div class="ht-modal-actions">
+            <button class="ht-btn ht-btn-primary" data-action="cancel">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Version History Modal -->
+<div id="versionHistoryModal" class="ht-modal" style="display: none;">
+    <div class="ht-modal-backdrop"></div>
+    <div class="ht-modal-content ht-modal-lg">
+        <div class="ht-modal-header">
+            <h3 class="ht-modal-title">📜 Plan Version History</h3>
+            <button class="ht-modal-close" data-action="cancel">&times;</button>
+        </div>
+        <div class="ht-modal-body" id="versionHistoryContent">
+            <p class="ht-loading">Loading version history...</p>
+        </div>
+        <div class="ht-modal-actions">
+            <button class="ht-btn ht-btn-primary" data-action="cancel">Close</button>
+        </div>
     </div>
 </div>
 
