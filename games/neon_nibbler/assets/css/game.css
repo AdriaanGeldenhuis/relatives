@@ -580,27 +580,39 @@ html, body {
     to { filter: hue-rotate(12deg) brightness(1.06) saturate(1.15); }
 }
 
+/* ===== ROTATE OVERLAY ===== */
+.rotate-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 9999;
+    background: var(--bg-primary);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.rotate-icon {
+    font-size: 3rem;
+    animation: rotate-hint 1.5s ease-in-out infinite;
+}
+
+@keyframes rotate-hint {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(90deg); }
+}
+
 /* ===== LANDSCAPE RESPONSIVE ===== */
 @media (orientation: portrait) {
-    /* In portrait, show rotate hint or adapt */
-    .dpad-cluster {
-        padding: 10px 8px;
-        gap: 8px;
+    .rotate-overlay {
+        display: flex;
     }
-    .dpad-btn {
-        width: 48px;
-        height: 48px;
-        font-size: 1.1rem;
-    }
-    .start-content {
-        gap: 14px;
-    }
-    .game-logo h1 {
-        font-size: 1.8rem;
-    }
-    .logo-orb {
-        width: 44px;
-        height: 44px;
+    #screen-start, #screen-game, #screen-pause, #screen-results, #screen-level-complete {
+        display: none !important;
     }
 }
 

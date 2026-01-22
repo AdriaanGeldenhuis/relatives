@@ -193,6 +193,12 @@ $cacheVersion = '1.0.0';
 
         <!-- Vignette -->
         <div class="vignette"></div>
+
+        <!-- Rotate Phone Overlay (portrait only) -->
+        <div id="rotate-overlay" class="rotate-overlay">
+            <div class="rotate-icon">&#x1F4F1;&#x21BB;</div>
+            <p>Draai jou foon landscape</p>
+        </div>
     </div>
 
     <!-- User data for JS -->
@@ -218,6 +224,14 @@ $cacheVersion = '1.0.0';
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/games/neon_nibbler/sw.js');
         }
+        // Force landscape orientation
+        (function() {
+            try {
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape').catch(function(){});
+                }
+            } catch(e) {}
+        })();
     </script>
 </body>
 </html>
