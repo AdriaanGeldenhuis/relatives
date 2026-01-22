@@ -19,10 +19,11 @@ var NeonInput = (function() {
     var joystickKnob = null;
     var joystickActive = false;
     var joystickTouchId = null;
-    var baseCenterX = 0;
-    var baseCenterY = 0;
-    var knobMaxDist = 0;
-    var DEAD_ZONE = 12;
+    var touchStartX = 0;
+    var touchStartY = 0;
+    var KNOB_MAX = 40;
+    var DEAD_ZONE = 10;
+    var isPortrait = false;
 
     function init() {
         setupJoystick();
@@ -34,12 +35,42 @@ var NeonInput = (function() {
     function setupJoystick() {
         joystickBase = document.querySelector('.joystick-base');
         joystickKnob = document.getElementById('joystick-knob');
-        if (!joystickBase || !joystickKnob) return;
+        // Use the entire right control area as touch zone
+        var touchZone = document.querySelector('.ctrl-right');
+        if (!touchZone || !joystickKnob) return;
 
-        joystickBase.addEventListener('touchstart', onJoystickStart, { passive: false });
+        // Check orientation for coordinate correction
+        checkOrientation();
+        window.addEventListener('resize', checkOrientation);
+
+        touchZone.addEventListener('touchstart', onJoystickStart, { passive: false });
         document.addEventListener('touchmove', onJoystickMove, { passive: false });
         document.addEventListener('touchend', onJoystickEnd, { passive: false });
         document.addEventListener('touchcancel', onJoystickEnd, { passive: false });
+    }
+
+    function checkOrientation() {
+        isPortrait = window.innerHeight > window.innerWidth;
+    }
+
+    function transformTouch(touch) {
+        // When in portrait mode, the game-wrapper is rotated 90deg.
+        // Touch events are in screen coords, but the visual layout is rotated.
+        // We need to convert screen coords to the rotated coordinate system.
+        if (isPortrait) {
+            // Screen is portrait (e.g. 400w x 800h), but game is rotated to appear landscape
+            // The rotation is: rotate(90deg) with transform-origin: top left, left: 100%
+            // Visual X (in game) = touch.clientY
+            // Visual Y (in game) = screenWidth - touch.clientX
+            return {
+                x: touch.clientY,
+                y: window.innerWidth - touch.clientX
+            };
+        }
+        return {
+            x: touch.clientX,
+            y: touch.clientY
+        };
     }
 
     function onJoystickStart(e) {
@@ -52,8 +83,11 @@ var NeonInput = (function() {
         joystickActive = true;
         joystickKnob.classList.add('active');
 
-        updateBaseRect();
-        processJoystickTouch(t);
+        // Use initial touch position as the virtual center
+        var pos = transformTouch(t);
+        touchStartX = pos.x;
+        touchStartY = pos.y;
+
         NeonAudio.resume();
     }
 
@@ -81,23 +115,17 @@ var NeonInput = (function() {
         }
     }
 
-    function updateBaseRect() {
-        var rect = joystickBase.getBoundingClientRect();
-        baseCenterX = rect.left + rect.width / 2;
-        baseCenterY = rect.top + rect.height / 2;
-        knobMaxDist = rect.width / 2 - 20;
-    }
-
     function processJoystickTouch(touch) {
-        var dx = touch.clientX - baseCenterX;
-        var dy = touch.clientY - baseCenterY;
+        var pos = transformTouch(touch);
+        var dx = pos.x - touchStartX;
+        var dy = pos.y - touchStartY;
         var dist = Math.sqrt(dx * dx + dy * dy);
 
-        // Clamp to base radius
-        if (dist > knobMaxDist) {
-            dx = (dx / dist) * knobMaxDist;
-            dy = (dy / dist) * knobMaxDist;
-            dist = knobMaxDist;
+        // Clamp to max distance
+        if (dist > KNOB_MAX) {
+            dx = (dx / dist) * KNOB_MAX;
+            dy = (dy / dist) * KNOB_MAX;
+            dist = KNOB_MAX;
         }
 
         // Move knob visually
