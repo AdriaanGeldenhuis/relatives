@@ -1,13 +1,14 @@
 -- ============================================
 -- HOLIDAY TRAVELING MODULE - DATABASE SCHEMA
--- Version: 1.0.0
+-- Version: 1.1.0
+-- Fixed: Use BIGINT UNSIGNED to match users/families tables
 -- ============================================
 
 -- Trips table (main entity)
 CREATE TABLE IF NOT EXISTS ht_trips (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    family_id INT UNSIGNED NOT NULL,
-    user_id INT UNSIGNED NOT NULL,
+    family_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
     title VARCHAR(255) NOT NULL,
     destination VARCHAR(255) NOT NULL,
     origin VARCHAR(255) DEFAULT NULL,
@@ -59,11 +60,11 @@ CREATE TABLE IF NOT EXISTS ht_trip_plan_versions (
 CREATE TABLE IF NOT EXISTS ht_trip_members (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     trip_id INT UNSIGNED NOT NULL,
-    user_id INT UNSIGNED DEFAULT NULL COMMENT 'NULL if invited but not yet joined',
+    user_id BIGINT UNSIGNED DEFAULT NULL COMMENT 'NULL if invited but not yet joined',
     invited_email VARCHAR(255) DEFAULT NULL,
     invited_phone VARCHAR(50) DEFAULT NULL,
     role ENUM('owner', 'editor', 'viewer') NOT NULL DEFAULT 'viewer',
-    status ENUM('invited', 'joined', 'declined') NOT NULL DEFAULT 'invited',
+    status ENUM('invited', 'accepted', 'declined') NOT NULL DEFAULT 'invited',
     invite_token VARCHAR(64) DEFAULT NULL,
     invited_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     joined_at TIMESTAMP NULL DEFAULT NULL,
@@ -80,7 +81,7 @@ CREATE TABLE IF NOT EXISTS ht_trip_members (
 CREATE TABLE IF NOT EXISTS ht_trip_votes (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     trip_id INT UNSIGNED NOT NULL,
-    created_by_user_id INT UNSIGNED NOT NULL,
+    created_by_user_id BIGINT UNSIGNED NOT NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT DEFAULT NULL,
     options_json JSON NOT NULL COMMENT 'Array of {id, label, plan_summary}',
@@ -101,7 +102,7 @@ CREATE TABLE IF NOT EXISTS ht_trip_votes (
 CREATE TABLE IF NOT EXISTS ht_trip_vote_responses (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     vote_id INT UNSIGNED NOT NULL,
-    user_id INT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
     option_id VARCHAR(50) NOT NULL,
     vote_value ENUM('love', 'meh', 'no') NOT NULL,
     comment TEXT DEFAULT NULL,
@@ -120,7 +121,7 @@ CREATE TABLE IF NOT EXISTS ht_trip_vote_responses (
 CREATE TABLE IF NOT EXISTS ht_trip_wallet_items (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     trip_id INT UNSIGNED NOT NULL,
-    user_id INT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
     type ENUM('ticket', 'booking', 'doc', 'note', 'qr', 'link', 'contact', 'insurance', 'visa') NOT NULL,
     label VARCHAR(255) NOT NULL,
     content TEXT DEFAULT NULL COMMENT 'Text content, JSON, or URL',
@@ -144,26 +145,25 @@ CREATE TABLE IF NOT EXISTS ht_trip_wallet_items (
 CREATE TABLE IF NOT EXISTS ht_trip_expenses (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     trip_id INT UNSIGNED NOT NULL,
-    user_id INT UNSIGNED NOT NULL COMMENT 'Who paid',
+    paid_by BIGINT UNSIGNED NOT NULL COMMENT 'User who paid',
     category ENUM('food', 'fuel', 'transport', 'stay', 'activity', 'shopping', 'tips', 'other') NOT NULL,
     description VARCHAR(255) NOT NULL,
     amount DECIMAL(12,2) NOT NULL,
     currency VARCHAR(10) NOT NULL DEFAULT 'ZAR',
     expense_date DATE NOT NULL,
     receipt_path VARCHAR(500) DEFAULT NULL,
-    split_type ENUM('equal', 'custom', 'none') NOT NULL DEFAULT 'equal',
-    split_json JSON DEFAULT NULL COMMENT 'Custom split: [{user_id, share}]',
+    split_with_json JSON DEFAULT NULL COMMENT 'Array of user_ids to split with',
     notes TEXT DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     INDEX idx_trip (trip_id),
-    INDEX idx_user (user_id),
+    INDEX idx_paid_by (paid_by),
     INDEX idx_category (trip_id, category),
     INDEX idx_date (trip_id, expense_date),
 
     FOREIGN KEY (trip_id) REFERENCES ht_trips(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (paid_by) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- AI rate limiting and caching
@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS ht_ai_cache (
 -- AI rate limits per user
 CREATE TABLE IF NOT EXISTS ht_ai_rate_limits (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id INT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
     requests_count INT UNSIGNED NOT NULL DEFAULT 0,
     window_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS ht_ai_rate_limits (
 -- Google Calendar OAuth tokens
 CREATE TABLE IF NOT EXISTS ht_user_calendar_tokens (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id INT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
     provider ENUM('google', 'microsoft', 'apple') NOT NULL DEFAULT 'google',
     access_token TEXT NOT NULL,
     refresh_token TEXT DEFAULT NULL,
@@ -214,7 +214,7 @@ CREATE TABLE IF NOT EXISTS ht_user_calendar_tokens (
 CREATE TABLE IF NOT EXISTS ht_trip_packing_items (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     trip_id INT UNSIGNED NOT NULL,
-    user_id INT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
     category VARCHAR(50) NOT NULL COMMENT 'essentials, weather, activities, kids, etc',
     item_name VARCHAR(255) NOT NULL,
     quantity TINYINT UNSIGNED NOT NULL DEFAULT 1,
