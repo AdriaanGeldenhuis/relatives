@@ -21,7 +21,7 @@ array_unshift($pageCSS, '/holiday_traveling/assets/css/holiday.css');
 // Get user data for header
 $user = HT_Auth::user();
 ?>
-<?php require __DIR__ . '/../../../shared/components/header.php'; ?>
+<?php require __DIR__ . '/../../shared/components/header.php'; ?>
 
 <main class="ht-main">
     <div class="ht-container">
@@ -36,7 +36,7 @@ $user = HT_Auth::user();
     </div>
 </main>
 
-<?php require __DIR__ . '/../../../shared/components/footer.php'; ?>
+<?php require __DIR__ . '/../../shared/components/footer.php'; ?>
 
 <!-- Module JavaScript -->
 <script src="/holiday_traveling/assets/js/holiday.js?v=<?php echo $buildTime ?? '1.0.0'; ?>"></script>
