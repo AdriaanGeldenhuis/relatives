@@ -17,7 +17,13 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // If already logged in, redirect immediately
 if (isset($_SESSION['user_id']) && !empty($_SESSION['user_id'])) {
-    header('Location: /home/', true, 302);
+    // Respect redirect parameter if present
+    $redirect = $_GET['redirect'] ?? '/home/';
+    // Validate redirect is internal (starts with /)
+    if (empty($redirect) || $redirect[0] !== '/') {
+        $redirect = '/home/';
+    }
+    header('Location: ' . $redirect, true, 302);
     exit;
 }
 
