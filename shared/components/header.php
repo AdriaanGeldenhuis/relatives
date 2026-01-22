@@ -631,6 +631,11 @@ if (isset($db) && isset($_SESSION['user_id'])) {
                 <span class="nav-text">Holiday & Traveling</span>
             </a>
 
+            <a href="/games/" class="mobile-nav-link <?php echo $activePage === 'games' ? 'active' : ''; ?>">
+                <span class="nav-icon">🎮</span>
+                <span class="nav-text">Games</span>
+            </a>
+
             <?php if (isset($user) && in_array($user['role'], ['owner', 'admin'])): ?>
             <a href="/admin/" class="mobile-nav-link <?php echo $activePage === 'admin' ? 'active' : ''; ?>">
                 <span class="nav-icon">⚙️</span>
