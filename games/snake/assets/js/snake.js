@@ -18,14 +18,18 @@ const SnakeGame = (function() {
         SWIPE_MAX_TIME: 300      // max ms for swipe
     };
 
-    // Colors
+    // Colors - Vibrant & Premium
     const COLORS = {
-        BACKGROUND: '#0a0a12',
-        GRID: '#151520',
-        SNAKE_HEAD: '#4ecca3',
-        SNAKE_BODY: '#3db892',
-        FOOD: '#e74c3c',
-        FOOD_GLOW: 'rgba(231, 76, 60, 0.3)'
+        BACKGROUND: '#080810',
+        GRID: '#12121f',
+        SNAKE_HEAD: '#00ffa3',
+        SNAKE_HEAD_GLOW: 'rgba(0, 255, 163, 0.4)',
+        SNAKE_BODY: '#4ecca3',
+        SNAKE_BODY_GRADIENT: ['#4ecca3', '#3db892', '#2ea881'],
+        FOOD: '#ff6b6b',
+        FOOD_INNER: '#ff4757',
+        FOOD_GLOW: 'rgba(255, 107, 107, 0.5)',
+        FOOD_GLOW_OUTER: 'rgba(255, 71, 87, 0.2)'
     };
 
     // Direction vectors
@@ -477,13 +481,17 @@ const SnakeGame = (function() {
     }
 
     /**
-     * Draw game
+     * Draw game - Premium Graphics
      */
     function draw() {
         const size = canvas.width / (window.devicePixelRatio || 1);
 
-        // Clear canvas
-        ctx.fillStyle = COLORS.BACKGROUND;
+        // Clear canvas with gradient
+        const bgGradient = ctx.createLinearGradient(0, 0, size, size);
+        bgGradient.addColorStop(0, '#080810');
+        bgGradient.addColorStop(0.5, '#0a0a14');
+        bgGradient.addColorStop(1, '#080810');
+        ctx.fillStyle = bgGradient;
         ctx.fillRect(0, 0, size, size);
 
         // Draw grid (subtle)
@@ -499,60 +507,138 @@ const SnakeGame = (function() {
             }
         }
 
-        // Draw food with glow effect
+        // Draw food with enhanced glow effect
         if (food) {
-            // Glow
-            ctx.fillStyle = COLORS.FOOD_GLOW;
-            ctx.beginPath();
-            ctx.arc(
-                food.x * cellSize + cellSize / 2,
-                food.y * cellSize + cellSize / 2,
-                cellSize * 0.7,
-                0,
-                Math.PI * 2
+            const foodCenterX = food.x * cellSize + cellSize / 2;
+            const foodCenterY = food.y * cellSize + cellSize / 2;
+
+            // Outer glow (pulsing)
+            const pulseScale = 1 + Math.sin(Date.now() / 200) * 0.15;
+            const outerGlow = ctx.createRadialGradient(
+                foodCenterX, foodCenterY, 0,
+                foodCenterX, foodCenterY, cellSize * pulseScale
             );
+            outerGlow.addColorStop(0, COLORS.FOOD_GLOW);
+            outerGlow.addColorStop(0.5, COLORS.FOOD_GLOW_OUTER);
+            outerGlow.addColorStop(1, 'transparent');
+            ctx.fillStyle = outerGlow;
+            ctx.beginPath();
+            ctx.arc(foodCenterX, foodCenterY, cellSize * pulseScale, 0, Math.PI * 2);
             ctx.fill();
 
-            // Food
-            ctx.fillStyle = COLORS.FOOD;
-            ctx.fillRect(
-                food.x * cellSize + CONFIG.CELL_PADDING + 1,
-                food.y * cellSize + CONFIG.CELL_PADDING + 1,
-                cellSize - CONFIG.CELL_PADDING * 2 - 2,
-                cellSize - CONFIG.CELL_PADDING * 2 - 2
+            // Food body with gradient
+            const foodGradient = ctx.createRadialGradient(
+                foodCenterX - cellSize * 0.15, foodCenterY - cellSize * 0.15, 0,
+                foodCenterX, foodCenterY, cellSize * 0.5
             );
+            foodGradient.addColorStop(0, '#ff8a8a');
+            foodGradient.addColorStop(0.5, COLORS.FOOD);
+            foodGradient.addColorStop(1, COLORS.FOOD_INNER);
+            ctx.fillStyle = foodGradient;
+
+            // Draw rounded food
+            const fx = food.x * cellSize + CONFIG.CELL_PADDING + 1;
+            const fy = food.y * cellSize + CONFIG.CELL_PADDING + 1;
+            const fw = cellSize - CONFIG.CELL_PADDING * 2 - 2;
+            const fr = 4;
+            ctx.beginPath();
+            ctx.moveTo(fx + fr, fy);
+            ctx.lineTo(fx + fw - fr, fy);
+            ctx.quadraticCurveTo(fx + fw, fy, fx + fw, fy + fr);
+            ctx.lineTo(fx + fw, fy + fw - fr);
+            ctx.quadraticCurveTo(fx + fw, fy + fw, fx + fw - fr, fy + fw);
+            ctx.lineTo(fx + fr, fy + fw);
+            ctx.quadraticCurveTo(fx, fy + fw, fx, fy + fw - fr);
+            ctx.lineTo(fx, fy + fr);
+            ctx.quadraticCurveTo(fx, fy, fx + fr, fy);
+            ctx.fill();
         }
 
-        // Draw snake
-        for (let i = 0; i < snake.length; i++) {
+        // Draw snake with gradient body
+        for (let i = snake.length - 1; i >= 0; i--) {
             const segment = snake[i];
-            ctx.fillStyle = i === 0 ? COLORS.SNAKE_HEAD : COLORS.SNAKE_BODY;
+            const x = segment.x * cellSize + CONFIG.CELL_PADDING;
+            const y = segment.y * cellSize + CONFIG.CELL_PADDING;
+            const w = cellSize - CONFIG.CELL_PADDING * 2;
+            const r = i === 0 ? 5 : 3;
 
-            // Slightly round the head
             if (i === 0) {
+                // Draw head glow
+                ctx.fillStyle = COLORS.SNAKE_HEAD_GLOW;
                 ctx.beginPath();
-                const x = segment.x * cellSize + CONFIG.CELL_PADDING;
-                const y = segment.y * cellSize + CONFIG.CELL_PADDING;
-                const w = cellSize - CONFIG.CELL_PADDING * 2;
-                const r = 3;
-                ctx.moveTo(x + r, y);
-                ctx.lineTo(x + w - r, y);
-                ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-                ctx.lineTo(x + w, y + w - r);
-                ctx.quadraticCurveTo(x + w, y + w, x + w - r, y + w);
-                ctx.lineTo(x + r, y + w);
-                ctx.quadraticCurveTo(x, y + w, x, y + w - r);
-                ctx.lineTo(x, y + r);
-                ctx.quadraticCurveTo(x, y, x + r, y);
+                ctx.arc(x + w/2, y + w/2, w * 0.8, 0, Math.PI * 2);
                 ctx.fill();
-            } else {
-                ctx.fillRect(
-                    segment.x * cellSize + CONFIG.CELL_PADDING,
-                    segment.y * cellSize + CONFIG.CELL_PADDING,
-                    cellSize - CONFIG.CELL_PADDING * 2,
-                    cellSize - CONFIG.CELL_PADDING * 2
+
+                // Head with bright gradient
+                const headGradient = ctx.createRadialGradient(
+                    x + w * 0.3, y + w * 0.3, 0,
+                    x + w/2, y + w/2, w * 0.7
                 );
+                headGradient.addColorStop(0, '#5fffd4');
+                headGradient.addColorStop(0.5, COLORS.SNAKE_HEAD);
+                headGradient.addColorStop(1, '#3db892');
+                ctx.fillStyle = headGradient;
+            } else {
+                // Body segments with fading gradient
+                const progress = i / snake.length;
+                const alpha = 1 - (progress * 0.4);
+                const colorIndex = Math.min(2, Math.floor(progress * 3));
+                ctx.fillStyle = COLORS.SNAKE_BODY_GRADIENT[colorIndex];
+                ctx.globalAlpha = alpha;
             }
+
+            // Draw rounded rectangle for each segment
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + w - r);
+            ctx.quadraticCurveTo(x + w, y + w, x + w - r, y + w);
+            ctx.lineTo(x + r, y + w);
+            ctx.quadraticCurveTo(x, y + w, x, y + w - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.fill();
+
+            ctx.globalAlpha = 1;
+        }
+
+        // Draw eyes on head
+        if (snake.length > 0) {
+            const head = snake[0];
+            const hx = head.x * cellSize + cellSize / 2;
+            const hy = head.y * cellSize + cellSize / 2;
+            const eyeSize = cellSize * 0.12;
+            const eyeOffset = cellSize * 0.2;
+
+            ctx.fillStyle = '#fff';
+
+            // Position eyes based on direction
+            let eye1x, eye1y, eye2x, eye2y;
+            switch (direction) {
+                case 'UP':
+                    eye1x = hx - eyeOffset; eye1y = hy - eyeOffset;
+                    eye2x = hx + eyeOffset; eye2y = hy - eyeOffset;
+                    break;
+                case 'DOWN':
+                    eye1x = hx - eyeOffset; eye1y = hy + eyeOffset;
+                    eye2x = hx + eyeOffset; eye2y = hy + eyeOffset;
+                    break;
+                case 'LEFT':
+                    eye1x = hx - eyeOffset; eye1y = hy - eyeOffset;
+                    eye2x = hx - eyeOffset; eye2y = hy + eyeOffset;
+                    break;
+                case 'RIGHT':
+                default:
+                    eye1x = hx + eyeOffset; eye1y = hy - eyeOffset;
+                    eye2x = hx + eyeOffset; eye2y = hy + eyeOffset;
+                    break;
+            }
+
+            ctx.beginPath();
+            ctx.arc(eye1x, eye1y, eyeSize, 0, Math.PI * 2);
+            ctx.arc(eye2x, eye2y, eyeSize, 0, Math.PI * 2);
+            ctx.fill();
         }
     }
 
