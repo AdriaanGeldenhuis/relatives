@@ -256,7 +256,7 @@ body {
     font-weight: 600;
     white-space: nowrap;
     box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
-    z-index: 1000;
+    z-index: 9999;
     animation: tooltipBounce 0.6s ease-out, tooltipPulse 2s ease-in-out infinite 0.6s;
     display: flex;
     align-items: center;
