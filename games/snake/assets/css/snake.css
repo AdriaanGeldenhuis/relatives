@@ -26,22 +26,22 @@
     --dpad-active: rgba(78, 204, 163, 0.4);
 }
 
-/* Realistic Theme */
+/* Realistic Theme - Nature/Outdoor */
 [data-theme="realistic"] {
-    --bg-primary: #1a2f1a;
-    --bg-secondary: #2d4a2d;
-    --bg-tertiary: #1e3d1e;
-    --accent-primary: #8fbc8f;
-    --accent-secondary: #98d998;
-    --accent-tertiary: #6b8e6b;
-    --text-primary: #f0f0e8;
-    --text-secondary: rgba(240, 240, 232, 0.8);
-    --text-muted: rgba(240, 240, 232, 0.5);
-    --border-glow: rgba(143, 188, 143, 0.3);
-    --shadow-glow: rgba(143, 188, 143, 0.3);
-    --dpad-bg: rgba(107, 142, 35, 0.2);
-    --dpad-border: rgba(107, 142, 35, 0.6);
-    --dpad-active: rgba(107, 142, 35, 0.4);
+    --bg-primary: #2d5a1d;
+    --bg-secondary: #3d6b2d;
+    --bg-tertiary: #1d4a0d;
+    --accent-primary: #8b4513;
+    --accent-secondary: #a0522d;
+    --accent-tertiary: #654321;
+    --text-primary: #fff8dc;
+    --text-secondary: rgba(255, 248, 220, 0.85);
+    --text-muted: rgba(255, 248, 220, 0.6);
+    --border-glow: rgba(139, 69, 19, 0.4);
+    --shadow-glow: rgba(0, 0, 0, 0.3);
+    --dpad-bg: rgba(139, 69, 19, 0.25);
+    --dpad-border: rgba(160, 82, 45, 0.7);
+    --dpad-active: rgba(139, 69, 19, 0.5);
 }
 
 /* Classic Nokia Theme */
@@ -582,25 +582,54 @@ body {
 }
 
 .realistic-preview {
-    background: linear-gradient(135deg, #1a2f1a, #2d4a2d);
-    border: 2px solid #6b8e23;
+    background: linear-gradient(135deg, #3d6b2d, #2d5a1d, #1d4a0d);
+    border: 2px solid #8b4513;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Grass texture effect */
+.realistic-preview::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 80, 0, 0.15) 2px,
+        rgba(0, 80, 0, 0.15) 4px
+    );
 }
 
 .realistic-preview .preview-snake {
     position: absolute;
-    width: 12px;
-    height: 36px;
-    background: linear-gradient(180deg, #228b22, #2e8b57, #3cb371);
-    border-radius: 6px;
-    top: 12px;
+    width: 14px;
+    height: 40px;
+    background: linear-gradient(90deg, #2a3520, #4a5a32, #5a6b3a, #4a5a32, #2a3520);
+    border-radius: 7px;
+    top: 10px;
     left: 16px;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+/* Snake head */
+.realistic-preview .preview-snake::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 2px;
+    width: 10px;
+    height: 8px;
+    background: linear-gradient(90deg, #3a4a28, #5a6b3a, #3a4a28);
+    border-radius: 5px 5px 3px 3px;
 }
 
 .realistic-preview .preview-food {
     position: absolute;
-    width: 12px;
-    height: 12px;
-    background: radial-gradient(circle at 30% 30%, #ff6347, #dc143c);
+    width: 14px;
+    height: 14px;
+    background: radial-gradient(circle at 35% 35%, #ff6666, #cc2233, #991122);
     border-radius: 50%;
     top: 14px;
     right: 12px;

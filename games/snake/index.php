@@ -143,8 +143,8 @@ $familyId = $_SESSION['family_id'] ?? null;
                                 <div class="preview-snake"></div>
                                 <div class="preview-food"></div>
                             </div>
-                            <span class="theme-name">Realistic</span>
-                            <span class="theme-desc">Natural & lifelike</span>
+                            <span class="theme-name">Nature</span>
+                            <span class="theme-desc">3D snake on grass</span>
                         </button>
                         <button class="theme-option" data-theme="classic">
                             <div class="theme-preview classic-preview">
