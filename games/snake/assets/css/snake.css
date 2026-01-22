@@ -238,6 +238,121 @@ body {
     border-radius: 4px;
 }
 
+/* Theme Button Wrapper */
+.theme-btn-wrapper {
+    position: relative;
+}
+
+/* First-time Tooltip Balloon */
+.tooltip-balloon {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: -10px;
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    animation: tooltipBounce 0.6s ease-out, tooltipPulse 2s ease-in-out infinite 0.6s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tooltip-balloon.hidden {
+    display: none;
+}
+
+.tooltip-arrow {
+    position: absolute;
+    top: -8px;
+    right: 20px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid #ff6b6b;
+}
+
+.tooltip-text {
+    flex: 1;
+}
+
+.tooltip-close {
+    background: rgba(255, 255, 255, 0.25);
+    border: none;
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.tooltip-close:active {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+@keyframes tooltipBounce {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.8);
+    }
+    50% {
+        transform: translateY(5px) scale(1.05);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes tooltipPulse {
+    0%, 100% {
+        box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(255, 107, 107, 0.6), 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+}
+
+/* Realistic theme tooltip */
+[data-theme="realistic"] .tooltip-balloon {
+    background: linear-gradient(135deg, #8b4513 0%, #a0522d 100%);
+    box-shadow: 0 4px 15px rgba(139, 69, 19, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="realistic"] .tooltip-arrow {
+    border-bottom-color: #8b4513;
+}
+
+/* Classic theme tooltip */
+[data-theme="classic"] .tooltip-balloon {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    border-radius: 4px;
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.3);
+    animation: none;
+}
+
+[data-theme="classic"] .tooltip-arrow {
+    border-bottom-color: var(--accent-primary);
+}
+
+[data-theme="classic"] .tooltip-close {
+    background: var(--bg-primary);
+    color: var(--accent-primary);
+}
+
 /* Sync Indicator */
 .sync-indicator {
     display: flex;

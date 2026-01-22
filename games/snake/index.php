@@ -40,9 +40,17 @@ $familyId = $_SESSION['family_id'] ?? null;
             </div>
             <h1>Snake Classic</h1>
             <div class="header-right">
-                <button id="theme-btn" class="theme-btn" aria-label="Change theme" title="Change Theme">
-                    <span class="theme-icon">🎨</span>
-                </button>
+                <div class="theme-btn-wrapper">
+                    <button id="theme-btn" class="theme-btn" aria-label="Change theme" title="Change Theme">
+                        <span class="theme-icon">🎨</span>
+                    </button>
+                    <!-- First-time tooltip -->
+                    <div id="theme-tooltip" class="tooltip-balloon hidden">
+                        <span class="tooltip-text">Change your look here!</span>
+                        <button class="tooltip-close" aria-label="Close">&times;</button>
+                        <div class="tooltip-arrow"></div>
+                    </div>
+                </div>
                 <span id="sync-indicator" class="sync-indicator" title="Sync status">
                     <span class="sync-icon"></span>
                 </span>

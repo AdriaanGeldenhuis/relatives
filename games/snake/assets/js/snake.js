@@ -445,6 +445,54 @@ const SnakeGame = (function() {
         document.querySelectorAll('.theme-option').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.theme === currentTheme);
         });
+
+        // Show first-time tooltip
+        showFirstTimeTooltip();
+    }
+
+    /**
+     * Show tooltip balloon on first visit
+     */
+    function showFirstTimeTooltip() {
+        const tooltip = document.getElementById('theme-tooltip');
+        const themeBtn = document.getElementById('theme-btn');
+        const closeBtn = tooltip?.querySelector('.tooltip-close');
+
+        if (!tooltip) return;
+
+        // Check if user has seen the tooltip before
+        const hasSeenTooltip = localStorage.getItem('snake_tooltip_seen');
+
+        if (hasSeenTooltip) {
+            tooltip.classList.add('hidden');
+            return;
+        }
+
+        // Show the tooltip
+        tooltip.classList.remove('hidden');
+
+        // Hide tooltip when close button is clicked
+        if (closeBtn) {
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideTooltip();
+            });
+        }
+
+        // Hide tooltip when theme button is clicked
+        if (themeBtn) {
+            themeBtn.addEventListener('click', hideTooltip, { once: true });
+        }
+
+        // Auto-hide after 8 seconds
+        setTimeout(() => {
+            hideTooltip();
+        }, 8000);
+
+        function hideTooltip() {
+            tooltip.classList.add('hidden');
+            localStorage.setItem('snake_tooltip_seen', 'true');
+        }
     }
 
     /**
