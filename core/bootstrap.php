@@ -97,6 +97,7 @@ $coreClasses = [
     'Response.php',
     'Session.php',
     'Auth.php',
+    'CSRF.php',
     'Validator.php',
     'EmailService.php',
     'Cache.php',
