@@ -129,78 +129,84 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         .mobile-menu-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(4px);
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(8px);
             z-index: 1998;
             opacity: 0;
             visibility: hidden;
             transition: opacity 0.3s ease, visibility 0.3s ease;
         }
-        
+
         .mobile-menu-overlay.active {
             opacity: 1;
             visibility: visible;
         }
-        
+
         .mobile-sidebar {
             position: fixed;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            width: 85%;
-            max-width: 320px;
-            background: linear-gradient(180deg, rgba(31, 34, 49, 0.98), rgba(118, 75, 162, 0.98));
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            max-width: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             backdrop-filter: blur(40px);
             z-index: 1999;
-            transform: translateX(-100%);
-            transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(0.95);
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
             display: flex;
             flex-direction: column;
-            box-shadow: 10px 0 50px rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+            overflow-x: hidden;
         }
-        
+
         .mobile-sidebar.active {
-            transform: translateX(0);
+            opacity: 1;
+            visibility: visible;
+            transform: scale(1);
         }
-        
+
         .mobile-sidebar-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+            flex-shrink: 0;
         }
         
         .logo {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
-        
+
         .logo-icon {
-            font-size: 32px;
+            font-size: 36px;
             animation: logoFloat 3s ease-in-out infinite;
         }
-        
+
         @keyframes logoFloat {
             0%, 100% { transform: translateY(0) rotate(0deg); }
             50% { transform: translateY(-5px) rotate(5deg); }
         }
-        
+
         .logo-text {
-            font-size: 20px;
+            font-size: 24px;
             font-weight: 900;
             color: white;
             font-family: 'Space Grotesk', sans-serif;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         }
-        
+
         .close-sidebar {
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.25);
             color: white;
             font-size: 24px;
-            width: 40px;
-            height: 40px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             cursor: pointer;
             display: flex;
@@ -208,102 +214,95 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             justify-content: center;
             transition: all 0.3s;
         }
-        
+
         .close-sidebar:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: rotate(90deg);
+            background: rgba(255, 255, 255, 0.25);
+            transform: rotate(90deg) scale(1.1);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
         }
         
         .mobile-nav {
             flex: 1;
-            padding: 20px 0;
-            overflow-y: auto;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            align-content: start;
         }
-        
-        .mobile-nav::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        .mobile-nav::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-        }
-        
-        .mobile-nav::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 10px;
-        }
-        
+
         .mobile-nav-link {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 15px;
-            padding: 8px 25px;
+            justify-content: center;
+            gap: 8px;
+            padding: 20px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
             color: rgba(255, 255, 255, 0.9);
             text-decoration: none;
             font-weight: 600;
-            font-size: 16px;
-            transition: all 0.3s;
+            font-size: 13px;
+            transition: all 0.3s ease;
             position: relative;
+            text-align: center;
+            min-height: 100px;
         }
-        
+
         .mobile-nav-link:hover {
-            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .mobile-nav-link:active {
+            transform: translateY(-2px) scale(0.98);
         }
 
         .mobile-nav-link.active {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.15));
-            padding-left: 30px;
+            background: rgba(255, 255, 255, 0.25);
+            border: 2px solid rgba(255, 255, 255, 0.4);
             color: white;
             font-weight: 700;
-            border-radius: 0 12px 12px 0;
-            box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.1);
-        }
-
-        .mobile-nav-link.active::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.7));
-            border-radius: 0 4px 4px 0;
-            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 20px rgba(255, 255, 255, 0.15), inset 0 0 20px rgba(255, 255, 255, 0.1);
         }
 
         .mobile-nav-link.active .nav-icon {
-            transform: scale(1.15);
-            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+            transform: scale(1.2);
+            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.6));
         }
-        
+
         .nav-icon {
-            font-size: 24px;
-            min-width: 30px;
-            text-align: center;
-            flex-shrink: 0;
+            font-size: 32px;
             filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
             transition: transform 0.3s ease, filter 0.3s ease;
         }
-        
+
         .nav-text {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-size: 0.85rem;
+            letter-spacing: 0.3px;
+            line-height: 1.2;
         }
         
         .mobile-sidebar-footer {
             padding: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            background: rgba(0, 0, 0, 0.1);
+            flex-shrink: 0;
         }
-        
+
         .user-profile {
             display: flex;
             gap: 12px;
             margin-bottom: 15px;
             align-items: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            border-radius: 12px;
         }
-        
+
         .user-avatar {
             width: 48px;
             height: 48px;
@@ -318,12 +317,12 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             border: 3px solid rgba(255, 255, 255, 0.3);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
-        
+
         .user-info {
             flex: 1;
             min-width: 0;
         }
-        
+
         .user-name {
             font-weight: 700;
             color: white;
@@ -332,7 +331,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             text-overflow: ellipsis;
             font-size: 16px;
         }
-        
+
         .user-email {
             font-size: 12px;
             color: rgba(255, 255, 255, 0.7);
@@ -340,28 +339,28 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        
+
         .logout-btn {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
             width: 100%;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.15);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 10px;
+            padding: 14px;
+            background: rgba(255, 71, 87, 0.2);
+            border: 1px solid rgba(255, 71, 87, 0.4);
+            border-radius: 12px;
             color: white;
             font-weight: 700;
             cursor: pointer;
             text-decoration: none;
             transition: all 0.3s;
         }
-        
+
         .logout-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
+            background: rgba(255, 71, 87, 0.35);
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 16px rgba(255, 71, 87, 0.3);
         }
         
         .global-header {
@@ -519,23 +518,59 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         
         @media (max-width: 480px) {
             .mobile-sidebar {
-                width: 90%;
+                width: 100%;
             }
-            
+
+            .mobile-nav {
+                padding: 15px;
+                gap: 10px;
+            }
+
+            .mobile-nav-link {
+                padding: 16px 10px;
+                min-height: 90px;
+            }
+
+            .nav-icon {
+                font-size: 28px;
+            }
+
+            .nav-text {
+                font-size: 0.75rem;
+            }
+
             .header-container {
                 padding: 10px 15px;
             }
-            
+
             .header-btn {
                 width: 40px;
                 height: 40px;
                 font-size: 18px;
             }
-            
+
             .notification-badge {
                 font-size: 10px;
                 min-width: 18px;
                 height: 18px;
+            }
+        }
+
+        @media (min-width: 600px) {
+            .mobile-nav {
+                max-width: 500px;
+                margin: 0 auto;
+            }
+        }
+
+        @media (max-height: 600px) {
+            .mobile-nav-link {
+                padding: 12px 10px;
+                min-height: 70px;
+            }
+
+            .nav-icon {
+                font-size: 24px;
             }
         }
     </style>
