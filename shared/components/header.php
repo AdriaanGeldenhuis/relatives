@@ -169,23 +169,23 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px 20px;
+            padding: 12px 16px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             flex-shrink: 0;
         }
-        
+
         .logo {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .logo-icon {
-            font-size: 32px;
+            font-size: 28px;
         }
 
         .logo-text {
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 900;
             color: white;
             font-family: 'Space Grotesk', sans-serif;
@@ -199,9 +199,9 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.15);
             color: white;
-            font-size: 22px;
-            width: 40px;
-            height: 40px;
+            font-size: 20px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             cursor: pointer;
             display: flex;
@@ -217,10 +217,10 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         
         .mobile-nav {
             flex: 1;
-            padding: 12px;
+            padding: 10px;
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
+            gap: 8px;
             align-content: center;
             overflow: hidden;
         }
@@ -230,19 +230,18 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 6px;
-            padding: clamp(10px, 2vh, 18px) 8px;
+            gap: 4px;
+            padding: clamp(8px, 1.2vh, 14px) 6px;
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 14px;
+            border-radius: 12px;
             color: rgba(255, 255, 255, 0.9);
             text-decoration: none;
             font-weight: 600;
-            font-size: clamp(11px, 1.5vh, 13px);
+            font-size: clamp(10px, 1.3vh, 12px);
             transition: all 0.3s ease;
             position: relative;
             text-align: center;
-            aspect-ratio: 1.2;
         }
 
         .mobile-nav-link:hover {
@@ -268,19 +267,19 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         }
 
         .nav-icon {
-            font-size: clamp(24px, 4vh, 32px);
+            font-size: clamp(20px, 3vh, 28px);
             filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
             transition: transform 0.3s ease, filter 0.3s ease;
         }
 
         .nav-text {
-            font-size: clamp(10px, 1.4vh, 13px);
-            letter-spacing: 0.3px;
-            line-height: 1.2;
+            font-size: clamp(9px, 1.2vh, 11px);
+            letter-spacing: 0.2px;
+            line-height: 1.1;
         }
         
         .mobile-sidebar-footer {
-            padding: 12px 16px;
+            padding: 10px 12px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             background: rgba(0, 0, 0, 0.2);
             flex-shrink: 0;
@@ -289,23 +288,23 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         .user-profile {
             display: flex;
             gap: 10px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             align-items: center;
             background: rgba(255, 255, 255, 0.06);
-            padding: 10px;
+            padding: 8px 10px;
             border-radius: 10px;
         }
 
         .user-avatar {
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
             font-weight: 800;
-            font-size: 16px;
+            font-size: 14px;
             flex-shrink: 0;
             border: 2px solid rgba(255, 255, 255, 0.2);
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -322,11 +321,11 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            font-size: 14px;
+            font-size: 13px;
         }
 
         .user-email {
-            font-size: 11px;
+            font-size: 10px;
             color: rgba(255, 255, 255, 0.6);
             white-space: nowrap;
             overflow: hidden;
@@ -339,13 +338,13 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             justify-content: center;
             gap: 8px;
             width: 100%;
-            padding: 12px;
+            padding: 10px;
             background: rgba(255, 71, 87, 0.15);
             border: 1px solid rgba(255, 71, 87, 0.3);
             border-radius: 10px;
             color: white;
             font-weight: 700;
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
             text-decoration: none;
             transition: all 0.3s;
@@ -511,29 +510,6 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         }
         
         @media (max-width: 480px) {
-            .mobile-sidebar-header {
-                padding: 12px 16px;
-            }
-
-            .logo-icon {
-                font-size: 28px;
-            }
-
-            .logo-text {
-                font-size: 20px;
-            }
-
-            .close-sidebar {
-                width: 38px;
-                height: 38px;
-                font-size: 20px;
-            }
-
-            .mobile-nav {
-                padding: 10px;
-                gap: 8px;
-            }
-
             .header-container {
                 padding: 10px 15px;
             }
@@ -553,44 +529,15 @@ if (isset($db) && isset($_SESSION['user_id'])) {
 
         @media (min-width: 600px) {
             .mobile-nav {
-                max-width: 420px;
+                max-width: 380px;
                 margin: 0 auto;
             }
         }
 
         /* Short screens - compact everything */
-        @media (max-height: 700px) {
+        @media (max-height: 750px) {
             .mobile-sidebar-header {
-                padding: 10px 16px;
-            }
-
-            .mobile-nav {
-                gap: 6px;
-                padding: 8px;
-            }
-
-            .mobile-nav-link {
-                gap: 4px;
-            }
-
-            .mobile-sidebar-footer {
-                padding: 10px 12px;
-            }
-
-            .user-profile {
-                padding: 8px;
-                margin-bottom: 8px;
-            }
-
-            .logout-btn {
-                padding: 10px;
-            }
-        }
-
-        /* Very short screens */
-        @media (max-height: 550px) {
-            .mobile-sidebar-header {
-                padding: 8px 12px;
+                padding: 10px 14px;
             }
 
             .logo-icon {
@@ -602,12 +549,30 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             }
 
             .mobile-nav {
-                gap: 4px;
-                padding: 6px;
+                gap: 6px;
+                padding: 8px;
+            }
+
+            .mobile-nav-link {
+                gap: 3px;
+                padding: clamp(6px, 1vh, 12px) 4px;
+            }
+
+            .nav-icon {
+                font-size: clamp(18px, 2.5vh, 24px);
+            }
+
+            .nav-text {
+                font-size: clamp(8px, 1vh, 10px);
             }
 
             .mobile-sidebar-footer {
                 padding: 8px 10px;
+            }
+
+            .user-profile {
+                padding: 6px 8px;
+                margin-bottom: 6px;
             }
 
             .user-avatar {
@@ -621,12 +586,80 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             }
 
             .user-email {
-                font-size: 10px;
+                font-size: 9px;
             }
 
             .logout-btn {
                 padding: 8px;
                 font-size: 12px;
+            }
+        }
+
+        /* Very short screens */
+        @media (max-height: 600px) {
+            .mobile-sidebar-header {
+                padding: 8px 12px;
+            }
+
+            .logo-icon {
+                font-size: 22px;
+            }
+
+            .logo-text {
+                font-size: 16px;
+            }
+
+            .close-sidebar {
+                width: 32px;
+                height: 32px;
+                font-size: 18px;
+            }
+
+            .mobile-nav {
+                gap: 4px;
+                padding: 6px;
+            }
+
+            .mobile-nav-link {
+                gap: 2px;
+                padding: clamp(4px, 0.8vh, 8px) 4px;
+                border-radius: 8px;
+            }
+
+            .nav-icon {
+                font-size: clamp(16px, 2vh, 20px);
+            }
+
+            .nav-text {
+                font-size: clamp(7px, 0.9vh, 9px);
+            }
+
+            .mobile-sidebar-footer {
+                padding: 6px 8px;
+            }
+
+            .user-profile {
+                padding: 5px 6px;
+                margin-bottom: 5px;
+            }
+
+            .user-avatar {
+                width: 28px;
+                height: 28px;
+                font-size: 11px;
+            }
+
+            .user-name {
+                font-size: 11px;
+            }
+
+            .user-email {
+                font-size: 8px;
+            }
+
+            .logout-btn {
+                padding: 6px;
+                font-size: 11px;
             }
         }
     </style>
