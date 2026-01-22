@@ -763,8 +763,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .team-players {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: var(--spacing-md);
 }
 
@@ -782,7 +782,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .player-input {
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: var(--spacing-md);
     font-size: 1rem;
     color: var(--text-primary);
     background: rgba(0, 0, 0, 0.2);
@@ -1240,6 +1240,73 @@ h1, h2, h3, h4, h5, h6 {
 /* ================================
    Responsive Adjustments
    ================================ */
+
+/* Mobile-first responsive adjustments */
+@media (max-width: 480px) {
+    .page-title {
+        font-size: 1.5rem;
+    }
+
+    .page-subtitle {
+        font-size: 0.875rem;
+    }
+
+    .team-card {
+        padding: var(--spacing-md);
+    }
+
+    .player-input {
+        font-size: 16px; /* Prevents iOS zoom on focus */
+    }
+
+    .btn {
+        padding: var(--spacing-md);
+        font-size: 0.9375rem;
+    }
+
+    .btn-lg {
+        padding: var(--spacing-md) var(--spacing-lg);
+    }
+
+    .item-card {
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    .item-text {
+        font-size: 1rem;
+    }
+
+    .settings-panel {
+        padding: var(--spacing-md);
+    }
+
+    .setting-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-sm);
+    }
+
+    .setting-value {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .feature-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .rules-section {
+        padding: var(--spacing-md);
+    }
+
+    .gate-icon {
+        font-size: 4rem;
+    }
+
+    .gate-title {
+        font-size: 1.5rem;
+    }
+}
 
 @media (max-width: 360px) {
     :root {

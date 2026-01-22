@@ -127,6 +127,26 @@ $displayName = htmlspecialchars($user['full_name'] ?? 'Player');
         .back-link:hover {
             color: var(--text-primary);
         }
+
+        /* Mobile responsive */
+        @media (max-width: 400px) {
+            .hero-icon {
+                font-size: 4rem;
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+                gap: var(--spacing-sm);
+            }
+
+            .feature-card {
+                padding: var(--spacing-md);
+            }
+
+            .feature-icon {
+                font-size: 1.5rem;
+            }
+        }
     </style>
 </head>
 <body>
