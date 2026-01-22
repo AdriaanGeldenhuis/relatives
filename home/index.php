@@ -535,7 +535,16 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php foreach ($familyMembers as $member): ?>
                     <div class="member-card" data-tilt>
                         <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>" aria-label="<?php echo htmlspecialchars($member['full_name']); ?>">
-                            <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                            <?php
+                            $avatarPath = __DIR__ . "/../saves/{$member['id']}/avatar/avatar.webp";
+                            if (file_exists($avatarPath)):
+                            ?>
+                                <img src="/saves/<?php echo $member['id']; ?>/avatar/avatar.webp?<?php echo time(); ?>"
+                                     alt="<?php echo htmlspecialchars($member['full_name']); ?>"
+                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                            <?php else: ?>
+                                <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                            <?php endif; ?>
                             <?php
                             $lastActive = strtotime($member['last_active']);
                             $isOnline = (time() - $lastActive) < 300;
