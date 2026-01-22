@@ -4,9 +4,7 @@
  * Accepts score submissions with basic anti-cheat validation.
  */
 
-declare(strict_types=1);
-
-// Start session if not already started
+// Start session first
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -29,9 +27,21 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Get user data from session
-$userId = (int) $_SESSION['user_id'];
-$familyId = isset($_SESSION['family_id']) ? (int) $_SESSION['family_id'] : null;
+// Load bootstrap for database connection
+require_once __DIR__ . '/../../../core/bootstrap.php';
+
+// Get user with Auth
+$auth = new Auth($db);
+$user = $auth->getCurrentUser();
+
+if (!$user) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Not authenticated']);
+    exit;
+}
+
+$userId = (int) $user['id'];
+$familyId = isset($user['family_id']) ? (int) $user['family_id'] : null;
 
 // Parse JSON body
 $input = file_get_contents('php://input');
@@ -136,23 +146,33 @@ if (strlen($deviceId) < 8) {
 // Extract optional seed
 $seed = isset($data['seed']) ? substr(preg_replace('/[^a-zA-Z0-9\-]/', '', $data['seed']), 0, 16) : null;
 
-// Database connection
+// Insert score using $db from bootstrap
 try {
-    $dbConfig = require __DIR__ . '/../../../config/database.php';
+    // First, check if table exists, if not create it
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS snake_scores (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            family_id INT UNSIGNED NULL,
+            score INT UNSIGNED NOT NULL DEFAULT 0,
+            mode VARCHAR(20) NOT NULL DEFAULT 'classic',
+            run_started_at DATETIME NOT NULL,
+            run_ended_at DATETIME NOT NULL,
+            duration_seconds INT UNSIGNED NOT NULL,
+            device_id VARCHAR(64) NOT NULL,
+            seed VARCHAR(16) NULL,
+            flagged TINYINT(1) NOT NULL DEFAULT 0,
+            flag_reason VARCHAR(255) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_user_id (user_id),
+            INDEX idx_family_id (family_id),
+            INDEX idx_created_at (created_at),
+            INDEX idx_family_created (family_id, created_at),
+            INDEX idx_score (score DESC)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 
-    $pdo = new PDO(
-        "mysql:host={$dbConfig['host']};dbname={$dbConfig['database']};charset=utf8mb4",
-        $dbConfig['username'],
-        $dbConfig['password'],
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false
-        ]
-    );
-
-    // Insert score
-    $stmt = $pdo->prepare("
+    $stmt = $db->prepare("
         INSERT INTO snake_scores
             (user_id, family_id, score, mode, run_started_at, run_ended_at, duration_seconds, device_id, seed, flagged, flag_reason, created_at)
         VALUES
@@ -173,7 +193,7 @@ try {
         'flag_reason' => $flagReason
     ]);
 
-    $scoreId = $pdo->lastInsertId();
+    $scoreId = $db->lastInsertId();
 
     // Return success
     echo json_encode([
@@ -186,6 +206,6 @@ try {
 } catch (PDOException $e) {
     error_log('Snake score submission error: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'Database error']);
+    echo json_encode(['error' => 'Database error', 'debug' => $e->getMessage()]);
     exit;
 }
