@@ -516,9 +516,13 @@ function createMessageElement(msg) {
         </div>
     `;
     
-    const time = new Date(msg.created_at).toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit' 
+    const msgDate = new Date(msg.created_at);
+    const time = msgDate.toLocaleDateString([], {
+        month: 'short',
+        day: 'numeric'
+    }) + ' ' + msgDate.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
     });
     
     const editedIndicator = msg.edited_at ? `<span class="edited-indicator" title="Edited at ${msg.edited_at}">(edited)</span>` : '';
