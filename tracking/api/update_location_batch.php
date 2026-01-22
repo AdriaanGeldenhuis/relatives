@@ -74,8 +74,8 @@ try {
     $deviceName = $input['device_name'] ?? null;
     $source = $input['source'] ?? 'native';
 
-    // Limit batch size to prevent abuse
-    $maxBatchSize = 50;
+    // Limit batch size to prevent abuse (increased from 50 to 100 for better offline queue flush)
+    $maxBatchSize = 100;
     if (count($locations) > $maxBatchSize) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => "batch_too_large (max {$maxBatchSize})"]);

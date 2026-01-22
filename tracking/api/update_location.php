@@ -16,7 +16,7 @@ declare(strict_types=1);
  * 1. Existing PHP session
  * 2. Authorization: Bearer <token>
  * 3. RELATIVES_SESSION cookie
- * 4. session_token in request body (fallback)
+ * 4. session_token in request body (fallback for some Android devices/proxies)
  */
 
 error_reporting(E_ALL);
@@ -140,10 +140,11 @@ if (!isset($_SESSION['user_id'])) {
     }
 }
 
-// 4. Try session_token in request body (last resort)
+// Read input early for body token auth (needed as fallback for some Android devices/proxies that strip headers)
 $rawInput = file_get_contents('php://input');
 $inputData = json_decode($rawInput, true);
 
+// 4. Try session_token in request body (fallback for devices where Authorization header is stripped)
 if (!isset($_SESSION['user_id'])) {
     if ($inputData && isset($inputData['session_token']) && !empty($inputData['session_token'])) {
         try {

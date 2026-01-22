@@ -38,6 +38,9 @@ class TrackingMapProfessional {
             min: Math.max(5, this.config.pollingIntervalMin || 5)              // Minimum allowed
         };
 
+        // Track previous status for change detection
+        this.previousStatus = new Map();
+
         // Map styles - Mapbox if token available, else free tiles
         this.mapStyles = this.buildMapStyles();
 
@@ -871,6 +874,16 @@ class TrackingMapProfessional {
                 const isStale = status === 'stale';
                 const hasNoLocation = status === 'no_location';
 
+                // Detect status change
+                const previousStatus = this.previousStatus.get(member.user_id);
+                const statusChanged = previousStatus && previousStatus !== status;
+                this.previousStatus.set(member.user_id, status);
+
+                // Trigger visual feedback on status change
+                if (statusChanged) {
+                    this.onStatusChange(member, previousStatus, status, memberCard);
+                }
+
                 memberCard.setAttribute('data-tracking', isTracking ? 'true' : 'false');
                 memberCard.setAttribute('data-status', status);
 
@@ -903,6 +916,112 @@ class TrackingMapProfessional {
             lastUpdateEl.textContent = 'Just now';
         }
         this.lastUpdateTime = Date.now();
+    }
+
+    // Handle status change with visual feedback
+    onStatusChange(member, oldStatus, newStatus, memberCard) {
+        const isMe = member.user_id === this.config.userId;
+        const name = isMe ? 'You' : (member.name || 'Someone');
+
+        // Add flash animation to card
+        memberCard.classList.add('status-changed');
+        setTimeout(() => memberCard.classList.remove('status-changed'), 2000);
+
+        // Determine change type and show appropriate notification
+        const statusLabels = {
+            'online': 'Online',
+            'stale': 'Stale',
+            'offline': 'Offline',
+            'no_location': 'No Location'
+        };
+
+        const oldLabel = statusLabels[oldStatus] || oldStatus;
+        const newLabel = statusLabels[newStatus] || newStatus;
+
+        // Important status changes get a toast
+        if (newStatus === 'online' && oldStatus !== 'online') {
+            // Someone came online
+            this.showStatusToast(`${name} is now online! 🟢`, 'success', member);
+        } else if (oldStatus === 'online' && newStatus === 'stale') {
+            // Someone went stale
+            this.showStatusToast(`${name} went stale 🟡`, 'warning', member);
+        } else if (oldStatus === 'online' && newStatus === 'offline') {
+            // Someone went offline directly
+            this.showStatusToast(`${name} went offline ⚫`, 'error', member);
+        } else if (newStatus === 'offline' && oldStatus === 'stale') {
+            // Stale -> Offline
+            this.showStatusToast(`${name} is now offline ⚫`, 'error', member);
+        }
+
+        console.log(`Status change: ${name} ${oldLabel} → ${newLabel}`);
+    }
+
+    // Show status change toast with member info
+    showStatusToast(message, type, member) {
+        document.querySelectorAll('.status-toast').forEach(t => t.remove());
+
+        const colors = {
+            success: '#43e97b',
+            error: '#ff6b6b',
+            warning: '#ffa502',
+            info: '#4facfe'
+        };
+
+        const toast = document.createElement('div');
+        toast.className = 'status-toast';
+
+        const avatarContent = member.has_avatar && member.avatar_url
+            ? `<img src="${member.avatar_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`
+            : (member.name ? member.name.charAt(0).toUpperCase() : '?');
+
+        toast.innerHTML = `
+            <div style="
+                position: fixed;
+                top: 90px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(26, 29, 46, 0.98);
+                backdrop-filter: blur(40px) saturate(180%);
+                color: white;
+                padding: 14px 24px;
+                border-radius: 50px;
+                font-weight: 700;
+                font-size: 14px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.1);
+                z-index: 10001;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                animation: statusToastIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+                cursor: pointer;
+            " onclick="window.TrackingMap.centerOnMember(${member.user_id}); this.parentElement.remove();">
+                <div style="
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 50%;
+                    background: ${member.avatar_color || '#667eea'};
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 16px;
+                    font-weight: 900;
+                    color: white;
+                    border: 2px solid ${colors[type]};
+                    overflow: hidden;
+                ">${avatarContent}</div>
+                <span>${message}</span>
+            </div>
+        `;
+
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            const innerDiv = toast.querySelector('div');
+            if (innerDiv) {
+                innerDiv.style.animation = 'statusToastOut 0.3s ease forwards';
+            }
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
     }
 
     updateMarkerSizes() {
