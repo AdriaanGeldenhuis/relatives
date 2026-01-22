@@ -210,32 +210,31 @@ require_once __DIR__ . '/../shared/components/header.php';
         -webkit-backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 20px;
-        padding: 20px;
-        margin-bottom: 24px;
-        display: flex;
-        align-items: center;
-        gap: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+        text-align: center;
     }
 
     .games-hero-icon {
-        font-size: 40px;
-        flex-shrink: 0;
-    }
-
-    .games-hero-content {
-        flex: 1;
+        font-size: 36px;
+        margin-bottom: 8px;
+        filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.3));
     }
 
     .games-hero h1 {
-        font-size: 1.25rem;
-        font-weight: 800;
-        margin-bottom: 2px;
-        color: #fff;
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.5rem;
+        font-weight: 900;
+        margin-bottom: 4px;
+        background: linear-gradient(135deg, #fff 0%, #667eea 50%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
     }
 
     .games-hero p {
         color: rgba(255, 255, 255, 0.7);
-        font-size: 0.875rem;
+        font-size: 0.85rem;
         margin: 0;
     }
 
@@ -304,16 +303,16 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     .games-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 16px;
-        margin-bottom: 32px;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 24px;
     }
 
     .game-card {
         background: rgba(255, 255, 255, 0.06);
         backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 20px;
+        border-radius: 16px;
         overflow: hidden;
         transition: transform 0.3s, box-shadow 0.3s, background 0.3s;
         text-decoration: none;
@@ -322,13 +321,13 @@ require_once __DIR__ . '/../shared/components/header.php';
     }
 
     .game-card:hover {
-        transform: translateY(-8px);
-        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+        transform: translateY(-4px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
         background: rgba(255, 255, 255, 0.1);
     }
 
     .game-card.coming-soon {
-        opacity: 0.6;
+        opacity: 0.5;
         cursor: default;
     }
 
@@ -339,100 +338,103 @@ require_once __DIR__ . '/../shared/components/header.php';
     }
 
     .game-card-header {
-        padding: 24px;
+        padding: 16px;
         text-align: center;
         position: relative;
     }
 
     .game-icon {
-        font-size: 56px;
-        margin-bottom: 12px;
+        font-size: 36px;
+        margin-bottom: 8px;
         display: block;
     }
 
     .game-name {
-        font-size: 1.25rem;
+        font-size: 0.95rem;
         font-weight: 700;
         color: #fff;
         margin-bottom: 4px;
     }
 
     .game-description {
-        font-size: 0.875rem;
-        color: rgba(255, 255, 255, 0.7);
-        line-height: 1.5;
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.6);
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
     }
 
     .coming-soon-badge {
         position: absolute;
-        top: 12px;
-        right: 12px;
+        top: 8px;
+        right: 8px;
         background: rgba(255, 255, 255, 0.2);
         color: #fff;
-        font-size: 0.7rem;
+        font-size: 0.6rem;
         font-weight: 700;
-        padding: 4px 10px;
-        border-radius: 20px;
+        padding: 2px 6px;
+        border-radius: 10px;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
     }
 
     .played-today-badge {
         position: absolute;
-        top: 12px;
-        right: 12px;
+        top: 8px;
+        right: 8px;
         background: linear-gradient(135deg, #4ecca3, #3db892);
         color: #1a1a2e;
-        font-size: 0.7rem;
+        font-size: 0.6rem;
         font-weight: 700;
-        padding: 4px 10px;
-        border-radius: 20px;
+        padding: 2px 6px;
+        border-radius: 10px;
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 2px;
     }
 
     .game-card.highlight {
-        border: 2px solid rgba(102, 126, 234, 0.5);
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15));
+        border: 1px solid rgba(102, 126, 234, 0.4);
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
     }
 
     .game-card.highlight:hover {
-        border-color: rgba(102, 126, 234, 0.8);
-        box-shadow: 0 16px 48px rgba(102, 126, 234, 0.25);
+        border-color: rgba(102, 126, 234, 0.6);
+        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
     }
 
     .daily-tag {
         background: linear-gradient(135deg, #667eea, #764ba2);
         color: #fff;
-        font-size: 0.65rem;
+        font-size: 0.55rem;
         font-weight: 700;
-        padding: 3px 8px;
-        border-radius: 6px;
+        padding: 2px 6px;
+        border-radius: 4px;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-left: 8px;
+        margin-left: 4px;
+        vertical-align: middle;
     }
 
     .game-card-features {
-        padding: 16px 24px;
+        padding: 10px 16px;
         border-top: 1px solid rgba(255, 255, 255, 0.08);
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 4px;
     }
 
     .feature-tag {
         background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 0.7rem;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.6rem;
         font-weight: 600;
-        padding: 4px 10px;
+        padding: 2px 6px;
         border-radius: 12px;
     }
 
     .game-card-action {
-        padding: 16px 24px;
+        padding: 10px 16px;
         background: rgba(0, 0, 0, 0.15);
         text-align: center;
     }
@@ -440,11 +442,11 @@ require_once __DIR__ . '/../shared/components/header.php';
     .play-btn {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        padding: 12px 32px;
-        border-radius: 12px;
+        gap: 6px;
+        padding: 8px 20px;
+        border-radius: 10px;
         font-weight: 700;
-        font-size: 1rem;
+        font-size: 0.8rem;
         transition: all 0.3s;
         border: none;
         cursor: pointer;
@@ -457,13 +459,14 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     .play-btn.active:hover {
         transform: scale(1.05);
-        box-shadow: 0 8px 24px rgba(78, 204, 163, 0.4);
+        box-shadow: 0 4px 16px rgba(78, 204, 163, 0.4);
     }
 
     .play-btn.disabled {
         background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.5);
+        color: rgba(255, 255, 255, 0.4);
         cursor: not-allowed;
+        font-size: 0.7rem;
     }
 
     .leaderboard-section {
@@ -605,13 +608,11 @@ require_once __DIR__ . '/../shared/components/header.php';
 <main class="main-content">
     <div class="games-container">
 
-        <!-- Compact Hero Section -->
+        <!-- Hero Section (Schedule style) -->
         <section class="games-hero">
             <div class="games-hero-icon">🎮</div>
-            <div class="games-hero-content">
-                <h1>Family Game Center</h1>
-                <p>Play, compete, and have fun with your family!</p>
-            </div>
+            <h1>Family Game Center</h1>
+            <p>Play, compete, and have fun with your family!</p>
         </section>
 
         <!-- User Stats -->
