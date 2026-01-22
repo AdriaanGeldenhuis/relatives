@@ -175,6 +175,17 @@ $games = [
         'highlight' => true
     ],
     [
+        'id' => '30seconds',
+        'name' => '30 Seconds Party',
+        'icon' => '⏱️',
+        'description' => 'Teams of 2 explain words in 30 seconds. Voice detection catches forbidden words!',
+        'url' => '/games/30_seconds_offline/',
+        'color' => '#764ba2',
+        'features' => ['Voice Detection', 'Teams of 2', 'Offline Mode'],
+        'available' => true,
+        'highlight' => true
+    ],
+    [
         'id' => 'memory',
         'name' => 'Memory Match',
         'icon' => '🧠',
