@@ -4,17 +4,35 @@
  * Entry point / Home page
  */
 
-session_start();
-require_once __DIR__ . '/../../includes/auth.php';
-require_once __DIR__ . '/../../includes/db.php';
+// Start session
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-// Check authentication
-if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+// Authentication check
+if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+    header('Location: /login.php', true, 302);
     exit;
 }
 
-$user = getCurrentUser();
+// Load bootstrap
+require_once __DIR__ . '/../../core/bootstrap.php';
+
+// Validate session
+try {
+    $auth = new Auth($db);
+    $user = $auth->getCurrentUser();
+
+    if (!$user) {
+        header('Location: /login.php?session_expired=1', true, 302);
+        exit;
+    }
+} catch (Exception $e) {
+    error_log('30 Seconds page error: ' . $e->getMessage());
+    header('Location: /login.php?error=1', true, 302);
+    exit;
+}
+
 $displayName = htmlspecialchars($user['full_name'] ?? 'Player');
 ?>
 <!DOCTYPE html>
