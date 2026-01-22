@@ -113,7 +113,7 @@ $itemTypes = [
     </div>
 </div>
 
-<!-- Add/Edit Item Modal (stub) -->
+<!-- Add/Edit Item Modal -->
 <div id="walletItemModal" class="ht-modal" style="display: none;">
     <div class="ht-modal-backdrop"></div>
     <div class="ht-modal-content">
@@ -129,11 +129,11 @@ $itemTypes = [
             </div>
             <div class="ht-form-group">
                 <label class="ht-label">Label *</label>
-                <input type="text" name="label" class="ht-input" placeholder="e.g., Flight Confirmation" required>
+                <input type="text" name="label" class="ht-input" placeholder="e.g., Flight Confirmation" required maxlength="255">
             </div>
             <div class="ht-form-group">
                 <label class="ht-label">Content</label>
-                <textarea name="content" class="ht-textarea" rows="4" placeholder="Paste text, booking details, etc."></textarea>
+                <textarea name="content" class="ht-textarea" rows="4" placeholder="Paste text, booking details, confirmation numbers, etc."></textarea>
             </div>
             <div class="ht-form-group">
                 <label class="ht-checkbox-label">
@@ -149,39 +149,32 @@ $itemTypes = [
     </div>
 </div>
 
+<!-- View Item Modal -->
+<div id="walletViewModal" class="ht-modal" style="display: none;">
+    <div class="ht-modal-backdrop"></div>
+    <div class="ht-modal-content ht-modal-lg">
+        <div class="ht-modal-header">
+            <h3 class="ht-modal-title">Item Details</h3>
+            <button class="ht-modal-close" data-action="close">&times;</button>
+        </div>
+        <div class="ht-modal-body" id="walletViewContent">
+            <!-- Content loaded dynamically -->
+        </div>
+    </div>
+</div>
+
 <script>
 (function() {
     'use strict';
 
     const tripId = <?php echo $trip['id']; ?>;
-    const modal = document.getElementById('walletItemModal');
 
-    // Open add modal
-    document.getElementById('addWalletItemBtn')?.addEventListener('click', () => {
-        modal.style.display = 'flex';
-    });
-
-    // Close modal
-    modal?.querySelector('.ht-modal-backdrop')?.addEventListener('click', () => {
-        modal.style.display = 'none';
-    });
-    modal?.querySelector('[data-action="cancel"]')?.addEventListener('click', () => {
-        modal.style.display = 'none';
-    });
-
-    // Form submission (stub)
-    document.getElementById('walletItemForm')?.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        HT.Toast.info('Wallet functionality will be fully implemented in Phase 6');
-        modal.style.display = 'none';
-    });
-
-    // View item (stub)
-    document.querySelectorAll('.ht-wallet-view-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            HT.Toast.info('Item viewer will be implemented in Phase 6');
-        });
-    });
+    // Initialize Wallet UI when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => HT.WalletUI.init(tripId));
+    } else {
+        HT.WalletUI.init(tripId);
+    }
 })();
 </script>
 
