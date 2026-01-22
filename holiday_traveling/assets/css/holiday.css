@@ -1,0 +1,1010 @@
+/**
+ * Holiday Traveling Module - Styles
+ * Mobile-first, glassmorphism design
+ */
+
+/* ============================================
+   CSS VARIABLES
+   ============================================ */
+:root {
+    --ht-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --ht-secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    --ht-success: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    --ht-warning: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+    --ht-danger: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+    --ht-info: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+
+    --ht-glass-light: rgba(255, 255, 255, 0.08);
+    --ht-glass-medium: rgba(255, 255, 255, 0.12);
+    --ht-glass-heavy: rgba(255, 255, 255, 0.18);
+    --ht-glass-border: rgba(255, 255, 255, 0.25);
+
+    --ht-text-primary: #ffffff;
+    --ht-text-secondary: rgba(255, 255, 255, 0.85);
+    --ht-text-muted: rgba(255, 255, 255, 0.6);
+
+    --ht-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --ht-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.15);
+    --ht-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.2);
+
+    --ht-radius-sm: 8px;
+    --ht-radius-md: 12px;
+    --ht-radius-lg: 16px;
+    --ht-radius-xl: 24px;
+
+    --ht-transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --ht-transition-bounce: 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* ============================================
+   BASE LAYOUT
+   ============================================ */
+.ht-main {
+    padding: 20px;
+    min-height: calc(100vh - 200px);
+}
+
+.ht-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* ============================================
+   PAGE HEADER
+   ============================================ */
+.ht-page-header {
+    margin-bottom: 24px;
+}
+
+.ht-page-header-content {
+    margin-bottom: 16px;
+}
+
+.ht-page-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--ht-text-primary);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.ht-title-icon {
+    font-size: 32px;
+}
+
+.ht-page-subtitle {
+    font-size: 15px;
+    color: var(--ht-text-secondary);
+    margin: 0;
+}
+
+.ht-back-link {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ht-text-secondary);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 16px;
+    transition: var(--ht-transition);
+}
+
+.ht-back-link:hover {
+    color: var(--ht-text-primary);
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+.ht-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: var(--ht-radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: var(--ht-transition);
+    white-space: nowrap;
+}
+
+.ht-btn-primary {
+    background: var(--ht-primary);
+    color: white;
+    box-shadow: var(--ht-shadow-md);
+}
+
+.ht-btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--ht-shadow-lg);
+}
+
+.ht-btn-secondary {
+    background: var(--ht-glass-heavy);
+    color: white;
+    border: 1px solid var(--ht-glass-border);
+}
+
+.ht-btn-secondary:hover {
+    background: var(--ht-glass-medium);
+}
+
+.ht-btn-outline {
+    background: transparent;
+    color: white;
+    border: 1px solid var(--ht-glass-border);
+}
+
+.ht-btn-outline:hover {
+    background: var(--ht-glass-light);
+}
+
+.ht-btn-danger {
+    background: var(--ht-danger);
+    color: white;
+}
+
+.ht-btn-lg {
+    padding: 16px 28px;
+    font-size: 16px;
+}
+
+.ht-btn-create {
+    width: 100%;
+    margin-top: 8px;
+}
+
+.ht-btn-icon {
+    font-size: 18px;
+}
+
+/* ============================================
+   STATS GRID
+   ============================================ */
+.ht-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.ht-stat-card {
+    background: var(--ht-glass-medium);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-md);
+    padding: 16px;
+    text-align: center;
+    backdrop-filter: blur(20px);
+}
+
+.ht-stat-icon {
+    font-size: 24px;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.ht-stat-value {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--ht-text-primary);
+    display: block;
+}
+
+.ht-stat-label {
+    font-size: 12px;
+    color: var(--ht-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ============================================
+   SECTIONS
+   ============================================ */
+.ht-section {
+    margin-bottom: 24px;
+}
+
+.ht-section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.ht-section-icon {
+    font-size: 20px;
+}
+
+.ht-section-highlight {
+    background: var(--ht-glass-medium);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-lg);
+    padding: 20px;
+    backdrop-filter: blur(20px);
+}
+
+/* ============================================
+   TRIP CARDS
+   ============================================ */
+.ht-trips-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ht-trip-card {
+    background: var(--ht-glass-medium);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-lg);
+    padding: 16px;
+    backdrop-filter: blur(20px);
+    transition: var(--ht-transition);
+}
+
+.ht-trip-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--ht-shadow-md);
+}
+
+.ht-trip-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+
+.ht-trip-destination h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 4px 0;
+}
+
+.ht-trip-title {
+    font-size: 14px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 12px 0;
+}
+
+.ht-trip-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.ht-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--ht-text-muted);
+}
+
+.ht-meta-icon {
+    font-size: 14px;
+}
+
+.ht-trip-budget {
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.ht-budget-label {
+    color: var(--ht-text-muted);
+}
+
+.ht-budget-value {
+    color: var(--ht-text-primary);
+    font-weight: 600;
+}
+
+.ht-trip-card-link {
+    display: inline-block;
+    color: var(--ht-text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: var(--ht-transition);
+}
+
+.ht-trip-card-link:hover {
+    color: var(--ht-text-primary);
+}
+
+/* ============================================
+   STATUS BADGES
+   ============================================ */
+.ht-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: var(--ht-radius-sm);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge-draft {
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.badge-planned {
+    background: rgba(79, 172, 254, 0.2);
+    color: #4facfe;
+}
+
+.badge-locked {
+    background: rgba(247, 151, 30, 0.2);
+    color: #f7971e;
+}
+
+.badge-active {
+    background: rgba(17, 153, 142, 0.2);
+    color: #11998e;
+}
+
+.badge-completed {
+    background: rgba(56, 239, 125, 0.2);
+    color: #38ef7d;
+}
+
+.badge-cancelled {
+    background: rgba(255, 65, 108, 0.2);
+    color: #ff416c;
+}
+
+/* ============================================
+   PLAN INDICATORS
+   ============================================ */
+.ht-plan-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-sm);
+    font-size: 12px;
+    color: var(--ht-text-secondary);
+}
+
+.ht-plan-badge-empty {
+    color: var(--ht-text-muted);
+    font-style: italic;
+}
+
+/* ============================================
+   ACTIVE TRIP BANNER
+   ============================================ */
+.ht-active-trip-card {
+    background: linear-gradient(135deg, rgba(17, 153, 142, 0.3), rgba(56, 239, 125, 0.2));
+    border: 1px solid rgba(56, 239, 125, 0.4);
+    border-radius: var(--ht-radius-lg);
+    padding: 20px;
+}
+
+.ht-active-trip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.ht-active-trip-destination {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--ht-text-primary);
+    margin: 0;
+}
+
+.ht-active-trip-title {
+    font-size: 15px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 16px 0;
+}
+
+.ht-active-trip-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.ht-active-trip-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* ============================================
+   EMPTY STATE
+   ============================================ */
+.ht-empty-state {
+    text-align: center;
+    padding: 48px 24px;
+}
+
+.ht-empty-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+}
+
+.ht-empty-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 8px 0;
+}
+
+.ht-empty-description {
+    font-size: 15px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 24px 0;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* ============================================
+   FORMS
+   ============================================ */
+.ht-form {
+    margin-top: 24px;
+}
+
+.ht-form-section {
+    background: var(--ht-glass-light);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-md);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.ht-form-section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 16px 0;
+}
+
+.ht-form-group {
+    margin-bottom: 16px;
+}
+
+.ht-form-group:last-child {
+    margin-bottom: 0;
+}
+
+.ht-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ht-text-secondary);
+    margin-bottom: 6px;
+}
+
+.ht-input,
+.ht-select,
+.ht-textarea {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--ht-glass-medium);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-md);
+    color: var(--ht-text-primary);
+    font-size: 15px;
+    font-family: inherit;
+    transition: var(--ht-transition);
+}
+
+.ht-input:focus,
+.ht-select:focus,
+.ht-textarea:focus {
+    outline: none;
+    border-color: rgba(102, 126, 234, 0.5);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.ht-input::placeholder,
+.ht-textarea::placeholder {
+    color: var(--ht-text-muted);
+}
+
+.ht-select {
+    cursor: pointer;
+}
+
+.ht-textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.ht-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.ht-form-row-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+/* ============================================
+   PROMPT BOX
+   ============================================ */
+.ht-prompt-box {
+    text-align: center;
+}
+
+.ht-prompt-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ht-text-primary);
+    margin-bottom: 12px;
+}
+
+.ht-prompt-icon {
+    font-size: 20px;
+}
+
+.ht-prompt-input {
+    width: 100%;
+    padding: 16px;
+    background: var(--ht-glass-heavy);
+    border: 2px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-lg);
+    color: var(--ht-text-primary);
+    font-size: 16px;
+    font-family: inherit;
+    resize: none;
+    transition: var(--ht-transition);
+}
+
+.ht-prompt-input:focus {
+    outline: none;
+    border-color: rgba(102, 126, 234, 0.6);
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.2);
+}
+
+.ht-prompt-input::placeholder {
+    color: var(--ht-text-muted);
+}
+
+.ht-prompt-examples {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+}
+
+.ht-examples-label {
+    font-size: 13px;
+    color: var(--ht-text-muted);
+}
+
+.ht-example-chip {
+    padding: 6px 12px;
+    background: var(--ht-glass-light);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-sm);
+    color: var(--ht-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: var(--ht-transition);
+}
+
+.ht-example-chip:hover {
+    background: var(--ht-glass-medium);
+    color: var(--ht-text-primary);
+}
+
+/* ============================================
+   ACCORDION
+   ============================================ */
+.ht-accordion {
+    margin-bottom: 16px;
+}
+
+.ht-accordion-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--ht-glass-light);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-md);
+    color: var(--ht-text-primary);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--ht-transition);
+}
+
+.ht-accordion-trigger:hover {
+    background: var(--ht-glass-medium);
+}
+
+.ht-accordion-icon {
+    font-size: 18px;
+}
+
+.ht-accordion-title {
+    flex: 1;
+    text-align: left;
+}
+
+.ht-accordion-arrow {
+    font-size: 12px;
+    transition: transform var(--ht-transition);
+}
+
+.ht-accordion-trigger[aria-expanded="true"] .ht-accordion-arrow {
+    transform: rotate(180deg);
+}
+
+.ht-accordion-content {
+    padding: 16px 0 0 0;
+}
+
+/* ============================================
+   CHIP GROUPS
+   ============================================ */
+.ht-chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ht-chip {
+    padding: 8px 14px;
+    background: var(--ht-glass-light);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-sm);
+    color: var(--ht-text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--ht-transition);
+}
+
+.ht-chip:hover {
+    background: var(--ht-glass-medium);
+}
+
+.ht-chip-selected {
+    background: var(--ht-primary);
+    border-color: transparent;
+    color: white;
+}
+
+/* ============================================
+   COUNTER INPUT
+   ============================================ */
+.ht-counter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ht-counter-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ht-glass-medium);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-sm);
+    color: var(--ht-text-primary);
+    font-size: 20px;
+    cursor: pointer;
+    transition: var(--ht-transition);
+}
+
+.ht-counter-btn:hover {
+    background: var(--ht-glass-heavy);
+}
+
+.ht-counter-input {
+    width: 60px;
+    text-align: center;
+    padding: 8px;
+    background: var(--ht-glass-light);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-sm);
+    color: var(--ht-text-primary);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+/* ============================================
+   FORM ACTIONS
+   ============================================ */
+.ht-form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.ht-form-actions .ht-btn {
+    flex: 1;
+}
+
+/* ============================================
+   AI LOADING STATE
+   ============================================ */
+.ht-ai-loading {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ht-ai-loading-content {
+    text-align: center;
+    padding: 40px;
+    max-width: 400px;
+}
+
+.ht-ai-spinner {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 24px;
+    border: 4px solid var(--ht-glass-border);
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: htSpin 1s linear infinite;
+}
+
+@keyframes htSpin {
+    to { transform: rotate(360deg); }
+}
+
+.ht-ai-loading-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 8px 0;
+}
+
+.ht-ai-loading-text {
+    font-size: 14px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 24px 0;
+}
+
+.ht-ai-loading-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ht-loading-step {
+    font-size: 13px;
+    color: var(--ht-text-muted);
+    transition: var(--ht-transition);
+}
+
+.ht-loading-step.active {
+    color: #667eea;
+}
+
+.ht-loading-step.done {
+    color: #38ef7d;
+}
+
+/* ============================================
+   DROPDOWN MENU
+   ============================================ */
+.ht-menu-trigger {
+    background: none;
+    border: none;
+    color: var(--ht-text-muted);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: var(--ht-transition);
+}
+
+.ht-menu-trigger:hover {
+    color: var(--ht-text-primary);
+}
+
+.ht-actions-menu {
+    position: relative;
+}
+
+.ht-menu-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: rgba(30, 30, 50, 0.95);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-md);
+    padding: 8px;
+    min-width: 140px;
+    z-index: 100;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: var(--ht-transition);
+    backdrop-filter: blur(20px);
+}
+
+.ht-actions-menu:hover .ht-menu-dropdown,
+.ht-trip-actions-menu:hover .ht-menu-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.ht-menu-item {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    background: none;
+    border: none;
+    border-radius: var(--ht-radius-sm);
+    color: var(--ht-text-secondary);
+    font-size: 14px;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: var(--ht-transition);
+}
+
+.ht-menu-item:hover {
+    background: var(--ht-glass-medium);
+    color: var(--ht-text-primary);
+}
+
+.ht-menu-item-danger {
+    color: #ff416c;
+}
+
+.ht-menu-item-danger:hover {
+    background: rgba(255, 65, 108, 0.2);
+}
+
+/* ============================================
+   MODAL
+   ============================================ */
+.ht-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.ht-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+}
+
+.ht-modal-content {
+    position: relative;
+    background: linear-gradient(180deg, rgba(40, 40, 60, 0.98), rgba(30, 30, 50, 0.98));
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-lg);
+    padding: 24px;
+    max-width: 400px;
+    width: 100%;
+    backdrop-filter: blur(40px);
+}
+
+.ht-modal-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 12px 0;
+}
+
+.ht-modal-text {
+    font-size: 14px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 20px 0;
+}
+
+.ht-modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+@media (max-width: 600px) {
+    .ht-main {
+        padding: 16px;
+    }
+
+    .ht-page-title {
+        font-size: 24px;
+    }
+
+    .ht-stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+
+    .ht-stat-card {
+        padding: 12px 8px;
+    }
+
+    .ht-stat-value {
+        font-size: 22px;
+    }
+
+    .ht-form-row,
+    .ht-form-row-3 {
+        grid-template-columns: 1fr;
+    }
+
+    .ht-form-actions {
+        flex-direction: column;
+    }
+
+    .ht-active-trip-meta {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .ht-active-trip-actions {
+        flex-direction: column;
+    }
+
+    .ht-active-trip-actions .ht-btn {
+        width: 100%;
+    }
+}
+
+@media (min-width: 768px) {
+    .ht-page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .ht-btn-create {
+        width: auto;
+        margin-top: 0;
+    }
+
+    .ht-trips-list {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .ht-container {
+        max-width: 1000px;
+    }
+}
