@@ -228,6 +228,8 @@ var NeonEngine = (function() {
         lastTime = performance.now();
         accumulator = 0;
         NeonInput.reset();
+        // Ensure canvas is sized now that screen is visible
+        resize();
         loop(performance.now());
     }
 
@@ -779,7 +781,7 @@ var NeonEngine = (function() {
         ctx.fillRect(0, 0, w, h);
 
         // Draw walls (prerendered)
-        if (wallCanvas) {
+        if (wallCanvas && wallCanvas.width > 0 && wallCanvas.height > 0) {
             ctx.drawImage(wallCanvas, 0, 0, w, h);
         }
 
