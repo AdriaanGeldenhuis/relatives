@@ -1008,3 +1008,735 @@
         max-width: 1000px;
     }
 }
+
+/* ============================================
+   TRIP VIEW PAGE
+   ============================================ */
+.ht-trip-header {
+    margin-bottom: 20px;
+}
+
+.ht-trip-header-main {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ht-trip-destination-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--ht-text-primary);
+    margin: 0;
+}
+
+.ht-trip-title-sub {
+    font-size: 15px;
+    color: var(--ht-text-secondary);
+    margin: 4px 0 12px 0;
+}
+
+.ht-trip-header-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.ht-trip-header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.ht-btn-sm {
+    padding: 8px 14px;
+    font-size: 13px;
+}
+
+.ht-btn-xs {
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+.ht-plan-version-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-md);
+}
+
+.ht-version-label {
+    font-size: 13px;
+    color: var(--ht-text-muted);
+}
+
+.ht-version-select {
+    padding: 6px 12px;
+    background: var(--ht-glass-medium);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-sm);
+    color: var(--ht-text-primary);
+    font-size: 13px;
+}
+
+/* ============================================
+   TABS
+   ============================================ */
+.ht-tabs-nav {
+    display: flex;
+    overflow-x: auto;
+    gap: 4px;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--ht-glass-border);
+    -webkit-overflow-scrolling: touch;
+}
+
+.ht-tabs-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.ht-tab-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 14px;
+    background: transparent;
+    border: none;
+    border-radius: var(--ht-radius-sm);
+    color: var(--ht-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--ht-transition);
+    white-space: nowrap;
+    min-width: 60px;
+}
+
+.ht-tab-btn:hover {
+    background: var(--ht-glass-light);
+    color: var(--ht-text-secondary);
+}
+
+.ht-tab-btn.active {
+    background: var(--ht-glass-medium);
+    color: var(--ht-text-primary);
+}
+
+.ht-tab-icon {
+    font-size: 20px;
+}
+
+.ht-tab-content {
+    display: none;
+}
+
+.ht-tab-content.active {
+    display: block;
+    animation: htFadeIn 0.3s ease;
+}
+
+@keyframes htFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================
+   EMPTY TAB STATE
+   ============================================ */
+.ht-empty-tab {
+    text-align: center;
+    padding: 48px 24px;
+}
+
+.ht-empty-tab-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.ht-empty-tab h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 8px 0;
+}
+
+.ht-empty-tab p {
+    font-size: 14px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 20px 0;
+}
+
+.ht-ai-remaining {
+    font-size: 12px;
+    color: var(--ht-text-muted);
+    margin-top: 12px;
+}
+
+.ht-ai-remaining-inline {
+    font-size: 12px;
+    color: var(--ht-text-muted);
+    margin-left: auto;
+}
+
+/* ============================================
+   PLAN ACTIONS
+   ============================================ */
+.ht-plan-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding: 12px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-md);
+    align-items: center;
+}
+
+/* ============================================
+   REALITY CHECK SCORES
+   ============================================ */
+.ht-reality-check {
+    margin-bottom: 24px;
+    padding: 16px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-md);
+}
+
+.ht-section-title-sm {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 16px 0;
+}
+
+.ht-scores-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.ht-score-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.ht-score-icon {
+    font-size: 18px;
+}
+
+.ht-score-bar {
+    height: 8px;
+    background: var(--ht-glass-medium);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.ht-score-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.ht-score-good { background: linear-gradient(90deg, #11998e, #38ef7d); }
+.ht-score-medium { background: linear-gradient(90deg, #f7971e, #ffd200); }
+.ht-score-low { background: linear-gradient(90deg, #ff416c, #ff4b2b); }
+
+.ht-score-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ht-text-primary);
+    min-width: 40px;
+    text-align: right;
+}
+
+.ht-score-label {
+    grid-column: 2 / -1;
+    font-size: 11px;
+    color: var(--ht-text-muted);
+}
+
+.ht-reality-notes {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--ht-glass-border);
+}
+
+.ht-reality-note {
+    font-size: 13px;
+    color: var(--ht-text-secondary);
+    margin: 4px 0;
+}
+
+/* ============================================
+   ITINERARY
+   ============================================ */
+.ht-itinerary {
+    margin-bottom: 24px;
+}
+
+.ht-days-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ht-day-card {
+    background: var(--ht-glass-medium);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-md);
+    overflow: hidden;
+}
+
+.ht-day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--ht-glass-light);
+    border-bottom: 1px solid var(--ht-glass-border);
+}
+
+.ht-day-number {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+}
+
+.ht-day-date {
+    font-size: 13px;
+    color: var(--ht-text-muted);
+}
+
+.ht-day-sections {
+    padding: 16px;
+}
+
+.ht-day-section {
+    margin-bottom: 16px;
+}
+
+.ht-day-section:last-child {
+    margin-bottom: 0;
+}
+
+.ht-time-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ht-text-secondary);
+    margin-bottom: 8px;
+}
+
+.ht-activity-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.ht-activity-item {
+    position: relative;
+    padding: 8px 0 8px 20px;
+    font-size: 14px;
+    color: var(--ht-text-primary);
+    border-left: 2px solid var(--ht-glass-border);
+}
+
+.ht-activity-item::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 12px;
+    width: 8px;
+    height: 8px;
+    background: var(--ht-glass-heavy);
+    border: 2px solid var(--ht-text-muted);
+    border-radius: 50%;
+}
+
+.ht-day-buffers,
+.ht-backup-weather {
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-sm);
+    font-size: 12px;
+}
+
+.ht-buffer-label,
+.ht-backup-label {
+    color: var(--ht-text-muted);
+    margin-right: 8px;
+}
+
+.ht-buffer-item,
+.ht-backup-item {
+    color: var(--ht-text-secondary);
+}
+
+/* ============================================
+   SAFETY TIPS
+   ============================================ */
+.ht-safety-tips {
+    padding: 16px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-md);
+}
+
+.ht-tips-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.ht-tip-item {
+    position: relative;
+    padding: 8px 0 8px 24px;
+    font-size: 14px;
+    color: var(--ht-text-secondary);
+}
+
+.ht-tip-item::before {
+    content: '💡';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    font-size: 12px;
+}
+
+/* ============================================
+   STAYS TAB
+   ============================================ */
+.ht-stays-grid {
+    display: grid;
+    gap: 16px;
+}
+
+.ht-stay-card {
+    background: var(--ht-glass-medium);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-md);
+    padding: 16px;
+}
+
+.ht-stay-budget { border-left: 4px solid #38ef7d; }
+.ht-stay-comfort { border-left: 4px solid #4facfe; }
+.ht-stay-treat { border-left: 4px solid #f7971e; }
+
+.ht-stay-tier {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ht-text-muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.ht-stay-type {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 4px 0;
+}
+
+.ht-stay-area {
+    font-size: 13px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 8px 0;
+}
+
+.ht-stay-price {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 8px 0;
+}
+
+.ht-stay-notes {
+    font-size: 13px;
+    color: var(--ht-text-muted);
+    margin: 0 0 8px 0;
+}
+
+.ht-stay-pros,
+.ht-stay-cons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.ht-pro-item,
+.ht-con-item {
+    font-size: 12px;
+    padding: 2px 8px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-sm);
+}
+
+.ht-pro-item { color: #38ef7d; }
+.ht-con-item { color: #ffd200; }
+
+/* ============================================
+   FOOD TAB
+   ============================================ */
+.ht-food-plan {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ht-food-day {
+    background: var(--ht-glass-medium);
+    border: 1px solid var(--ht-glass-border);
+    border-radius: var(--ht-radius-md);
+    padding: 16px;
+}
+
+.ht-food-day-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+    margin: 0 0 12px 0;
+}
+
+.ht-meals {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ht-meal {
+    padding: 12px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-sm);
+}
+
+.ht-meal-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ht-text-secondary);
+    margin-bottom: 8px;
+}
+
+.ht-meal-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ht-meal-option {
+    font-size: 13px;
+    color: var(--ht-text-primary);
+    padding: 4px 10px;
+    background: var(--ht-glass-medium);
+    border-radius: var(--ht-radius-sm);
+}
+
+/* ============================================
+   BUDGET TAB
+   ============================================ */
+.ht-budget-overview {
+    margin-bottom: 24px;
+}
+
+.ht-budget-tiers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.ht-budget-tier {
+    text-align: center;
+    padding: 16px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-md);
+}
+
+.ht-budget-tier-main {
+    background: var(--ht-glass-medium);
+    border: 1px solid var(--ht-glass-border);
+}
+
+.ht-budget-tier-label {
+    display: block;
+    font-size: 12px;
+    color: var(--ht-text-muted);
+    margin-bottom: 4px;
+}
+
+.ht-budget-tier-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ht-text-primary);
+}
+
+.ht-budget-breakdown {
+    margin-bottom: 24px;
+}
+
+.ht-breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ht-breakdown-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-sm);
+}
+
+.ht-breakdown-icon {
+    font-size: 18px;
+}
+
+.ht-breakdown-label {
+    flex: 1;
+    font-size: 14px;
+    color: var(--ht-text-secondary);
+}
+
+.ht-breakdown-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ht-text-primary);
+}
+
+.ht-breakdown-total {
+    display: flex;
+    justify-content: space-between;
+    padding: 16px;
+    background: var(--ht-glass-medium);
+    border-radius: var(--ht-radius-md);
+    margin-top: 8px;
+}
+
+.ht-breakdown-total .ht-breakdown-label {
+    font-weight: 700;
+    color: var(--ht-text-primary);
+}
+
+.ht-breakdown-total .ht-breakdown-value {
+    font-size: 18px;
+}
+
+.ht-transport-info {
+    padding: 16px;
+    background: var(--ht-glass-light);
+    border-radius: var(--ht-radius-md);
+}
+
+.ht-transport-recommended {
+    font-size: 14px;
+    color: var(--ht-text-primary);
+    margin: 0 0 8px 0;
+}
+
+.ht-transport-notes {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.ht-transport-notes li {
+    font-size: 13px;
+    color: var(--ht-text-secondary);
+    padding: 4px 0;
+}
+
+/* ============================================
+   WALLET & EXPENSES TABS
+   ============================================ */
+.ht-wallet-header,
+.ht-expenses-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.ht-wallet-description,
+.ht-expenses-description {
+    font-size: 14px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 16px 0;
+}
+
+.ht-wallet-preview,
+.ht-expenses-preview {
+    min-height: 100px;
+}
+
+.ht-loading {
+    font-size: 14px;
+    color: var(--ht-text-muted);
+    text-align: center;
+    padding: 24px;
+}
+
+/* ============================================
+   CALENDAR TAB
+   ============================================ */
+.ht-calendar-export {
+    text-align: center;
+    padding: 24px;
+}
+
+.ht-calendar-description {
+    font-size: 14px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 20px 0;
+}
+
+.ht-calendar-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 300px;
+    margin: 0 auto;
+}
+
+.ht-no-content {
+    font-size: 14px;
+    color: var(--ht-text-muted);
+    text-align: center;
+    padding: 24px;
+}
+
+/* ============================================
+   TRIP VIEW RESPONSIVE
+   ============================================ */
+@media (min-width: 768px) {
+    .ht-trip-header-main {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .ht-scores-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .ht-score-label {
+        grid-column: auto;
+    }
+
+    .ht-stays-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .ht-calendar-options {
+        flex-direction: row;
+        max-width: none;
+        justify-content: center;
+    }
+}
