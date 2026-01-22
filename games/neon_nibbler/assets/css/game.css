@@ -580,39 +580,19 @@ html, body {
     to { filter: hue-rotate(12deg) brightness(1.06) saturate(1.15); }
 }
 
-/* ===== ROTATE OVERLAY ===== */
-.rotate-overlay {
-    display: none;
-    position: absolute;
-    inset: 0;
-    z-index: 9999;
-    background: var(--bg-primary);
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    color: var(--text-secondary);
-    font-size: 1rem;
-    font-weight: 600;
-}
+/* ===== ROTATE OVERLAY (hidden - using CSS transform instead) ===== */
+.rotate-overlay { display: none; }
 
-.rotate-icon {
-    font-size: 3rem;
-    animation: rotate-hint 1.5s ease-in-out infinite;
-}
-
-@keyframes rotate-hint {
-    0%, 100% { transform: rotate(0deg); }
-    50% { transform: rotate(90deg); }
-}
-
-/* ===== LANDSCAPE RESPONSIVE ===== */
+/* ===== FORCE LANDSCAPE VIA CSS TRANSFORM ===== */
 @media (orientation: portrait) {
-    .rotate-overlay {
-        display: flex;
-    }
-    #screen-start, #screen-game, #screen-pause, #screen-results, #screen-level-complete {
-        display: none !important;
+    #game-wrapper {
+        transform: rotate(90deg);
+        transform-origin: top left;
+        position: absolute;
+        top: 0;
+        left: 100%;
+        width: 100vh;
+        height: 100vw;
     }
 }
 

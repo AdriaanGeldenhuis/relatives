@@ -84,10 +84,10 @@ var NeonEngine = (function() {
 
     function resize() {
         var dpr = window.devicePixelRatio || 1;
-        var rect = canvas.getBoundingClientRect();
-        var w = rect.width;
-        var h = rect.height;
-        if (w <= 0 || h <= 0) return; // Not visible yet
+        // Use offsetWidth/Height (ignores parent CSS transforms like rotation)
+        var w = canvas.offsetWidth;
+        var h = canvas.offsetHeight;
+        if (w <= 0 || h <= 0) return;
 
         canvas.width = w * dpr;
         canvas.height = h * dpr;
@@ -189,9 +189,8 @@ var NeonEngine = (function() {
     }
 
     function prerenderWalls() {
-        var rect = canvas.getBoundingClientRect();
-        var w = rect.width;
-        var h = rect.height;
+        var w = canvas.offsetWidth;
+        var h = canvas.offsetHeight;
         if (w <= 0 || h <= 0) return;
         var dpr = window.devicePixelRatio || 1;
 
@@ -821,9 +820,8 @@ var NeonEngine = (function() {
     }
 
     function render() {
-        var rect = canvas.getBoundingClientRect();
-        var w = rect.width;
-        var h = rect.height;
+        var w = canvas.offsetWidth;
+        var h = canvas.offsetHeight;
         if (w <= 0 || h <= 0) return;
 
         // Clear with gradient background
