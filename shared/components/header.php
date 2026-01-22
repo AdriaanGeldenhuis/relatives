@@ -129,78 +129,79 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         .mobile-menu-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(4px);
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(8px);
             z-index: 1998;
             opacity: 0;
             visibility: hidden;
             transition: opacity 0.3s ease, visibility 0.3s ease;
         }
-        
+
         .mobile-menu-overlay.active {
             opacity: 1;
             visibility: visible;
         }
-        
+
         .mobile-sidebar {
             position: fixed;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            width: 85%;
-            max-width: 320px;
-            background: linear-gradient(180deg, rgba(31, 34, 49, 0.98), rgba(118, 75, 162, 0.98));
-            backdrop-filter: blur(40px);
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            max-width: none;
+            background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
             z-index: 1999;
-            transform: translateX(-100%);
-            transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(0.95);
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
             display: flex;
             flex-direction: column;
-            box-shadow: 10px 0 50px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
         }
-        
+
         .mobile-sidebar.active {
-            transform: translateX(0);
+            opacity: 1;
+            visibility: visible;
+            transform: scale(1);
         }
-        
+
         .mobile-sidebar-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            flex-shrink: 0;
         }
-        
+
         .logo {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
-        
+
         .logo-icon {
-            font-size: 32px;
-            animation: logoFloat 3s ease-in-out infinite;
+            font-size: 28px;
         }
-        
-        @keyframes logoFloat {
-            0%, 100% { transform: translateY(0) rotate(0deg); }
-            50% { transform: translateY(-5px) rotate(5deg); }
-        }
-        
+
         .logo-text {
             font-size: 20px;
             font-weight: 900;
             color: white;
             font-family: 'Space Grotesk', sans-serif;
+            background: linear-gradient(135deg, #fff 0%, #667eea 50%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
-        
+
         .close-sidebar {
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
             color: white;
-            font-size: 24px;
-            width: 40px;
-            height: 40px;
+            font-size: 20px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             cursor: pointer;
             display: flex;
@@ -208,160 +209,151 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             justify-content: center;
             transition: all 0.3s;
         }
-        
+
         .close-sidebar:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: rotate(90deg);
+            background: rgba(255, 255, 255, 0.2);
+            transform: rotate(90deg) scale(1.1);
         }
         
         .mobile-nav {
             flex: 1;
-            padding: 20px 0;
-            overflow-y: auto;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            align-content: center;
+            overflow: hidden;
         }
-        
-        .mobile-nav::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        .mobile-nav::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-        }
-        
-        .mobile-nav::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 10px;
-        }
-        
+
         .mobile-nav-link {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 15px;
-            padding: 8px 25px;
+            justify-content: center;
+            gap: 4px;
+            padding: clamp(8px, 1.2vh, 14px) 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
             color: rgba(255, 255, 255, 0.9);
             text-decoration: none;
             font-weight: 600;
-            font-size: 16px;
-            transition: all 0.3s;
+            font-size: clamp(10px, 1.3vh, 12px);
+            transition: all 0.3s ease;
             position: relative;
+            text-align: center;
         }
-        
+
         .mobile-nav-link:hover {
-            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .mobile-nav-link:active {
+            transform: scale(0.98);
         }
 
         .mobile-nav-link.active {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.15));
-            padding-left: 30px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
+            border: 1px solid rgba(102, 126, 234, 0.5);
             color: white;
             font-weight: 700;
-            border-radius: 0 12px 12px 0;
-            box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.1);
-        }
-
-        .mobile-nav-link.active::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.7));
-            border-radius: 0 4px 4px 0;
-            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
         }
 
         .mobile-nav-link.active .nav-icon {
-            transform: scale(1.15);
-            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+            transform: scale(1.1);
+            filter: drop-shadow(0 0 8px rgba(102, 126, 234, 0.6));
         }
-        
+
         .nav-icon {
-            font-size: 24px;
-            min-width: 30px;
-            text-align: center;
-            flex-shrink: 0;
-            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+            font-size: clamp(20px, 3vh, 28px);
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
             transition: transform 0.3s ease, filter 0.3s ease;
         }
-        
+
         .nav-text {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-size: clamp(9px, 1.2vh, 11px);
+            letter-spacing: 0.2px;
+            line-height: 1.1;
         }
         
         .mobile-sidebar-footer {
-            padding: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 10px 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
+            flex-shrink: 0;
         }
-        
+
         .user-profile {
             display: flex;
-            gap: 12px;
-            margin-bottom: 15px;
+            gap: 10px;
+            margin-bottom: 8px;
             align-items: center;
+            background: rgba(255, 255, 255, 0.06);
+            padding: 8px 10px;
+            border-radius: 10px;
         }
-        
+
         .user-avatar {
-            width: 48px;
-            height: 48px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
             font-weight: 800;
-            font-size: 18px;
+            font-size: 14px;
             flex-shrink: 0;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
-        
+
         .user-info {
             flex: 1;
             min-width: 0;
         }
-        
+
         .user-name {
             font-weight: 700;
             color: white;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            font-size: 16px;
+            font-size: 13px;
         }
-        
+
         .user-email {
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.7);
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.6);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        
+
         .logout-btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 8px;
             width: 100%;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.15);
-            border: 1px solid rgba(255, 255, 255, 0.25);
+            padding: 10px;
+            background: rgba(255, 71, 87, 0.15);
+            border: 1px solid rgba(255, 71, 87, 0.3);
             border-radius: 10px;
             color: white;
             font-weight: 700;
+            font-size: 13px;
             cursor: pointer;
             text-decoration: none;
             transition: all 0.3s;
         }
-        
+
         .logout-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
+            background: rgba(255, 71, 87, 0.3);
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 16px rgba(255, 71, 87, 0.3);
         }
         
         .global-header {
@@ -518,24 +510,156 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         }
         
         @media (max-width: 480px) {
-            .mobile-sidebar {
-                width: 90%;
-            }
-            
             .header-container {
                 padding: 10px 15px;
             }
-            
+
             .header-btn {
                 width: 40px;
                 height: 40px;
                 font-size: 18px;
             }
-            
+
             .notification-badge {
                 font-size: 10px;
                 min-width: 18px;
                 height: 18px;
+            }
+        }
+
+        @media (min-width: 600px) {
+            .mobile-nav {
+                max-width: 380px;
+                margin: 0 auto;
+            }
+        }
+
+        /* Short screens - compact everything */
+        @media (max-height: 750px) {
+            .mobile-sidebar-header {
+                padding: 10px 14px;
+            }
+
+            .logo-icon {
+                font-size: 24px;
+            }
+
+            .logo-text {
+                font-size: 18px;
+            }
+
+            .mobile-nav {
+                gap: 6px;
+                padding: 8px;
+            }
+
+            .mobile-nav-link {
+                gap: 3px;
+                padding: clamp(6px, 1vh, 12px) 4px;
+            }
+
+            .nav-icon {
+                font-size: clamp(18px, 2.5vh, 24px);
+            }
+
+            .nav-text {
+                font-size: clamp(8px, 1vh, 10px);
+            }
+
+            .mobile-sidebar-footer {
+                padding: 8px 10px;
+            }
+
+            .user-profile {
+                padding: 6px 8px;
+                margin-bottom: 6px;
+            }
+
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                font-size: 12px;
+            }
+
+            .user-name {
+                font-size: 12px;
+            }
+
+            .user-email {
+                font-size: 9px;
+            }
+
+            .logout-btn {
+                padding: 8px;
+                font-size: 12px;
+            }
+        }
+
+        /* Very short screens */
+        @media (max-height: 600px) {
+            .mobile-sidebar-header {
+                padding: 8px 12px;
+            }
+
+            .logo-icon {
+                font-size: 22px;
+            }
+
+            .logo-text {
+                font-size: 16px;
+            }
+
+            .close-sidebar {
+                width: 32px;
+                height: 32px;
+                font-size: 18px;
+            }
+
+            .mobile-nav {
+                gap: 4px;
+                padding: 6px;
+            }
+
+            .mobile-nav-link {
+                gap: 2px;
+                padding: clamp(4px, 0.8vh, 8px) 4px;
+                border-radius: 8px;
+            }
+
+            .nav-icon {
+                font-size: clamp(16px, 2vh, 20px);
+            }
+
+            .nav-text {
+                font-size: clamp(7px, 0.9vh, 9px);
+            }
+
+            .mobile-sidebar-footer {
+                padding: 6px 8px;
+            }
+
+            .user-profile {
+                padding: 5px 6px;
+                margin-bottom: 5px;
+            }
+
+            .user-avatar {
+                width: 28px;
+                height: 28px;
+                font-size: 11px;
+            }
+
+            .user-name {
+                font-size: 11px;
+            }
+
+            .user-email {
+                font-size: 8px;
+            }
+
+            .logout-btn {
+                padding: 6px;
+                font-size: 11px;
             }
         }
     </style>
