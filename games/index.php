@@ -186,49 +186,64 @@ require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
 <style>
+    /* Dark theme background like schedule */
+    .bg-animation {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
+    }
+
     .games-container {
         max-width: 1200px;
         margin: 0 auto;
         padding: 20px;
+        position: relative;
+        z-index: 1;
     }
 
+    /* Compact hero like schedule's greeting-card */
     .games-hero {
-        text-align: center;
-        padding: 40px 20px;
-        margin-bottom: 30px;
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 20px;
+        padding: 20px;
+        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
     }
 
     .games-hero-icon {
-        font-size: 64px;
-        margin-bottom: 16px;
-        animation: bounce 2s ease-in-out infinite;
+        font-size: 40px;
+        flex-shrink: 0;
     }
 
-    @keyframes bounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
+    .games-hero-content {
+        flex: 1;
     }
 
     .games-hero h1 {
-        font-size: 2rem;
+        font-size: 1.25rem;
         font-weight: 800;
-        margin-bottom: 8px;
-        background: linear-gradient(135deg, #fff, rgba(255,255,255,0.8));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        margin-bottom: 2px;
+        color: #fff;
     }
 
     .games-hero p {
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 1rem;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.875rem;
+        margin: 0;
     }
 
     .user-stats {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
         gap: 12px;
-        margin-bottom: 30px;
+        margin-bottom: 24px;
     }
 
     @media (max-width: 600px) {
@@ -238,9 +253,9 @@ require_once __DIR__ . '/../shared/components/header.php';
     }
 
     .stat-box {
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 16px;
         padding: 16px;
         text-align: center;
@@ -249,7 +264,8 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     .stat-box:hover {
         transform: translateY(-4px);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        background: rgba(255, 255, 255, 0.12);
     }
 
     .stat-box-icon {
@@ -265,7 +281,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     .stat-box-label {
         font-size: 0.75rem;
-        color: rgba(255, 255, 255, 0.7);
+        color: rgba(255, 255, 255, 0.6);
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
@@ -274,31 +290,32 @@ require_once __DIR__ . '/../shared/components/header.php';
         display: flex;
         align-items: center;
         gap: 12px;
-        margin-bottom: 20px;
+        margin-bottom: 16px;
     }
 
     .section-header h2 {
-        font-size: 1.25rem;
+        font-size: 1.1rem;
         font-weight: 700;
         display: flex;
         align-items: center;
         gap: 8px;
+        color: rgba(255, 255, 255, 0.9);
     }
 
     .games-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 20px;
-        margin-bottom: 40px;
+        gap: 16px;
+        margin-bottom: 32px;
     }
 
     .game-card {
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.06);
         backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 20px;
         overflow: hidden;
-        transition: transform 0.3s, box-shadow 0.3s;
+        transition: transform 0.3s, box-shadow 0.3s, background 0.3s;
         text-decoration: none;
         color: inherit;
         display: block;
@@ -306,17 +323,19 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     .game-card:hover {
         transform: translateY(-8px);
-        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+        background: rgba(255, 255, 255, 0.1);
     }
 
     .game-card.coming-soon {
-        opacity: 0.7;
+        opacity: 0.6;
         cursor: default;
     }
 
     .game-card.coming-soon:hover {
         transform: none;
         box-shadow: none;
+        background: rgba(255, 255, 255, 0.06);
     }
 
     .game-card-header {
@@ -397,15 +416,15 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     .game-card-features {
         padding: 16px 24px;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
     }
 
     .feature-tag {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.9);
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.8);
         font-size: 0.7rem;
         font-weight: 600;
         padding: 4px 10px;
@@ -414,7 +433,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     .game-card-action {
         padding: 16px 24px;
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(0, 0, 0, 0.15);
         text-align: center;
     }
 
@@ -448,9 +467,9 @@ require_once __DIR__ . '/../shared/components/header.php';
     }
 
     .leaderboard-section {
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.06);
         backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 20px;
         padding: 24px;
         margin-bottom: 30px;
@@ -465,7 +484,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         align-items: center;
         gap: 12px;
         padding: 12px 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
 
     .leaderboard-item:last-child {
@@ -544,7 +563,8 @@ require_once __DIR__ . '/../shared/components/header.php';
     .cta-section {
         text-align: center;
         padding: 40px 20px;
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 20px;
         margin-bottom: 30px;
     }
@@ -579,14 +599,19 @@ require_once __DIR__ . '/../shared/components/header.php';
     }
 </style>
 
+<!-- Dark Background -->
+<div class="bg-animation"></div>
+
 <main class="main-content">
     <div class="games-container">
 
-        <!-- Hero Section -->
+        <!-- Compact Hero Section -->
         <section class="games-hero">
             <div class="games-hero-icon">🎮</div>
-            <h1>Family Game Center</h1>
-            <p>Play, compete, and have fun with your family!</p>
+            <div class="games-hero-content">
+                <h1>Family Game Center</h1>
+                <p>Play, compete, and have fun with your family!</p>
+            </div>
         </section>
 
         <!-- User Stats -->
