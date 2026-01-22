@@ -4,7 +4,7 @@
  * and network-first for API calls.
  */
 
-const CACHE_VERSION = 'snake-v1.0.0';
+const CACHE_VERSION = 'snake-v1.1.0';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 const DYNAMIC_CACHE = CACHE_VERSION + '-dynamic';
 
