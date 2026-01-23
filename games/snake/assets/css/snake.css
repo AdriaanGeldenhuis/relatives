@@ -774,8 +774,12 @@ body {
 }
 
 .casual-preview {
-    background: linear-gradient(135deg, #1a2332, #1e2a3a);
+    background: #0c0e16;
     border: 2px solid #4caf50;
+    background-image:
+        linear-gradient(rgba(40,44,60,0.6) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(40,44,60,0.6) 1px, transparent 1px);
+    background-size: 15px 15px;
 }
 
 .casual-preview .preview-snake {

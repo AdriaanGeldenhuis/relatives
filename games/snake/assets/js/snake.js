@@ -76,9 +76,9 @@ const SnakeGame = (function() {
         },
         casual: {
             name: 'Casual',
-            BACKGROUND: '#1a2332',
-            BACKGROUND_GRADIENT: ['#1a2332', '#162030', '#1a2332'],
-            GRID: 'rgba(255,255,255,0.03)',
+            BACKGROUND: '#0c0e16',
+            BACKGROUND_GRADIENT: ['#0c0e16', '#0e1018', '#0c0e16'],
+            GRID: 'transparent',
             SNAKE_HEAD: '#66bb6a',
             SNAKE_HEAD_HIGHLIGHT: '#81c784',
             SNAKE_HEAD_SHADOW: '#388e3c',
@@ -749,6 +749,8 @@ const SnakeGame = (function() {
         // Draw realistic grass texture for realistic mode
         if (COLORS.realisticMode) {
             drawGrassBackground(size);
+        } else if (COLORS.casualMode) {
+            drawCasualBackground(size);
         } else {
             // Draw grid (subtle) for other themes
             ctx.fillStyle = COLORS.GRID;
@@ -921,6 +923,99 @@ const SnakeGame = (function() {
         grassCacheSize = size;
 
         // Draw to main canvas
+        ctx.drawImage(grassCache, 0, 0, size, size);
+    }
+
+    /**
+     * Draw casual mode background - dark tile floor pattern (pre-rendered)
+     */
+    function drawCasualBackground(size) {
+        if (grassCache && grassCacheSize === size) {
+            ctx.drawImage(grassCache, 0, 0, size, size);
+            return;
+        }
+
+        const offCanvas = document.createElement('canvas');
+        const dpr = window.devicePixelRatio || 1;
+        offCanvas.width = size * dpr;
+        offCanvas.height = size * dpr;
+        const oc = offCanvas.getContext('2d');
+        oc.scale(dpr, dpr);
+
+        const seededRandom = (x, y) => {
+            const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+            return n - Math.floor(n);
+        };
+
+        // Dark base fill
+        oc.fillStyle = '#0c0e16';
+        oc.fillRect(0, 0, size, size);
+
+        const gap = 2; // Gap between tiles
+
+        // Draw each tile
+        for (let row = 0; row < CONFIG.GRID_SIZE; row++) {
+            for (let col = 0; col < CONFIG.GRID_SIZE; col++) {
+                const tx = col * cellSize + gap;
+                const ty = row * cellSize + gap;
+                const tw = cellSize - gap * 2;
+                const th = cellSize - gap * 2;
+
+                // Vary tile base color slightly per tile
+                const variation = seededRandom(col * 7 + 3, row * 13 + 5);
+                const baseR = 28 + Math.floor(variation * 8);
+                const baseG = 30 + Math.floor(variation * 8);
+                const baseB = 42 + Math.floor(variation * 10);
+
+                // Tile gradient (subtle top-left highlight)
+                const tileGrad = oc.createLinearGradient(tx, ty, tx + tw, ty + th);
+                tileGrad.addColorStop(0, `rgb(${baseR + 6}, ${baseG + 6}, ${baseB + 8})`);
+                tileGrad.addColorStop(0.3, `rgb(${baseR}, ${baseG}, ${baseB})`);
+                tileGrad.addColorStop(1, `rgb(${baseR - 4}, ${baseG - 4}, ${baseB - 4})`);
+                oc.fillStyle = tileGrad;
+                oc.fillRect(tx, ty, tw, th);
+
+                // Fine noise texture within tile
+                for (let ny = 0; ny < th; ny += 3) {
+                    for (let nx = 0; nx < tw; nx += 3) {
+                        const noise = seededRandom(col * 100 + nx, row * 100 + ny);
+                        if (noise > 0.6) {
+                            oc.fillStyle = `rgba(255, 255, 255, ${noise * 0.03})`;
+                            oc.fillRect(tx + nx, ty + ny, 2, 2);
+                        } else if (noise < 0.2) {
+                            oc.fillStyle = `rgba(0, 0, 0, ${(1 - noise) * 0.08})`;
+                            oc.fillRect(tx + nx, ty + ny, 2, 2);
+                        }
+                    }
+                }
+
+                // Top edge highlight
+                oc.fillStyle = 'rgba(60, 65, 85, 0.25)';
+                oc.fillRect(tx, ty, tw, 1);
+
+                // Left edge highlight
+                oc.fillStyle = 'rgba(55, 60, 80, 0.2)';
+                oc.fillRect(tx, ty, 1, th);
+
+                // Bottom edge shadow
+                oc.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                oc.fillRect(tx, ty + th - 1, tw, 1);
+
+                // Right edge shadow
+                oc.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                oc.fillRect(tx + tw - 1, ty, 1, th);
+            }
+        }
+
+        // Subtle overall vignette
+        const vigGrad = oc.createRadialGradient(size / 2, size / 2, size * 0.3, size / 2, size / 2, size * 0.72);
+        vigGrad.addColorStop(0, 'transparent');
+        vigGrad.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
+        oc.fillStyle = vigGrad;
+        oc.fillRect(0, 0, size, size);
+
+        grassCache = offCanvas;
+        grassCacheSize = size;
         ctx.drawImage(grassCache, 0, 0, size, size);
     }
 
