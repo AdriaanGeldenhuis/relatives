@@ -749,6 +749,15 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
         </section>
 
+        <!-- Customization -->
+        <section class="cta-section" style="margin-bottom:24px;">
+            <h3>🎨 Customize Your Games</h3>
+            <p>Change themes, unlock Casual mode, and personalize your experience.</p>
+            <a href="/games/snake/#customize" class="cta-btn" style="background:linear-gradient(135deg,#4caf50,#388e3c);">
+                <span>🎨</span> Open Customization
+            </a>
+        </section>
+
         <!-- Family Leaderboard -->
         <section class="leaderboard-section">
             <div class="section-header">

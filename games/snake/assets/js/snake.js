@@ -452,7 +452,13 @@ const SnakeGame = (function() {
         if (closeThemeBtn && themeScreen) {
             closeThemeBtn.addEventListener('click', () => {
                 themeScreen.classList.add('hidden');
+                history.replaceState(null, '', window.location.pathname);
             });
+        }
+
+        // Auto-open theme selector if #customize hash is in URL
+        if (window.location.hash === '#customize' && themeScreen) {
+            themeScreen.classList.remove('hidden');
         }
 
         // Theme option buttons
