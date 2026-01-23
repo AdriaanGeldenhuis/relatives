@@ -141,6 +141,7 @@ $cacheVersion = '1.0.0';
             <div class="overlay-box">
                 <h2>PAUSED</h2>
                 <button id="btn-resume" class="neon-btn primary">Resume</button>
+                <a href="/games/" class="neon-btn secondary" style="text-decoration:none;text-align:center;">Customization</a>
                 <button id="btn-quit" class="neon-btn secondary">Quit</button>
             </div>
         </div>
