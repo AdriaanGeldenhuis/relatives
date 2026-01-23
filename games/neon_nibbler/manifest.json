@@ -1,0 +1,17 @@
+{
+    "name": "Neon Nibbler",
+    "short_name": "Nibbler",
+    "description": "Neon maze chase game - collect dots, avoid sentinels!",
+    "start_url": "/games/neon_nibbler/",
+    "display": "fullscreen",
+    "orientation": "landscape",
+    "background_color": "#0a0a1a",
+    "theme_color": "#0a0a1a",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%230a0a1a' width='192' height='192' rx='32'/><circle cx='96' cy='96' r='40' fill='%2300f5ff'/></svg>",
+            "sizes": "192x192",
+            "type": "image/svg+xml"
+        }
+    ]
+}

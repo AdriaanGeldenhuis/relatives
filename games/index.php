@@ -88,6 +88,24 @@ try {
         // Flash tables may not exist yet
     }
 
+    // Neon Nibbler stats
+    try {
+        $stmt = $db->prepare("
+            SELECT COUNT(*) as total_neon, MAX(score) as best_neon_score
+            FROM neon_scores
+            WHERE user_id = ? AND flagged = 0
+        ");
+        $stmt->execute([$user['id']]);
+        $neonStats = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($neonStats) {
+            $userStats['total_games'] += (int)($neonStats['total_neon'] ?? 0);
+            $userStats['total_score'] += (int)($neonStats['best_neon_score'] ?? 0);
+        }
+    } catch (Exception $e) {
+        // Neon table may not exist yet
+    }
+
 } catch (Exception $e) {
     error_log('Game stats error: ' . $e->getMessage());
 }
@@ -144,6 +162,17 @@ $games = [
         'color' => '#4ecca3',
         'features' => ['Offline Play', 'Family Leaderboard', 'Daily Challenges'],
         'available' => true
+    ],
+    [
+        'id' => 'neon',
+        'name' => 'Neon Nibbler',
+        'icon' => '💠',
+        'description' => 'Neon maze chase! Collect spark dots, dodge sentinels, grab pulse orbs!',
+        'url' => '/games/neon_nibbler/',
+        'color' => '#00f5ff',
+        'features' => ['Offline Play', 'Pulse Mode', 'Multiple Levels'],
+        'available' => true,
+        'highlight' => true
     ],
     [
         'id' => '30seconds',
