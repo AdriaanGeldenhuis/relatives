@@ -74,6 +74,26 @@ const SnakeGame = (function() {
             snakePattern: true,
             foodStyle: 'apple'
         },
+        casual: {
+            name: 'Casual',
+            BACKGROUND: '#1a2332',
+            BACKGROUND_GRADIENT: ['#1a2332', '#162030', '#1a2332'],
+            GRID: 'rgba(255,255,255,0.03)',
+            SNAKE_HEAD: '#66bb6a',
+            SNAKE_HEAD_HIGHLIGHT: '#81c784',
+            SNAKE_HEAD_SHADOW: '#388e3c',
+            SNAKE_HEAD_GLOW: 'transparent',
+            SNAKE_BODY: '#4caf50',
+            SNAKE_BODY_GRADIENT: ['#66bb6a', '#4caf50', '#388e3c'],
+            FOOD: '#ff7043',
+            FOOD_INNER: '#e64a19',
+            FOOD_HIGHLIGHT: '#ff8a65',
+            FOOD_GLOW: 'transparent',
+            FOOD_GLOW_OUTER: 'transparent',
+            EYE_COLOR: '#fff',
+            useGlow: false,
+            casualMode: true
+        },
         classic: {
             name: 'Nokia Classic',
             BACKGROUND: '#9bbc0f',
@@ -1085,6 +1105,32 @@ const SnakeGame = (function() {
             return;
         }
 
+        // Casual theme - clean circle food with shadow
+        if (COLORS.casualMode) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.beginPath();
+            ctx.arc(foodCenterX + 1, foodCenterY + 2, cellSize * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            const casualGrad = ctx.createRadialGradient(
+                foodCenterX - cellSize * 0.1, foodCenterY - cellSize * 0.1, 0,
+                foodCenterX, foodCenterY, cellSize * 0.38
+            );
+            casualGrad.addColorStop(0, COLORS.FOOD_HIGHLIGHT);
+            casualGrad.addColorStop(0.6, COLORS.FOOD);
+            casualGrad.addColorStop(1, COLORS.FOOD_INNER);
+            ctx.fillStyle = casualGrad;
+            ctx.beginPath();
+            ctx.arc(foodCenterX, foodCenterY, cellSize * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.beginPath();
+            ctx.ellipse(foodCenterX - cellSize * 0.08, foodCenterY - cellSize * 0.1, cellSize * 0.12, cellSize * 0.08, -0.5, 0, Math.PI * 2);
+            ctx.fill();
+            return;
+        }
+
         // Neon theme - glow effect
         if (COLORS.useGlow) {
             const pulseScale = 1 + Math.sin(Date.now() / 200) * 0.15;
@@ -1133,6 +1179,12 @@ const SnakeGame = (function() {
         // Realistic theme - draw connected snake body
         if (COLORS.realisticMode) {
             drawRealisticSnake();
+            return;
+        }
+
+        // Casual theme - smooth connected rounded snake
+        if (COLORS.casualMode) {
+            drawCasualSnake();
             return;
         }
 
@@ -1649,6 +1701,143 @@ const SnakeGame = (function() {
             ctx.fill();
 
             ctx.restore();
+        }
+    }
+
+    /**
+     * Draw casual theme snake - smooth connected pill-shaped body
+     */
+    function drawCasualSnake() {
+        if (snake.length === 0) return;
+
+        const radius = cellSize * 0.42;
+
+        // Build center points for each segment
+        const points = snake.map(seg => ({
+            x: seg.x * cellSize + cellSize / 2,
+            y: seg.y * cellSize + cellSize / 2
+        }));
+
+        // Draw shadow under the snake
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        for (let i = 0; i < points.length; i++) {
+            ctx.beginPath();
+            ctx.arc(points[i].x + 2, points[i].y + 3, radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+
+        // Draw connected body segments (tail to head)
+        for (let i = points.length - 1; i >= 0; i--) {
+            const p = points[i];
+            const progress = i / Math.max(1, points.length - 1);
+
+            // Color gradient from head to tail
+            const r = Math.floor(66 + progress * 20);
+            const g = Math.floor(187 - progress * 40);
+            const b = Math.floor(106 - progress * 30);
+            const bodyColor = `rgb(${r}, ${g}, ${b})`;
+            const darkColor = `rgb(${Math.floor(r * 0.7)}, ${Math.floor(g * 0.7)}, ${Math.floor(b * 0.7)})`;
+            const lightColor = `rgb(${Math.min(255, Math.floor(r * 1.3))}, ${Math.min(255, Math.floor(g * 1.2))}, ${Math.min(255, Math.floor(b * 1.2))})`;
+
+            // Draw connection to next segment
+            if (i < points.length - 1) {
+                const next = points[i + 1];
+                ctx.fillStyle = bodyColor;
+                ctx.beginPath();
+                const dx = next.x - p.x;
+                const dy = next.y - p.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < cellSize * 1.5) {
+                    const nx = -dy / dist * radius * 0.85;
+                    const ny = dx / dist * radius * 0.85;
+                    ctx.moveTo(p.x + nx, p.y + ny);
+                    ctx.lineTo(next.x + nx, next.y + ny);
+                    ctx.lineTo(next.x - nx, next.y - ny);
+                    ctx.lineTo(p.x - nx, p.y - ny);
+                    ctx.fill();
+                }
+            }
+
+            // Draw segment circle
+            const segGrad = ctx.createRadialGradient(
+                p.x - radius * 0.3, p.y - radius * 0.3, 0,
+                p.x, p.y, radius
+            );
+            segGrad.addColorStop(0, lightColor);
+            segGrad.addColorStop(0.5, bodyColor);
+            segGrad.addColorStop(1, darkColor);
+            ctx.fillStyle = segGrad;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Subtle specular highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+            ctx.beginPath();
+            ctx.ellipse(p.x - radius * 0.2, p.y - radius * 0.25, radius * 0.35, radius * 0.2, -0.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Draw head details
+        if (points.length > 0) {
+            const head = points[0];
+
+            // Eyes
+            const eyeSize = radius * 0.32;
+            const pupilSize = eyeSize * 0.55;
+            let e1x, e1y, e2x, e2y, pupilDx = 0, pupilDy = 0;
+
+            switch (direction) {
+                case 'UP':
+                    e1x = head.x - radius * 0.35; e1y = head.y - radius * 0.2;
+                    e2x = head.x + radius * 0.35; e2y = head.y - radius * 0.2;
+                    pupilDy = -pupilSize * 0.3;
+                    break;
+                case 'DOWN':
+                    e1x = head.x - radius * 0.35; e1y = head.y + radius * 0.2;
+                    e2x = head.x + radius * 0.35; e2y = head.y + radius * 0.2;
+                    pupilDy = pupilSize * 0.3;
+                    break;
+                case 'LEFT':
+                    e1x = head.x - radius * 0.2; e1y = head.y - radius * 0.35;
+                    e2x = head.x - radius * 0.2; e2y = head.y + radius * 0.35;
+                    pupilDx = -pupilSize * 0.3;
+                    break;
+                default: // RIGHT
+                    e1x = head.x + radius * 0.2; e1y = head.y - radius * 0.35;
+                    e2x = head.x + radius * 0.2; e2y = head.y + radius * 0.35;
+                    pupilDx = pupilSize * 0.3;
+                    break;
+            }
+
+            // Eye whites
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(e1x, e1y, eyeSize, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(e2x, e2y, eyeSize, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pupils
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath();
+            ctx.arc(e1x + pupilDx, e1y + pupilDy, pupilSize, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(e2x + pupilDx, e2y + pupilDy, pupilSize, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pupil highlights
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(e1x + pupilDx + pupilSize * 0.3, e1y + pupilDy - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(e2x + pupilDx + pupilSize * 0.3, e2y + pupilDy - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
+            ctx.fill();
         }
     }
 
