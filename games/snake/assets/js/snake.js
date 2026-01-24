@@ -497,6 +497,10 @@ const SnakeGame = (function() {
         if (customizeGameoverBtn) {
             customizeGameoverBtn.classList.toggle("hidden", themeName !== "casual");
         }
+        const closeCustomizationBtn = document.getElementById("close-customization-btn");
+        if (closeCustomizationBtn) {
+            closeCustomizationBtn.classList.toggle("hidden", themeName !== "casual");
+        }
 
         // Redraw canvas with new theme
         draw();
