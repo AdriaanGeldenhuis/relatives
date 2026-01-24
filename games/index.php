@@ -175,16 +175,6 @@ $games = [
         'highlight' => true
     ],
     [
-        'id' => 'pacman',
-        'name' => 'Pac-Man',
-        'icon' => '👾',
-        'description' => 'Classic maze chase! Eat all dots, avoid ghosts, grab power pellets to fight back.',
-        'url' => '/games/pacman/',
-        'color' => '#00ffff',
-        'features' => ['5 Levels', 'Swipe Controls', 'Ghost AI'],
-        'available' => true
-    ],
-    [
         'id' => 'blockforge',
         'name' => 'BlockForge',
         'icon' => '🧱',
