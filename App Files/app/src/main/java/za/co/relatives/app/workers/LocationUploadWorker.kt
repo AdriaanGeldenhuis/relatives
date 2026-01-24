@@ -165,8 +165,7 @@ class LocationUploadWorker(
                     dao.deleteSent()
 
                     // Apply server settings if present
-                    val serverSettings = json.optJSONObject("server_settings")
-                    serverSettings?.let { applyServerSettings(it) }
+                    PreferencesManager.applyServerSettings(json.optJSONObject("server_settings"))
 
                     PreferencesManager.lastUploadTime = System.currentTimeMillis()
 
@@ -193,18 +192,4 @@ class LocationUploadWorker(
         }
     }
 
-    private fun applyServerSettings(settings: JSONObject) {
-        settings.optInt("update_interval_seconds", 0).takeIf { it > 0 }?.let {
-            PreferencesManager.setUpdateInterval(it)
-        }
-        settings.optInt("idle_heartbeat_seconds", 0).takeIf { it > 0 }?.let {
-            PreferencesManager.idleHeartbeatSeconds = it
-        }
-        settings.optInt("offline_threshold_seconds", 0).takeIf { it > 0 }?.let {
-            PreferencesManager.offlineThresholdSeconds = it
-        }
-        settings.optInt("stale_threshold_seconds", 0).takeIf { it > 0 }?.let {
-            PreferencesManager.staleThresholdSeconds = it
-        }
-    }
 }

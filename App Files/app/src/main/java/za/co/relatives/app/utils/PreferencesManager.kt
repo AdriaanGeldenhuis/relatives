@@ -3,6 +3,7 @@ package za.co.relatives.app.utils
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import org.json.JSONObject
 import java.util.UUID
 
 object PreferencesManager {
@@ -91,4 +92,29 @@ object PreferencesManager {
     var lastUploadTime: Long
         get() = prefs.getLong(KEY_LAST_UPLOAD_TIME, 0L)
         set(value) = prefs.edit { putLong(KEY_LAST_UPLOAD_TIME, value) }
+
+    /**
+     * Apply server settings from JSON response.
+     * Returns true if update_interval_seconds changed (caller may need to react).
+     */
+    fun applyServerSettings(settings: JSONObject?): Boolean {
+        settings ?: return false
+        var intervalChanged = false
+        settings.optInt("update_interval_seconds", 0).takeIf { it > 0 }?.let { newInterval ->
+            if (newInterval != getUpdateInterval()) {
+                intervalChanged = true
+            }
+            setUpdateInterval(newInterval)
+        }
+        settings.optInt("idle_heartbeat_seconds", 0).takeIf { it > 0 }?.let {
+            idleHeartbeatSeconds = it
+        }
+        settings.optInt("offline_threshold_seconds", 0).takeIf { it > 0 }?.let {
+            offlineThresholdSeconds = it
+        }
+        settings.optInt("stale_threshold_seconds", 0).takeIf { it > 0 }?.let {
+            staleThresholdSeconds = it
+        }
+        return intervalChanged
+    }
 }

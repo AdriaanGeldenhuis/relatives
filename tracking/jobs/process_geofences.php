@@ -52,6 +52,7 @@ register_shutdown_function(function() use ($lockHandle, $lockFile) {
 
 // Load bootstrap
 require_once __DIR__ . '/../../core/bootstrap.php';
+require_once __DIR__ . '/../../core/GeoUtils.php';
 require_once __DIR__ . '/../../core/NotificationManager.php';
 require_once __DIR__ . '/../../core/NotificationTriggers.php';
 
@@ -108,7 +109,8 @@ try {
                 $triggers = new NotificationTriggers($db);
 
                 // ========== LOW BATTERY CHECK ==========
-                if ($batteryLevel !== null && $batteryLevel <= 15) {
+                // Threshold matches Android LOW_BATTERY_THRESHOLD (20%) where tracking degrades
+                if ($batteryLevel !== null && $batteryLevel <= 20) {
                     // Check if we already notified recently (within last hour)
                     $stmt = $db->prepare("
                         SELECT id FROM tracking_events
@@ -156,7 +158,7 @@ try {
                     $insideZone = false;
 
                     if ($zone['type'] === 'circle') {
-                        $distance = haversineDistance(
+                        $distance = geo_haversineDistance(
                             $latitude,
                             $longitude,
                             (float)$zone['center_lat'],
@@ -166,7 +168,7 @@ try {
                     } elseif ($zone['type'] === 'polygon' && $zone['polygon_json']) {
                         $polygon = json_decode($zone['polygon_json'], true);
                         if ($polygon) {
-                            $insideZone = isPointInPolygon($latitude, $longitude, $polygon);
+                            $insideZone = geo_isPointInPolygon($latitude, $longitude, $polygon);
                         }
                     }
 
@@ -282,48 +284,3 @@ try {
 $duration = round(microtime(true) - $startTime, 2);
 echo "[" . date('Y-m-d H:i:s') . "] Completed: $processed processed, $notifications notifications, $errors errors in {$duration}s\n";
 
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
-
-/**
- * Calculate distance between two points using Haversine formula
- */
-function haversineDistance($lat1, $lon1, $lat2, $lon2): float {
-    $earthRadius = 6371000; // meters
-
-    $dLat = deg2rad($lat2 - $lat1);
-    $dLon = deg2rad($lon2 - $lon1);
-
-    $a = sin($dLat/2) * sin($dLat/2) +
-         cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-         sin($dLon/2) * sin($dLon/2);
-
-    $c = 2 * atan2(sqrt($a), sqrt(1-$a));
-
-    return $earthRadius * $c;
-}
-
-/**
- * Check if point is inside polygon
- */
-function isPointInPolygon($lat, $lng, $polygon): bool {
-    $inside = false;
-    $count = count($polygon);
-
-    for ($i = 0, $j = $count - 1; $i < $count; $j = $i++) {
-        $xi = $polygon[$i]['lat'];
-        $yi = $polygon[$i]['lng'];
-        $xj = $polygon[$j]['lat'];
-        $yj = $polygon[$j]['lng'];
-
-        $intersect = (($yi > $lng) != ($yj > $lng))
-            && ($lat < ($xj - $xi) * ($lng - $yi) / ($yj - $yi) + $xi);
-
-        if ($intersect) {
-            $inside = !$inside;
-        }
-    }
-
-    return $inside;
-}

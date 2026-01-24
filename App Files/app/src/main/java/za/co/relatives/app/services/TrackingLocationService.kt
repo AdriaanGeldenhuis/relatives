@@ -156,9 +156,10 @@ class TrackingLocationService : Service() {
         private const val UPLOAD_URL = "https://www.relatives.co.za/tracking/api/update_location.php"
 
         // Mode intervals
-        private const val IDLE_INTERVAL_MS = 2 * 60 * 1000L       // 2 minutes (ensures heartbeat stays alive)
-        private const val IDLE_MIN_DISTANCE_M = 100f               // 100m distance gate (tighter than before)
-        private const val MOVING_INTERVAL_MS = 30 * 1000L          // 30 seconds
+        // Note: IDLE fires every 2min but with 100m gate, so stationary users only get heartbeat fixes
+        private const val IDLE_INTERVAL_MS = 2 * 60 * 1000L       // 2 minutes (+ distance gate for stationary)
+        private const val IDLE_MIN_DISTANCE_M = 100f               // 100m distance gate
+        // MOVING interval comes from server via PreferencesManager.getUpdateInterval()
         private const val MOVING_MIN_DISTANCE_M = 20f              // 20m distance gate
         private const val BURST_INTERVAL_MS = 5 * 1000L            // 5 seconds (fast sampling)
         private const val SCREEN_BOOST_INTERVAL_MS = 15 * 1000L    // 15s when screen visible
@@ -529,19 +530,24 @@ class TrackingLocationService : Service() {
                             PreferencesManager.lastUploadTime = lastUploadTime
                             consecutiveAuthFailures = 0
 
+                            // Parse response
+                            val json = try { JSONObject(responseBody ?: "{}") } catch (e: Exception) { JSONObject() }
+
                             // Apply server settings
                             try {
-                                val json = JSONObject(responseBody ?: "{}")
                                 applyServerSettings(json.optJSONObject("server_settings"))
                             } catch (e: Exception) { /* non-fatal */ }
 
-                            // Mark this location as sent in Room
-                            serviceScope.launch {
-                                try {
-                                    val dao = TrackingDatabase.getInstance(applicationContext).queuedLocationDao()
-                                    dao.markSent(listOf(clientEventId))
-                                    dao.deleteSent()
-                                } catch (e: Exception) { /* non-fatal */ }
+                            // Only mark as sent if NOT rate-limited (otherwise data is lost)
+                            val wasRateLimited = json.optBoolean("rate_limited", false)
+                            if (!wasRateLimited) {
+                                serviceScope.launch {
+                                    try {
+                                        val dao = TrackingDatabase.getInstance(applicationContext).queuedLocationDao()
+                                        dao.markSent(listOf(clientEventId))
+                                        dao.deleteSent()
+                                    } catch (e: Exception) { /* non-fatal */ }
+                                }
                             }
                         }
                         resp.code in listOf(401, 403) -> {
@@ -668,23 +674,10 @@ class TrackingLocationService : Service() {
     // ========== SERVER SETTINGS ==========
 
     private fun applyServerSettings(settings: JSONObject?) {
-        settings ?: return
         try {
-            settings.optInt("update_interval_seconds", 0).takeIf { it > 0 }?.let { newInterval ->
-                val oldInterval = PreferencesManager.getUpdateInterval()
-                PreferencesManager.setUpdateInterval(newInterval)
-                if (newInterval != oldInterval && currentMode == TrackingMode.MOVING && isTracking && !isPaused) {
-                    mainHandler.post { restartLocationUpdates() }
-                }
-            }
-            settings.optInt("idle_heartbeat_seconds", 0).takeIf { it > 0 }?.let {
-                PreferencesManager.idleHeartbeatSeconds = it
-            }
-            settings.optInt("offline_threshold_seconds", 0).takeIf { it > 0 }?.let {
-                PreferencesManager.offlineThresholdSeconds = it
-            }
-            settings.optInt("stale_threshold_seconds", 0).takeIf { it > 0 }?.let {
-                PreferencesManager.staleThresholdSeconds = it
+            val intervalChanged = PreferencesManager.applyServerSettings(settings)
+            if (intervalChanged && currentMode == TrackingMode.MOVING && isTracking && !isPaused) {
+                mainHandler.post { restartLocationUpdates() }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error applying server settings", e)
