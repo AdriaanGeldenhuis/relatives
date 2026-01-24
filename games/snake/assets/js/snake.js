@@ -1367,6 +1367,26 @@ const SnakeGame = (function() {
     }
 
     /**
+     * Get interpolated grid positions (for segment-based drawing like neon/classic)
+     */
+    function getInterpolatedSegments() {
+        const len = Math.min(prevSnake.length, snake.length);
+        const segs = [];
+        for (let i = 0; i < len; i++) {
+            const a = prevSnake[i];
+            const b = snake[i];
+            segs.push({
+                x: a.x + (b.x - a.x) * moveT,
+                y: a.y + (b.y - a.y) * moveT
+            });
+        }
+        for (let i = len; i < snake.length; i++) {
+            segs.push({ x: snake[i].x, y: snake[i].y });
+        }
+        return segs;
+    }
+
+    /**
      * Shade a hex color by amount (positive = lighter, negative = darker)
      */
     function shade(hex, amt) {
@@ -1397,9 +1417,14 @@ const SnakeGame = (function() {
             return;
         }
 
+        // Use interpolated positions for smooth movement
+        const segments = (gameState === 'playing' && prevSnake.length > 0)
+            ? getInterpolatedSegments()
+            : snake;
+
         // Draw snake segments (tail to head so head is on top)
-        for (let i = snake.length - 1; i >= 0; i--) {
-            const segment = snake[i];
+        for (let i = segments.length - 1; i >= 0; i--) {
+            const segment = segments[i];
             const x = segment.x * cellSize + CONFIG.CELL_PADDING;
             const y = segment.y * cellSize + CONFIG.CELL_PADDING;
             const w = cellSize - CONFIG.CELL_PADDING * 2;
@@ -1433,7 +1458,7 @@ const SnakeGame = (function() {
                 ctx.fillStyle = headGradient;
             } else {
                 // Body segments with fading gradient
-                const progress = i / snake.length;
+                const progress = i / segments.length;
                 const alpha = COLORS.snakePattern ? 1 : (1 - (progress * 0.4));
                 const colorIndex = Math.min(2, Math.floor(progress * 3));
                 ctx.fillStyle = COLORS.SNAKE_BODY_GRADIENT[colorIndex];
@@ -1457,8 +1482,8 @@ const SnakeGame = (function() {
         }
 
         // Draw eyes on head (skip for classic blocky theme)
-        if (snake.length > 0 && !COLORS.blockStyle) {
-            const head = snake[0];
+        if (segments.length > 0 && !COLORS.blockStyle) {
+            const head = segments[0];
             const hx = head.x * cellSize + cellSize / 2;
             const hy = head.y * cellSize + cellSize / 2;
             const eyeSize = cellSize * 0.12;
@@ -1512,11 +1537,13 @@ const SnakeGame = (function() {
 
         const bodyWidth = cellSize * 0.9;
 
-        // Get all segment center points
-        const points = snake.map(seg => ({
-            x: seg.x * cellSize + cellSize / 2,
-            y: seg.y * cellSize + cellSize / 2
-        }));
+        // Get interpolated center points for smooth movement
+        const points = (gameState === 'playing' && prevSnake.length > 0)
+            ? getInterpolatedPoints()
+            : snake.map(seg => ({
+                x: seg.x * cellSize + cellSize / 2,
+                y: seg.y * cellSize + cellSize / 2
+            }));
 
         // Draw ground shadow
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
