@@ -483,6 +483,13 @@ const SnakeGame = (function() {
         // Save to localStorage
         localStorage.setItem('snake_theme', themeName);
 
+        // Update start screen title with theme name
+        const themeDisplayNames = { neon: 'Neon Retro', realistic: 'Nature', casual: 'Casual', classic: 'Nokia Classic' };
+        const startTitle = document.getElementById('start-screen-title');
+        if (startTitle) {
+            startTitle.textContent = themeDisplayNames[themeName] || themeName;
+        }
+
         // Update theme option buttons
         document.querySelectorAll('.theme-option').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.theme === themeName);
