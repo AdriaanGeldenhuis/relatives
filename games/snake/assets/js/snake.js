@@ -437,6 +437,13 @@ const SnakeGame = (function() {
                 drawPreviewSnake();
             });
         }
+        const customizeGameoverBtn = document.getElementById('customize-gameover-btn');
+        if (customizeGameoverBtn) {
+            customizeGameoverBtn.addEventListener('click', () => {
+                ui.gameoverScreen.classList.add('hidden');
+                openCustomization();
+            });
+        }
 
         // Tab buttons
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -485,6 +492,12 @@ const SnakeGame = (function() {
         const startBtn = document.getElementById("start-btn");
         if (startBtn) {
             startBtn.textContent = (themeName === "casual") ? "Customization" : "Start Game";
+        }
+
+        // Show/hide customization button on game over screen
+        const customizeGameoverBtn = document.getElementById("customize-gameover-btn");
+        if (customizeGameoverBtn) {
+            customizeGameoverBtn.classList.toggle("hidden", themeName !== "casual");
         }
 
         // Redraw canvas with new theme
