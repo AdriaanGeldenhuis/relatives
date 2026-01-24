@@ -27,6 +27,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../../core/bootstrap.php';
+require_once __DIR__ . '/../../core/tracking/TrackingSettings.php';
 
 try {
     $rawInput = file_get_contents('php://input');
@@ -69,8 +70,7 @@ try {
     }
     // ========== END SUBSCRIPTION LOCK ==========
     
-    // Prepare values with validation (default 30s - matches TrackingSettings.php)
-    $updateInterval = isset($input['update_interval_seconds']) ? (int)$input['update_interval_seconds'] : 30;
+    $updateInterval = isset($input['update_interval_seconds']) ? (int)$input['update_interval_seconds'] : TRACKING_DEFAULT_UPDATE_INTERVAL;
     $historyRetention = isset($input['history_retention_days']) ? (int)$input['history_retention_days'] : 30;
     $showSpeed = isset($input['show_speed']) ? (int)(bool)$input['show_speed'] : 1;
     $showBattery = isset($input['show_battery']) ? (int)(bool)$input['show_battery'] : 1;
@@ -78,10 +78,10 @@ try {
     $isTrackingEnabled = isset($input['is_tracking_enabled']) ? (int)(bool)$input['is_tracking_enabled'] : 1;
     $highAccuracyMode = isset($input['high_accuracy_mode']) ? (int)(bool)$input['high_accuracy_mode'] : 1;
     $backgroundTracking = isset($input['background_tracking']) ? (int)(bool)$input['background_tracking'] : 1;
-    
-    // Validate ranges (must match TrackingSettings.php constants)
-    if ($updateInterval < 10) $updateInterval = 10;  // TRACKING_UPDATE_INTERVAL_MIN
-    if ($updateInterval > 300) $updateInterval = 300; // TRACKING_UPDATE_INTERVAL_MAX
+
+    // Validate ranges using TrackingSettings.php constants
+    if ($updateInterval < TRACKING_UPDATE_INTERVAL_MIN) $updateInterval = TRACKING_UPDATE_INTERVAL_MIN;
+    if ($updateInterval > TRACKING_UPDATE_INTERVAL_MAX) $updateInterval = TRACKING_UPDATE_INTERVAL_MAX;
     if ($historyRetention < 1) $historyRetention = 1;
     if ($historyRetention > 365) $historyRetention = 365;
     
@@ -142,10 +142,6 @@ try {
         ]);
     }
 
-    // Also sync to users.location_update_interval for page reload consistency
-    $stmt = $db->prepare("UPDATE users SET location_update_interval = ? WHERE id = ?");
-    $stmt->execute([$updateInterval, $userId]);
-    
     echo json_encode([
         'success' => true,
         'message' => 'Settings saved successfully'

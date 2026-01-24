@@ -29,6 +29,7 @@ if (!isset($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../../core/Cache.php';
+require_once __DIR__ . '/../../core/tracking/TrackingSettings.php';
 
 try {
     $userId = (int)$_SESSION['user_id'];
@@ -82,10 +83,10 @@ try {
 
     foreach ($members as $member) {
         $memberId = (int)$member['user_id'];
-        $updateInterval = (int)($member['update_interval_seconds'] ?? 30);
-        $idleHeartbeat = (int)($member['idle_heartbeat_seconds'] ?? 300);  // 5 min default
-        $offlineThreshold = (int)($member['offline_threshold_seconds'] ?? 660);  // 11 min default
-        $staleThreshold = (int)($member['stale_threshold_seconds'] ?? 3600);
+        $updateInterval = (int)($member['update_interval_seconds'] ?? TRACKING_DEFAULT_UPDATE_INTERVAL);
+        $idleHeartbeat = (int)($member['idle_heartbeat_seconds'] ?? TRACKING_DEFAULT_IDLE_HEARTBEAT);
+        $offlineThreshold = (int)($member['offline_threshold_seconds'] ?? TRACKING_DEFAULT_OFFLINE_THRESHOLD);
+        $staleThreshold = (int)($member['stale_threshold_seconds'] ?? TRACKING_DEFAULT_STALE_THRESHOLD);
 
         // Online (Tracking): within heartbeat + 60s buffer
         // This means: if we got a fix within last 6 minutes, device is actively tracking
@@ -199,15 +200,23 @@ try {
         }
 
         // ========== DETERMINE STATUS ==========
-        // Simple 3-tier:
-        //   online (Tracking) = fix within heartbeat + buffer (6 min)
-        //   idle = fix within offline threshold (11 min) - between heartbeats, service alive
-        //   offline = no fix beyond offline threshold - service dead/phone off
-        if ($secondsAgo === null || $loc === null || ($loc['latitude'] ?? null) === null) {
+        // Use the freshest signal: either tracking_current.updated_at OR device.last_seen
+        // Device last_seen is always updated on every upload, even rejected fixes.
+        $deviceLastSeenAgo = null;
+        if (isset($loc['device_last_seen']) && $loc['device_last_seen']) {
+            $deviceLastSeenAgo = time() - strtotime($loc['device_last_seen']);
+        }
+        // Use whichever is more recent: location timestamp or device heartbeat
+        $effectiveAge = $secondsAgo;
+        if ($deviceLastSeenAgo !== null && ($effectiveAge === null || $deviceLastSeenAgo < $effectiveAge)) {
+            $effectiveAge = $deviceLastSeenAgo;
+        }
+
+        if ($effectiveAge === null || $loc === null || ($loc['latitude'] ?? null) === null) {
             $status = 'no_location';
-        } elseif ($secondsAgo < $onlineThreshold) {
+        } elseif ($effectiveAge < $onlineThreshold) {
             $status = 'online';   // Actively tracking
-        } elseif ($secondsAgo < $offlineThreshold) {
+        } elseif ($effectiveAge < $offlineThreshold) {
             $status = 'idle';     // Between heartbeats, service still alive
         } else {
             $status = 'offline';  // Service dead or phone off
@@ -223,7 +232,7 @@ try {
                 : null,
             'status' => $status,
             'last_seen' => $loc['created_at'] ?? null,
-            'seconds_ago' => $secondsAgo,
+            'seconds_ago' => $effectiveAge,
             'update_interval' => $updateInterval,
             'location' => null,
             'data_source' => $dataSource,

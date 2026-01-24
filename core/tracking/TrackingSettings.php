@@ -9,8 +9,6 @@ declare(strict_types=1);
  * - Native app uploads (server_settings response uses tracking_loadSettings())
  *
  * All timing values are read from tracking_settings table with validated defaults.
- * The users.location_update_interval column is deprecated but kept in sync for
- * backwards compatibility via save_settings.php.
  *
  * Default values (in seconds):
  * - UPDATE_INTERVAL: 30 (30s) - How often to send/poll location
