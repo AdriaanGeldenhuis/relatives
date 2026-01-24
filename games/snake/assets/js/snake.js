@@ -2022,24 +2022,28 @@ const SnakeGame = (function() {
                 }
             }
 
-            // Draw segment circle with gradient
-            const segGrad = ctx.createRadialGradient(
-                p.x - radius * 0.3, p.y - radius * 0.3, 0,
-                p.x, p.y, radius
-            );
-            segGrad.addColorStop(0, lightColor);
-            segGrad.addColorStop(0.5, bodyColor);
-            segGrad.addColorStop(1, darkColor);
-            ctx.fillStyle = segGrad;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-            ctx.fill();
+            // Draw segment circle with gradient (skip head if custom face is set)
+            if (i === 0 && snakeCustomFace) {
+                // Don't draw circle for head - emoji will be the head
+            } else {
+                const segGrad = ctx.createRadialGradient(
+                    p.x - radius * 0.3, p.y - radius * 0.3, 0,
+                    p.x, p.y, radius
+                );
+                segGrad.addColorStop(0, lightColor);
+                segGrad.addColorStop(0.5, bodyColor);
+                segGrad.addColorStop(1, darkColor);
+                ctx.fillStyle = segGrad;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+                ctx.fill();
 
-            // Subtle specular highlight
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-            ctx.beginPath();
-            ctx.ellipse(p.x - radius * 0.2, p.y - radius * 0.25, radius * 0.35, radius * 0.2, -0.5, 0, Math.PI * 2);
-            ctx.fill();
+                // Subtle specular highlight
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+                ctx.beginPath();
+                ctx.ellipse(p.x - radius * 0.2, p.y - radius * 0.25, radius * 0.35, radius * 0.2, -0.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
 
         // Draw head details
