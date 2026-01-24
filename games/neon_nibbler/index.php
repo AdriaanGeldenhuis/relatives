@@ -80,13 +80,9 @@ $cacheVersion = '1.0.0';
                 <button id="btn-play" class="neon-btn primary">
                     <span class="btn-icon">&#9654;</span> PLAY
                 </button>
-                <div class="start-controls-hint">
-                    Joystick to move, Boost for speed
-                </div>
-                <div class="start-options">
-                    <button id="btn-theme-toggle" class="neon-btn small">Theme: Dark</button>
-                    <button id="btn-sound-toggle" class="neon-btn small">Sound: On</button>
-                </div>
+                <button id="btn-options" class="neon-btn primary">
+                    Options
+                </button>
             </div>
         </div>
 
@@ -141,7 +137,6 @@ $cacheVersion = '1.0.0';
             <div class="overlay-box">
                 <h2>PAUSED</h2>
                 <button id="btn-resume" class="neon-btn primary">Resume</button>
-                <a href="/games/" class="neon-btn secondary" style="text-decoration:none;text-align:center;">Customization</a>
                 <button id="btn-quit" class="neon-btn primary">Quit</button>
             </div>
         </div>
@@ -190,6 +185,21 @@ $cacheVersion = '1.0.0';
                     <span id="time-bonus-value">+0</span>
                 </div>
                 <p id="next-level-text">Get ready for Level 2...</p>
+            </div>
+        </div>
+
+        <!-- Options Overlay -->
+        <div id="screen-options" class="options-overlay">
+            <div class="options-content">
+                <h2>OPTIONS</h2>
+                <div class="start-controls-hint">
+                    Joystick to move, Boost for speed
+                </div>
+                <div class="options-buttons">
+                    <button id="btn-theme-toggle" class="neon-btn small">Theme: Dark</button>
+                    <button id="btn-sound-toggle" class="neon-btn small">Sound: On</button>
+                </div>
+                <button id="btn-options-close" class="neon-btn primary">Close</button>
             </div>
         </div>
 
