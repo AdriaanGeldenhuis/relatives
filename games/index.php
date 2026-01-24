@@ -185,6 +185,17 @@ $games = [
         'available' => true
     ],
     [
+        'id' => 'blockforge',
+        'name' => 'BlockForge',
+        'icon' => '🧱',
+        'description' => 'Premium neon block puzzle! Solo endless, Daily Challenge, and Family Board modes.',
+        'url' => '/games/blockforge/',
+        'color' => '#00f5ff',
+        'features' => ['Offline Play', 'Daily Challenge', 'Family Board'],
+        'available' => true,
+        'highlight' => true
+    ],
+    [
         'id' => '30seconds',
         'name' => '30 Seconds Party',
         'icon' => '⏱️',
