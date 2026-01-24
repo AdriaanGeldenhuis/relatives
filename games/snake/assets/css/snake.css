@@ -834,6 +834,11 @@ body {
    CUSTOMIZATION UI
    ========================================== */
 
+#customization-screen {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+}
+
 .customization-content {
     max-width: 520px;
     max-height: 85vh;
