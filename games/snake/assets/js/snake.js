@@ -154,6 +154,28 @@ const SnakeGame = (function() {
     let gameStartTime = null;
     let animationFrameId = null;
 
+    // Smooth movement interpolation
+    let prevSnake = [];
+    let moveT = 0; // 0..1 interpolation progress between ticks
+
+    // Snake customization
+    const CUSTOM_DEFAULT_COLORS = [
+        "#2ecc71","#27ae60","#f1c40f","#e67e22","#e74c3c",
+        "#3498db","#9b59b6","#1abc9c","#ffffff","#95a5a6"
+    ];
+
+    const COLOR_PICKER = [
+        "#2f80ed","#eb5757","#56ccf2","#2d9cdb","#27ae60",
+        "#f2c94c","#f2994a","#9b51e0","#bb6bd9","#6fcf97",
+        "#219653","#e74c3c","#333333","#bdbdbd","#ffffff",
+        "#00c2ff","#ff00a8","#00ff85","#ffd166","#ff6b6b"
+    ];
+
+    const FACE_PICKER = ["😀","😎","🥳","😍","🤖","😈","👽","🐸","🐵","🐱","🐶","🦊","🐼","🐯","🐲","💀"];
+
+    let snakeCustomColors = SnakeStorage.getSnakeColors() || CUSTOM_DEFAULT_COLORS;
+    let snakeCustomFace = SnakeStorage.getSnakeFace() || "";
+
     // Touch handling
     let touchStartX = 0;
     let touchStartY = 0;
@@ -231,7 +253,8 @@ const SnakeGame = (function() {
         canvas.width = size * dpr;
         canvas.height = size * dpr;
 
-        // Scale context
+        // Reset and scale context (prevents stacking transforms on resize)
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
 
         // Calculate cell size
@@ -387,6 +410,41 @@ const SnakeGame = (function() {
         document.getElementById('leaderboard-btn').addEventListener('click', showLeaderboards);
         document.getElementById('close-leaderboard-btn').addEventListener('click', hideLeaderboards);
 
+        // Start screen customization button (casual only)
+        const customizeStartBtn = document.getElementById('customize-start-btn');
+        if (customizeStartBtn) {
+            customizeStartBtn.addEventListener('click', openCustomization);
+        }
+
+        // Customization overlay buttons
+        const customStartBtn = document.getElementById('custom-start-btn');
+        if (customStartBtn) {
+            customStartBtn.addEventListener('click', () => {
+                closeCustomization();
+                startGame();
+            });
+        }
+        const closeCustomBtn = document.getElementById('close-customization-btn');
+        if (closeCustomBtn) {
+            closeCustomBtn.addEventListener('click', closeCustomization);
+        }
+        const clearColorsBtn = document.getElementById('clear-colors-btn');
+        if (clearColorsBtn) {
+            clearColorsBtn.addEventListener('click', () => {
+                snakeCustomColors = [];
+                SnakeStorage.setSnakeColors(snakeCustomColors);
+                renderCustomizationUI();
+                drawPreviewSnake();
+            });
+        }
+        const customizeGameoverBtn = document.getElementById('customize-gameover-btn');
+        if (customizeGameoverBtn) {
+            customizeGameoverBtn.addEventListener('click', () => {
+                ui.gameoverScreen.classList.add('hidden');
+                openCustomization();
+            });
+        }
+
         // Tab buttons
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -429,6 +487,16 @@ const SnakeGame = (function() {
         document.querySelectorAll('.theme-option').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.theme === themeName);
         });
+
+        // Show/hide customization buttons based on theme
+        const customizeStartBtn = document.getElementById("customize-start-btn");
+        if (customizeStartBtn) {
+            customizeStartBtn.classList.toggle("hidden", themeName !== "casual");
+        }
+        const customizeGameoverBtn = document.getElementById("customize-gameover-btn");
+        if (customizeGameoverBtn) {
+            customizeGameoverBtn.classList.toggle("hidden", themeName !== "casual");
+        }
 
         // Redraw canvas with new theme
         draw();
@@ -549,6 +617,8 @@ const SnakeGame = (function() {
         snake = [
             { x: Math.floor(CONFIG.GRID_SIZE / 2), y: Math.floor(CONFIG.GRID_SIZE / 2) }
         ];
+        prevSnake = JSON.parse(JSON.stringify(snake));
+        moveT = 0;
         direction = 'RIGHT';
         nextDirection = 'RIGHT';
         score = 0;
@@ -646,6 +716,10 @@ const SnakeGame = (function() {
             update();
         }
 
+        // Interpolation progress for smooth rendering (casual mode)
+        const sinceLast = timestamp - lastMoveTime;
+        moveT = Math.min(1, sinceLast / currentSpeed);
+
         draw();
     }
 
@@ -653,6 +727,10 @@ const SnakeGame = (function() {
      * Update game state
      */
     function update() {
+        // Store previous state for interpolation
+        prevSnake = JSON.parse(JSON.stringify(snake));
+        moveT = 0;
+
         // Apply direction change
         direction = nextDirection;
 
@@ -1206,23 +1284,26 @@ const SnakeGame = (function() {
             return;
         }
 
-        // Casual theme - clean circle food with shadow
+        // Casual theme - clean circle food with pulse animation
         if (COLORS.casualMode) {
+            const pulse = 1 + Math.sin(Date.now() / 300) * 0.08;
+            const foodRadius = cellSize * 0.35 * pulse;
+
             ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
             ctx.beginPath();
-            ctx.arc(foodCenterX + 1, foodCenterY + 2, cellSize * 0.35, 0, Math.PI * 2);
+            ctx.arc(foodCenterX + 1, foodCenterY + 2, foodRadius, 0, Math.PI * 2);
             ctx.fill();
 
             const casualGrad = ctx.createRadialGradient(
                 foodCenterX - cellSize * 0.1, foodCenterY - cellSize * 0.1, 0,
-                foodCenterX, foodCenterY, cellSize * 0.38
+                foodCenterX, foodCenterY, foodRadius + 2
             );
             casualGrad.addColorStop(0, COLORS.FOOD_HIGHLIGHT);
             casualGrad.addColorStop(0.6, COLORS.FOOD);
             casualGrad.addColorStop(1, COLORS.FOOD_INNER);
             ctx.fillStyle = casualGrad;
             ctx.beginPath();
-            ctx.arc(foodCenterX, foodCenterY, cellSize * 0.35, 0, Math.PI * 2);
+            ctx.arc(foodCenterX, foodCenterY, foodRadius, 0, Math.PI * 2);
             ctx.fill();
 
             ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
@@ -1274,6 +1355,64 @@ const SnakeGame = (function() {
     }
 
     /**
+     * Get interpolated points for smooth movement (casual mode)
+     */
+    function getInterpolatedPoints() {
+        const len = Math.min(prevSnake.length, snake.length);
+        const points = [];
+        for (let i = 0; i < len; i++) {
+            const a = prevSnake[i];
+            const b = snake[i];
+            const x = (a.x + (b.x - a.x) * moveT) * cellSize + cellSize / 2;
+            const y = (a.y + (b.y - a.y) * moveT) * cellSize + cellSize / 2;
+            points.push({ x, y });
+        }
+        // If snake grew, add new segments at their actual position
+        for (let i = len; i < snake.length; i++) {
+            points.push({
+                x: snake[i].x * cellSize + cellSize / 2,
+                y: snake[i].y * cellSize + cellSize / 2
+            });
+        }
+        return points;
+    }
+
+    /**
+     * Get interpolated grid positions (for segment-based drawing like neon/classic)
+     */
+    function getInterpolatedSegments() {
+        const len = Math.min(prevSnake.length, snake.length);
+        const segs = [];
+        for (let i = 0; i < len; i++) {
+            const a = prevSnake[i];
+            const b = snake[i];
+            segs.push({
+                x: a.x + (b.x - a.x) * moveT,
+                y: a.y + (b.y - a.y) * moveT
+            });
+        }
+        for (let i = len; i < snake.length; i++) {
+            segs.push({ x: snake[i].x, y: snake[i].y });
+        }
+        return segs;
+    }
+
+    /**
+     * Shade a hex color by amount (positive = lighter, negative = darker)
+     */
+    function shade(hex, amt) {
+        const c = hex.replace("#", "");
+        const num = parseInt(c, 16);
+        let r = (num >> 16) + amt;
+        let g = ((num >> 8) & 0x00FF) + amt;
+        let b = (num & 0x0000FF) + amt;
+        r = Math.max(0, Math.min(255, r));
+        g = Math.max(0, Math.min(255, g));
+        b = Math.max(0, Math.min(255, b));
+        return `rgb(${r},${g},${b})`;
+    }
+
+    /**
      * Draw snake with theme-specific styling
      */
     function drawSnake() {
@@ -1289,9 +1428,14 @@ const SnakeGame = (function() {
             return;
         }
 
+        // Use interpolated positions for smooth movement
+        const segments = (gameState === 'playing' && prevSnake.length > 0)
+            ? getInterpolatedSegments()
+            : snake;
+
         // Draw snake segments (tail to head so head is on top)
-        for (let i = snake.length - 1; i >= 0; i--) {
-            const segment = snake[i];
+        for (let i = segments.length - 1; i >= 0; i--) {
+            const segment = segments[i];
             const x = segment.x * cellSize + CONFIG.CELL_PADDING;
             const y = segment.y * cellSize + CONFIG.CELL_PADDING;
             const w = cellSize - CONFIG.CELL_PADDING * 2;
@@ -1325,7 +1469,7 @@ const SnakeGame = (function() {
                 ctx.fillStyle = headGradient;
             } else {
                 // Body segments with fading gradient
-                const progress = i / snake.length;
+                const progress = i / segments.length;
                 const alpha = COLORS.snakePattern ? 1 : (1 - (progress * 0.4));
                 const colorIndex = Math.min(2, Math.floor(progress * 3));
                 ctx.fillStyle = COLORS.SNAKE_BODY_GRADIENT[colorIndex];
@@ -1349,8 +1493,8 @@ const SnakeGame = (function() {
         }
 
         // Draw eyes on head (skip for classic blocky theme)
-        if (snake.length > 0 && !COLORS.blockStyle) {
-            const head = snake[0];
+        if (segments.length > 0 && !COLORS.blockStyle) {
+            const head = segments[0];
             const hx = head.x * cellSize + cellSize / 2;
             const hy = head.y * cellSize + cellSize / 2;
             const eyeSize = cellSize * 0.12;
@@ -1404,11 +1548,13 @@ const SnakeGame = (function() {
 
         const bodyWidth = cellSize * 0.9;
 
-        // Get all segment center points
-        const points = snake.map(seg => ({
-            x: seg.x * cellSize + cellSize / 2,
-            y: seg.y * cellSize + cellSize / 2
-        }));
+        // Get interpolated center points for smooth movement
+        const points = (gameState === 'playing' && prevSnake.length > 0)
+            ? getInterpolatedPoints()
+            : snake.map(seg => ({
+                x: seg.x * cellSize + cellSize / 2,
+                y: seg.y * cellSize + cellSize / 2
+            }));
 
         // Draw ground shadow
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -1806,18 +1952,25 @@ const SnakeGame = (function() {
     }
 
     /**
-     * Draw casual theme snake - smooth connected pill-shaped body
+     * Draw casual theme snake - smooth connected pill-shaped body with custom colors
      */
     function drawCasualSnake() {
         if (snake.length === 0) return;
 
         const radius = cellSize * 0.42;
 
-        // Build center points for each segment
-        const points = snake.map(seg => ({
-            x: seg.x * cellSize + cellSize / 2,
-            y: seg.y * cellSize + cellSize / 2
-        }));
+        // Use interpolated points for smooth movement during play
+        const points = (gameState === 'playing' && prevSnake.length > 0)
+            ? getInterpolatedPoints()
+            : snake.map(seg => ({
+                x: seg.x * cellSize + cellSize / 2,
+                y: seg.y * cellSize + cellSize / 2
+            }));
+
+        // Get custom color palette
+        const palette = (snakeCustomColors && snakeCustomColors.length > 0)
+            ? snakeCustomColors
+            : CUSTOM_DEFAULT_COLORS;
 
         // Draw shadow under the snake
         ctx.save();
@@ -1832,15 +1985,12 @@ const SnakeGame = (function() {
         // Draw connected body segments (tail to head)
         for (let i = points.length - 1; i >= 0; i--) {
             const p = points[i];
-            const progress = i / Math.max(1, points.length - 1);
 
-            // Color gradient from head to tail
-            const r = Math.floor(66 + progress * 20);
-            const g = Math.floor(187 - progress * 40);
-            const b = Math.floor(106 - progress * 30);
-            const bodyColor = `rgb(${r}, ${g}, ${b})`;
-            const darkColor = `rgb(${Math.floor(r * 0.7)}, ${Math.floor(g * 0.7)}, ${Math.floor(b * 0.7)})`;
-            const lightColor = `rgb(${Math.min(255, Math.floor(r * 1.3))}, ${Math.min(255, Math.floor(g * 1.2))}, ${Math.min(255, Math.floor(b * 1.2))})`;
+            // Use custom palette colors
+            const color = palette[i % palette.length];
+            const bodyColor = color;
+            const darkColor = shade(color, -50);
+            const lightColor = shade(color, +40);
 
             // Draw connection to next segment
             if (i < points.length - 1) {
@@ -1850,7 +2000,7 @@ const SnakeGame = (function() {
                 const dx = next.x - p.x;
                 const dy = next.y - p.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist < cellSize * 1.5) {
+                if (dist < cellSize * 1.5 && dist > 0) {
                     const nx = -dy / dist * radius * 0.85;
                     const ny = dx / dist * radius * 0.85;
                     ctx.moveTo(p.x + nx, p.y + ny);
@@ -1861,7 +2011,7 @@ const SnakeGame = (function() {
                 }
             }
 
-            // Draw segment circle
+            // Draw segment circle with gradient
             const segGrad = ctx.createRadialGradient(
                 p.x - radius * 0.3, p.y - radius * 0.3, 0,
                 p.x, p.y, radius
@@ -1885,60 +2035,70 @@ const SnakeGame = (function() {
         if (points.length > 0) {
             const head = points[0];
 
-            // Eyes
-            const eyeSize = radius * 0.32;
-            const pupilSize = eyeSize * 0.55;
-            let e1x, e1y, e2x, e2y, pupilDx = 0, pupilDy = 0;
+            // If custom face is selected, draw emoji
+            if (snakeCustomFace) {
+                ctx.save();
+                ctx.font = `${Math.floor(radius * 1.2)}px system-ui, Apple Color Emoji, Segoe UI Emoji`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(snakeCustomFace, head.x, head.y);
+                ctx.restore();
+            } else {
+                // Default eyes
+                const eyeSize = radius * 0.32;
+                const pupilSize = eyeSize * 0.55;
+                let e1x, e1y, e2x, e2y, pupilDx = 0, pupilDy = 0;
 
-            switch (direction) {
-                case 'UP':
-                    e1x = head.x - radius * 0.35; e1y = head.y - radius * 0.2;
-                    e2x = head.x + radius * 0.35; e2y = head.y - radius * 0.2;
-                    pupilDy = -pupilSize * 0.3;
-                    break;
-                case 'DOWN':
-                    e1x = head.x - radius * 0.35; e1y = head.y + radius * 0.2;
-                    e2x = head.x + radius * 0.35; e2y = head.y + radius * 0.2;
-                    pupilDy = pupilSize * 0.3;
-                    break;
-                case 'LEFT':
-                    e1x = head.x - radius * 0.2; e1y = head.y - radius * 0.35;
-                    e2x = head.x - radius * 0.2; e2y = head.y + radius * 0.35;
-                    pupilDx = -pupilSize * 0.3;
-                    break;
-                default: // RIGHT
-                    e1x = head.x + radius * 0.2; e1y = head.y - radius * 0.35;
-                    e2x = head.x + radius * 0.2; e2y = head.y + radius * 0.35;
-                    pupilDx = pupilSize * 0.3;
-                    break;
+                switch (direction) {
+                    case 'UP':
+                        e1x = head.x - radius * 0.35; e1y = head.y - radius * 0.2;
+                        e2x = head.x + radius * 0.35; e2y = head.y - radius * 0.2;
+                        pupilDy = -pupilSize * 0.3;
+                        break;
+                    case 'DOWN':
+                        e1x = head.x - radius * 0.35; e1y = head.y + radius * 0.2;
+                        e2x = head.x + radius * 0.35; e2y = head.y + radius * 0.2;
+                        pupilDy = pupilSize * 0.3;
+                        break;
+                    case 'LEFT':
+                        e1x = head.x - radius * 0.2; e1y = head.y - radius * 0.35;
+                        e2x = head.x - radius * 0.2; e2y = head.y + radius * 0.35;
+                        pupilDx = -pupilSize * 0.3;
+                        break;
+                    default: // RIGHT
+                        e1x = head.x + radius * 0.2; e1y = head.y - radius * 0.35;
+                        e2x = head.x + radius * 0.2; e2y = head.y + radius * 0.35;
+                        pupilDx = pupilSize * 0.3;
+                        break;
+                }
+
+                // Eye whites
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(e1x, e1y, eyeSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(e2x, e2y, eyeSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Pupils
+                ctx.fillStyle = '#1a1a2e';
+                ctx.beginPath();
+                ctx.arc(e1x + pupilDx, e1y + pupilDy, pupilSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(e2x + pupilDx, e2y + pupilDy, pupilSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Pupil highlights
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(e1x + pupilDx + pupilSize * 0.3, e1y + pupilDy - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(e2x + pupilDx + pupilSize * 0.3, e2y + pupilDy - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
+                ctx.fill();
             }
-
-            // Eye whites
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(e1x, e1y, eyeSize, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(e2x, e2y, eyeSize, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Pupils
-            ctx.fillStyle = '#1a1a2e';
-            ctx.beginPath();
-            ctx.arc(e1x + pupilDx, e1y + pupilDy, pupilSize, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(e2x + pupilDx, e2y + pupilDy, pupilSize, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Pupil highlights
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(e1x + pupilDx + pupilSize * 0.3, e1y + pupilDy - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(e2x + pupilDx + pupilSize * 0.3, e2y + pupilDy - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
-            ctx.fill();
         }
     }
 
@@ -2024,6 +2184,125 @@ const SnakeGame = (function() {
     }
 
     /**
+     * Open the customization overlay
+     */
+    function openCustomization() {
+        const screen = document.getElementById("customization-screen");
+        if (screen) {
+            screen.classList.remove("hidden");
+            renderCustomizationUI();
+            drawPreviewSnake();
+        }
+    }
+
+    /**
+     * Close the customization overlay
+     */
+    function closeCustomization() {
+        const screen = document.getElementById("customization-screen");
+        if (screen) {
+            screen.classList.add("hidden");
+        }
+    }
+
+    /**
+     * Render the customization UI (color dots + face buttons)
+     */
+    function renderCustomizationUI() {
+        const grid = document.getElementById("snake-color-grid");
+        const faceGrid = document.getElementById("snake-face-grid");
+        if (!grid || !faceGrid) return;
+
+        grid.innerHTML = "";
+        COLOR_PICKER.forEach((c) => {
+            const b = document.createElement("button");
+            b.className = "color-dot" + (snakeCustomColors.includes(c) ? " selected" : "");
+            b.style.background = c;
+            b.addEventListener("click", () => {
+                if (snakeCustomColors.includes(c)) {
+                    snakeCustomColors = snakeCustomColors.filter(x => x !== c);
+                } else {
+                    if (snakeCustomColors.length < 24) snakeCustomColors.push(c);
+                }
+                SnakeStorage.setSnakeColors(snakeCustomColors);
+                renderCustomizationUI();
+                drawPreviewSnake();
+            });
+            grid.appendChild(b);
+        });
+
+        faceGrid.innerHTML = "";
+        const faces = ["", ...FACE_PICKER]; // "" = default eyes
+        faces.forEach((f) => {
+            const b = document.createElement("button");
+            b.className = "face-btn" + (snakeCustomFace === f ? " selected" : "");
+            b.textContent = f || "👀";
+            b.addEventListener("click", () => {
+                snakeCustomFace = f;
+                SnakeStorage.setSnakeFace(snakeCustomFace);
+                renderCustomizationUI();
+                drawPreviewSnake();
+            });
+            faceGrid.appendChild(b);
+        });
+    }
+
+    /**
+     * Draw preview snake in the customization canvas
+     */
+    function drawPreviewSnake() {
+        const c = document.getElementById("snake-preview-canvas");
+        if (!c) return;
+        const pctx = c.getContext("2d");
+        const w = c.width, h = c.height;
+
+        pctx.clearRect(0, 0, w, h);
+
+        // Dark background
+        pctx.fillStyle = "#0c0e16";
+        pctx.fillRect(0, 0, w, h);
+
+        const palette = (snakeCustomColors && snakeCustomColors.length > 0)
+            ? snakeCustomColors
+            : CUSTOM_DEFAULT_COLORS;
+
+        const segCount = 18;
+        const r = 14;
+        let x = 40;
+        const y = h / 2;
+
+        // Draw segments from tail to head (so head draws on top)
+        for (let i = segCount - 1; i >= 0; i--) {
+            const sx = 40 + i * 16;
+            const col = palette[i % palette.length];
+            const grad = pctx.createRadialGradient(sx - r * 0.3, y - r * 0.3, 0, sx, y, r);
+            grad.addColorStop(0, shade(col, +40));
+            grad.addColorStop(0.6, col);
+            grad.addColorStop(1, shade(col, -50));
+            pctx.fillStyle = grad;
+            pctx.beginPath();
+            pctx.arc(sx, y, r, 0, Math.PI * 2);
+            pctx.fill();
+        }
+
+        // Face on head (first segment at x=40)
+        if (snakeCustomFace) {
+            pctx.font = "28px system-ui, Apple Color Emoji, Segoe UI Emoji";
+            pctx.textAlign = "center";
+            pctx.textBaseline = "middle";
+            pctx.fillText(snakeCustomFace, 40, y);
+        } else {
+            // Simple eyes fallback
+            pctx.fillStyle = "#fff";
+            pctx.beginPath(); pctx.arc(44, y - 5, 4, 0, Math.PI * 2); pctx.fill();
+            pctx.beginPath(); pctx.arc(44, y + 5, 4, 0, Math.PI * 2); pctx.fill();
+            pctx.fillStyle = "#111";
+            pctx.beginPath(); pctx.arc(45, y - 5, 2, 0, Math.PI * 2); pctx.fill();
+            pctx.beginPath(); pctx.arc(45, y + 5, 2, 0, Math.PI * 2); pctx.fill();
+        }
+    }
+
+    /**
      * Hide all overlay screens
      */
     function hideAllOverlays() {
@@ -2031,6 +2310,7 @@ const SnakeGame = (function() {
         ui.pauseScreen.classList.add('hidden');
         ui.gameoverScreen.classList.add('hidden');
         ui.leaderboardScreen.classList.add('hidden');
+        closeCustomization();
     }
 
     /**

@@ -13,7 +13,9 @@ const SnakeStorage = (function() {
         TODAY_DATE: 'snake_today_date',
         SCORE_QUEUE: 'snake_score_queue',
         CACHED_LEADERBOARDS: 'snake_leaderboards',
-        LEADERBOARD_TIMESTAMP: 'snake_leaderboards_ts'
+        LEADERBOARD_TIMESTAMP: 'snake_leaderboards_ts',
+        SNAKE_CUSTOM_COLORS: 'snake_custom_colors',
+        SNAKE_CUSTOM_FACE: 'snake_custom_face'
     };
 
     const LEADERBOARD_CACHE_TTL = 60000; // 1 minute cache
@@ -237,6 +239,37 @@ const SnakeStorage = (function() {
         };
     }
 
+    /**
+     * Get saved snake custom colors
+     */
+    function getSnakeColors() {
+        try {
+            const v = localStorage.getItem(STORAGE_KEYS.SNAKE_CUSTOM_COLORS);
+            return v ? JSON.parse(v) : null;
+        } catch (e) { return null; }
+    }
+
+    /**
+     * Save snake custom colors
+     */
+    function setSnakeColors(colors) {
+        localStorage.setItem(STORAGE_KEYS.SNAKE_CUSTOM_COLORS, JSON.stringify(colors));
+    }
+
+    /**
+     * Get saved snake face emoji
+     */
+    function getSnakeFace() {
+        return localStorage.getItem(STORAGE_KEYS.SNAKE_CUSTOM_FACE) || '';
+    }
+
+    /**
+     * Save snake face emoji
+     */
+    function setSnakeFace(face) {
+        localStorage.setItem(STORAGE_KEYS.SNAKE_CUSTOM_FACE, face || '');
+    }
+
     // Public API
     return {
         getDeviceId,
@@ -254,7 +287,11 @@ const SnakeStorage = (function() {
         cacheLeaderboards,
         getCachedLeaderboards,
         saveScoreRun,
-        createScoreRecord
+        createScoreRecord,
+        getSnakeColors,
+        setSnakeColors,
+        getSnakeFace,
+        setSnakeFace
     };
 })();
 
