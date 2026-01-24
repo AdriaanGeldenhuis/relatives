@@ -21,6 +21,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../../core/bootstrap.php';
+require_once __DIR__ . '/../../core/tracking/TrackingSettings.php';
 
 try {
     $userId = (int)$_SESSION['user_id'];
@@ -47,12 +48,11 @@ try {
     $settings = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$settings) {
-        // Return defaults - must match TrackingSettings.php and Android PreferencesManager.kt
         $settings = [
-            'update_interval_seconds' => 30,   // TRACKING_DEFAULT_UPDATE_INTERVAL
-            'idle_heartbeat_seconds' => 300,   // TRACKING_DEFAULT_IDLE_HEARTBEAT
-            'offline_threshold_seconds' => 660, // TRACKING_DEFAULT_OFFLINE_THRESHOLD
-            'stale_threshold_seconds' => 3600, // TRACKING_DEFAULT_STALE_THRESHOLD
+            'update_interval_seconds' => TRACKING_DEFAULT_UPDATE_INTERVAL,
+            'idle_heartbeat_seconds' => TRACKING_DEFAULT_IDLE_HEARTBEAT,
+            'offline_threshold_seconds' => TRACKING_DEFAULT_OFFLINE_THRESHOLD,
+            'stale_threshold_seconds' => TRACKING_DEFAULT_STALE_THRESHOLD,
             'history_retention_days' => 30,
             'show_speed' => 1,
             'show_battery' => 1,

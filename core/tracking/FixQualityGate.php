@@ -10,9 +10,9 @@ require_once __DIR__ . '/../GeoUtils.php';
  * "current best known position" in tracking_current.
  *
  * Rules:
- * - accuracy_m > 200 → store in history, do NOT promote to current
- * - accuracy_m > 100 AND last_best accuracy < 50 AND last_best age < 10 min → do NOT promote
- * - Unrealistic speed (> 180 km/h while is_moving=false) → store but don't promote
+ * - accuracy_m > 200 → store in history, touch only (keeps status alive, no marker move)
+ * - accuracy_m > 100 AND last_best accuracy < 50 AND last_best age < 10 min → touch only
+ * - Unrealistic speed (> 180 km/h while is_moving=false) → reject (GPS jump)
  * - Good fix → promote to tracking_current + cache
  */
 
@@ -92,9 +92,9 @@ class FixQualityGate
         $speedKmh = $fix['speed_kmh'] ?? 0;
         $isMoving = (bool)($fix['is_moving'] ?? false);
 
-        // Rule 1: accuracy > 200 → reject entirely (garbage fix)
+        // Rule 1: accuracy > 200 → touch only (garbage GPS but device is alive)
         if ($accuracy !== null && $accuracy > 200) {
-            return 'reject';
+            return 'touch';
         }
 
         // Rule 3: Unrealistic speed while stationary → reject
