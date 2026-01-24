@@ -84,7 +84,7 @@ $familyId = $_SESSION['family_id'] ?? null;
             <!-- Overlay Screens -->
             <div id="start-screen" class="overlay-screen">
                 <div class="overlay-content">
-                    <h2>Snake Classic</h2>
+                    <h2 id="start-screen-title">Neon Retro</h2>
                     <p>Swipe or use D-pad to control</p>
                     <button id="start-btn" class="game-btn primary">Start Game</button>
                     <button id="customize-start-btn" class="game-btn secondary hidden">Customization</button>

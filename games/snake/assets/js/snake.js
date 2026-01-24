@@ -483,6 +483,13 @@ const SnakeGame = (function() {
         // Save to localStorage
         localStorage.setItem('snake_theme', themeName);
 
+        // Update start screen title with theme name
+        const themeDisplayNames = { neon: 'Neon Retro', realistic: 'Nature', casual: 'Casual', classic: 'Nokia Classic' };
+        const startTitle = document.getElementById('start-screen-title');
+        if (startTitle) {
+            startTitle.textContent = themeDisplayNames[themeName] || themeName;
+        }
+
         // Update theme option buttons
         document.querySelectorAll('.theme-option').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.theme === themeName);
@@ -496,6 +503,10 @@ const SnakeGame = (function() {
         const customizeGameoverBtn = document.getElementById("customize-gameover-btn");
         if (customizeGameoverBtn) {
             customizeGameoverBtn.classList.toggle("hidden", themeName !== "casual");
+        }
+        const closeCustomizationBtn = document.getElementById("close-customization-btn");
+        if (closeCustomizationBtn) {
+            closeCustomizationBtn.classList.toggle("hidden", themeName !== "casual");
         }
 
         // Redraw canvas with new theme
@@ -2011,24 +2022,28 @@ const SnakeGame = (function() {
                 }
             }
 
-            // Draw segment circle with gradient
-            const segGrad = ctx.createRadialGradient(
-                p.x - radius * 0.3, p.y - radius * 0.3, 0,
-                p.x, p.y, radius
-            );
-            segGrad.addColorStop(0, lightColor);
-            segGrad.addColorStop(0.5, bodyColor);
-            segGrad.addColorStop(1, darkColor);
-            ctx.fillStyle = segGrad;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-            ctx.fill();
+            // Draw segment circle with gradient (skip head if custom face is set)
+            if (i === 0 && snakeCustomFace) {
+                // Don't draw circle for head - emoji will be the head
+            } else {
+                const segGrad = ctx.createRadialGradient(
+                    p.x - radius * 0.3, p.y - radius * 0.3, 0,
+                    p.x, p.y, radius
+                );
+                segGrad.addColorStop(0, lightColor);
+                segGrad.addColorStop(0.5, bodyColor);
+                segGrad.addColorStop(1, darkColor);
+                ctx.fillStyle = segGrad;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+                ctx.fill();
 
-            // Subtle specular highlight
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-            ctx.beginPath();
-            ctx.ellipse(p.x - radius * 0.2, p.y - radius * 0.25, radius * 0.35, radius * 0.2, -0.5, 0, Math.PI * 2);
-            ctx.fill();
+                // Subtle specular highlight
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+                ctx.beginPath();
+                ctx.ellipse(p.x - radius * 0.2, p.y - radius * 0.25, radius * 0.35, radius * 0.2, -0.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
 
         // Draw head details
@@ -2038,7 +2053,7 @@ const SnakeGame = (function() {
             // If custom face is selected, draw emoji
             if (snakeCustomFace) {
                 ctx.save();
-                ctx.font = `${Math.floor(radius * 1.2)}px system-ui, Apple Color Emoji, Segoe UI Emoji`;
+                ctx.font = `${Math.floor(cellSize * 0.85)}px system-ui, Apple Color Emoji, Segoe UI Emoji`;
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText(snakeCustomFace, head.x, head.y);
@@ -2273,6 +2288,7 @@ const SnakeGame = (function() {
 
         // Draw segments from tail to head (so head draws on top)
         for (let i = segCount - 1; i >= 0; i--) {
+            if (i === 0 && snakeCustomFace) continue; // Skip head circle if face is set
             const sx = 40 + i * 16;
             const col = palette[i % palette.length];
             const grad = pctx.createRadialGradient(sx - r * 0.3, y - r * 0.3, 0, sx, y, r);
