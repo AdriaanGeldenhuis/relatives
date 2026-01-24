@@ -20,26 +20,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 session_start();
 
-// TODO: Support token-based auth for native apps
-if (!isset($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'error' => 'unauthorized']);
-    exit;
-}
-
 require_once __DIR__ . '/../../core/bootstrap.php';
+require_once __DIR__ . '/../../core/tracking/TrackingAuth.php';
 
 try {
     $rawInput = file_get_contents('php://input');
     $input = json_decode($rawInput, true);
-    
+
     if (json_last_error() !== JSON_ERROR_NONE) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'invalid_json']);
         exit;
     }
-    
-    $userId = (int)$_SESSION['user_id'];
+
+    // Unified auth: Bearer token, session, or body token
+    $authResult = tracking_requireUserId($db, $input);
+    $userId = $authResult['user_id'];
     
     // Get user info
     $stmt = $db->prepare("SELECT family_id FROM users WHERE id = ? LIMIT 1");

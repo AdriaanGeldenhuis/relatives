@@ -21,10 +21,9 @@ try {
         exit;
     }
 
-    // Get user's location update interval (default 60 seconds for battery efficiency)
-    $pollingInterval = (int)($user['location_update_interval'] ?? 60);
-    // Ensure minimum 10 seconds, maximum 300 seconds
-    $pollingInterval = max(10, min(300, $pollingInterval));
+    // Get polling interval from tracking settings (single source of truth)
+    require_once __DIR__ . '/../core/tracking/TrackingSettings.php';
+    $pollingInterval = tracking_getUpdateInterval($db, (int)$user['id']);
 
 } catch (Exception $e) {
     error_log('Tracking page error: ' . $e->getMessage());

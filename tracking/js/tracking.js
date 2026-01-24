@@ -931,33 +931,16 @@ class TrackingMapProfessional {
         memberCard.classList.add('status-changed');
         setTimeout(() => memberCard.classList.remove('status-changed'), 2000);
 
-        // Determine change type and show appropriate notification
-        const statusLabels = {
-            'online': 'Online',
-            'stale': 'Stale',
-            'offline': 'Offline',
-            'no_location': 'No Location'
-        };
-
-        const oldLabel = statusLabels[oldStatus] || oldStatus;
-        const newLabel = statusLabels[newStatus] || newStatus;
-
-        // Important status changes get a toast
+        // 3-tier status toasts: online (Tracking) / idle / offline
         if (newStatus === 'online' && oldStatus !== 'online') {
-            // Someone came online
-            this.showStatusToast(`${name} is now online! 🟢`, 'success', member);
-        } else if (oldStatus === 'online' && newStatus === 'stale') {
-            // Someone went stale
-            this.showStatusToast(`${name} went stale 🟡`, 'warning', member);
-        } else if (oldStatus === 'online' && newStatus === 'offline') {
-            // Someone went offline directly
-            this.showStatusToast(`${name} went offline ⚫`, 'error', member);
-        } else if (newStatus === 'offline' && oldStatus === 'stale') {
-            // Stale -> Offline
-            this.showStatusToast(`${name} is now offline ⚫`, 'error', member);
+            this.showStatusToast(`${name} is now tracking`, 'success', member);
+        } else if (oldStatus === 'online' && newStatus === 'idle') {
+            this.showStatusToast(`${name} went idle`, 'warning', member);
+        } else if (newStatus === 'offline' && oldStatus !== 'offline') {
+            this.showStatusToast(`${name} went offline`, 'error', member);
         }
 
-        console.log(`Status change: ${name} ${oldLabel} → ${newLabel}`);
+        console.log(`Status: ${name} ${oldStatus} → ${newStatus}`);
     }
 
     // Show status change toast with member info
