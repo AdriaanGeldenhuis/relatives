@@ -2049,7 +2049,7 @@ const SnakeGame = (function() {
             // If custom face is selected, draw emoji
             if (snakeCustomFace) {
                 ctx.save();
-                ctx.font = `${Math.floor(radius * 1.2)}px system-ui, Apple Color Emoji, Segoe UI Emoji`;
+                ctx.font = `${Math.floor(cellSize * 0.85)}px system-ui, Apple Color Emoji, Segoe UI Emoji`;
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText(snakeCustomFace, head.x, head.y);
