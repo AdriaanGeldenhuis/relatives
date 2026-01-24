@@ -75,27 +75,32 @@ class FixQualityGate
     /**
      * Check whether this fix should be promoted to tracking_current.
      *
+     * Returns:
+     *   'promote' = full update (position + timestamp)
+     *   'touch'   = timestamp-only update (heartbeat alive, position unchanged)
+     *   'reject'  = don't touch tracking_current at all
+     *
      * @param array $fix The new fix data
      * @param int $userId The user ID
-     * @return bool True if fix should be promoted
+     * @return string 'promote', 'touch', or 'reject'
      */
-    public function shouldPromote(array $fix, int $userId): bool
+    public function shouldPromote(array $fix, int $userId): string
     {
         $accuracy = $fix['accuracy_m'] ?? null;
         $speedKmh = $fix['speed_kmh'] ?? 0;
         $isMoving = (bool)($fix['is_moving'] ?? false);
 
-        // Rule 1: accuracy > 200 → never promote
+        // Rule 1: accuracy > 200 → reject entirely (garbage fix)
         if ($accuracy !== null && $accuracy > 200) {
-            return false;
+            return 'reject';
         }
 
-        // Rule 3: Unrealistic speed while stationary → don't promote
+        // Rule 3: Unrealistic speed while stationary → reject
         if ($speedKmh > 180 && !$isMoving) {
-            return false;
+            return 'reject';
         }
 
-        // Rule 2: accuracy > 100 AND last best was good AND recent → don't promote
+        // Rule 2: accuracy > 100 AND last best was good AND recent → touch only
         if ($accuracy !== null && $accuracy > 100) {
             $lastBest = $this->getLastBest($userId);
             if ($lastBest) {
@@ -103,15 +108,14 @@ class FixQualityGate
                 $lastAge = $lastBest['age_seconds'] ?? 99999;
 
                 if ($lastAccuracy < 50 && $lastAge < 600) {
-                    // We have a good recent fix, don't overwrite with garbage
-                    return false;
+                    // We have a good recent fix, keep position but refresh heartbeat
+                    return 'touch';
                 }
             }
         }
 
         // Rule 4: GPS drift suppression for stationary users
-        // If not moving, only promote if distance from last position exceeds
-        // the accuracy circle. This prevents marker jiggle from GPS drift.
+        // If not moving, don't change position but DO refresh timestamp (heartbeat)
         if (!$isMoving) {
             $lastBest = $lastBest ?? $this->getLastBest($userId);
             if ($lastBest && $lastBest['latitude'] !== null) {
@@ -122,9 +126,9 @@ class FixQualityGate
                 // Use the larger of current accuracy or 30m as drift threshold
                 $driftThreshold = max(30, $accuracy ?? 30);
                 if ($distance < $driftThreshold) {
-                    // Position hasn't changed meaningfully - don't update
-                    // This keeps the marker stable when standing still
-                    return false;
+                    // Position hasn't changed meaningfully - keep marker stable
+                    // but still touch timestamp so status stays alive
+                    return 'touch';
                 }
             }
         }
@@ -141,11 +145,11 @@ class FixQualityGate
 
             // If implied speed > 180 km/h and not marked as moving, it's a jump
             if ($impliedSpeedKmh > 180 && !$isMoving) {
-                return false;
+                return 'reject';
             }
         }
 
-        return true;
+        return 'promote';
     }
 
     /**
@@ -193,6 +197,27 @@ class FixQualityGate
             $fix['battery_level'] ?? null,
             $score,
             $source
+        ]);
+    }
+
+    /**
+     * Touch tracking_current: refresh updated_at + battery without changing position.
+     * Keeps the user's status alive (heartbeat) without jiggling the marker.
+     */
+    public function touch(array $fix, int $userId, int $deviceId): bool
+    {
+        $stmt = $this->db->prepare("
+            UPDATE tracking_current
+            SET updated_at = NOW(),
+                battery_level = COALESCE(?, battery_level),
+                is_moving = ?
+            WHERE user_id = ?
+        ");
+
+        return $stmt->execute([
+            $fix['battery_level'] ?? null,
+            (int)($fix['is_moving'] ?? 0),
+            $userId
         ]);
     }
 

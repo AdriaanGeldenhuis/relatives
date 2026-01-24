@@ -244,15 +244,19 @@ try {
         ];
 
         if ($loc && ($loc['latitude'] ?? null) !== null && ($loc['longitude'] ?? null) !== null) {
+            $locIsMoving = (bool)($loc['is_moving'] ?? false);
+            // Server-side speed clamp: if not moving, speed is always 0
+            $locSpeed = ($locIsMoving && isset($loc['speed_kmh'])) ? (float)$loc['speed_kmh'] : 0.0;
+
             $memberData['location'] = [
                 'lat' => (float)$loc['latitude'],
                 'lng' => (float)$loc['longitude'],
                 'accuracy_m' => isset($loc['accuracy_m']) ? (int)$loc['accuracy_m'] : null,
-                'speed_kmh' => isset($loc['speed_kmh']) ? (float)$loc['speed_kmh'] : null,
+                'speed_kmh' => $locSpeed,
                 'heading_deg' => isset($loc['heading_deg']) ? (float)$loc['heading_deg'] : null,
                 'altitude_m' => isset($loc['altitude_m']) ? (float)$loc['altitude_m'] : null,
                 'battery_level' => isset($loc['battery_level']) ? (int)$loc['battery_level'] : null,
-                'is_moving' => (bool)($loc['is_moving'] ?? false)
+                'is_moving' => $locIsMoving
             ];
         }
 

@@ -111,6 +111,11 @@ try {
         $batteryLevel = null;
     }
 
+    // SERVER-SIDE SPEED CLAMP: if not moving, speed is 0 (prevents phantom speed from GPS noise)
+    if (!$isMoving) {
+        $speedKmh = 0.0;
+    }
+
     // ========== GET USER INFO ==========
     $stmt = $db->prepare("SELECT family_id, full_name FROM users WHERE id = ? LIMIT 1");
     $stmt->execute([$userId]);
@@ -240,12 +245,14 @@ try {
             'battery_level' => $batteryLevel,
         ];
 
-        if ($qualityGate->shouldPromote($fixData, $userId)) {
-            // PROMOTE: Update tracking_current (source of truth)
+        $gateResult = $qualityGate->shouldPromote($fixData, $userId);
+
+        if ($gateResult === 'promote') {
+            // FULL PROMOTE: Update position + timestamp in tracking_current
             $qualityGate->promote($fixData, $userId, $deviceId, $familyId);
             $promoted = true;
 
-            // CACHE: Only cache good fixes (from tracking_current updates)
+            // CACHE: Only cache good fixes
             try {
                 $cache = Cache::init($db);
                 $cacheData = [
@@ -263,7 +270,26 @@ try {
             } catch (Exception $e) {
                 error_log('Cache update error: ' . $e->getMessage());
             }
+        } elseif ($gateResult === 'touch') {
+            // TOUCH: Refresh timestamp only (keeps status alive without moving marker)
+            $qualityGate->touch($fixData, $userId, $deviceId);
+            $promoted = false;
+
+            // Update cache timestamp too (so status refreshes from cache)
+            try {
+                $cache = Cache::init($db);
+                $existingCache = $cache->getUserLocation($familyId, $userId);
+                if ($existingCache) {
+                    $existingCache['battery'] = $batteryLevel ?? ($existingCache['battery'] ?? null);
+                    $existingCache['moving'] = (bool)$isMoving;
+                    $existingCache['ts'] = date('Y-m-d H:i:s');
+                    $cache->setUserLocation($familyId, $userId, $existingCache);
+                }
+            } catch (Exception $e) {
+                error_log('Cache touch error: ' . $e->getMessage());
+            }
         }
+        // else 'reject': don't touch tracking_current at all (garbage fix)
 
         // ========== QUEUE FOR ASYNC GEOFENCE PROCESSING ==========
         try {

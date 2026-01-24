@@ -188,6 +188,11 @@ try {
             $batteryLevel = null;
         }
 
+        // SERVER-SIDE SPEED CLAMP: if not moving, speed is 0
+        if (!$isMoving) {
+            $speedKmh = 0.0;
+        }
+
         // Insert to history
         try {
             $stmt = $db->prepare("
@@ -237,27 +242,47 @@ try {
 
     // ========== PROMOTE BEST FIX FROM BATCH ==========
     $promoted = false;
-    if ($bestFix !== null && $qualityGate->shouldPromote($bestFix, $userId)) {
-        $qualityGate->promote($bestFix, $userId, $deviceId, $familyId);
-        $promoted = true;
+    if ($bestFix !== null) {
+        $gateResult = $qualityGate->shouldPromote($bestFix, $userId);
 
-        // Cache only on promotion
-        try {
-            $cache = Cache::init($db);
-            $cacheData = [
-                'lat' => $bestFix['latitude'],
-                'lng' => $bestFix['longitude'],
-                'speed' => $bestFix['speed_kmh'],
-                'accuracy' => $bestFix['accuracy_m'],
-                'heading' => $bestFix['heading_deg'],
-                'altitude' => $bestFix['altitude_m'],
-                'battery' => $bestFix['battery_level'],
-                'moving' => (bool)$bestFix['is_moving'],
-                'ts' => date('Y-m-d H:i:s')
-            ];
-            $cache->setUserLocation($familyId, $userId, $cacheData);
-        } catch (Exception $e) {
-            error_log('Batch cache update error: ' . $e->getMessage());
+        if ($gateResult === 'promote') {
+            $qualityGate->promote($bestFix, $userId, $deviceId, $familyId);
+            $promoted = true;
+
+            // Cache only on promotion
+            try {
+                $cache = Cache::init($db);
+                $cacheData = [
+                    'lat' => $bestFix['latitude'],
+                    'lng' => $bestFix['longitude'],
+                    'speed' => $bestFix['speed_kmh'],
+                    'accuracy' => $bestFix['accuracy_m'],
+                    'heading' => $bestFix['heading_deg'],
+                    'altitude' => $bestFix['altitude_m'],
+                    'battery' => $bestFix['battery_level'],
+                    'moving' => (bool)$bestFix['is_moving'],
+                    'ts' => date('Y-m-d H:i:s')
+                ];
+                $cache->setUserLocation($familyId, $userId, $cacheData);
+            } catch (Exception $e) {
+                error_log('Batch cache update error: ' . $e->getMessage());
+            }
+        } elseif ($gateResult === 'touch') {
+            // Touch: refresh timestamp only (keeps status alive)
+            $qualityGate->touch($bestFix, $userId, $deviceId);
+
+            try {
+                $cache = Cache::init($db);
+                $existingCache = $cache->getUserLocation($familyId, $userId);
+                if ($existingCache) {
+                    $existingCache['battery'] = $bestFix['battery_level'] ?? ($existingCache['battery'] ?? null);
+                    $existingCache['moving'] = (bool)$bestFix['is_moving'];
+                    $existingCache['ts'] = date('Y-m-d H:i:s');
+                    $cache->setUserLocation($familyId, $userId, $existingCache);
+                }
+            } catch (Exception $e) {
+                error_log('Batch cache touch error: ' . $e->getMessage());
+            }
         }
     }
 
