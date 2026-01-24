@@ -22,6 +22,7 @@ session_start();
 
 require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../../core/tracking/TrackingAuth.php';
+require_once __DIR__ . '/../../core/tracking/TrackingMiddleware.php';
 
 try {
     $rawInput = file_get_contents('php://input');
@@ -51,20 +52,7 @@ try {
     $familyId = (int)$user['family_id'];
     
     // ========== SUBSCRIPTION LOCK CHECK ==========
-    require_once __DIR__ . '/../../core/SubscriptionManager.php';
-    
-    $subscriptionManager = new SubscriptionManager($db);
-    
-    if ($subscriptionManager->isFamilyLocked($familyId)) {
-        http_response_code(402);
-        echo json_encode([
-            'success' => false,
-            'error' => 'subscription_locked',
-            'message' => 'Your trial has ended. Please subscribe to continue using this feature.'
-        ]);
-        exit;
-    }
-    // ========== END SUBSCRIPTION LOCK ==========
+    tracking_requireActiveSubscription($db, $familyId);
     
     // Validate event type
     $validEventTypes = ['enter_zone', 'exit_zone', 'sos', 'tracking_paused', 'tracking_resumed', 'location_stale', 'speed_alert', 'battery_low'];

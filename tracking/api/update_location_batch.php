@@ -36,6 +36,7 @@ session_start();
 require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../../core/tracking/TrackingAuth.php';
 require_once __DIR__ . '/../../core/tracking/TrackingSettings.php';
+require_once __DIR__ . '/../../core/tracking/TrackingMiddleware.php';
 require_once __DIR__ . '/../../core/tracking/FixQualityGate.php';
 require_once __DIR__ . '/../../core/Cache.php';
 
@@ -95,18 +96,7 @@ try {
     $familyId = (int)$user['family_id'];
 
     // ========== SUBSCRIPTION CHECK ==========
-    require_once __DIR__ . '/../../core/SubscriptionManager.php';
-    $subscriptionManager = new SubscriptionManager($db);
-
-    if ($subscriptionManager->isFamilyLocked($familyId)) {
-        http_response_code(402);
-        echo json_encode([
-            'success' => false,
-            'error' => 'subscription_locked',
-            'message' => 'Your trial has ended. Please subscribe to continue.'
-        ]);
-        exit;
-    }
+    tracking_requireActiveSubscription($db, $familyId);
 
     // ========== GET OR CREATE DEVICE ==========
     $stmt = $db->prepare("SELECT id FROM tracking_devices WHERE device_uuid = ? AND user_id = ? LIMIT 1");
@@ -213,6 +203,18 @@ try {
             $result['success'] = true;
             $result['location_id'] = (int)$db->lastInsertId();
             $insertedCount++;
+
+            // Queue for async geofence processing
+            try {
+                $geoStmt = $db->prepare("
+                    INSERT INTO tracking_geofence_queue
+                    (user_id, family_id, device_id, location_id, latitude, longitude, battery_level, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+                ");
+                $geoStmt->execute([$userId, $familyId, $deviceId, $result['location_id'], $latitude, $longitude, $batteryLevel]);
+            } catch (Exception $geoEx) {
+                error_log("TRACKING_BATCH: geofence queue failed: " . $geoEx->getMessage());
+            }
 
             // Track best fix in batch for promotion
             $fixData = [

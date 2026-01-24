@@ -48,6 +48,7 @@ session_start();
 require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../../core/tracking/TrackingAuth.php';
 require_once __DIR__ . '/../../core/tracking/TrackingSettings.php';
+require_once __DIR__ . '/../../core/tracking/TrackingMiddleware.php';
 require_once __DIR__ . '/../../core/tracking/FixQualityGate.php';
 require_once __DIR__ . '/../../core/Cache.php';
 
@@ -130,18 +131,7 @@ try {
     $familyId = (int)$user['family_id'];
 
     // ========== SUBSCRIPTION LOCK CHECK ==========
-    require_once __DIR__ . '/../../core/SubscriptionManager.php';
-    $subscriptionManager = new SubscriptionManager($db);
-
-    if ($subscriptionManager->isFamilyLocked($familyId)) {
-        http_response_code(402);
-        echo json_encode([
-            'success' => false,
-            'error' => 'subscription_locked',
-            'message' => 'Your trial has ended. Please subscribe to continue.'
-        ]);
-        exit;
-    }
+    tracking_requireActiveSubscription($db, $familyId);
 
     // ========== DEVICE UPSERT ==========
     $stmt = $db->prepare("SELECT id FROM tracking_devices WHERE device_uuid = ? AND user_id = ? LIMIT 1");
@@ -310,11 +300,19 @@ try {
     // ========== CLEANUP OLD LOCATIONS (5% chance) ==========
     if (!$rateLimited && !$isDuplicate && mt_rand(1, 100) <= 5) {
         try {
+            // Use user's history_retention_days setting (default 30)
+            $retentionStmt = $db->prepare("SELECT history_retention_days FROM tracking_settings WHERE user_id = ? LIMIT 1");
+            $retentionStmt->execute([$userId]);
+            $retentionRow = $retentionStmt->fetch(PDO::FETCH_ASSOC);
+            $retentionDays = (int)($retentionRow['history_retention_days'] ?? 30);
+            if ($retentionDays < 1) $retentionDays = 1;
+            if ($retentionDays > 365) $retentionDays = 365;
+
             $stmt = $db->prepare("
                 DELETE FROM tracking_locations
-                WHERE user_id = ? AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
+                WHERE user_id = ? AND created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
             ");
-            $stmt->execute([$userId]);
+            $stmt->execute([$userId, $retentionDays]);
         } catch (Exception $e) {
             // Non-fatal
         }

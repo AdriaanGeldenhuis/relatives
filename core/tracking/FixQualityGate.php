@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../GeoUtils.php';
+
 /**
  * FixQualityGate - Server-side location quality scoring and promotion
  *
@@ -119,7 +121,7 @@ class FixQualityGate
         if (!$isMoving) {
             $lastBest = $lastBest ?? $this->getLastBest($userId);
             if ($lastBest && $lastBest['latitude'] !== null) {
-                $distance = $this->haversineDistance(
+                $distance = geo_haversineDistance(
                     (float)$lastBest['latitude'], (float)$lastBest['longitude'],
                     (float)$fix['latitude'], (float)$fix['longitude']
                 );
@@ -136,7 +138,7 @@ class FixQualityGate
         // Rule 5: Check for impossible jump (teleportation)
         $lastBest = $lastBest ?? $this->getLastBest($userId);
         if ($lastBest && $lastBest['age_seconds'] !== null && $lastBest['age_seconds'] < 300) {
-            $distance = $distance ?? $this->haversineDistance(
+            $distance = $distance ?? geo_haversineDistance(
                 (float)$lastBest['latitude'], (float)$lastBest['longitude'],
                 (float)$fix['latitude'], (float)$fix['longitude']
             );
@@ -238,18 +240,4 @@ class FixQualityGate
         return $row ?: null;
     }
 
-    /**
-     * Haversine distance in meters between two lat/lng points
-     */
-    private function haversineDistance(float $lat1, float $lng1, float $lat2, float $lng2): float
-    {
-        $earthRadius = 6371000; // meters
-        $dLat = deg2rad($lat2 - $lat1);
-        $dLng = deg2rad($lng2 - $lng1);
-        $a = sin($dLat / 2) * sin($dLat / 2) +
-             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-             sin($dLng / 2) * sin($dLng / 2);
-        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-        return $earthRadius * $c;
-    }
 }

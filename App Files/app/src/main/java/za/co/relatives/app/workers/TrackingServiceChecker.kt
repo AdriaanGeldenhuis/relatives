@@ -26,7 +26,7 @@ class TrackingServiceChecker(
     companion object {
         private const val TAG = "TrackingServiceChecker"
         private const val WORK_NAME = "tracking_service_checker"
-        private const val DEAD_THRESHOLD_MS = 6 * 60 * 1000L  // 6 minutes = 1 missed heartbeat
+        private const val DEAD_THRESHOLD_BUFFER_MS = 60 * 1000L  // 60s buffer on top of heartbeat
 
         /**
          * Schedule periodic checks every 15 minutes (WorkManager minimum).
@@ -70,12 +70,15 @@ class TrackingServiceChecker(
         }
 
         // Check if service is running by checking last upload time
+        // Use dynamic heartbeat from server settings + buffer
+        val heartbeatMs = PreferencesManager.idleHeartbeatSeconds * 1000L
+        val deadThresholdMs = heartbeatMs + DEAD_THRESHOLD_BUFFER_MS
         val lastUploadTime = PreferencesManager.lastUploadTime
         val timeSinceLastUpload = System.currentTimeMillis() - lastUploadTime
 
-        if (timeSinceLastUpload > DEAD_THRESHOLD_MS) {
+        if (timeSinceLastUpload > deadThresholdMs) {
             // Service hasn't uploaded within heartbeat window - likely killed
-            Log.w(TAG, "No upload in ${timeSinceLastUpload / 1000}s (threshold: ${DEAD_THRESHOLD_MS / 1000}s) - restarting")
+            Log.w(TAG, "No upload in ${timeSinceLastUpload / 1000}s (threshold: ${deadThresholdMs / 1000}s) - restarting")
             TrackingLocationService.startTracking(applicationContext)
             // Also flush any queued locations
             LocationUploadWorker.enqueue(applicationContext)
