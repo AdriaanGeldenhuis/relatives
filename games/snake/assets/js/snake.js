@@ -403,20 +403,20 @@ const SnakeGame = (function() {
      * Setup UI button listeners
      */
     function setupButtonListeners() {
-        document.getElementById('start-btn').addEventListener('click', () => {
-            if (currentTheme === "casual") {
-                openCustomization();
-            } else {
-                startGame();
-            }
-        });
+        document.getElementById('start-btn').addEventListener('click', startGame);
         document.getElementById('resume-btn').addEventListener('click', resumeGame);
         document.getElementById('restart-btn').addEventListener('click', startGame);
         document.getElementById('playagain-btn').addEventListener('click', startGame);
         document.getElementById('leaderboard-btn').addEventListener('click', showLeaderboards);
         document.getElementById('close-leaderboard-btn').addEventListener('click', hideLeaderboards);
 
-        // Customization buttons
+        // Start screen customization button (casual only)
+        const customizeStartBtn = document.getElementById('customize-start-btn');
+        if (customizeStartBtn) {
+            customizeStartBtn.addEventListener('click', openCustomization);
+        }
+
+        // Customization overlay buttons
         const customStartBtn = document.getElementById('custom-start-btn');
         if (customStartBtn) {
             customStartBtn.addEventListener('click', () => {
@@ -488,13 +488,11 @@ const SnakeGame = (function() {
             btn.classList.toggle('active', btn.dataset.theme === themeName);
         });
 
-        // Update start button label based on theme
-        const startBtn = document.getElementById("start-btn");
-        if (startBtn) {
-            startBtn.textContent = (themeName === "casual") ? "Customization" : "Start Game";
+        // Show/hide customization buttons based on theme
+        const customizeStartBtn = document.getElementById("customize-start-btn");
+        if (customizeStartBtn) {
+            customizeStartBtn.classList.toggle("hidden", themeName !== "casual");
         }
-
-        // Show/hide customization button on game over screen
         const customizeGameoverBtn = document.getElementById("customize-gameover-btn");
         if (customizeGameoverBtn) {
             customizeGameoverBtn.classList.toggle("hidden", themeName !== "casual");
