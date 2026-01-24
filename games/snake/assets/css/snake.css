@@ -480,6 +480,7 @@ body {
     position: relative;
     padding: 16px;
     min-height: 0;
+    background: #121932;
 }
 
 #game-canvas {
