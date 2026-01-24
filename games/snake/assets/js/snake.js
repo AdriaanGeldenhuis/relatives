@@ -2288,6 +2288,7 @@ const SnakeGame = (function() {
 
         // Draw segments from tail to head (so head draws on top)
         for (let i = segCount - 1; i >= 0; i--) {
+            if (i === 0 && snakeCustomFace) continue; // Skip head circle if face is set
             const sx = 40 + i * 16;
             const col = palette[i % palette.length];
             const grad = pctx.createRadialGradient(sx - r * 0.3, y - r * 0.3, 0, sx, y, r);
