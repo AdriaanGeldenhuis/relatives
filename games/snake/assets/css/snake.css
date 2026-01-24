@@ -844,7 +844,7 @@ body {
     background: #121932;
     backdrop-filter: none;
     z-index: 100;
-    padding: clamp(12px, 3vh, 24px);
+    padding: clamp(16px, 4vh, 32px) clamp(20px, 5vw, 40px);
 }
 
 #theme-screen {
@@ -861,28 +861,26 @@ body {
 .customization-content {
     max-width: 520px;
     width: 100%;
-    max-height: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    overflow-y: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    justify-content: space-between;
 }
 
-.customization-content::-webkit-scrollbar {
-    display: none;
+.customization-content h2 {
+    margin-bottom: 1vh;
+    font-size: clamp(1.5rem, 4vh, 2.25rem);
 }
 
 .customization-section {
-    margin-bottom: 2vh;
+    margin-bottom: 1vh;
     text-align: left;
 }
 
 .customization-section h3 {
     font-size: 0.95rem;
     color: var(--accent-primary);
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     font-weight: 700;
 }
 
@@ -931,22 +929,29 @@ body {
 }
 
 .customization-preview {
-    margin-top: 1.5vh;
-    padding: clamp(6px, 1vh, 10px);
-    border-radius: 16px;
+    margin-top: 1vh;
+    padding: clamp(4px, 1vh, 8px);
+    border-radius: 12px;
     background: rgba(0, 0, 0, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 1;
+    min-height: 0;
 }
 
 .customization-preview canvas {
     width: 100%;
-    height: auto;
+    height: clamp(60px, 10vh, 120px);
     display: block;
     border-radius: 12px;
 }
 
 .customization-actions {
-    margin-top: 1.5vh;
+    margin-top: 1vh;
+}
+
+.customization-actions .game-btn {
+    padding: clamp(10px, 2vh, 18px) 28px;
+    margin: clamp(4px, 0.5vh, 10px) 0;
 }
 
 .hint {
