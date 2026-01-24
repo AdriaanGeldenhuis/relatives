@@ -2,12 +2,13 @@
 declare(strict_types=1);
 
 /**
- * BATCH LOCATION UPLOAD - For efficient offline queue flush
+ * BATCH LOCATION UPLOAD v3.0 - For efficient offline queue flush
  *
- * Accepts array of locations with client_event_id for idempotency.
- * Processes each location and returns per-item results.
- *
- * Auth: Bearer token (preferred for native apps)
+ * Rebuilt with:
+ * - Unified auth via TrackingAuth.php
+ * - Server-side fix quality gating per location
+ * - Only the BEST fix in batch gets promoted to tracking_current
+ * - Cache only updated on promotion
  */
 
 error_reporting(E_ALL);
@@ -35,27 +36,25 @@ session_start();
 require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../../core/tracking/TrackingAuth.php';
 require_once __DIR__ . '/../../core/tracking/TrackingSettings.php';
-require_once __DIR__ . '/../../core/NotificationManager.php';
-require_once __DIR__ . '/../../core/NotificationTriggers.php';
+require_once __DIR__ . '/../../core/tracking/FixQualityGate.php';
+require_once __DIR__ . '/../../core/Cache.php';
 
 try {
     $rawInput = file_get_contents('php://input');
     $input = json_decode($rawInput, true);
 
-    if (json_last_error() !== JSON_ERROR_NONE) {
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($input)) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'invalid_json']);
         exit;
     }
 
-    // Authenticate
+    // ========== UNIFIED AUTH ==========
     $auth = tracking_requireUserId($db, $input);
     $userId = $auth['user_id'];
     $authMethod = $auth['auth_method'];
 
-    error_log("TRACKING_BATCH: auth success user={$userId} method={$authMethod}");
-
-    // Validate required fields
+    // ========== VALIDATE REQUIRED FIELDS ==========
     if (!isset($input['device_uuid'])) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'missing_field_device_uuid']);
@@ -74,7 +73,7 @@ try {
     $deviceName = $input['device_name'] ?? null;
     $source = $input['source'] ?? 'native';
 
-    // Limit batch size to prevent abuse (increased from 50 to 100 for better offline queue flush)
+    // Limit batch size
     $maxBatchSize = 100;
     if (count($locations) > $maxBatchSize) {
         http_response_code(400);
@@ -82,7 +81,7 @@ try {
         exit;
     }
 
-    // Get user info
+    // ========== GET USER INFO ==========
     $stmt = $db->prepare("SELECT family_id, full_name FROM users WHERE id = ? LIMIT 1");
     $stmt->execute([$userId]);
     $user = $stmt->fetch();
@@ -94,9 +93,8 @@ try {
     }
 
     $familyId = (int)$user['family_id'];
-    $userName = $user['full_name'];
 
-    // Subscription check
+    // ========== SUBSCRIPTION CHECK ==========
     require_once __DIR__ . '/../../core/SubscriptionManager.php';
     $subscriptionManager = new SubscriptionManager($db);
 
@@ -105,12 +103,12 @@ try {
         echo json_encode([
             'success' => false,
             'error' => 'subscription_locked',
-            'message' => 'Your trial has ended. Please subscribe to continue using this feature.'
+            'message' => 'Your trial has ended. Please subscribe to continue.'
         ]);
         exit;
     }
 
-    // Get or create device
+    // ========== GET OR CREATE DEVICE ==========
     $stmt = $db->prepare("SELECT id FROM tracking_devices WHERE device_uuid = ? AND user_id = ? LIMIT 1");
     $stmt->execute([$deviceUuid, $userId]);
     $device = $stmt->fetch();
@@ -128,20 +126,13 @@ try {
         $deviceId = (int)$db->lastInsertId();
     }
 
-    // Check if idempotency columns exist
-    $hasIdempotencyColumns = false;
-    try {
-        $checkStmt = $db->query("SELECT client_event_id FROM tracking_locations LIMIT 1");
-        $hasIdempotencyColumns = true;
-    } catch (Exception $e) {
-        // Columns don't exist yet - run migration 015
-    }
-
-    // Process each location
+    // ========== PROCESS EACH LOCATION ==========
+    $qualityGate = new FixQualityGate($db);
     $results = [];
     $insertedCount = 0;
     $duplicateCount = 0;
-    $triggers = new NotificationTriggers($db);
+    $bestFix = null;      // Track best fix in batch for promotion
+    $bestScore = -1;
 
     foreach ($locations as $loc) {
         $clientEventId = isset($loc['client_event_id']) ? trim($loc['client_event_id']) : null;
@@ -168,8 +159,8 @@ try {
             continue;
         }
 
-        // Check idempotency
-        if ($hasIdempotencyColumns && $clientEventId) {
+        // Idempotency check
+        if ($clientEventId) {
             $stmt = $db->prepare("SELECT id FROM tracking_locations WHERE client_event_id = ? AND user_id = ? LIMIT 1");
             $stmt->execute([$clientEventId, $userId]);
             $existing = $stmt->fetch();
@@ -197,44 +188,48 @@ try {
             $batteryLevel = null;
         }
 
-        // Insert location
+        // SERVER-SIDE SPEED CLAMP: if not moving, speed is 0
+        if (!$isMoving) {
+            $speedKmh = 0.0;
+        }
+
+        // Insert to history
         try {
-            if ($hasIdempotencyColumns) {
-                $stmt = $db->prepare("
-                    INSERT INTO tracking_locations
-                    (device_id, user_id, family_id, latitude, longitude, accuracy_m, speed_kmh,
-                     heading_deg, altitude_m, is_moving, battery_level, source, client_event_id, client_timestamp, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                ");
-                $stmt->execute([
-                    $deviceId, $userId, $familyId,
-                    $latitude, $longitude, $accuracyM, $speedKmh,
-                    $headingDeg, $altitudeM, $isMoving, $batteryLevel,
-                    $source, $clientEventId,
-                    $clientTimestamp ? date('Y-m-d H:i:s', $clientTimestamp / 1000) : null
-                ]);
-            } else {
-                $stmt = $db->prepare("
-                    INSERT INTO tracking_locations
-                    (device_id, user_id, family_id, latitude, longitude, accuracy_m, speed_kmh,
-                     heading_deg, altitude_m, is_moving, battery_level, source, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                ");
-                $stmt->execute([
-                    $deviceId, $userId, $familyId,
-                    $latitude, $longitude, $accuracyM, $speedKmh,
-                    $headingDeg, $altitudeM, $isMoving, $batteryLevel,
-                    $source
-                ]);
-            }
+            $stmt = $db->prepare("
+                INSERT INTO tracking_locations
+                (device_id, user_id, family_id, latitude, longitude, accuracy_m, speed_kmh,
+                 heading_deg, altitude_m, is_moving, battery_level, source,
+                 client_event_id, client_timestamp, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+            $stmt->execute([
+                $deviceId, $userId, $familyId,
+                $latitude, $longitude, $accuracyM, $speedKmh,
+                $headingDeg, $altitudeM, $isMoving, $batteryLevel,
+                $source, $clientEventId,
+                $clientTimestamp ? date('Y-m-d H:i:s', (int)($clientTimestamp / 1000)) : null
+            ]);
 
             $result['success'] = true;
             $result['location_id'] = (int)$db->lastInsertId();
             $insertedCount++;
 
-            // Check for low battery notification (only on last item to avoid spam)
-            if ($batteryLevel !== null && $batteryLevel <= 15) {
-                // We'll trigger notification only once at the end
+            // Track best fix in batch for promotion
+            $fixData = [
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+                'accuracy_m' => $accuracyM,
+                'speed_kmh' => $speedKmh,
+                'heading_deg' => $headingDeg,
+                'altitude_m' => $altitudeM,
+                'is_moving' => $isMoving,
+                'battery_level' => $batteryLevel,
+            ];
+            $score = $qualityGate->computeScore($fixData);
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestFix = $fixData;
             }
 
         } catch (Exception $e) {
@@ -245,13 +240,57 @@ try {
         $results[] = $result;
     }
 
+    // ========== PROMOTE BEST FIX FROM BATCH ==========
+    $promoted = false;
+    if ($bestFix !== null) {
+        $gateResult = $qualityGate->shouldPromote($bestFix, $userId);
+
+        if ($gateResult === 'promote') {
+            $qualityGate->promote($bestFix, $userId, $deviceId, $familyId);
+            $promoted = true;
+
+            // Cache only on promotion
+            try {
+                $cache = Cache::init($db);
+                $cacheData = [
+                    'lat' => $bestFix['latitude'],
+                    'lng' => $bestFix['longitude'],
+                    'speed' => $bestFix['speed_kmh'],
+                    'accuracy' => $bestFix['accuracy_m'],
+                    'heading' => $bestFix['heading_deg'],
+                    'altitude' => $bestFix['altitude_m'],
+                    'battery' => $bestFix['battery_level'],
+                    'moving' => (bool)$bestFix['is_moving'],
+                    'ts' => date('Y-m-d H:i:s')
+                ];
+                $cache->setUserLocation($familyId, $userId, $cacheData);
+            } catch (Exception $e) {
+                error_log('Batch cache update error: ' . $e->getMessage());
+            }
+        } elseif ($gateResult === 'touch') {
+            // Touch: refresh timestamp only (keeps status alive)
+            $qualityGate->touch($bestFix, $userId, $deviceId);
+
+            try {
+                $cache = Cache::init($db);
+                $existingCache = $cache->getUserLocation($familyId, $userId);
+                if ($existingCache) {
+                    $existingCache['battery'] = $bestFix['battery_level'] ?? ($existingCache['battery'] ?? null);
+                    $existingCache['moving'] = (bool)$bestFix['is_moving'];
+                    $existingCache['ts'] = date('Y-m-d H:i:s');
+                    $cache->setUserLocation($familyId, $userId, $existingCache);
+                }
+            } catch (Exception $e) {
+                error_log('Batch cache touch error: ' . $e->getMessage());
+            }
+        }
+    }
+
     // Update last_fix_at on device
     $stmt = $db->prepare("UPDATE tracking_devices SET last_fix_at = NOW() WHERE id = ?");
     $stmt->execute([$deviceId]);
 
-    error_log("TRACKING_BATCH: processed user={$userId} device={$deviceId} total=" . count($locations) . " inserted={$insertedCount} duplicates={$duplicateCount}");
-
-    // Load server settings for response (uses shared TrackingSettings.php)
+    // ========== SERVER SETTINGS ==========
     $serverSettings = tracking_loadSettings($db, $userId);
 
     http_response_code(200);
@@ -260,6 +299,7 @@ try {
         'processed' => count($locations),
         'inserted' => $insertedCount,
         'duplicates' => $duplicateCount,
+        'promoted' => $promoted,
         'results' => $results,
         'device_id' => $deviceId,
         'server_settings' => $serverSettings
@@ -267,7 +307,6 @@ try {
 
 } catch (Exception $e) {
     error_log('Batch upload error: ' . $e->getMessage());
-    error_log('Stack trace: ' . $e->getTraceAsString());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'internal_error']);
 }

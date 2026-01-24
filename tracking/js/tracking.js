@@ -600,7 +600,7 @@ class TrackingMapProfessional {
                     </div>
 
                     <!-- Status indicator -->
-                    ${member.status === 'online' || member.status === 'stale' ? `
+                    ${member.status === 'online' || member.status === 'idle' ? `
                         <div style="
                             position: absolute;
                             top: 2px;
@@ -769,11 +769,11 @@ class TrackingMapProfessional {
                             ${isMe ? `<span style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 800;">You</span>` : ''}
                         </div>
                         <div style="display: flex; align-items: center; gap: 6px;">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="${member.status === 'online' ? '#43e97b' : member.status === 'stale' ? '#ffa502' : '#6c757d'}">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="${member.status === 'online' ? '#43e97b' : member.status === 'idle' ? '#ffa502' : '#6c757d'}">
                                 <circle cx="12" cy="12" r="10"></circle>
                             </svg>
-                            <span style="font-size: ${isMobile ? '12px' : '13px'}; font-weight: 700; color: ${member.status === 'online' ? '#43e97b' : member.status === 'stale' ? '#ffa502' : '#6c757d'};">
-                                ${member.status === 'online' ? 'Tracking' : member.status === 'stale' ? `Stale (${Math.floor((member.seconds_ago || 0) / 60)}m ago)` : member.status === 'no_location' ? 'No location yet' : 'Offline'}
+                            <span class="member-status" style="font-size: ${isMobile ? '12px' : '13px'}; font-weight: 700; color: ${member.status === 'online' ? '#43e97b' : member.status === 'idle' ? '#ffa502' : '#6c757d'};">
+                                ${member.status === 'online' ? 'Tracking' : member.status === 'idle' ? 'Idle' : member.status === 'no_location' ? 'No location yet' : `Offline (${(() => { const mins = Math.floor((member.seconds_ago || 0) / 60); return mins >= 60 ? Math.floor(mins/60) + 'h' : mins + 'm'; })()})`}
                             </span>
                         </div>
                     </div>
@@ -871,7 +871,7 @@ class TrackingMapProfessional {
 
                 const status = member.status;
                 const isTracking = status === 'online';
-                const isStale = status === 'stale';
+                const isIdle = status === 'idle';
                 const hasNoLocation = status === 'no_location';
 
                 // Detect status change
@@ -887,20 +887,24 @@ class TrackingMapProfessional {
                 memberCard.setAttribute('data-tracking', isTracking ? 'true' : 'false');
                 memberCard.setAttribute('data-status', status);
 
-                // Status dot styling is handled by CSS via data-status attribute
+                // Simple 3-tier: Tracking (green) / Idle (amber) / Offline (grey)
+                const statusColor = isTracking ? '#43e97b' : isIdle ? '#ffa502' : '#6c757d';
 
-                const statusText = memberCard.querySelector('.member-status span');
+                const statusText = memberCard.querySelector('.member-status');
                 if (statusText) {
+                    statusText.style.color = statusColor;
+                    const spanEl = statusText.querySelector('span') || statusText;
+                    const mins = Math.floor((member.seconds_ago || 0) / 60);
+                    const hours = Math.floor(mins / 60);
+
                     if (isTracking) {
-                        statusText.textContent = 'Tracking';
-                    } else if (isStale) {
-                        const mins = Math.floor((member.seconds_ago || 0) / 60);
-                        statusText.textContent = `Stale (${mins}m ago)`;
+                        spanEl.textContent = 'Tracking';
+                    } else if (isIdle) {
+                        spanEl.textContent = 'Idle';
                     } else if (hasNoLocation) {
-                        statusText.textContent = 'No location yet';
+                        spanEl.textContent = 'No location yet';
                     } else {
-                        const hours = Math.floor((member.seconds_ago || 0) / 3600);
-                        statusText.textContent = hours > 0 ? `Offline (${hours}h)` : 'Offline';
+                        spanEl.textContent = hours > 0 ? `Offline (${hours}h)` : `Offline (${mins}m)`;
                     }
                 }
 
@@ -927,33 +931,16 @@ class TrackingMapProfessional {
         memberCard.classList.add('status-changed');
         setTimeout(() => memberCard.classList.remove('status-changed'), 2000);
 
-        // Determine change type and show appropriate notification
-        const statusLabels = {
-            'online': 'Online',
-            'stale': 'Stale',
-            'offline': 'Offline',
-            'no_location': 'No Location'
-        };
-
-        const oldLabel = statusLabels[oldStatus] || oldStatus;
-        const newLabel = statusLabels[newStatus] || newStatus;
-
-        // Important status changes get a toast
+        // 3-tier status toasts: online (Tracking) / idle / offline
         if (newStatus === 'online' && oldStatus !== 'online') {
-            // Someone came online
-            this.showStatusToast(`${name} is now online! 🟢`, 'success', member);
-        } else if (oldStatus === 'online' && newStatus === 'stale') {
-            // Someone went stale
-            this.showStatusToast(`${name} went stale 🟡`, 'warning', member);
-        } else if (oldStatus === 'online' && newStatus === 'offline') {
-            // Someone went offline directly
-            this.showStatusToast(`${name} went offline ⚫`, 'error', member);
-        } else if (newStatus === 'offline' && oldStatus === 'stale') {
-            // Stale -> Offline
-            this.showStatusToast(`${name} is now offline ⚫`, 'error', member);
+            this.showStatusToast(`${name} is now tracking`, 'success', member);
+        } else if (oldStatus === 'online' && newStatus === 'idle') {
+            this.showStatusToast(`${name} went idle`, 'warning', member);
+        } else if (newStatus === 'offline' && oldStatus !== 'offline') {
+            this.showStatusToast(`${name} went offline`, 'error', member);
         }
 
-        console.log(`Status change: ${name} ${oldLabel} → ${newLabel}`);
+        console.log(`Status: ${name} ${oldStatus} → ${newStatus}`);
     }
 
     // Show status change toast with member info

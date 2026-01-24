@@ -35,11 +35,11 @@ object PreferencesManager {
         set(value) = prefs.edit { putString(KEY_SESSION_TOKEN, value) }
 
     var idleHeartbeatSeconds: Int
-        get() = prefs.getInt(KEY_IDLE_HEARTBEAT_SECONDS, 600)  // Default 10 min
+        get() = prefs.getInt(KEY_IDLE_HEARTBEAT_SECONDS, 300)  // Default 5 min
         set(value) = prefs.edit { putInt(KEY_IDLE_HEARTBEAT_SECONDS, value) }
 
     var offlineThresholdSeconds: Int
-        get() = prefs.getInt(KEY_OFFLINE_THRESHOLD_SECONDS, 720)  // Default 12 min
+        get() = prefs.getInt(KEY_OFFLINE_THRESHOLD_SECONDS, 660)  // Default 11 min (2x heartbeat + buffer)
         set(value) = prefs.edit { putInt(KEY_OFFLINE_THRESHOLD_SECONDS, value) }
 
     var staleThresholdSeconds: Int

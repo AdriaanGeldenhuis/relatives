@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -63,8 +64,13 @@ dependencies {
     // Gson
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // WorkManager for background service checking
+    // WorkManager for background service checking + location upload
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Room database for offline location queue
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 
     // Firebase
     implementation(platform(libs.firebase.bom))

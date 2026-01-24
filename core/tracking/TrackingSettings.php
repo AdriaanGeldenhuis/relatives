@@ -13,17 +13,17 @@ declare(strict_types=1);
  * backwards compatibility via save_settings.php.
  *
  * Default values (in seconds):
- * - UPDATE_INTERVAL: 60 (1 minute) - How often to send/poll location
- * - IDLE_HEARTBEAT: 600 (10 minutes) - Heartbeat interval when stationary
- * - OFFLINE_THRESHOLD: 720 (12 minutes) - Mark user offline after this time without updates
+ * - UPDATE_INTERVAL: 30 (30s) - How often to send/poll location
+ * - IDLE_HEARTBEAT: 300 (5 min) - Heartbeat interval when stationary
+ * - OFFLINE_THRESHOLD: 660 (11 min) - Mark user offline after this (2x heartbeat + buffer)
  * - STALE_THRESHOLD: 3600 (1 hour) - Consider location data stale after this time
  */
 
 // ====== DEFAULT CONSTANTS (single source of truth) ======
 // NOTE: These must match Android PreferencesManager.kt defaults
 const TRACKING_DEFAULT_UPDATE_INTERVAL = 30;      // 30 seconds (matches Android default)
-const TRACKING_DEFAULT_IDLE_HEARTBEAT = 600;      // 10 minutes
-const TRACKING_DEFAULT_OFFLINE_THRESHOLD = 720;   // 12 minutes
+const TRACKING_DEFAULT_IDLE_HEARTBEAT = 300;      // 5 minutes (keeps background position fresh)
+const TRACKING_DEFAULT_OFFLINE_THRESHOLD = 660;   // 11 minutes (2x heartbeat + buffer)
 const TRACKING_DEFAULT_STALE_THRESHOLD = 3600;    // 1 hour
 
 // ====== VALIDATION RANGES ======

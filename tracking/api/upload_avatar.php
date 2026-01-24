@@ -79,114 +79,21 @@ try {
         
     }
     // ========================================
-    // METHOD 2: Base64 encoded (for native apps)
+    // METHOD 2: Base64 (POST form or JSON body)
     // ========================================
     elseif (isset($_POST['avatar_base64']) && !empty($_POST['avatar_base64'])) {
-        error_log("upload_avatar.php: Processing base64 upload for user $userId");
-        
-        $base64Data = $_POST['avatar_base64'];
-        
-        // Remove data:image/...;base64, prefix if present
-        if (preg_match('/^data:image\/(\w+);base64,/', $base64Data, $matches)) {
-            $imageType = $matches[1];
-            $base64Data = substr($base64Data, strpos($base64Data, ',') + 1);
-            
-            // Map image type to MIME type
-            $mimeMap = [
-                'jpeg' => 'image/jpeg',
-                'jpg' => 'image/jpeg',
-                'png' => 'image/png',
-                'gif' => 'image/gif',
-                'webp' => 'image/webp'
-            ];
-            $mimeType = $mimeMap[$imageType] ?? 'image/jpeg';
-        }
-        
-        $base64Data = base64_decode($base64Data, true);
-        
-        if ($base64Data === false) {
-            throw new Exception('Invalid base64 data');
-        }
-        
-        $fileSize = strlen($base64Data);
-        
-        // Create temporary file
-        $tempFile = tempnam(sys_get_temp_dir(), 'avatar_');
-        if (!$tempFile) {
-            throw new Exception('Failed to create temporary file');
-        }
-        
-        if (file_put_contents($tempFile, $base64Data) === false) {
-            throw new Exception('Failed to write temporary file');
-        }
-        
-        // Detect MIME type if not set
-        if (!$mimeType) {
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $mimeType = finfo_file($finfo, $tempFile);
-            finfo_close($finfo);
-        }
-        
-        error_log("upload_avatar.php: Base64 decoded, size: $fileSize bytes, mime: $mimeType");
+        $rawBase64 = $_POST['avatar_base64'];
+        [$tempFile, $mimeType, $fileSize] = decodeBase64ToTempFile($rawBase64);
     }
-    // ========================================
-    // METHOD 3: Raw POST body (alternative for native)
-    // ========================================
-    elseif ($_SERVER['CONTENT_TYPE'] && strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false) {
-        error_log("upload_avatar.php: Processing JSON upload for user $userId");
-        
-        $rawInput = file_get_contents('php://input');
-        $json = json_decode($rawInput, true);
-        
+    elseif (($_SERVER['CONTENT_TYPE'] ?? '') && strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false) {
+        $json = json_decode(file_get_contents('php://input'), true);
         if (json_last_error() !== JSON_ERROR_NONE) {
             throw new Exception('Invalid JSON data');
         }
-        
         if (!isset($json['avatar_base64']) || empty($json['avatar_base64'])) {
             throw new Exception('No avatar data in JSON');
         }
-        
-        $base64Data = $json['avatar_base64'];
-        
-        // Remove data:image/...;base64, prefix if present
-        if (preg_match('/^data:image\/(\w+);base64,/', $base64Data, $matches)) {
-            $imageType = $matches[1];
-            $base64Data = substr($base64Data, strpos($base64Data, ',') + 1);
-            
-            $mimeMap = [
-                'jpeg' => 'image/jpeg',
-                'jpg' => 'image/jpeg',
-                'png' => 'image/png',
-                'gif' => 'image/gif',
-                'webp' => 'image/webp'
-            ];
-            $mimeType = $mimeMap[$imageType] ?? 'image/jpeg';
-        }
-        
-        $base64Data = base64_decode($base64Data, true);
-        
-        if ($base64Data === false) {
-            throw new Exception('Invalid base64 data');
-        }
-        
-        $fileSize = strlen($base64Data);
-        
-        $tempFile = tempnam(sys_get_temp_dir(), 'avatar_');
-        if (!$tempFile) {
-            throw new Exception('Failed to create temporary file');
-        }
-        
-        if (file_put_contents($tempFile, $base64Data) === false) {
-            throw new Exception('Failed to write temporary file');
-        }
-        
-        if (!$mimeType) {
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $mimeType = finfo_file($finfo, $tempFile);
-            finfo_close($finfo);
-        }
-        
-        error_log("upload_avatar.php: JSON base64 decoded, size: $fileSize bytes, mime: $mimeType");
+        [$tempFile, $mimeType, $fileSize] = decodeBase64ToTempFile($json['avatar_base64']);
     }
     else {
         error_log('upload_avatar.php: No valid upload method detected');
@@ -335,10 +242,43 @@ try {
     
 } catch (Exception $e) {
     error_log('upload_avatar.php ERROR: ' . $e->getMessage());
-    error_log('upload_avatar.php TRACE: ' . $e->getTraceAsString());
     http_response_code(500);
     echo json_encode([
         'success' => false,
         'error' => $e->getMessage()
     ]);
+}
+
+/**
+ * Decode base64 image string to a temp file.
+ * Handles optional data:image/...;base64, prefix.
+ * @return array [tempFilePath, mimeType, fileSize]
+ */
+function decodeBase64ToTempFile(string $raw): array {
+    $mimeType = null;
+
+    // Strip data:image/...;base64, prefix if present
+    if (preg_match('/^data:image\/(\w+);base64,/', $raw, $matches)) {
+        $mimeMap = ['jpeg' => 'image/jpeg', 'jpg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif', 'webp' => 'image/webp'];
+        $mimeType = $mimeMap[$matches[1]] ?? 'image/jpeg';
+        $raw = substr($raw, strpos($raw, ',') + 1);
+    }
+
+    $decoded = base64_decode($raw, true);
+    if ($decoded === false) {
+        throw new Exception('Invalid base64 data');
+    }
+
+    $tempFile = tempnam(sys_get_temp_dir(), 'avatar_');
+    if (!$tempFile || file_put_contents($tempFile, $decoded) === false) {
+        throw new Exception('Failed to write temporary file');
+    }
+
+    if (!$mimeType) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mimeType = finfo_file($finfo, $tempFile);
+        finfo_close($finfo);
+    }
+
+    return [$tempFile, $mimeType, strlen($decoded)];
 }

@@ -12,15 +12,11 @@ import za.co.relatives.app.utils.PreferencesManager
 import java.util.concurrent.TimeUnit
 
 /**
- * WorkManager-based service checker for Huawei/Honor/Xiaomi devices.
+ * WorkManager-based service checker - aggressive restart for killed services.
  *
- * These devices have aggressive battery management that kills foreground services
- * even with ongoing notifications. WorkManager uses Android's JobScheduler which
- * is more resilient to battery optimization.
- *
- * This worker runs every 15 minutes and restarts the tracking service if:
- * 1. Tracking is enabled in preferences
- * 2. The service is not currently running
+ * Runs every 5 minutes (WorkManager minimum for periodic is 15, but we use
+ * REPLACE policy to force fresh scheduling). Restarts tracking service if
+ * no upload happened within 6 minutes (heartbeat is 5 min, so 6 min = missed).
  */
 class TrackingServiceChecker(
     context: Context,
@@ -30,10 +26,11 @@ class TrackingServiceChecker(
     companion object {
         private const val TAG = "TrackingServiceChecker"
         private const val WORK_NAME = "tracking_service_checker"
+        private const val DEAD_THRESHOLD_MS = 6 * 60 * 1000L  // 6 minutes = 1 missed heartbeat
 
         /**
-         * Schedule periodic checks every 15 minutes.
-         * Call this when tracking is enabled.
+         * Schedule periodic checks every 15 minutes (WorkManager minimum).
+         * Combined with AlarmManager in the service for tighter checks.
          */
         fun schedule(context: Context) {
             val workRequest = PeriodicWorkRequestBuilder<TrackingServiceChecker>(
@@ -75,14 +72,15 @@ class TrackingServiceChecker(
         // Check if service is running by checking last upload time
         val lastUploadTime = PreferencesManager.lastUploadTime
         val timeSinceLastUpload = System.currentTimeMillis() - lastUploadTime
-        val tenMinutesMs = 10 * 60 * 1000L
 
-        if (timeSinceLastUpload > tenMinutesMs) {
-            // Service hasn't uploaded in over 10 minutes - likely killed
-            Log.w(TAG, "No upload in ${timeSinceLastUpload / 1000}s - restarting tracking service")
+        if (timeSinceLastUpload > DEAD_THRESHOLD_MS) {
+            // Service hasn't uploaded within heartbeat window - likely killed
+            Log.w(TAG, "No upload in ${timeSinceLastUpload / 1000}s (threshold: ${DEAD_THRESHOLD_MS / 1000}s) - restarting")
             TrackingLocationService.startTracking(applicationContext)
+            // Also flush any queued locations
+            LocationUploadWorker.enqueue(applicationContext)
         } else {
-            Log.d(TAG, "Service appears healthy (last upload ${timeSinceLastUpload / 1000}s ago)")
+            Log.d(TAG, "Service healthy (last upload ${timeSinceLastUpload / 1000}s ago)")
         }
 
         return Result.success()
