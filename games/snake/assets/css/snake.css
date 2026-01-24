@@ -831,6 +831,98 @@ body {
 }
 
 /* ==========================================
+   CUSTOMIZATION UI
+   ========================================== */
+
+.customization-content {
+    max-width: 520px;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+.customization-section {
+    margin-bottom: 18px;
+    text-align: left;
+}
+
+.customization-section h3 {
+    font-size: 0.95rem;
+    color: var(--accent-primary);
+    margin-bottom: 8px;
+    font-weight: 700;
+}
+
+.color-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 10px;
+    padding: 10px 0;
+}
+
+.color-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.color-dot.selected {
+    outline: 3px solid rgba(255, 255, 255, 0.55);
+    transform: scale(1.05);
+}
+
+.face-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 10px;
+    padding: 10px 0;
+}
+
+.face-btn {
+    height: 38px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 22px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.face-btn.selected {
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.customization-preview {
+    margin-top: 14px;
+    padding: 10px;
+    border-radius: 16px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.customization-preview canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 12px;
+}
+
+.customization-actions {
+    margin-top: 16px;
+}
+
+.hint {
+    opacity: 0.8;
+    font-size: 12px;
+    margin-top: 6px;
+    color: var(--text-muted);
+}
+
+/* ==========================================
    BUTTONS
    ========================================== */
 

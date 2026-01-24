@@ -29,7 +29,7 @@ $familyId = $_SESSION['family_id'] ?? null;
     <meta name="theme-color" content="#1a1a2e">
     <title>Snake Classic</title>
     <link rel="manifest" href="/games/snake/manifest.json">
-    <link rel="stylesheet" href="/games/snake/assets/css/snake.css?v=2.0">
+    <link rel="stylesheet" href="/games/snake/assets/css/snake.css?v=3.0">
 </head>
 <body>
     <div id="app">
@@ -133,6 +133,35 @@ $familyId = $_SESSION['family_id'] ?? null;
                 </div>
             </div>
 
+            <!-- Customization Screen -->
+            <div id="customization-screen" class="overlay-screen hidden">
+                <div class="overlay-content customization-content">
+                    <h2>Snake Customization</h2>
+
+                    <div class="customization-section">
+                        <h3>Colors</h3>
+                        <div id="snake-color-grid" class="color-grid"></div>
+                        <div class="hint">Tap colors to build your snake pattern</div>
+                        <button id="clear-colors-btn" class="game-btn secondary">Clear</button>
+                    </div>
+
+                    <div class="customization-section">
+                        <h3>Face</h3>
+                        <div id="snake-face-grid" class="face-grid"></div>
+                        <div class="hint">Pick a face to equip</div>
+                    </div>
+
+                    <div class="customization-preview">
+                        <canvas id="snake-preview-canvas" width="320" height="120"></canvas>
+                    </div>
+
+                    <div class="customization-actions">
+                        <button id="custom-start-btn" class="game-btn primary">Start Game</button>
+                        <button id="close-customization-btn" class="game-btn secondary">Close</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Theme Selector Modal -->
             <div id="theme-screen" class="overlay-screen hidden">
                 <div class="overlay-content theme-content">
@@ -210,9 +239,9 @@ $familyId = $_SESSION['family_id'] ?? null;
     </script>
 
     <!-- Scripts -->
-    <script src="/games/snake/assets/js/storage.js?v=2.0"></script>
-    <script src="/games/snake/assets/js/api.js?v=2.0"></script>
-    <script src="/games/snake/assets/js/snake.js?v=2.0"></script>
+    <script src="/games/snake/assets/js/storage.js?v=3.0"></script>
+    <script src="/games/snake/assets/js/api.js?v=3.0"></script>
+    <script src="/games/snake/assets/js/snake.js?v=3.0"></script>
 
     <!-- Register Service Worker -->
     <script>

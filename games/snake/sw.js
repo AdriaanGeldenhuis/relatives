@@ -4,7 +4,7 @@
  * and network-first for API calls.
  */
 
-const CACHE_VERSION = 'snake-v1.1.0';
+const CACHE_VERSION = 'snake-v1.2.0';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 const DYNAMIC_CACHE = CACHE_VERSION + '-dynamic';
 
@@ -106,40 +106,32 @@ self.addEventListener('fetch', (event) => {
 });
 
 /**
- * Cache-first strategy
- * Try cache, fall back to network, update cache
+ * Stale-while-revalidate strategy
+ * Return cached immediately if available, fetch in background to update cache
  */
 async function cacheFirst(request) {
-    try {
-        const cachedResponse = await caches.match(request);
+    const cache = await caches.open(STATIC_CACHE);
+    const cached = await cache.match(request);
 
-        if (cachedResponse) {
-            // Return cached version
-            return cachedResponse;
-        }
-
-        // Fetch from network
-        const networkResponse = await fetch(request);
-
-        // Cache successful responses
-        if (networkResponse.ok) {
-            const cache = await caches.open(STATIC_CACHE);
+    const fetchPromise = fetch(request).then((networkResponse) => {
+        if (networkResponse && networkResponse.ok) {
             cache.put(request, networkResponse.clone());
         }
-
         return networkResponse;
-    } catch (error) {
-        console.error('[SW] Cache-first error:', error);
+    }).catch(() => null);
 
-        // Try to return cached version as last resort
-        const cachedResponse = await caches.match(request);
-        if (cachedResponse) {
-            return cachedResponse;
-        }
-
-        // Return offline fallback if available
-        return caches.match('/games/snake/');
+    // Return cached immediately if exists, otherwise wait for network
+    if (cached) {
+        return cached;
     }
+
+    const networkResponse = await fetchPromise;
+    if (networkResponse) {
+        return networkResponse;
+    }
+
+    // Offline fallback
+    return caches.match('/games/snake/');
 }
 
 /**
