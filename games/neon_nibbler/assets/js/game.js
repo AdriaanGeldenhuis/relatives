@@ -90,6 +90,18 @@
             updateStartStats();
         });
 
+        // Options
+        document.getElementById('btn-options').addEventListener('click', function() {
+            NeonAudio.menuSelect();
+            document.getElementById('screen-options').classList.add('active');
+        });
+
+        // Options close
+        document.getElementById('btn-options-close').addEventListener('click', function() {
+            NeonAudio.menuSelect();
+            document.getElementById('screen-options').classList.remove('active');
+        });
+
         // Theme toggle
         document.getElementById('btn-theme-toggle').addEventListener('click', function() {
             prefs.theme = prefs.theme === 'dark' ? 'light' : 'dark';
