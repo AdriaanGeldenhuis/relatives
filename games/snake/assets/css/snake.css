@@ -835,8 +835,8 @@ body {
    ========================================== */
 
 #customization-screen {
-    background: rgba(18, 25, 50, 0.92);
-    backdrop-filter: blur(8px);
+    background: #121932;
+    backdrop-filter: none;
 }
 
 .customization-content {
