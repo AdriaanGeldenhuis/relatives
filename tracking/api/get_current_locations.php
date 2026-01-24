@@ -56,6 +56,7 @@ try {
             u.location_sharing,
             ts.is_tracking_enabled,
             ts.update_interval_seconds,
+            ts.idle_heartbeat_seconds,
             ts.offline_threshold_seconds,
             ts.stale_threshold_seconds
         FROM users u
@@ -82,11 +83,13 @@ try {
     foreach ($members as $member) {
         $memberId = (int)$member['user_id'];
         $updateInterval = (int)($member['update_interval_seconds'] ?? 30);
-        $offlineThreshold = (int)($member['offline_threshold_seconds'] ?? 720);
+        $idleHeartbeat = (int)($member['idle_heartbeat_seconds'] ?? 300);  // 5 min default
+        $offlineThreshold = (int)($member['offline_threshold_seconds'] ?? 660);  // 11 min default
         $staleThreshold = (int)($member['stale_threshold_seconds'] ?? 3600);
 
-        // Online threshold: 2x update interval, capped by offline threshold
-        $onlineThreshold = min($offlineThreshold, max($updateInterval * 2, 120));
+        // Online (Tracking): within heartbeat + 60s buffer
+        // This means: if we got a fix within last 6 minutes, device is actively tracking
+        $onlineThreshold = $idleHeartbeat + 60;
 
         $loc = null;
         $secondsAgo = null;
@@ -196,19 +199,18 @@ try {
         }
 
         // ========== DETERMINE STATUS ==========
-        // online: within onlineThreshold
-        // stale: "Last seen X minutes ago"
-        // offline: beyond stale threshold - truly gone
+        // Simple 3-tier:
+        //   online (Tracking) = fix within heartbeat + buffer (6 min)
+        //   idle = fix within offline threshold (11 min) - between heartbeats, service alive
+        //   offline = no fix beyond offline threshold - service dead/phone off
         if ($secondsAgo === null || $loc === null || ($loc['latitude'] ?? null) === null) {
             $status = 'no_location';
         } elseif ($secondsAgo < $onlineThreshold) {
-            $status = 'online';
+            $status = 'online';   // Actively tracking
         } elseif ($secondsAgo < $offlineThreshold) {
-            $status = 'recent';  // Not real-time but fresh enough
-        } elseif ($secondsAgo < $staleThreshold) {
-            $status = 'stale';   // "Last seen X minutes ago"
+            $status = 'idle';     // Between heartbeats, service still alive
         } else {
-            $status = 'offline'; // Beyond stale threshold
+            $status = 'offline';  // Service dead or phone off
         }
 
         $memberData = [

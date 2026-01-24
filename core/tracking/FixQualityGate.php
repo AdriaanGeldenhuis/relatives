@@ -109,22 +109,39 @@ class FixQualityGate
             }
         }
 
-        // Additional: Check for impossible jump (teleportation)
-        if ($accuracy !== null && $accuracy <= 200) {
+        // Rule 4: GPS drift suppression for stationary users
+        // If not moving, only promote if distance from last position exceeds
+        // the accuracy circle. This prevents marker jiggle from GPS drift.
+        if (!$isMoving) {
             $lastBest = $lastBest ?? $this->getLastBest($userId);
-            if ($lastBest && $lastBest['age_seconds'] !== null && $lastBest['age_seconds'] < 300) {
-                // Calculate implied speed between last best and this fix
+            if ($lastBest && $lastBest['latitude'] !== null) {
                 $distance = $this->haversineDistance(
                     (float)$lastBest['latitude'], (float)$lastBest['longitude'],
                     (float)$fix['latitude'], (float)$fix['longitude']
                 );
-                $timeDelta = max(1, $lastBest['age_seconds']);
-                $impliedSpeedKmh = ($distance / $timeDelta) * 3.6;
-
-                // If implied speed > 180 km/h and not marked as moving, it's a jump
-                if ($impliedSpeedKmh > 180 && !$isMoving) {
+                // Use the larger of current accuracy or 30m as drift threshold
+                $driftThreshold = max(30, $accuracy ?? 30);
+                if ($distance < $driftThreshold) {
+                    // Position hasn't changed meaningfully - don't update
+                    // This keeps the marker stable when standing still
                     return false;
                 }
+            }
+        }
+
+        // Rule 5: Check for impossible jump (teleportation)
+        $lastBest = $lastBest ?? $this->getLastBest($userId);
+        if ($lastBest && $lastBest['age_seconds'] !== null && $lastBest['age_seconds'] < 300) {
+            $distance = $distance ?? $this->haversineDistance(
+                (float)$lastBest['latitude'], (float)$lastBest['longitude'],
+                (float)$fix['latitude'], (float)$fix['longitude']
+            );
+            $timeDelta = max(1, $lastBest['age_seconds']);
+            $impliedSpeedKmh = ($distance / $timeDelta) * 3.6;
+
+            // If implied speed > 180 km/h and not marked as moving, it's a jump
+            if ($impliedSpeedKmh > 180 && !$isMoving) {
+                return false;
             }
         }
 

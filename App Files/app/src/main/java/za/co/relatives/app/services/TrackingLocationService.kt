@@ -156,8 +156,8 @@ class TrackingLocationService : Service() {
         private const val UPLOAD_URL = "https://www.relatives.co.za/tracking/api/update_location.php"
 
         // Mode intervals
-        private const val IDLE_INTERVAL_MS = 3 * 60 * 1000L       // 3 minutes
-        private const val IDLE_MIN_DISTANCE_M = 150f               // 150m distance gate
+        private const val IDLE_INTERVAL_MS = 2 * 60 * 1000L       // 2 minutes (ensures heartbeat stays alive)
+        private const val IDLE_MIN_DISTANCE_M = 100f               // 100m distance gate (tighter than before)
         private const val MOVING_INTERVAL_MS = 30 * 1000L          // 30 seconds
         private const val MOVING_MIN_DISTANCE_M = 20f              // 20m distance gate
         private const val BURST_INTERVAL_MS = 5 * 1000L            // 5 seconds (fast sampling)
@@ -243,6 +243,9 @@ class TrackingLocationService : Service() {
         // Schedule service checker for aggressive OEMs
         za.co.relatives.app.workers.TrackingServiceChecker.schedule(this)
 
+        // Schedule AlarmManager keepalive (every 5 min - more reliable than WorkManager)
+        scheduleKeepAlive()
+
         Log.d(TAG, "Tracking started (initial mode: BURST -> will settle to IDLE/MOVING)")
     }
 
@@ -253,6 +256,7 @@ class TrackingLocationService : Service() {
         stopLocationUpdates()
         stopHeartbeatTimer()
         releaseWakeLock()
+        cancelKeepAlive()
 
         za.co.relatives.app.workers.TrackingServiceChecker.cancel(this)
 
@@ -376,17 +380,20 @@ class TrackingLocationService : Service() {
     private fun onLocationReceived(location: Location) {
         val accuracyM = location.accuracy
 
-        // Calculate speed
+        // Calculate raw speed
         var speedKmh = if (location.hasSpeed() && location.speed > 0) {
             location.speed * 3.6f
         } else {
             calculateSpeedFromDistance(location)
         }
 
-        // Movement detection
+        // Movement detection - account for GPS accuracy in distance check
         val distanceMoved = lastLocation?.distanceTo(location) ?: 0f
+        // Only count distance as movement if it exceeds accuracy circle
+        // GPS drift within accuracy is NOT real movement
+        val effectiveDistance = if (distanceMoved > accuracyM) distanceMoved else 0f
         val isMovingBySpeed = speedKmh > SPEED_THRESHOLD_KMH
-        val isMovingByDistance = distanceMoved > DISTANCE_THRESHOLD_M
+        val isMovingByDistance = effectiveDistance > DISTANCE_THRESHOLD_M
         val currentlyMoving = isMovingBySpeed || isMovingByDistance
 
         // Smoothed is_moving flag
@@ -405,12 +412,13 @@ class TrackingLocationService : Service() {
             }
         }
 
-        // If moving by distance but speed is 0, estimate speed
-        if (isMovingByDistance && speedKmh < SPEED_THRESHOLD_KMH) {
-            speedKmh = calculateSpeedFromDistance(location)
+        // CLAMP SPEED TO 0 when not actually moving
+        // GPS drift causes 3-5 km/h "phantom speed" - don't report it
+        if (!isMoving) {
+            speedKmh = 0f
         }
 
-        Log.d(TAG, "Fix: acc=${accuracyM.toInt()}m speed=${speedKmh.toInt()}km/h dist=${distanceMoved.toInt()}m moving=$isMoving mode=$currentMode")
+        Log.d(TAG, "Fix: acc=${accuracyM.toInt()}m speed=${speedKmh.toInt()}km/h dist=${distanceMoved.toInt()}m effective=${effectiveDistance.toInt()}m moving=$isMoving mode=$currentMode")
 
         // ========== QUEUE TO ROOM (always - collection is decoupled from upload) ==========
         queueLocation(location, isMoving, speedKmh)
@@ -492,6 +500,7 @@ class TrackingLocationService : Service() {
             put("heading_deg", if (location.hasBearing()) location.bearing else 0)
             put("altitude_m", if (location.hasAltitude()) location.altitude else JSONObject.NULL)
             put("is_moving", isMoving)
+            put("tracking_mode", currentMode.name.lowercase())
             put("source", "native")
             put("session_token", sessionToken)
             put("client_event_id", clientEventId)
@@ -839,6 +848,41 @@ class TrackingLocationService : Service() {
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
         }
+    }
+
+    // ========== KEEPALIVE ALARM (safety net for OEM kills) ==========
+
+    private fun scheduleKeepAlive() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        val intent = Intent(this, TrackingLocationService::class.java).apply {
+            action = ACTION_START_TRACKING
+        }
+        val pendingIntent = PendingIntent.getService(
+            this, 2, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        // Fire every 5 minutes - if service is alive, handleStartTracking returns immediately
+        // If service was killed, this restarts it
+        alarmManager.setRepeating(
+            android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            android.os.SystemClock.elapsedRealtime() + 5 * 60 * 1000L,
+            5 * 60 * 1000L,
+            pendingIntent
+        )
+        Log.d(TAG, "Keepalive alarm scheduled (every 5 min)")
+    }
+
+    private fun cancelKeepAlive() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        val intent = Intent(this, TrackingLocationService::class.java).apply {
+            action = ACTION_START_TRACKING
+        }
+        val pendingIntent = PendingIntent.getService(
+            this, 2, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
+        Log.d(TAG, "Keepalive alarm cancelled")
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
