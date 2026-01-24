@@ -154,6 +154,14 @@ $familyId = $_SESSION['family_id'] ?? null;
                             <span class="theme-name">Nature</span>
                             <span class="theme-desc">3D snake on grass</span>
                         </button>
+                        <button class="theme-option" data-theme="casual">
+                            <div class="theme-preview casual-preview">
+                                <div class="preview-snake"></div>
+                                <div class="preview-food"></div>
+                            </div>
+                            <span class="theme-name">Casual</span>
+                            <span class="theme-desc">Smooth & relaxed</span>
+                        </button>
                         <button class="theme-option" data-theme="classic">
                             <div class="theme-preview classic-preview">
                                 <div class="preview-snake"></div>

@@ -175,6 +175,16 @@ $games = [
         'highlight' => true
     ],
     [
+        'id' => 'pacman',
+        'name' => 'Pac-Man',
+        'icon' => '👾',
+        'description' => 'Classic maze chase! Eat all dots, avoid ghosts, grab power pellets to fight back.',
+        'url' => '/games/pacman/',
+        'color' => '#00ffff',
+        'features' => ['5 Levels', 'Swipe Controls', 'Ghost AI'],
+        'available' => true
+    ],
+    [
         'id' => '30seconds',
         'name' => '30 Seconds Party',
         'icon' => '⏱️',
@@ -737,6 +747,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <?php endif; ?>
                 <?php endforeach; ?>
             </div>
+        </section>
+
+        <!-- Customization -->
+        <section class="cta-section" style="margin-bottom:24px;">
+            <h3>🎨 Customize Your Games</h3>
+            <p>Change themes, unlock Casual mode, and personalize your experience.</p>
+            <a href="/games/snake/#customize" class="cta-btn" style="background:linear-gradient(135deg,#4caf50,#388e3c);">
+                <span>🎨</span> Open Customization
+            </a>
         </section>
 
         <!-- Family Leaderboard -->

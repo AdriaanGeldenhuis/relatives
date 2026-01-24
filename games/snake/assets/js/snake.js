@@ -74,6 +74,26 @@ const SnakeGame = (function() {
             snakePattern: true,
             foodStyle: 'apple'
         },
+        casual: {
+            name: 'Casual',
+            BACKGROUND: '#0c0e16',
+            BACKGROUND_GRADIENT: ['#0c0e16', '#0e1018', '#0c0e16'],
+            GRID: 'transparent',
+            SNAKE_HEAD: '#66bb6a',
+            SNAKE_HEAD_HIGHLIGHT: '#81c784',
+            SNAKE_HEAD_SHADOW: '#388e3c',
+            SNAKE_HEAD_GLOW: 'transparent',
+            SNAKE_BODY: '#4caf50',
+            SNAKE_BODY_GRADIENT: ['#66bb6a', '#4caf50', '#388e3c'],
+            FOOD: '#ff7043',
+            FOOD_INNER: '#e64a19',
+            FOOD_HIGHLIGHT: '#ff8a65',
+            FOOD_GLOW: 'transparent',
+            FOOD_GLOW_OUTER: 'transparent',
+            EYE_COLOR: '#fff',
+            useGlow: false,
+            casualMode: true
+        },
         classic: {
             name: 'Nokia Classic',
             BACKGROUND: '#9bbc0f',
@@ -120,6 +140,8 @@ const SnakeGame = (function() {
     // Game state
     let canvas, ctx;
     let cellSize = 0;
+    let grassCache = null; // Pre-rendered grass background
+    let grassCacheSize = 0;
     let gameState = 'idle'; // idle, playing, paused, gameover
     let snake = [];
     let food = null;
@@ -214,6 +236,9 @@ const SnakeGame = (function() {
 
         // Calculate cell size
         cellSize = Math.floor(size / CONFIG.GRID_SIZE);
+
+        // Invalidate grass cache on resize
+        grassCache = null;
 
         // Redraw
         draw();
@@ -391,6 +416,9 @@ const SnakeGame = (function() {
         currentTheme = themeName;
         COLORS = THEMES[themeName];
 
+        // Invalidate grass cache when theme changes
+        grassCache = null;
+
         // Update HTML data-theme attribute for CSS
         document.documentElement.setAttribute('data-theme', themeName);
 
@@ -424,7 +452,13 @@ const SnakeGame = (function() {
         if (closeThemeBtn && themeScreen) {
             closeThemeBtn.addEventListener('click', () => {
                 themeScreen.classList.add('hidden');
+                history.replaceState(null, '', window.location.pathname);
             });
+        }
+
+        // Auto-open theme selector if #customize hash is in URL
+        if (window.location.hash === '#customize' && themeScreen) {
+            themeScreen.classList.remove('hidden');
         }
 
         // Theme option buttons
@@ -715,6 +749,8 @@ const SnakeGame = (function() {
         // Draw realistic grass texture for realistic mode
         if (COLORS.realisticMode) {
             drawGrassBackground(size);
+        } else if (COLORS.casualMode) {
+            drawCasualBackground(size);
         } else {
             // Draw grid (subtle) for other themes
             ctx.fillStyle = COLORS.GRID;
@@ -740,76 +776,247 @@ const SnakeGame = (function() {
     }
 
     /**
-     * Draw realistic grass background - no grid, natural look
+     * Draw realistic grass background - high quality pre-rendered texture
      */
     function drawGrassBackground(size) {
-        // Create natural grass base with varied patches
-        const grassColors = ['#2a5518', '#3d6b2d', '#1d4a0d', '#4a7a3d', '#2d5a1d', '#357a28'];
+        // Use cached version if available
+        if (grassCache && grassCacheSize === size) {
+            ctx.drawImage(grassCache, 0, 0, size, size);
+            return;
+        }
 
-        // Seed-based random for consistent grass pattern
+        // Create offscreen canvas for high-quality rendering
+        const offCanvas = document.createElement('canvas');
+        const dpr = window.devicePixelRatio || 1;
+        offCanvas.width = size * dpr;
+        offCanvas.height = size * dpr;
+        const oc = offCanvas.getContext('2d');
+        oc.scale(dpr, dpr);
+
+        // Seed-based random for consistent pattern
         const seededRandom = (x, y) => {
             const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
             return n - Math.floor(n);
         };
 
-        // Draw larger grass patches (not grid-aligned)
-        for (let i = 0; i < 80; i++) {
-            const px = seededRandom(i, 0) * size;
-            const py = seededRandom(0, i) * size;
-            const patchSize = 20 + seededRandom(i, i) * 40;
+        // 1. Rich base gradient
+        const baseGrad = oc.createRadialGradient(size * 0.4, size * 0.35, 0, size * 0.5, size * 0.5, size * 0.75);
+        baseGrad.addColorStop(0, '#3a7a2a');
+        baseGrad.addColorStop(0.4, '#2d6620');
+        baseGrad.addColorStop(0.7, '#245518');
+        baseGrad.addColorStop(1, '#1a4010');
+        oc.fillStyle = baseGrad;
+        oc.fillRect(0, 0, size, size);
 
-            const patchGrad = ctx.createRadialGradient(px, py, 0, px, py, patchSize);
-            patchGrad.addColorStop(0, grassColors[Math.floor(seededRandom(i, i * 2) * grassColors.length)]);
-            patchGrad.addColorStop(1, 'transparent');
-            ctx.fillStyle = patchGrad;
-            ctx.globalAlpha = 0.3;
-            ctx.fillRect(px - patchSize, py - patchSize, patchSize * 2, patchSize * 2);
+        // 2. Fine grain texture (pixel-level noise for sharpness)
+        const grainSize = 3;
+        const greens = ['#2a5a18', '#326b22', '#1e4c0e', '#3d7830', '#285015', '#3a7028', '#1a3f0c', '#4a8838'];
+        for (let y = 0; y < size; y += grainSize) {
+            for (let x = 0; x < size; x += grainSize) {
+                const r = seededRandom(x * 7 + 1, y * 13 + 3);
+                oc.fillStyle = greens[Math.floor(r * greens.length)];
+                oc.globalAlpha = 0.25 + r * 0.15;
+                oc.fillRect(x, y, grainSize, grainSize);
+            }
         }
-        ctx.globalAlpha = 1;
+        oc.globalAlpha = 1;
 
-        // Draw many grass blades across the field
-        for (let i = 0; i < 300; i++) {
-            const bx = seededRandom(i * 3, i) * size;
-            const by = seededRandom(i, i * 2) * size;
-            const height = 4 + seededRandom(i * 2, i) * 8;
-            const lean = (seededRandom(i, i * 3) - 0.5) * 6;
+        // 3. Medium grass patches for natural variation
+        for (let i = 0; i < 200; i++) {
+            const px = seededRandom(i + 5, i * 3) * size;
+            const py = seededRandom(i * 2, i + 7) * size;
+            const patchW = 15 + seededRandom(i, i * 5) * 35;
+            const patchH = 12 + seededRandom(i * 4, i) * 25;
+            const angle = seededRandom(i * 6, i + 2) * Math.PI;
 
-            ctx.strokeStyle = grassColors[Math.floor(seededRandom(i * 4, i) * grassColors.length)];
-            ctx.globalAlpha = 0.3 + seededRandom(i, i * 4) * 0.3;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(bx, by);
-            ctx.quadraticCurveTo(bx + lean * 0.5, by - height * 0.5, bx + lean, by - height);
-            ctx.stroke();
+            oc.save();
+            oc.translate(px, py);
+            oc.rotate(angle);
+            const pGrad = oc.createRadialGradient(0, 0, 0, 0, 0, patchW * 0.6);
+            const pColor = greens[Math.floor(seededRandom(i * 3, i + 10) * greens.length)];
+            pGrad.addColorStop(0, pColor);
+            pGrad.addColorStop(1, 'transparent');
+            oc.fillStyle = pGrad;
+            oc.globalAlpha = 0.4 + seededRandom(i + 20, i) * 0.25;
+            oc.beginPath();
+            oc.ellipse(0, 0, patchW, patchH, 0, 0, Math.PI * 2);
+            oc.fill();
+            oc.restore();
         }
-        ctx.globalAlpha = 1;
+        oc.globalAlpha = 1;
 
-        // Add some dirt/earth patches
-        for (let i = 0; i < 15; i++) {
-            const dx = seededRandom(i + 100, i) * size;
-            const dy = seededRandom(i, i + 100) * size;
-            const dirtSize = 5 + seededRandom(i, i + 50) * 10;
+        // 4. Dense grass blades for texture detail
+        const bladeColors = ['#1e5510', '#2a6618', '#357a22', '#408a2c', '#255a14', '#3d7528', '#1a4c0c', '#4a9030'];
+        for (let i = 0; i < 1500; i++) {
+            const bx = seededRandom(i * 3 + 1, i + 2) * size;
+            const by = seededRandom(i + 1, i * 2 + 3) * size;
+            const height = 3 + seededRandom(i * 2, i + 5) * 7;
+            const lean = (seededRandom(i + 4, i * 3) - 0.5) * 4;
+            const thickness = 0.5 + seededRandom(i * 5, i) * 1;
 
-            ctx.fillStyle = 'rgba(80, 60, 40, 0.15)';
-            ctx.beginPath();
-            ctx.ellipse(dx, dy, dirtSize, dirtSize * 0.6, seededRandom(i, i) * Math.PI, 0, Math.PI * 2);
-            ctx.fill();
+            oc.strokeStyle = bladeColors[Math.floor(seededRandom(i * 4, i + 1) * bladeColors.length)];
+            oc.globalAlpha = 0.35 + seededRandom(i + 10, i * 4) * 0.35;
+            oc.lineWidth = thickness;
+            oc.lineCap = 'round';
+            oc.beginPath();
+            oc.moveTo(bx, by);
+            oc.quadraticCurveTo(bx + lean * 0.6, by - height * 0.6, bx + lean, by - height);
+            oc.stroke();
+        }
+        oc.globalAlpha = 1;
+
+        // 5. Highlight grass tips (sunlit)
+        for (let i = 0; i < 400; i++) {
+            const bx = seededRandom(i * 7 + 2, i + 8) * size;
+            const by = seededRandom(i + 3, i * 5 + 1) * size;
+            const height = 4 + seededRandom(i * 3, i + 6) * 6;
+            const lean = (seededRandom(i + 9, i * 2) - 0.5) * 3;
+
+            oc.strokeStyle = '#5aaa38';
+            oc.globalAlpha = 0.2 + seededRandom(i + 15, i) * 0.15;
+            oc.lineWidth = 0.8;
+            oc.beginPath();
+            oc.moveTo(bx, by);
+            oc.quadraticCurveTo(bx + lean * 0.5, by - height * 0.5, bx + lean, by - height);
+            oc.stroke();
+        }
+        oc.globalAlpha = 1;
+
+        // 6. Subtle mowed lines (striped lawn effect)
+        for (let y = 0; y < size; y += cellSize) {
+            const stripe = Math.floor(y / cellSize) % 2 === 0;
+            oc.fillStyle = stripe ? 'rgba(60, 120, 40, 0.06)' : 'rgba(20, 50, 10, 0.06)';
+            oc.fillRect(0, y, size, cellSize);
         }
 
-        // Add subtle vignette for depth
-        const vignetteGrad = ctx.createRadialGradient(size/2, size/2, size * 0.3, size/2, size/2, size * 0.7);
-        vignetteGrad.addColorStop(0, 'transparent');
-        vignetteGrad.addColorStop(1, 'rgba(0, 20, 0, 0.2)');
-        ctx.fillStyle = vignetteGrad;
-        ctx.fillRect(0, 0, size, size);
+        // 7. Subtle dirt/shadow spots
+        for (let i = 0; i < 25; i++) {
+            const dx = seededRandom(i + 100, i + 50) * size;
+            const dy = seededRandom(i + 50, i + 100) * size;
+            const dirtSize = 3 + seededRandom(i + 30, i + 60) * 8;
 
-        // Subtle light from top-left
-        const lightGrad = ctx.createLinearGradient(0, 0, size, size);
-        lightGrad.addColorStop(0, 'rgba(255, 255, 200, 0.05)');
-        lightGrad.addColorStop(0.5, 'transparent');
-        lightGrad.addColorStop(1, 'rgba(0, 0, 0, 0.1)');
-        ctx.fillStyle = lightGrad;
-        ctx.fillRect(0, 0, size, size);
+            oc.globalAlpha = 0.08;
+            oc.fillStyle = '#3a2a15';
+            oc.beginPath();
+            oc.ellipse(dx, dy, dirtSize, dirtSize * 0.7, seededRandom(i, i + 40) * Math.PI, 0, Math.PI * 2);
+            oc.fill();
+        }
+        oc.globalAlpha = 1;
+
+        // 8. Top-left sunlight
+        const lightGrad = oc.createLinearGradient(0, 0, size * 0.7, size * 0.7);
+        lightGrad.addColorStop(0, 'rgba(180, 220, 100, 0.08)');
+        lightGrad.addColorStop(0.4, 'rgba(140, 200, 80, 0.03)');
+        lightGrad.addColorStop(1, 'transparent');
+        oc.fillStyle = lightGrad;
+        oc.fillRect(0, 0, size, size);
+
+        // 9. Soft vignette for depth
+        const vigGrad = oc.createRadialGradient(size / 2, size / 2, size * 0.35, size / 2, size / 2, size * 0.72);
+        vigGrad.addColorStop(0, 'transparent');
+        vigGrad.addColorStop(1, 'rgba(5, 20, 5, 0.25)');
+        oc.fillStyle = vigGrad;
+        oc.fillRect(0, 0, size, size);
+
+        // Cache the result
+        grassCache = offCanvas;
+        grassCacheSize = size;
+
+        // Draw to main canvas
+        ctx.drawImage(grassCache, 0, 0, size, size);
+    }
+
+    /**
+     * Draw casual mode background - dark tile floor pattern (pre-rendered)
+     */
+    function drawCasualBackground(size) {
+        if (grassCache && grassCacheSize === size) {
+            ctx.drawImage(grassCache, 0, 0, size, size);
+            return;
+        }
+
+        const offCanvas = document.createElement('canvas');
+        const dpr = window.devicePixelRatio || 1;
+        offCanvas.width = size * dpr;
+        offCanvas.height = size * dpr;
+        const oc = offCanvas.getContext('2d');
+        oc.scale(dpr, dpr);
+
+        const seededRandom = (x, y) => {
+            const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+            return n - Math.floor(n);
+        };
+
+        // Dark base fill
+        oc.fillStyle = '#0c0e16';
+        oc.fillRect(0, 0, size, size);
+
+        const gap = 2; // Gap between tiles
+
+        // Draw each tile
+        for (let row = 0; row < CONFIG.GRID_SIZE; row++) {
+            for (let col = 0; col < CONFIG.GRID_SIZE; col++) {
+                const tx = col * cellSize + gap;
+                const ty = row * cellSize + gap;
+                const tw = cellSize - gap * 2;
+                const th = cellSize - gap * 2;
+
+                // Vary tile base color slightly per tile
+                const variation = seededRandom(col * 7 + 3, row * 13 + 5);
+                const baseR = 28 + Math.floor(variation * 8);
+                const baseG = 30 + Math.floor(variation * 8);
+                const baseB = 42 + Math.floor(variation * 10);
+
+                // Tile gradient (subtle top-left highlight)
+                const tileGrad = oc.createLinearGradient(tx, ty, tx + tw, ty + th);
+                tileGrad.addColorStop(0, `rgb(${baseR + 6}, ${baseG + 6}, ${baseB + 8})`);
+                tileGrad.addColorStop(0.3, `rgb(${baseR}, ${baseG}, ${baseB})`);
+                tileGrad.addColorStop(1, `rgb(${baseR - 4}, ${baseG - 4}, ${baseB - 4})`);
+                oc.fillStyle = tileGrad;
+                oc.fillRect(tx, ty, tw, th);
+
+                // Fine noise texture within tile
+                for (let ny = 0; ny < th; ny += 3) {
+                    for (let nx = 0; nx < tw; nx += 3) {
+                        const noise = seededRandom(col * 100 + nx, row * 100 + ny);
+                        if (noise > 0.6) {
+                            oc.fillStyle = `rgba(255, 255, 255, ${noise * 0.03})`;
+                            oc.fillRect(tx + nx, ty + ny, 2, 2);
+                        } else if (noise < 0.2) {
+                            oc.fillStyle = `rgba(0, 0, 0, ${(1 - noise) * 0.08})`;
+                            oc.fillRect(tx + nx, ty + ny, 2, 2);
+                        }
+                    }
+                }
+
+                // Top edge highlight
+                oc.fillStyle = 'rgba(60, 65, 85, 0.25)';
+                oc.fillRect(tx, ty, tw, 1);
+
+                // Left edge highlight
+                oc.fillStyle = 'rgba(55, 60, 80, 0.2)';
+                oc.fillRect(tx, ty, 1, th);
+
+                // Bottom edge shadow
+                oc.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                oc.fillRect(tx, ty + th - 1, tw, 1);
+
+                // Right edge shadow
+                oc.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                oc.fillRect(tx + tw - 1, ty, 1, th);
+            }
+        }
+
+        // Subtle overall vignette
+        const vigGrad = oc.createRadialGradient(size / 2, size / 2, size * 0.3, size / 2, size / 2, size * 0.72);
+        vigGrad.addColorStop(0, 'transparent');
+        vigGrad.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
+        oc.fillStyle = vigGrad;
+        oc.fillRect(0, 0, size, size);
+
+        grassCache = offCanvas;
+        grassCacheSize = size;
+        ctx.drawImage(grassCache, 0, 0, size, size);
     }
 
     /**
@@ -999,6 +1206,32 @@ const SnakeGame = (function() {
             return;
         }
 
+        // Casual theme - clean circle food with shadow
+        if (COLORS.casualMode) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.beginPath();
+            ctx.arc(foodCenterX + 1, foodCenterY + 2, cellSize * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            const casualGrad = ctx.createRadialGradient(
+                foodCenterX - cellSize * 0.1, foodCenterY - cellSize * 0.1, 0,
+                foodCenterX, foodCenterY, cellSize * 0.38
+            );
+            casualGrad.addColorStop(0, COLORS.FOOD_HIGHLIGHT);
+            casualGrad.addColorStop(0.6, COLORS.FOOD);
+            casualGrad.addColorStop(1, COLORS.FOOD_INNER);
+            ctx.fillStyle = casualGrad;
+            ctx.beginPath();
+            ctx.arc(foodCenterX, foodCenterY, cellSize * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.beginPath();
+            ctx.ellipse(foodCenterX - cellSize * 0.08, foodCenterY - cellSize * 0.1, cellSize * 0.12, cellSize * 0.08, -0.5, 0, Math.PI * 2);
+            ctx.fill();
+            return;
+        }
+
         // Neon theme - glow effect
         if (COLORS.useGlow) {
             const pulseScale = 1 + Math.sin(Date.now() / 200) * 0.15;
@@ -1047,6 +1280,12 @@ const SnakeGame = (function() {
         // Realistic theme - draw connected snake body
         if (COLORS.realisticMode) {
             drawRealisticSnake();
+            return;
+        }
+
+        // Casual theme - smooth connected rounded snake
+        if (COLORS.casualMode) {
+            drawCasualSnake();
             return;
         }
 
@@ -1563,6 +1802,143 @@ const SnakeGame = (function() {
             ctx.fill();
 
             ctx.restore();
+        }
+    }
+
+    /**
+     * Draw casual theme snake - smooth connected pill-shaped body
+     */
+    function drawCasualSnake() {
+        if (snake.length === 0) return;
+
+        const radius = cellSize * 0.42;
+
+        // Build center points for each segment
+        const points = snake.map(seg => ({
+            x: seg.x * cellSize + cellSize / 2,
+            y: seg.y * cellSize + cellSize / 2
+        }));
+
+        // Draw shadow under the snake
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        for (let i = 0; i < points.length; i++) {
+            ctx.beginPath();
+            ctx.arc(points[i].x + 2, points[i].y + 3, radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+
+        // Draw connected body segments (tail to head)
+        for (let i = points.length - 1; i >= 0; i--) {
+            const p = points[i];
+            const progress = i / Math.max(1, points.length - 1);
+
+            // Color gradient from head to tail
+            const r = Math.floor(66 + progress * 20);
+            const g = Math.floor(187 - progress * 40);
+            const b = Math.floor(106 - progress * 30);
+            const bodyColor = `rgb(${r}, ${g}, ${b})`;
+            const darkColor = `rgb(${Math.floor(r * 0.7)}, ${Math.floor(g * 0.7)}, ${Math.floor(b * 0.7)})`;
+            const lightColor = `rgb(${Math.min(255, Math.floor(r * 1.3))}, ${Math.min(255, Math.floor(g * 1.2))}, ${Math.min(255, Math.floor(b * 1.2))})`;
+
+            // Draw connection to next segment
+            if (i < points.length - 1) {
+                const next = points[i + 1];
+                ctx.fillStyle = bodyColor;
+                ctx.beginPath();
+                const dx = next.x - p.x;
+                const dy = next.y - p.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < cellSize * 1.5) {
+                    const nx = -dy / dist * radius * 0.85;
+                    const ny = dx / dist * radius * 0.85;
+                    ctx.moveTo(p.x + nx, p.y + ny);
+                    ctx.lineTo(next.x + nx, next.y + ny);
+                    ctx.lineTo(next.x - nx, next.y - ny);
+                    ctx.lineTo(p.x - nx, p.y - ny);
+                    ctx.fill();
+                }
+            }
+
+            // Draw segment circle
+            const segGrad = ctx.createRadialGradient(
+                p.x - radius * 0.3, p.y - radius * 0.3, 0,
+                p.x, p.y, radius
+            );
+            segGrad.addColorStop(0, lightColor);
+            segGrad.addColorStop(0.5, bodyColor);
+            segGrad.addColorStop(1, darkColor);
+            ctx.fillStyle = segGrad;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Subtle specular highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+            ctx.beginPath();
+            ctx.ellipse(p.x - radius * 0.2, p.y - radius * 0.25, radius * 0.35, radius * 0.2, -0.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Draw head details
+        if (points.length > 0) {
+            const head = points[0];
+
+            // Eyes
+            const eyeSize = radius * 0.32;
+            const pupilSize = eyeSize * 0.55;
+            let e1x, e1y, e2x, e2y, pupilDx = 0, pupilDy = 0;
+
+            switch (direction) {
+                case 'UP':
+                    e1x = head.x - radius * 0.35; e1y = head.y - radius * 0.2;
+                    e2x = head.x + radius * 0.35; e2y = head.y - radius * 0.2;
+                    pupilDy = -pupilSize * 0.3;
+                    break;
+                case 'DOWN':
+                    e1x = head.x - radius * 0.35; e1y = head.y + radius * 0.2;
+                    e2x = head.x + radius * 0.35; e2y = head.y + radius * 0.2;
+                    pupilDy = pupilSize * 0.3;
+                    break;
+                case 'LEFT':
+                    e1x = head.x - radius * 0.2; e1y = head.y - radius * 0.35;
+                    e2x = head.x - radius * 0.2; e2y = head.y + radius * 0.35;
+                    pupilDx = -pupilSize * 0.3;
+                    break;
+                default: // RIGHT
+                    e1x = head.x + radius * 0.2; e1y = head.y - radius * 0.35;
+                    e2x = head.x + radius * 0.2; e2y = head.y + radius * 0.35;
+                    pupilDx = pupilSize * 0.3;
+                    break;
+            }
+
+            // Eye whites
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(e1x, e1y, eyeSize, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(e2x, e2y, eyeSize, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pupils
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath();
+            ctx.arc(e1x + pupilDx, e1y + pupilDy, pupilSize, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(e2x + pupilDx, e2y + pupilDy, pupilSize, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pupil highlights
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(e1x + pupilDx + pupilSize * 0.3, e1y + pupilDy - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(e2x + pupilDx + pupilSize * 0.3, e2y + pupilDy - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
+            ctx.fill();
         }
     }
 
