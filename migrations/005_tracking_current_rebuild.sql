@@ -36,8 +36,9 @@ COMMENT='Best-known current location per user. Only updated by quality-gated fix
 --    Prevents duplicate inserts even if PHP check is bypassed.
 --    Uses a partial index approach: NULL client_event_id values are allowed (non-unique)
 --    but non-NULL values must be unique per user.
-ALTER TABLE tracking_locations
-    ADD UNIQUE INDEX idx_user_client_event (user_id, client_event_id);
-
--- Note: MySQL allows multiple NULL values in unique indexes,
--- so rows without client_event_id won't conflict.
+--    Safe to re-run: only adds if not already present.
+SET @idx_exists = (SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tracking_locations' AND INDEX_NAME = 'idx_user_client_event');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE tracking_locations ADD UNIQUE INDEX idx_user_client_event (user_id, client_event_id)', 'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
