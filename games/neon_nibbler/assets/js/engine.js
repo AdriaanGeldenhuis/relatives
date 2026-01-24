@@ -7,6 +7,7 @@ var NeonEngine = (function() {
 
     // Constants
     var TILE_SIZE = 0;
+    var MOVE_SCALE = 600; // Fixed reference for movement speed (independent of screen size)
     var OFFSET_X = 0;
     var OFFSET_Y = 0;
     var MAX_LIVES = 3;
@@ -371,7 +372,7 @@ var NeonEngine = (function() {
 
         if (player.moving) {
             var boostMult = NeonInput.isBoostActive() ? 2.2 : 1.0;
-            player.moveProgress += (player.speed * boostMult * dt) / (TILE_SIZE * 10);
+            player.moveProgress += (player.speed * boostMult * dt) / MOVE_SCALE;
             if (player.moveProgress >= 1) {
                 player.moveProgress = 1;
                 player.row = player.targetRow;
@@ -550,7 +551,7 @@ var NeonEngine = (function() {
 
             if (s.moving) {
                 var spd = s.state === SENTINEL_STATES.VULNERABLE ? s.speed * 0.5 : s.speed;
-                s.moveProgress += (spd * dt) / (TILE_SIZE * 10);
+                s.moveProgress += (spd * dt) / MOVE_SCALE;
                 if (s.moveProgress >= 1) {
                     s.moveProgress = 1;
                     s.row = s.targetRow;
