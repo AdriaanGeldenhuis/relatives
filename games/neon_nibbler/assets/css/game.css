@@ -191,14 +191,13 @@ html, body {
 .options-overlay {
     position: fixed;
     inset: 0;
-    width: 100%;
-    height: 100%;
-    background: var(--bg);
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-gradient);
     display: none;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
-    flex-direction: column;
+    z-index: 9999;
 }
 
 .options-overlay.active {
@@ -209,14 +208,18 @@ html, body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 24px;
-    width: 90%;
-    max-width: 400px;
+    justify-content: center;
+    gap: 28px;
+    width: 100%;
+    height: 100%;
     padding: 32px;
+    box-sizing: border-box;
 }
 
 .options-content h2 {
-    font-size: 1.8rem;
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: 4px;
     color: var(--text-primary);
     text-shadow: 0 0 20px var(--neon-glow);
     margin: 0;
@@ -224,7 +227,7 @@ html, body {
 
 .options-buttons {
     display: flex;
-    gap: 12px;
+    gap: 16px;
     flex-wrap: wrap;
     justify-content: center;
 }
