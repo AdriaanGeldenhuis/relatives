@@ -3,19 +3,15 @@ declare(strict_types=1);
 
 /**
  * ============================================
- * GET CURRENT LOCATIONS v2.0
+ * GET CURRENT LOCATIONS v3.0
  * ============================================
  *
- * Flow:
- * 1. Get family users
- * 2. For each user: try cache first
- * 3. If cache miss: fetch from DB
- * 4. Return unified list
+ * Rebuilt with proper data source priority:
+ * 1. Cache (speed layer - populated only by quality-gated fixes)
+ * 2. tracking_current table (source of truth for best-known position)
+ * 3. tracking_locations latest (last resort fallback)
  *
- * Rules:
- * - Cache is a performance hint, not authority
- * - Missing cache is NOT an error
- * - DB is always the fallback
+ * "Current" now means "best known" not "latest garbage".
  */
 
 error_reporting(E_ALL);
@@ -50,8 +46,7 @@ try {
 
     $familyId = (int)$user['family_id'];
 
-    // Get family members (always from DB - lightweight query)
-    // Fix #10: Include offline_threshold_seconds and stale_threshold_seconds for proper status calculation
+    // Get family members with settings
     $stmt = $db->prepare("
         SELECT
             u.id AS user_id,
@@ -73,8 +68,6 @@ try {
     $stmt->execute([$familyId, $userId]);
     $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $memberIds = array_column($members, 'user_id');
-
     // Initialize cache
     $cache = Cache::init($db);
     $cacheType = $cache->getType();
@@ -88,26 +81,22 @@ try {
 
     foreach ($members as $member) {
         $memberId = (int)$member['user_id'];
-        $updateInterval = (int)($member['update_interval_seconds'] ?? 30);  // Default 30s
-
-        // Fix #10: Use server settings for thresholds instead of hardcoded values
-        // Default values from TrackingSettings.php: offline=720s (12 min), stale=3600s (1 hr)
+        $updateInterval = (int)($member['update_interval_seconds'] ?? 30);
         $offlineThreshold = (int)($member['offline_threshold_seconds'] ?? 720);
         $staleThreshold = (int)($member['stale_threshold_seconds'] ?? 3600);
 
-        // Online threshold: either from settings or calculate from update interval
-        // At minimum, use 2x update interval (but not less than offline threshold)
+        // Online threshold: 2x update interval, capped by offline threshold
         $onlineThreshold = min($offlineThreshold, max($updateInterval * 2, 120));
 
         $loc = null;
         $secondsAgo = null;
-        $fromCache = false;
+        $dataSource = 'none';
 
-        // ========== TRY CACHE FIRST ==========
+        // ========== PRIORITY 1: TRY CACHE FIRST (speed layer) ==========
         $cached = $cache->getUserLocation($familyId, $memberId);
 
         if ($cached !== null && isset($cached['lat']) && isset($cached['lng'])) {
-            $fromCache = true;
+            $dataSource = 'cache';
             $createdAt = $cached['ts'] ?? null;
 
             if ($createdAt) {
@@ -119,8 +108,8 @@ try {
                 'longitude' => $cached['lng'],
                 'accuracy_m' => $cached['accuracy'] ?? null,
                 'speed_kmh' => $cached['speed'] ?? null,
-                'heading_deg' => $cached['heading'] ?? null,   // Now reads from cache
-                'altitude_m' => $cached['altitude'] ?? null,   // Added altitude
+                'heading_deg' => $cached['heading'] ?? null,
+                'altitude_m' => $cached['altitude'] ?? null,
                 'battery_level' => $cached['battery'] ?? null,
                 'is_moving' => $cached['moving'] ?? false,
                 'source' => 'cache',
@@ -130,7 +119,45 @@ try {
             ];
         }
 
-        // ========== FALLBACK TO DB IF CACHE MISS ==========
+        // ========== PRIORITY 2: TRACKING_CURRENT (source of truth) ==========
+        if ($loc === null) {
+            $stmt = $db->prepare("
+                SELECT
+                    tc.latitude,
+                    tc.longitude,
+                    tc.accuracy_m,
+                    tc.speed_kmh,
+                    tc.heading_deg,
+                    tc.altitude_m,
+                    tc.battery_level,
+                    tc.is_moving,
+                    tc.fix_source AS source,
+                    tc.fix_quality_score,
+                    tc.updated_at AS created_at,
+                    TIMESTAMPDIFF(SECOND, tc.updated_at, NOW()) AS seconds_ago,
+                    d.device_name,
+                    d.platform,
+                    d.location_status,
+                    d.permission_status,
+                    d.network_status,
+                    d.app_state,
+                    d.last_seen AS device_last_seen
+                FROM tracking_current tc
+                LEFT JOIN tracking_devices d ON tc.device_id = d.id
+                WHERE tc.user_id = ?
+                LIMIT 1
+            ");
+            $stmt->execute([$memberId]);
+            $currentLoc = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($currentLoc) {
+                $loc = $currentLoc;
+                $secondsAgo = $currentLoc['seconds_ago'] !== null ? (int)$currentLoc['seconds_ago'] : null;
+                $dataSource = 'tracking_current';
+            }
+        }
+
+        // ========== PRIORITY 3: LATEST TRACKING_LOCATIONS (last resort) ==========
         if ($loc === null) {
             $stmt = $db->prepare("
                 SELECT
@@ -139,6 +166,7 @@ try {
                     l.accuracy_m,
                     l.speed_kmh,
                     l.heading_deg,
+                    l.altitude_m,
                     l.battery_level,
                     l.is_moving,
                     l.source,
@@ -163,23 +191,24 @@ try {
             if ($dbLoc) {
                 $loc = $dbLoc;
                 $secondsAgo = $dbLoc['seconds_ago'] !== null ? (int)$dbLoc['seconds_ago'] : null;
+                $dataSource = 'tracking_locations';
             }
         }
 
-        // Determine status using configurable thresholds
-        // online: within onlineThreshold (2x update interval, min 2 min)
-        // stale: between offline threshold and stale threshold
-        // offline: beyond stale threshold
-        if ($secondsAgo === null || $loc === null || $loc['latitude'] === null) {
+        // ========== DETERMINE STATUS ==========
+        // online: within onlineThreshold
+        // stale: "Last seen X minutes ago"
+        // offline: beyond stale threshold - truly gone
+        if ($secondsAgo === null || $loc === null || ($loc['latitude'] ?? null) === null) {
             $status = 'no_location';
         } elseif ($secondsAgo < $onlineThreshold) {
             $status = 'online';
         } elseif ($secondsAgo < $offlineThreshold) {
-            $status = 'stale';  // Recent but not real-time
+            $status = 'recent';  // Not real-time but fresh enough
         } elseif ($secondsAgo < $staleThreshold) {
-            $status = 'stale';  // Last seen within stale threshold
+            $status = 'stale';   // "Last seen X minutes ago"
         } else {
-            $status = 'offline';  // Beyond stale threshold - truly offline
+            $status = 'offline'; // Beyond stale threshold
         }
 
         $memberData = [
@@ -195,14 +224,15 @@ try {
             'seconds_ago' => $secondsAgo,
             'update_interval' => $updateInterval,
             'location' => null,
-            'from_cache' => $fromCache,
+            'data_source' => $dataSource,
             'diagnostics' => [
                 'device_name' => $loc['device_name'] ?? null,
                 'platform' => $loc['platform'] ?? null,
                 'source' => $loc['source'] ?? null,
+                'fix_quality_score' => $loc['fix_quality_score'] ?? null,
                 'online_threshold' => $onlineThreshold,
+                'offline_threshold' => $offlineThreshold,
                 'stale_threshold' => $staleThreshold,
-                // Device state - helps diagnose why location isn't updating
                 'location_status' => $loc['location_status'] ?? null,
                 'permission_status' => $loc['permission_status'] ?? null,
                 'network_status' => $loc['network_status'] ?? null,
@@ -211,15 +241,16 @@ try {
             ]
         ];
 
-        if ($loc && $loc['latitude'] !== null && $loc['longitude'] !== null) {
+        if ($loc && ($loc['latitude'] ?? null) !== null && ($loc['longitude'] ?? null) !== null) {
             $memberData['location'] = [
                 'lat' => (float)$loc['latitude'],
                 'lng' => (float)$loc['longitude'],
-                'accuracy_m' => $loc['accuracy_m'] ? (int)$loc['accuracy_m'] : null,
-                'speed_kmh' => $loc['speed_kmh'] ? (float)$loc['speed_kmh'] : null,
-                'heading_deg' => $loc['heading_deg'] ? (float)$loc['heading_deg'] : null,
-                'battery_level' => $loc['battery_level'] ? (int)$loc['battery_level'] : null,
-                'is_moving' => (bool)$loc['is_moving']
+                'accuracy_m' => isset($loc['accuracy_m']) ? (int)$loc['accuracy_m'] : null,
+                'speed_kmh' => isset($loc['speed_kmh']) ? (float)$loc['speed_kmh'] : null,
+                'heading_deg' => isset($loc['heading_deg']) ? (float)$loc['heading_deg'] : null,
+                'altitude_m' => isset($loc['altitude_m']) ? (float)$loc['altitude_m'] : null,
+                'battery_level' => isset($loc['battery_level']) ? (int)$loc['battery_level'] : null,
+                'is_moving' => (bool)($loc['is_moving'] ?? false)
             ];
         }
 

@@ -600,14 +600,14 @@ class TrackingMapProfessional {
                     </div>
 
                     <!-- Status indicator -->
-                    ${member.status === 'online' || member.status === 'stale' ? `
+                    ${member.status === 'online' || member.status === 'recent' || member.status === 'stale' ? `
                         <div style="
                             position: absolute;
                             top: 2px;
                             right: 2px;
                             width: 12px;
                             height: 12px;
-                            background: ${member.status === 'online' ? '#43e97b' : '#ffa502'};
+                            background: ${member.status === 'online' ? '#43e97b' : member.status === 'recent' ? '#ffa502' : '#ff6b35'};
                             border: 2px solid white;
                             border-radius: 50%;
                             transform: rotate(${-rotationAngle}deg);
@@ -769,11 +769,11 @@ class TrackingMapProfessional {
                             ${isMe ? `<span style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 800;">You</span>` : ''}
                         </div>
                         <div style="display: flex; align-items: center; gap: 6px;">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="${member.status === 'online' ? '#43e97b' : member.status === 'stale' ? '#ffa502' : '#6c757d'}">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="${member.status === 'online' ? '#43e97b' : member.status === 'recent' ? '#ffa502' : member.status === 'stale' ? '#ff6b35' : '#6c757d'}">
                                 <circle cx="12" cy="12" r="10"></circle>
                             </svg>
-                            <span style="font-size: ${isMobile ? '12px' : '13px'}; font-weight: 700; color: ${member.status === 'online' ? '#43e97b' : member.status === 'stale' ? '#ffa502' : '#6c757d'};">
-                                ${member.status === 'online' ? 'Tracking' : member.status === 'stale' ? `Stale (${Math.floor((member.seconds_ago || 0) / 60)}m ago)` : member.status === 'no_location' ? 'No location yet' : 'Offline'}
+                            <span class="member-status" style="font-size: ${isMobile ? '12px' : '13px'}; font-weight: 700; color: ${member.status === 'online' ? '#43e97b' : member.status === 'recent' ? '#ffa502' : member.status === 'stale' ? '#ff6b35' : '#6c757d'};">
+                                ${member.status === 'online' ? 'Tracking' : member.status === 'recent' ? `Last seen ${Math.floor((member.seconds_ago || 0) / 60)}m ago` : member.status === 'stale' ? (() => { const mins = Math.floor((member.seconds_ago || 0) / 60); return mins >= 60 ? `Last seen ${Math.floor(mins/60)}h ago` : `Last seen ${mins}m ago`; })() : member.status === 'no_location' ? 'No location yet' : 'Offline'}
                             </span>
                         </div>
                     </div>
@@ -871,6 +871,7 @@ class TrackingMapProfessional {
 
                 const status = member.status;
                 const isTracking = status === 'online';
+                const isRecent = status === 'recent';
                 const isStale = status === 'stale';
                 const hasNoLocation = status === 'no_location';
 
@@ -887,20 +888,28 @@ class TrackingMapProfessional {
                 memberCard.setAttribute('data-tracking', isTracking ? 'true' : 'false');
                 memberCard.setAttribute('data-status', status);
 
-                // Status dot styling is handled by CSS via data-status attribute
+                // Update status dot + text color
+                const statusDot = memberCard.querySelector('.member-status svg circle') ||
+                                   memberCard.querySelector('[data-status] svg');
+                const statusColor = isTracking ? '#43e97b' : isRecent ? '#ffa502' : isStale ? '#ff6b35' : '#6c757d';
 
-                const statusText = memberCard.querySelector('.member-status span');
+                const statusText = memberCard.querySelector('.member-status');
                 if (statusText) {
+                    statusText.style.color = statusColor;
+                    const spanEl = statusText.querySelector('span') || statusText;
+                    const mins = Math.floor((member.seconds_ago || 0) / 60);
+                    const hours = Math.floor(mins / 60);
+
                     if (isTracking) {
-                        statusText.textContent = 'Tracking';
+                        spanEl.textContent = 'Tracking';
+                    } else if (isRecent) {
+                        spanEl.textContent = `Last seen ${mins}m ago`;
                     } else if (isStale) {
-                        const mins = Math.floor((member.seconds_ago || 0) / 60);
-                        statusText.textContent = `Stale (${mins}m ago)`;
+                        spanEl.textContent = hours > 0 ? `Last seen ${hours}h ago` : `Last seen ${mins}m ago`;
                     } else if (hasNoLocation) {
-                        statusText.textContent = 'No location yet';
+                        spanEl.textContent = 'No location yet';
                     } else {
-                        const hours = Math.floor((member.seconds_ago || 0) / 3600);
-                        statusText.textContent = hours > 0 ? `Offline (${hours}h)` : 'Offline';
+                        spanEl.textContent = hours > 0 ? `Offline (${hours}h)` : 'Offline';
                     }
                 }
 

@@ -27,6 +27,11 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -35,20 +40,37 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
+import za.co.relatives.app.data.QueuedLocationEntity
+import za.co.relatives.app.data.TrackingDatabase
 import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.utils.NotificationHelper
 import za.co.relatives.app.utils.PreferencesManager
+import za.co.relatives.app.workers.LocationUploadWorker
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 
+/**
+ * ============================================
+ * TRACKING LOCATION SERVICE v3.0
+ * ============================================
+ *
+ * 3-mode tracking engine:
+ * - IDLE: Low power, balanced accuracy, 2-5 min interval, 100-250m distance gate
+ * - MOVING: High accuracy, 10-30s interval, 10-30m distance gate
+ * - BURST: High accuracy for 20-30s to get good fix, then settle
+ *
+ * Key changes from v2:
+ * - Distance gating via setMinUpdateDistanceMeters (reduces spam + battery)
+ * - Room database queue (replaces SharedPreferences JSON)
+ * - WorkManager-based upload (decoupled from collection, survives death)
+ * - WebView visibility only boosts interval, does NOT control core tracking
+ * - BURST mode for movement start / bad accuracy recovery
+ */
 class TrackingLocationService : Service() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
-    private lateinit var uploader: LocationUploader
     private var isTracking = false
     private var isPaused = false
 
@@ -58,106 +80,88 @@ class TrackingLocationService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var heartbeatRunnable: Runnable? = null
 
-    // Notification Polling (existing - works 100%)
+    // Coroutine scope for Room operations
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Notification Polling
     private val notificationHandler = Handler(Looper.getMainLooper())
     private val notificationRunnable = object : Runnable {
         override fun run() {
             checkNotifications()
-            notificationHandler.postDelayed(this, 30000) // Check every 30 seconds
+            notificationHandler.postDelayed(this, 30000)
         }
     }
 
-    private enum class TrackingMode { MOVING, IDLE }
+    // ========== 3-MODE ENGINE ==========
+    enum class TrackingMode {
+        IDLE,    // Low power: balanced accuracy, 2-5 min, 100-250m distance
+        MOVING,  // High fidelity: high accuracy, 10-30s, 10-30m distance
+        BURST    // Confirm + lock: high accuracy for 20-30s, then settle
+    }
+
     private var currentMode = TrackingMode.IDLE
-    private var lastUploadTime: Long = 0
-    private var consecutiveIdleCount = 0
-    private var consecutiveIdleForStatus = 0  // Separate counter for is_moving flag smoothing
-    private var lastReportedMovingStatus = false  // Track what we last sent to server
     private var lastLocation: Location? = null
     private var lastLocationTime: Long = 0
-    private val SPEED_THRESHOLD_KMH = 5.0f
-    private val DISTANCE_THRESHOLD_M = 50.0f  // Consider moving if moved > 50m
-    private val IDLE_COUNT_THRESHOLD = 3  // Need 3 consecutive slow readings to switch to idle
-    private val MOVING_STATUS_HOLD_COUNT = 5  // Keep reporting "moving" for 5 readings after stopping (prevents traffic light flicker)
+    private var lastUploadTime: Long = 0
 
-    // Smart Battery Mode
+    // Mode transition state
+    private var consecutiveIdleCount = 0
+    private var consecutiveMovingCount = 0
+    private var burstStartTime: Long = 0
+    private var burstFixCount = 0
+
+    // Movement detection
+    private val SPEED_THRESHOLD_KMH = 5.0f
+    private val DISTANCE_THRESHOLD_M = 50.0f
+    private val IDLE_COUNT_THRESHOLD = 3    // 3 consecutive slow readings -> IDLE
+    private val BURST_DURATION_MS = 25000L  // 25 seconds of burst
+    private val BURST_MAX_FIXES = 3         // Max fixes to collect in burst
+
+    // Smoothed is_moving flag
+    private var consecutiveIdleForStatus = 0
+    private var lastReportedMovingStatus = false
+    private val MOVING_STATUS_HOLD_COUNT = 5
+
+    // Battery management
     private val LOW_BATTERY_THRESHOLD = 20
     private val CRITICAL_BATTERY_THRESHOLD = 10
     private var isLowBatteryMode = false
 
-    // Offline Queue - store locations when network unavailable
-    // Now persisted to SharedPreferences to survive service restarts
-    private val offlineQueue = mutableListOf<QueuedLocation>()
-    private val MAX_QUEUE_SIZE = 100  // Increased from 50 to match server batch limit
-    private val gson = Gson()
+    // Screen visibility boost (from WebView JS interface)
+    // This is an EXTRA on top of core tracking, not a dependency
+    @Volatile
+    var isScreenVisible = false
+        private set
 
-    // Exponential backoff for retries
-    private var retryDelayMs = 2000L  // Start at 2 seconds
-    private val MAX_RETRY_DELAY_MS = 60000L  // Max 60 seconds
-    private var consecutiveFailures = 0
+    // Auth failure tracking
+    private var consecutiveAuthFailures = 0
+    private val MAX_AUTH_FAILURES = 5
+    private var hasShownAuthFailureNotification = false
 
-    // Fix #5: Token refresh race condition prevention
+    // Token refresh lock
     @Volatile
     private var isRefreshingToken = false
     private val tokenRefreshLock = Object()
-
-    // Serializable version of QueuedLocation for persistence
-    // Using lat/lng instead of Location object for JSON serialization
-    data class QueuedLocation(
-        val latitude: Double,
-        val longitude: Double,
-        val accuracy: Float,
-        val altitude: Double?,
-        val bearing: Float?,
-        val speed: Float?,
-        val isMoving: Boolean,
-        val speedKmh: Float,
-        val timestamp: Long,
-        val clientEventId: String = UUID.randomUUID().toString(),  // For idempotent uploads
-        val retryCount: Int = 0  // Track retry attempts
-    ) {
-        companion object {
-            fun fromLocation(location: Location, isMoving: Boolean, speedKmh: Float): QueuedLocation {
-                return QueuedLocation(
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    accuracy = location.accuracy,
-                    altitude = if (location.hasAltitude()) location.altitude else null,
-                    bearing = if (location.hasBearing()) location.bearing else null,
-                    speed = if (location.hasSpeed()) location.speed else null,
-                    isMoving = isMoving,
-                    speedKmh = speedKmh,
-                    timestamp = System.currentTimeMillis()
-                )
-            }
-        }
-
-        fun toLocation(): Location {
-            return Location("queued").apply {
-                latitude = this@QueuedLocation.latitude
-                longitude = this@QueuedLocation.longitude
-                accuracy = this@QueuedLocation.accuracy
-                this@QueuedLocation.altitude?.let { altitude = it }
-                this@QueuedLocation.bearing?.let { bearing = it }
-                this@QueuedLocation.speed?.let { speed = it }
-            }
-        }
-    }
 
     companion object {
         const val ACTION_START_TRACKING = "ACTION_START_TRACKING"
         const val ACTION_STOP_TRACKING = "ACTION_STOP_TRACKING"
         const val ACTION_PAUSE_TRACKING = "ACTION_PAUSE_TRACKING"
         const val ACTION_RESUME_TRACKING = "ACTION_RESUME_TRACKING"
-        const val ACTION_UPDATE_INTERVAL = "ACTION_UPDATE_INTERVAL"
+        const val ACTION_SCREEN_VISIBLE = "ACTION_SCREEN_VISIBLE"
+        const val ACTION_SCREEN_HIDDEN = "ACTION_SCREEN_HIDDEN"
         private const val TAG = "TrackingService"
         private const val NOTIF_COUNT_URL = "https://www.relatives.co.za/notifications/api/count.php"
         private const val BASE_URL = "https://www.relatives.co.za"
+        private const val UPLOAD_URL = "https://www.relatives.co.za/tracking/api/update_location.php"
 
-        // MOVING: Fast updates when traveling (30s like Life360)
-        private const val DEFAULT_MOVING_INTERVAL_MS = 30 * 1000L
-        // IDLE: Check every 60 seconds to quickly detect when movement starts
-        private const val IDLE_INTERVAL_MS = 60 * 1000L
+        // Mode intervals
+        private const val IDLE_INTERVAL_MS = 3 * 60 * 1000L       // 3 minutes
+        private const val IDLE_MIN_DISTANCE_M = 150f               // 150m distance gate
+        private const val MOVING_INTERVAL_MS = 30 * 1000L          // 30 seconds
+        private const val MOVING_MIN_DISTANCE_M = 20f              // 20m distance gate
+        private const val BURST_INTERVAL_MS = 5 * 1000L            // 5 seconds (fast sampling)
+        private const val SCREEN_BOOST_INTERVAL_MS = 15 * 1000L    // 15s when screen visible
 
         fun startTracking(context: Context) {
             val intent = Intent(context, TrackingLocationService::class.java).apply {
@@ -170,7 +174,6 @@ class TrackingLocationService : Service() {
     override fun onCreate() {
         super.onCreate()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        uploader = LocationUploader(this)
 
         val handlerThread = HandlerThread(TAG)
         handlerThread.start()
@@ -180,56 +183,19 @@ class TrackingLocationService : Service() {
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 locationResult.lastLocation?.let { location ->
-                    uploadLocation(location)
+                    onLocationReceived(location)
                 }
             }
         }
 
-        // Fix #6: Load persisted offline queue on service start
-        loadPersistedQueue()
-
-        // Start notification polling (existing functionality - works 100%)
         notificationHandler.post(notificationRunnable)
     }
 
     override fun onDestroy() {
         super.onDestroy()
         notificationHandler.removeCallbacks(notificationRunnable)
+        serviceScope.cancel()
         serviceLooper?.quit()
-    }
-
-    // ========== Fix #6: Persist offline queue to survive service restarts ==========
-
-    private fun loadPersistedQueue() {
-        try {
-            val prefs = getSharedPreferences("tracking_queue", Context.MODE_PRIVATE)
-            val json = prefs.getString("offline_queue", null) ?: return
-            val type = object : TypeToken<List<QueuedLocation>>() {}.type
-            val loaded: List<QueuedLocation> = gson.fromJson(json, type) ?: emptyList()
-            synchronized(offlineQueue) {
-                offlineQueue.clear()
-                offlineQueue.addAll(loaded)
-            }
-            Log.d(TAG, "Loaded ${loaded.size} queued locations from persistence")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to load persisted queue", e)
-        }
-    }
-
-    private fun persistQueue() {
-        try {
-            val prefs = getSharedPreferences("tracking_queue", Context.MODE_PRIVATE)
-            synchronized(offlineQueue) {
-                if (offlineQueue.isEmpty()) {
-                    prefs.edit().remove("offline_queue").apply()
-                } else {
-                    val json = gson.toJson(offlineQueue.toList())
-                    prefs.edit().putString("offline_queue", json).apply()
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to persist queue", e)
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -238,16 +204,64 @@ class TrackingLocationService : Service() {
             ACTION_STOP_TRACKING -> handleStopTracking()
             ACTION_PAUSE_TRACKING -> pauseTracking()
             ACTION_RESUME_TRACKING -> resumeTracking()
-            ACTION_UPDATE_INTERVAL -> restartTrackingWithNewInterval()
+            ACTION_SCREEN_VISIBLE -> onScreenVisible()
+            ACTION_SCREEN_HIDDEN -> onScreenHidden()
         }
         return START_STICKY
     }
 
-    private fun restartTrackingWithNewInterval() {
-        if (isTracking && !isPaused) {
-            stopLocationUpdates()
-            startLocationUpdates()
+    // ========== LIFECYCLE ==========
+
+    private fun handleStartTracking() {
+        if (isTracking) return
+        isTracking = true
+        isPaused = false
+        consecutiveIdleCount = 0
+        consecutiveMovingCount = 0
+        consecutiveAuthFailures = 0
+        hasShownAuthFailureNotification = false
+        lastReportedMovingStatus = true
+        currentMode = TrackingMode.BURST  // Start with BURST to get initial good fix
+        burstStartTime = System.currentTimeMillis()
+        burstFixCount = 0
+        PreferencesManager.setTrackingEnabled(true)
+
+        val notification = NotificationHelper.buildTrackingNotification(this, false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NotificationHelper.NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } else {
+            startForeground(NotificationHelper.NOTIFICATION_ID, notification)
         }
+
+        acquireWakeLock()
+        startLocationUpdates()
+        startHeartbeatTimer()
+
+        // Schedule WorkManager for pending uploads
+        LocationUploadWorker.enqueue(this)
+
+        // Schedule service checker for aggressive OEMs
+        za.co.relatives.app.workers.TrackingServiceChecker.schedule(this)
+
+        Log.d(TAG, "Tracking started (initial mode: BURST -> will settle to IDLE/MOVING)")
+    }
+
+    private fun handleStopTracking() {
+        isTracking = false
+        isPaused = false
+        PreferencesManager.setTrackingEnabled(false)
+        stopLocationUpdates()
+        stopHeartbeatTimer()
+        releaseWakeLock()
+
+        za.co.relatives.app.workers.TrackingServiceChecker.cancel(this)
+
+        // Flush any remaining queued locations
+        LocationUploadWorker.enqueue(this)
+
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        Log.d(TAG, "Tracking stopped")
     }
 
     private fun pauseTracking() {
@@ -263,189 +277,131 @@ class TrackingLocationService : Service() {
         if (!isTracking || !isPaused) return
         isPaused = false
         acquireWakeLock()
-        startLocationUpdates()
+        // Resume with BURST to get a fresh fix
+        enterBurstMode("resume from pause")
         NotificationHelper.updateTrackingNotification(this, isPaused)
         Log.d(TAG, "Tracking resumed")
     }
 
+    // ========== SCREEN VISIBILITY (boost, not dependency) ==========
 
-    private fun handleStartTracking() {
-        if (isTracking) return
-        isTracking = true
-        isPaused = false
-        consecutiveIdleCount = 0
-        consecutiveIdleForStatus = 0
-        consecutiveAuthFailures = 0
-        hasShownAuthFailureNotification = false
-        lastReportedMovingStatus = true  // Assume moving initially
-        currentMode = TrackingMode.MOVING  // START IN MOVING MODE - detect idle later (like Life360)
-        PreferencesManager.setTrackingEnabled(true)
-
-        val notification = NotificationHelper.buildTrackingNotification(this, false)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NotificationHelper.NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else {
-            startForeground(NotificationHelper.NOTIFICATION_ID, notification)
-        }
-
-        acquireWakeLock()
-        startLocationUpdates()
-        startHeartbeatTimer()
-
-        // Request immediate location to determine initial mode quickly
-        requestImmediateLocation()
-
-        // Schedule WorkManager backup checker for aggressive OEMs (Huawei, Honor, Xiaomi)
-        // This will restart the service if it gets killed by battery optimization
-        za.co.relatives.app.workers.TrackingServiceChecker.schedule(this)
-
-        Log.d(TAG, "Tracking started (initial mode: MOVING, will switch to IDLE after 3 slow readings)")
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun requestImmediateLocation() {
-        if (!hasLocationPermission()) return
-
-        try {
-            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                .addOnSuccessListener { location ->
-                    location?.let {
-                        Log.d(TAG, "Immediate location received")
-                        uploadLocation(it)
-                    }
-                }
-                .addOnFailureListener { e ->
-                    Log.w(TAG, "Immediate location request failed", e)
-                }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Security exception on immediate location", e)
+    private fun onScreenVisible() {
+        isScreenVisible = true
+        if (isTracking && !isPaused) {
+            // Boost: shorter interval while user is watching the map
+            Log.d(TAG, "Screen visible - boosting update rate")
+            restartLocationUpdates()
         }
     }
 
-    private fun handleStopTracking() {
-        isTracking = false
-        isPaused = false
-        PreferencesManager.setTrackingEnabled(false)
-        stopLocationUpdates()
-        stopHeartbeatTimer()
-        releaseWakeLock()
-
-        // Cancel WorkManager backup checker
-        za.co.relatives.app.workers.TrackingServiceChecker.cancel(this)
-
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
-        Log.d(TAG, "Tracking stopped")
+    private fun onScreenHidden() {
+        isScreenVisible = false
+        if (isTracking && !isPaused) {
+            // Revert to normal mode-based interval
+            Log.d(TAG, "Screen hidden - reverting to mode-based interval")
+            restartLocationUpdates()
+        }
     }
+
+    // ========== LOCATION UPDATES (3-mode engine) ==========
 
     @SuppressLint("MissingPermission")
     private fun startLocationUpdates() {
-        if (!hasLocationPermission() || isPaused) {
-            Log.w(TAG, "No location permission or tracking is paused, cannot start updates.")
-            return
-        }
+        if (!hasLocationPermission() || isPaused) return
 
-        // Check battery level for smart battery mode
         val batteryLevel = getBatteryLevel() ?: 100
         isLowBatteryMode = batteryLevel < LOW_BATTERY_THRESHOLD
         val isCriticalBattery = batteryLevel < CRITICAL_BATTERY_THRESHOLD
 
         val request = when {
             isCriticalBattery -> {
-                // Critical battery: Very infrequent updates (5 min) to preserve battery
-                Log.d(TAG, "Starting CRITICAL BATTERY updates (battery: $batteryLevel%, interval: 5min)")
+                // Critical battery: passive only
+                Log.d(TAG, "CRITICAL BATTERY mode (${batteryLevel}%): passive, 5min")
                 LocationRequest.Builder(Priority.PRIORITY_PASSIVE, 5 * 60 * 1000L)
                     .setMinUpdateIntervalMillis(3 * 60 * 1000L)
+                    .setMinUpdateDistanceMeters(500f)
                     .build()
             }
             isLowBatteryMode -> {
-                // Low battery: Reduce frequency (3 min for moving, 5 min for idle)
-                val intervalMs = if (currentMode == TrackingMode.MOVING) 3 * 60 * 1000L else 5 * 60 * 1000L
-                Log.d(TAG, "Starting LOW BATTERY updates (battery: $batteryLevel%, mode: $currentMode, interval: ${intervalMs/1000}s)")
-                LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, intervalMs)
-                    .setMinUpdateIntervalMillis(intervalMs / 2)
+                // Low battery: balanced, 3min
+                Log.d(TAG, "LOW BATTERY mode (${batteryLevel}%): balanced, 3min")
+                LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 3 * 60 * 1000L)
+                    .setMinUpdateIntervalMillis(60 * 1000L)
+                    .setMinUpdateDistanceMeters(200f)
+                    .build()
+            }
+            currentMode == TrackingMode.BURST -> {
+                // BURST: high accuracy, fast sampling, no distance gate
+                Log.d(TAG, "BURST mode: high accuracy, 5s, no distance gate")
+                LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, BURST_INTERVAL_MS)
+                    .setMinUpdateIntervalMillis(3 * 1000L)
                     .build()
             }
             currentMode == TrackingMode.MOVING -> {
-                // Normal moving: Use server interval with high accuracy
-                val intervalMs = PreferencesManager.getUpdateInterval() * 1000L
-                Log.d(TAG, "Starting MOVING updates (interval: ${intervalMs/1000}s)")
+                // MOVING: high accuracy with distance gate
+                val intervalMs = if (isScreenVisible) SCREEN_BOOST_INTERVAL_MS else {
+                    PreferencesManager.getUpdateInterval() * 1000L
+                }
+                Log.d(TAG, "MOVING mode: high accuracy, ${intervalMs/1000}s, ${MOVING_MIN_DISTANCE_M}m gate")
                 LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
                     .setMinUpdateIntervalMillis(intervalMs / 2)
+                    .setMinUpdateDistanceMeters(MOVING_MIN_DISTANCE_M)
                     .build()
             }
             else -> {
-                // Idle: Check for movement every 60 seconds
-                // IMPORTANT: Still use HIGH_ACCURACY to avoid cell tower jumps (300m+ errors)
-                // Family tracking needs accuracy more than battery savings
-                Log.d(TAG, "Starting IDLE updates (interval: ${IDLE_INTERVAL_MS/1000}s, HIGH_ACCURACY)")
-                LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, IDLE_INTERVAL_MS)
-                    .setMinUpdateIntervalMillis(30 * 1000L)
+                // IDLE: balanced power, large distance gate
+                val intervalMs = if (isScreenVisible) SCREEN_BOOST_INTERVAL_MS else IDLE_INTERVAL_MS
+                Log.d(TAG, "IDLE mode: balanced, ${intervalMs/1000}s, ${IDLE_MIN_DISTANCE_M}m gate")
+                LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, intervalMs)
+                    .setMinUpdateIntervalMillis(60 * 1000L)
+                    .setMinUpdateDistanceMeters(IDLE_MIN_DISTANCE_M)
                     .build()
             }
         }
-        fusedLocationClient.requestLocationUpdates(request, locationCallback, serviceLooper)
-    }
 
-    private fun getBatteryLevel(): Int? {
-        return try {
-            val bm = getSystemService(BATTERY_SERVICE) as BatteryManager
-            bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-        } catch (e: Exception) { null }
+        fusedLocationClient.requestLocationUpdates(request, locationCallback, serviceLooper)
     }
 
     private fun stopLocationUpdates() {
         fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 
-    private fun uploadLocation(location: Location) {
-        // ACCURACY FILTER: Skip cell tower readings (typically 300m+ accuracy)
-        // These cause the "jumping 300m over houses" problem when app is in background
-        val accuracyM = location.accuracy
-        if (accuracyM > 100) {
-            // Bad accuracy - likely cell tower, not GPS
-            // Only skip if we have a recent good location (within 5 min)
-            val timeSinceLastGood = System.currentTimeMillis() - lastLocationTime
-            if (lastLocation != null && timeSinceLastGood < 5 * 60 * 1000) {
-                Log.w(TAG, "Skipping low-accuracy location: ${accuracyM.toInt()}m (cell tower?) - keeping last good GPS position")
-                return  // Skip this bad reading, keep the last good position
-            }
-            Log.w(TAG, "Using low-accuracy location: ${accuracyM.toInt()}m (no recent good GPS)")
-        }
+    private fun restartLocationUpdates() {
+        stopLocationUpdates()
+        startLocationUpdates()
+    }
 
-        // Calculate speed - prefer GPS speed, but calculate from distance if unavailable
+    // ========== LOCATION RECEIVED (core logic) ==========
+
+    private fun onLocationReceived(location: Location) {
+        val accuracyM = location.accuracy
+
+        // Calculate speed
         var speedKmh = if (location.hasSpeed() && location.speed > 0) {
             location.speed * 3.6f
         } else {
             calculateSpeedFromDistance(location)
         }
 
-        // Also check if we've moved significant distance (for cell tower positioning)
+        // Movement detection
         val distanceMoved = lastLocation?.distanceTo(location) ?: 0f
         val isMovingBySpeed = speedKmh > SPEED_THRESHOLD_KMH
         val isMovingByDistance = distanceMoved > DISTANCE_THRESHOLD_M
         val currentlyMoving = isMovingBySpeed || isMovingByDistance
 
-        // SMOOTHED is_moving flag - prevents flickering at traffic lights
-        // Switch TO moving: immediately
-        // Switch TO idle: only after MOVING_STATUS_HOLD_COUNT consecutive non-moving readings
+        // Smoothed is_moving flag
         val isMoving: Boolean
         if (currentlyMoving) {
-            // Currently moving - report moving immediately, reset counter
             consecutiveIdleForStatus = 0
             isMoving = true
             lastReportedMovingStatus = true
         } else {
-            // Currently not moving - but hold "moving" status for a while
             consecutiveIdleForStatus++
-            if (consecutiveIdleForStatus >= MOVING_STATUS_HOLD_COUNT) {
-                // Enough consecutive idle readings - now report as idle
-                isMoving = false
+            isMoving = if (consecutiveIdleForStatus >= MOVING_STATUS_HOLD_COUNT) {
                 lastReportedMovingStatus = false
+                false
             } else {
-                // Still in hold period - keep reporting as moving
-                isMoving = lastReportedMovingStatus
-                Log.d(TAG, "Holding moving status (${consecutiveIdleForStatus}/$MOVING_STATUS_HOLD_COUNT idle readings)")
+                lastReportedMovingStatus
             }
         }
 
@@ -454,248 +410,343 @@ class TrackingLocationService : Service() {
             speedKmh = calculateSpeedFromDistance(location)
         }
 
-        Log.d(TAG, "Location: speed=${speedKmh.toInt()} km/h, distance=${distanceMoved.toInt()}m, isMoving=$isMoving (raw=$currentlyMoving, holdCount=$consecutiveIdleForStatus)")
+        Log.d(TAG, "Fix: acc=${accuracyM.toInt()}m speed=${speedKmh.toInt()}km/h dist=${distanceMoved.toInt()}m moving=$isMoving mode=$currentMode")
 
-        // Check if network is available
-        if (!isNetworkAvailable()) {
-            queueLocationForLater(location, isMoving, speedKmh)
-            // Still update local state
-            lastLocation = location
-            lastLocationTime = System.currentTimeMillis()
-            updateTrackingMode(speedKmh, isMoving)
+        // ========== QUEUE TO ROOM (always - collection is decoupled from upload) ==========
+        queueLocation(location, isMoving, speedKmh)
+
+        // ========== ALSO TRY IMMEDIATE UPLOAD (if network available) ==========
+        if (isNetworkAvailable()) {
+            uploadLocationDirect(location, isMoving, speedKmh)
+        } else {
+            // Enqueue WorkManager to flush when network comes back
+            LocationUploadWorker.enqueue(this)
+        }
+
+        // Update local state
+        lastLocation = location
+        lastLocationTime = System.currentTimeMillis()
+
+        // ========== MODE TRANSITION LOGIC ==========
+        updateTrackingMode(speedKmh, isMoving, accuracyM)
+    }
+
+    // ========== ROOM QUEUE (replaces SharedPreferences) ==========
+
+    private fun queueLocation(location: Location, isMoving: Boolean, speedKmh: Float) {
+        val entity = QueuedLocationEntity(
+            latitude = location.latitude,
+            longitude = location.longitude,
+            accuracy = location.accuracy,
+            altitude = if (location.hasAltitude()) location.altitude else null,
+            bearing = if (location.hasBearing()) location.bearing else null,
+            speed = if (location.hasSpeed()) location.speed else null,
+            isMoving = isMoving,
+            speedKmh = speedKmh,
+            batteryLevel = getBatteryLevel(),
+            timestamp = System.currentTimeMillis()
+        )
+
+        serviceScope.launch {
+            try {
+                val dao = TrackingDatabase.getInstance(applicationContext).queuedLocationDao()
+                dao.insert(entity)
+                dao.trimToMaxSize()  // Keep max 300
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to queue location to Room", e)
+            }
+        }
+    }
+
+    // ========== DIRECT UPLOAD (for immediate feedback when online) ==========
+
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .build()
+    private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+
+    private fun uploadLocationDirect(location: Location, isMoving: Boolean, speedKmh: Float) {
+        val sessionToken = PreferencesManager.sessionToken
+        if (sessionToken.isNullOrBlank()) {
+            refreshSessionToken()
             return
         }
 
-        // First, try to send any queued locations
-        sendQueuedLocations()
+        val deviceUuid = PreferencesManager.getDeviceUuid()
+        val clientEventId = UUID.randomUUID().toString()
 
-        uploader.uploadLocation(
-            location = location,
-            isMoving = isMoving,
-            speedKmh = speedKmh,
-            onSuccess = { serverSettings ->
-                lastUploadTime = System.currentTimeMillis()
-                PreferencesManager.lastUploadTime = lastUploadTime  // Persist for WorkManager checker
-                consecutiveAuthFailures = 0  // Reset auth failure counter on success
-                // Store this location for next distance calculation
-                lastLocation = location
-                lastLocationTime = System.currentTimeMillis()
-                applyServerSettings(serverSettings)
-                updateTrackingMode(speedKmh, isMoving)
-                Log.d(TAG, "Location uploaded successfully (speed: ${speedKmh.toInt()} km/h, mode: $currentMode)")
-            },
-            onAuthFailure = {
-                Log.w(TAG, "Upload auth failure - queuing location and attempting to refresh token")
-                // CRITICAL: Queue the location so it's not lost
-                queueLocationForLater(location, isMoving, speedKmh)
-                refreshSessionToken()
-            },
-            onTransientFailure = {
-                // Queue for later if upload failed
-                queueLocationForLater(location, isMoving, speedKmh)
-            }
-        )
-    }
-
-    private fun isNetworkAvailable(): Boolean {
-        return try {
-            val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val network = connectivityManager.activeNetwork ?: return false
-            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        } catch (e: Exception) {
-            true // Assume available if we can't check
+        val body = JSONObject().apply {
+            put("device_uuid", deviceUuid)
+            put("platform", "android")
+            put("device_name", Build.MODEL)
+            put("network_status", getNetworkStatus())
+            put("location_status", getLocationStatus())
+            put("permission_status", getPermissionStatus())
+            put("app_state", if (isScreenVisible) "foreground" else "background")
+            put("battery_level", getBatteryLevel() ?: JSONObject.NULL)
+            put("latitude", location.latitude)
+            put("longitude", location.longitude)
+            put("accuracy_m", location.accuracy.toInt())
+            put("speed_kmh", speedKmh)
+            put("heading_deg", if (location.hasBearing()) location.bearing else 0)
+            put("altitude_m", if (location.hasAltitude()) location.altitude else JSONObject.NULL)
+            put("is_moving", isMoving)
+            put("source", "native")
+            put("session_token", sessionToken)
+            put("client_event_id", clientEventId)
+            put("client_timestamp", System.currentTimeMillis())
         }
-    }
 
-    private fun queueLocationForLater(location: Location, isMoving: Boolean, speedKmh: Float) {
-        synchronized(offlineQueue) {
-            // Add to queue using serializable format
-            offlineQueue.add(QueuedLocation.fromLocation(location, isMoving, speedKmh))
+        val request = Request.Builder()
+            .url(UPLOAD_URL)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Authorization", "Bearer $sessionToken")
+            .addHeader("User-Agent", "RelativesAndroid/1.0")
+            .post(body.toString().toRequestBody(jsonMediaType))
+            .build()
 
-            // Trim queue if too large (keep most recent)
-            while (offlineQueue.size > MAX_QUEUE_SIZE) {
-                offlineQueue.removeAt(0)
+        httpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.w(TAG, "Direct upload failed (network) - WorkManager will retry")
             }
 
-            Log.d(TAG, "Location queued for later upload (queue size: ${offlineQueue.size})")
+            override fun onResponse(call: Call, response: Response) {
+                response.use { resp ->
+                    val responseBody = try { resp.body?.string() } catch (e: Exception) { null }
+                    when {
+                        resp.isSuccessful -> {
+                            lastUploadTime = System.currentTimeMillis()
+                            PreferencesManager.lastUploadTime = lastUploadTime
+                            consecutiveAuthFailures = 0
 
-            // Persist queue to survive service restarts
-            persistQueue()
-        }
-    }
+                            // Apply server settings
+                            try {
+                                val json = JSONObject(responseBody ?: "{}")
+                                applyServerSettings(json.optJSONObject("server_settings"))
+                            } catch (e: Exception) { /* non-fatal */ }
 
-    private fun sendQueuedLocations() {
-        synchronized(offlineQueue) {
-            if (offlineQueue.isEmpty()) return
-
-            val queueSize = offlineQueue.size
-            Log.d(TAG, "Sending $queueSize queued locations")
-
-            // Fix #7: Use batch upload when there are multiple items (more efficient)
-            if (queueSize > 3) {
-                sendQueuedLocationsBatch()
-            } else {
-                sendQueuedLocationsIndividually()
-            }
-        }
-    }
-
-    // Fix #7: Batch upload for efficient queue flush
-    private fun sendQueuedLocationsBatch() {
-        synchronized(offlineQueue) {
-            val toSend = offlineQueue.toList()
-            offlineQueue.clear()
-            persistQueue()
-
-            Log.d(TAG, "Using batch upload for ${toSend.size} locations")
-
-            uploader.uploadLocationBatch(
-                locations = toSend,
-                onSuccess = { serverSettings ->
-                    consecutiveAuthFailures = 0
-                    consecutiveFailures = 0
-                    retryDelayMs = 2000L
-                    PreferencesManager.lastUploadTime = System.currentTimeMillis()
-                    applyServerSettings(serverSettings)
-                    Log.d(TAG, "Batch upload successful (${toSend.size} locations)")
-                },
-                onPartialSuccess = { failedItems ->
-                    // Some items failed - re-queue only the failed ones
-                    Log.w(TAG, "Batch upload partial success - ${failedItems.size} items failed")
-                    failedItems.forEach { reQueueLocationWithBackoff(it) }
-                },
-                onAuthFailure = {
-                    Log.w(TAG, "Batch upload auth failure - re-queuing all")
-                    toSend.forEach { reQueueLocationWithBackoff(it) }
-                    refreshSessionToken()
-                },
-                onTransientFailure = {
-                    Log.w(TAG, "Batch upload transient failure - re-queuing all with backoff")
-                    toSend.forEach { reQueueLocationWithBackoff(it) }
-                }
-            )
-        }
-    }
-
-    private fun sendQueuedLocationsIndividually() {
-        synchronized(offlineQueue) {
-            val toSend = offlineQueue.toList()
-            offlineQueue.clear()
-            persistQueue()
-
-            toSend.forEach { queued ->
-                uploader.uploadLocation(
-                    location = queued.toLocation(),
-                    isMoving = queued.isMoving,
-                    speedKmh = queued.speedKmh,
-                    clientEventId = queued.clientEventId,
-                    onSuccess = {
-                        consecutiveAuthFailures = 0
-                        consecutiveFailures = 0
-                        retryDelayMs = 2000L
-                        Log.d(TAG, "Queued location uploaded successfully (id=${queued.clientEventId})")
-                    },
-                    onAuthFailure = {
-                        Log.w(TAG, "Queued location auth failure - re-queuing (id=${queued.clientEventId})")
-                        reQueueLocationWithBackoff(queued)
-                    },
-                    onTransientFailure = {
-                        Log.w(TAG, "Queued location transient failure - re-queuing with backoff (id=${queued.clientEventId}, retry=${queued.retryCount})")
-                        reQueueLocationWithBackoff(queued)
+                            // Mark this location as sent in Room
+                            serviceScope.launch {
+                                try {
+                                    val dao = TrackingDatabase.getInstance(applicationContext).queuedLocationDao()
+                                    dao.markSent(listOf(clientEventId))
+                                    dao.deleteSent()
+                                } catch (e: Exception) { /* non-fatal */ }
+                            }
+                        }
+                        resp.code in listOf(401, 403) -> {
+                            Log.w(TAG, "Direct upload auth failure (${resp.code})")
+                            refreshSessionToken()
+                        }
+                        // Other failures: WorkManager will retry from Room queue
                     }
-                )
-            }
-        }
-    }
-
-    private fun reQueueLocation(queued: QueuedLocation) {
-        synchronized(offlineQueue) {
-            offlineQueue.add(queued)  // Re-add with same clientEventId for idempotency
-            while (offlineQueue.size > MAX_QUEUE_SIZE) {
-                offlineQueue.removeAt(0)
-            }
-            persistQueue()  // Persist after re-queue
-        }
-    }
-
-    private fun reQueueLocationWithBackoff(queued: QueuedLocation) {
-        synchronized(offlineQueue) {
-            consecutiveFailures++
-            // Exponential backoff: 2s, 4s, 8s, 16s, 32s, max 60s
-            retryDelayMs = (retryDelayMs * 2).coerceAtMost(MAX_RETRY_DELAY_MS)
-
-            // Increment retry count for tracking
-            val updatedQueued = queued.copy(retryCount = queued.retryCount + 1)
-            offlineQueue.add(updatedQueued)
-
-            while (offlineQueue.size > MAX_QUEUE_SIZE) {
-                offlineQueue.removeAt(0)
-            }
-
-            persistQueue()  // Persist after re-queue
-
-            Log.d(TAG, "Re-queued with backoff: ${retryDelayMs}ms delay, retry #${updatedQueued.retryCount}, queue size: ${offlineQueue.size}")
-
-            // Schedule retry with backoff delay
-            mainHandler.postDelayed({
-                if (isNetworkAvailable()) {
-                    sendQueuedLocations()
                 }
-            }, retryDelayMs)
-        }
+            }
+        })
     }
 
-    private fun calculateSpeedFromDistance(currentLocation: Location): Float {
-        val prevLocation = lastLocation ?: return 0f
-        val prevTime = lastLocationTime
-        if (prevTime == 0L) return 0f
+    // ========== MODE TRANSITION LOGIC ==========
 
-        val distanceM = prevLocation.distanceTo(currentLocation)
-        val timeSeconds = (System.currentTimeMillis() - prevTime) / 1000f
-
-        if (timeSeconds <= 0) return 0f
-
-        // Speed in m/s, convert to km/h
-        val speedMs = distanceM / timeSeconds
-        return speedMs * 3.6f
-    }
-
-    private fun updateTrackingMode(speedKmh: Float, isMoving: Boolean) {
+    private fun updateTrackingMode(speedKmh: Float, isMoving: Boolean, accuracyM: Float) {
         val previousMode = currentMode
 
-        if (isMoving || speedKmh > SPEED_THRESHOLD_KMH) {
-            // Moving - switch to frequent updates immediately
-            consecutiveIdleCount = 0
-            if (currentMode != TrackingMode.MOVING) {
-                currentMode = TrackingMode.MOVING
-                Log.d(TAG, "Switched to MOVING mode (speed: ${speedKmh.toInt()} km/h, isMoving: $isMoving)")
+        when (currentMode) {
+            TrackingMode.BURST -> {
+                burstFixCount++
+                val burstElapsed = System.currentTimeMillis() - burstStartTime
+
+                // Exit BURST when we have enough fixes or time elapsed
+                if (burstFixCount >= BURST_MAX_FIXES || burstElapsed >= BURST_DURATION_MS) {
+                    // Decide: settle into MOVING or IDLE
+                    currentMode = if (isMoving || speedKmh > SPEED_THRESHOLD_KMH) {
+                        TrackingMode.MOVING
+                    } else {
+                        TrackingMode.IDLE
+                    }
+                    Log.d(TAG, "BURST complete (${burstFixCount} fixes, ${burstElapsed}ms) -> $currentMode")
+                }
             }
-        } else {
-            // Slow/stationary - need consecutive readings before switching to idle
-            consecutiveIdleCount++
-            if (consecutiveIdleCount >= IDLE_COUNT_THRESHOLD && currentMode != TrackingMode.IDLE) {
-                currentMode = TrackingMode.IDLE
-                Log.d(TAG, "Switched to IDLE mode after $consecutiveIdleCount slow readings")
+            TrackingMode.IDLE -> {
+                if (isMoving || speedKmh > SPEED_THRESHOLD_KMH) {
+                    consecutiveMovingCount++
+                    if (consecutiveMovingCount >= 1) {
+                        // Movement detected - enter BURST to confirm
+                        enterBurstMode("movement detected from IDLE")
+                    }
+                } else {
+                    consecutiveMovingCount = 0
+                }
+
+                // If accuracy is bad (>100m), enter BURST to try for better fix
+                if (accuracyM > 100 && !isLowBatteryMode) {
+                    enterBurstMode("bad accuracy in IDLE (${accuracyM.toInt()}m)")
+                }
+            }
+            TrackingMode.MOVING -> {
+                if (!isMoving && speedKmh < SPEED_THRESHOLD_KMH) {
+                    consecutiveIdleCount++
+                    if (consecutiveIdleCount >= IDLE_COUNT_THRESHOLD) {
+                        currentMode = TrackingMode.IDLE
+                        consecutiveIdleCount = 0
+                        Log.d(TAG, "Switched to IDLE after $IDLE_COUNT_THRESHOLD slow readings")
+                    }
+                } else {
+                    consecutiveIdleCount = 0
+                }
             }
         }
 
         // Restart location updates if mode changed
         if (previousMode != currentMode && isTracking && !isPaused) {
             mainHandler.post {
-                stopLocationUpdates()
-                startLocationUpdates()
-                // Also restart heartbeat with appropriate timing
+                restartLocationUpdates()
                 stopHeartbeatTimer()
                 startHeartbeatTimer()
             }
         }
     }
 
-    // Track consecutive auth failures to avoid infinite retry loops
-    private var consecutiveAuthFailures = 0
-    private val MAX_AUTH_FAILURES = 5
-    private var hasShownAuthFailureNotification = false
+    private fun enterBurstMode(reason: String) {
+        currentMode = TrackingMode.BURST
+        burstStartTime = System.currentTimeMillis()
+        burstFixCount = 0
+        consecutiveIdleCount = 0
+        consecutiveMovingCount = 0
+        Log.d(TAG, "Entering BURST mode: $reason")
+
+        if (isTracking && !isPaused) {
+            mainHandler.post { restartLocationUpdates() }
+        }
+    }
+
+    // ========== HEARTBEAT ==========
+
+    private fun startHeartbeatTimer() {
+        stopHeartbeatTimer()
+        heartbeatRunnable = Runnable {
+            Log.d(TAG, "Heartbeat timer fired (mode: $currentMode)")
+            requestHeartbeatLocation()
+            startHeartbeatTimer()
+        }
+        val heartbeatMs = PreferencesManager.idleHeartbeatSeconds * 1000L
+        mainHandler.postDelayed(heartbeatRunnable!!, heartbeatMs)
+    }
+
+    private fun stopHeartbeatTimer() {
+        heartbeatRunnable?.let { mainHandler.removeCallbacks(it) }
+        heartbeatRunnable = null
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestHeartbeatLocation() {
+        if (!hasLocationPermission()) return
+
+        try {
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+                .addOnSuccessListener { location ->
+                    location?.let { onLocationReceived(it) }
+                        ?: Log.w(TAG, "Heartbeat location null")
+                }
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "Heartbeat location failed", e)
+                }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Heartbeat security exception", e)
+        }
+    }
+
+    // ========== SERVER SETTINGS ==========
+
+    private fun applyServerSettings(settings: JSONObject?) {
+        settings ?: return
+        try {
+            settings.optInt("update_interval_seconds", 0).takeIf { it > 0 }?.let { newInterval ->
+                val oldInterval = PreferencesManager.getUpdateInterval()
+                PreferencesManager.setUpdateInterval(newInterval)
+                if (newInterval != oldInterval && currentMode == TrackingMode.MOVING && isTracking && !isPaused) {
+                    mainHandler.post { restartLocationUpdates() }
+                }
+            }
+            settings.optInt("idle_heartbeat_seconds", 0).takeIf { it > 0 }?.let {
+                PreferencesManager.idleHeartbeatSeconds = it
+            }
+            settings.optInt("offline_threshold_seconds", 0).takeIf { it > 0 }?.let {
+                PreferencesManager.offlineThresholdSeconds = it
+            }
+            settings.optInt("stale_threshold_seconds", 0).takeIf { it > 0 }?.let {
+                PreferencesManager.staleThresholdSeconds = it
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error applying server settings", e)
+        }
+    }
+
+    // ========== AUTH ==========
+
+    private fun refreshSessionToken() {
+        synchronized(tokenRefreshLock) {
+            if (isRefreshingToken) return
+            isRefreshingToken = true
+        }
+
+        if (consecutiveAuthFailures >= MAX_AUTH_FAILURES) {
+            Log.e(TAG, "Too many auth failures - user needs to re-login")
+            showAuthFailureNotification()
+            synchronized(tokenRefreshLock) { isRefreshingToken = false }
+            return
+        }
+        consecutiveAuthFailures++
+
+        mainHandler.post {
+            try {
+                val cookieManager = CookieManager.getInstance()
+                val cookies = cookieManager.getCookie("https://www.relatives.co.za")
+
+                if (cookies.isNullOrBlank()) {
+                    showAuthFailureNotification()
+                    synchronized(tokenRefreshLock) { isRefreshingToken = false }
+                    return@post
+                }
+
+                Thread {
+                    try {
+                        val url = java.net.URL("https://www.relatives.co.za/api/session-token.php")
+                        val connection = url.openConnection() as java.net.HttpURLConnection
+                        connection.requestMethod = "GET"
+                        connection.setRequestProperty("Cookie", cookies)
+                        connection.connectTimeout = 10000
+                        connection.readTimeout = 10000
+
+                        if (connection.responseCode == 200) {
+                            val response = connection.inputStream.bufferedReader().readText()
+                            val json = JSONObject(response)
+                            if (json.optBoolean("success")) {
+                                val token = json.optString("session_token")
+                                if (token.isNotBlank()) {
+                                    PreferencesManager.sessionToken = token
+                                    consecutiveAuthFailures = 0
+                                    hasShownAuthFailureNotification = false
+                                    Log.d(TAG, "Session token refreshed")
+                                    LocationUploadWorker.enqueue(applicationContext)
+                                }
+                            }
+                        } else if (connection.responseCode == 401) {
+                            mainHandler.post { showAuthFailureNotification() }
+                        }
+                        connection.disconnect()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Token refresh failed", e)
+                    } finally {
+                        synchronized(tokenRefreshLock) { isRefreshingToken = false }
+                    }
+                }.start()
+            } catch (e: Exception) {
+                Log.e(TAG, "Token refresh cookie error", e)
+                synchronized(tokenRefreshLock) { isRefreshingToken = false }
+            }
+        }
+    }
 
     private fun showAuthFailureNotification() {
         if (hasShownAuthFailureNotification) return
@@ -720,212 +771,34 @@ class TrackingLocationService : Service() {
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         notificationManager.notify(NotificationHelper.ALERT_NOTIFICATION_ID + 1, notification)
-        Log.w(TAG, "Showed auth failure notification to user")
     }
 
-    private fun refreshSessionToken() {
-        // Fix #5: Prevent race condition with synchronized lock
-        synchronized(tokenRefreshLock) {
-            if (isRefreshingToken) {
-                Log.d(TAG, "Token refresh already in progress, skipping")
-                return
-            }
-            isRefreshingToken = true
-        }
+    // ========== UTILITY ==========
 
-        // Prevent infinite retry loops
-        if (consecutiveAuthFailures >= MAX_AUTH_FAILURES) {
-            Log.e(TAG, "Too many auth failures ($consecutiveAuthFailures) - user needs to re-login")
-            showAuthFailureNotification()
-            synchronized(tokenRefreshLock) { isRefreshingToken = false }
-            return
-        }
-        consecutiveAuthFailures++
-
-        // Fix #12: Get cookies on main thread first (some Android versions require this)
-        mainHandler.post {
-            try {
-                val cookieManager = android.webkit.CookieManager.getInstance()
-                val cookies = cookieManager.getCookie("https://www.relatives.co.za")
-
-                if (cookies.isNullOrBlank()) {
-                    Log.w(TAG, "No cookies available for token refresh - user needs to open app and login")
-                    showAuthFailureNotification()
-                    synchronized(tokenRefreshLock) { isRefreshingToken = false }
-                    return@post
-                }
-
-                // Now do network call in background thread
-                Thread {
-                    try {
-                        val url = java.net.URL("https://www.relatives.co.za/api/session-token.php")
-                        val connection = url.openConnection() as java.net.HttpURLConnection
-                        connection.requestMethod = "GET"
-                        connection.setRequestProperty("Cookie", cookies)
-                        connection.connectTimeout = 10000
-                        connection.readTimeout = 10000
-
-                        if (connection.responseCode == 200) {
-                            val response = connection.inputStream.bufferedReader().readText()
-                            val json = org.json.JSONObject(response)
-                            if (json.optBoolean("success")) {
-                                val token = json.optString("session_token")
-                                if (token.isNotBlank()) {
-                                    PreferencesManager.sessionToken = token
-                                    Log.d(TAG, "Session token refreshed successfully - retrying queued locations")
-                                    consecutiveAuthFailures = 0  // Reset on success
-                                    hasShownAuthFailureNotification = false  // Reset notification flag
-                                    // Now retry any queued locations with the fresh token
-                                    mainHandler.post { sendQueuedLocations() }
-                                }
-                            }
-                        } else if (connection.responseCode == 401) {
-                            Log.w(TAG, "Session token refresh got 401 - session expired, user needs to re-login")
-                            mainHandler.post { showAuthFailureNotification() }
-                        }
-                        connection.disconnect()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to refresh session token", e)
-                    } finally {
-                        synchronized(tokenRefreshLock) { isRefreshingToken = false }
-                    }
-                }.start()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to get cookies for token refresh", e)
-                synchronized(tokenRefreshLock) { isRefreshingToken = false }
-            }
-        }
+    private fun calculateSpeedFromDistance(currentLocation: Location): Float {
+        val prevLocation = lastLocation ?: return 0f
+        val prevTime = lastLocationTime
+        if (prevTime == 0L) return 0f
+        val distanceM = prevLocation.distanceTo(currentLocation)
+        val timeSeconds = (System.currentTimeMillis() - prevTime) / 1000f
+        if (timeSeconds <= 0) return 0f
+        return (distanceM / timeSeconds) * 3.6f
     }
 
-    private fun requestHeartbeatLocation() {
-        if (!hasLocationPermission()) {
-            Log.w(TAG, "No location permission - sending state-only heartbeat")
-            sendStateOnlyHeartbeat()
-            return
-        }
-        if (!isLocationServicesEnabled()) {
-            Log.w(TAG, "Location services disabled - sending state-only heartbeat")
-            sendStateOnlyHeartbeat()
-            return
-        }
-
-        try {
-            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
-                .addOnSuccessListener { location ->
-                    if (location != null) {
-                        Log.d(TAG, "Heartbeat location received: lat=${location.latitude}")
-                        uploadLocation(location)
-                    } else {
-                        Log.w(TAG, "Heartbeat location null - sending state-only")
-                        sendStateOnlyHeartbeat()
-                    }
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Heartbeat location request failed - sending state-only", e)
-                    sendStateOnlyHeartbeat()
-                }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Security exception - sending state-only heartbeat", e)
-            sendStateOnlyHeartbeat()
-        }
+    private fun getBatteryLevel(): Int? {
+        return try {
+            val bm = getSystemService(BATTERY_SERVICE) as BatteryManager
+            bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        } catch (e: Exception) { null }
     }
 
-    @SuppressLint("MissingPermission")
-    private fun sendStateOnlyHeartbeat() {
-        // Try to get last known location first - better than no location at all
-        if (hasLocationPermission()) {
-            try {
-                fusedLocationClient.lastLocation.addOnSuccessListener { lastKnownLocation ->
-                    if (lastKnownLocation != null) {
-                        // We have a cached location - use it instead of state-only
-                        Log.d(TAG, "Using last known location for heartbeat")
-                        uploadLocation(lastKnownLocation)
-                    } else {
-                        // No cached location - send state-only
-                        sendPureHeartbeat()
-                    }
-                }.addOnFailureListener {
-                    // Failed to get last location - send state-only
-                    sendPureHeartbeat()
-                }
-            } catch (e: SecurityException) {
-                sendPureHeartbeat()
-            }
-        } else {
-            sendPureHeartbeat()
-        }
-    }
-
-    private fun sendPureHeartbeat() {
-        uploader.uploadHeartbeat(
-            onSuccess = { serverSettings ->
-                lastUploadTime = System.currentTimeMillis()
-                PreferencesManager.lastUploadTime = lastUploadTime  // Persist for WorkManager checker
-                consecutiveAuthFailures = 0  // Reset auth failure counter on success
-                applyServerSettings(serverSettings)
-                Log.d(TAG, "State-only heartbeat uploaded successfully")
-            },
-            onAuthFailure = {
-                Log.w(TAG, "Heartbeat auth failure - attempting to refresh token")
-                refreshSessionToken()
-            },
-            onTransientFailure = {
-                Log.w(TAG, "Heartbeat transient failure")
-            }
-        )
-    }
-
-    private fun applyServerSettings(settings: JSONObject?) {
-        settings ?: return
-        try {
-            settings.optInt("update_interval_seconds", 0).takeIf { it > 0 }?.let { newInterval ->
-                val oldInterval = PreferencesManager.getUpdateInterval()
-                PreferencesManager.setUpdateInterval(newInterval)
-                // Restart location updates if interval changed and we're in MOVING mode
-                if (newInterval != oldInterval && currentMode == TrackingMode.MOVING && isTracking && !isPaused) {
-                    Log.d(TAG, "Server interval changed from ${oldInterval}s to ${newInterval}s, restarting updates")
-                    mainHandler.post {
-                        stopLocationUpdates()
-                        startLocationUpdates()
-                    }
-                }
-            }
-            settings.optInt("idle_heartbeat_seconds", 0).takeIf { it > 0 }?.let {
-                PreferencesManager.idleHeartbeatSeconds = it
-                if (currentMode == TrackingMode.IDLE) {
-                    stopHeartbeatTimer()
-                    startHeartbeatTimer()
-                }
-            }
-            settings.optInt("offline_threshold_seconds", 0).takeIf { it > 0 }?.let {
-                PreferencesManager.offlineThresholdSeconds = it
-            }
-            settings.optInt("stale_threshold_seconds", 0).takeIf { it > 0 }?.let {
-                PreferencesManager.staleThresholdSeconds = it
-            }
-            Log.d(TAG, "Applied server settings: heartbeat=${PreferencesManager.idleHeartbeatSeconds}s")
-        } catch (e: Exception) {
-            Log.w(TAG, "Error applying server settings", e)
-        }
-    }
-
-    private fun startHeartbeatTimer() {
-        stopHeartbeatTimer()
-        heartbeatRunnable = Runnable {
-            Log.d(TAG, "Heartbeat timer fired (mode: $currentMode)")
-            requestHeartbeatLocation()
-            startHeartbeatTimer()
-        }
-        // Heartbeat timing from server settings (idle_heartbeat_seconds)
-        // Default 600s (10 min), configurable via tracking_settings table
-        val heartbeatMs = PreferencesManager.idleHeartbeatSeconds * 1000L
-        mainHandler.postDelayed(heartbeatRunnable!!, heartbeatMs)
-        Log.d(TAG, "Heartbeat timer started (${heartbeatMs/1000}s interval from server settings)")
-    }
-
-    private fun stopHeartbeatTimer() {
-        heartbeatRunnable?.let { mainHandler.removeCallbacks(it) }
-        heartbeatRunnable = null
+    private fun isNetworkAvailable(): Boolean {
+        return try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } catch (e: Exception) { true }
     }
 
     private fun hasLocationPermission(): Boolean {
@@ -933,43 +806,49 @@ class TrackingLocationService : Service() {
                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun isLocationServicesEnabled(): Boolean {
-        val locationManager = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-        return locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
-               locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+    private fun getNetworkStatus(): String {
+        return try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+            if (caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true) "online" else "offline"
+        } catch (e: Exception) { "online" }
+    }
+
+    private fun getLocationStatus(): String {
+        val lm = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+        return if (lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
+                   lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)) "enabled" else "disabled"
+    }
+
+    private fun getPermissionStatus(): String {
+        return if (hasLocationPermission()) "granted" else "denied"
     }
 
     @SuppressLint("WakelockTimeout")
     private fun acquireWakeLock() {
         if (wakeLock == null) {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$TAG:WakeLock")
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$TAG:WakeLock")
         }
         if (wakeLock?.isHeld == false) {
             wakeLock?.acquire()
-            Log.d(TAG, "WakeLock acquired")
         }
     }
 
     private fun releaseWakeLock() {
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
-            Log.d(TAG, "WakeLock released")
         }
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // If user swipes app from recents while tracking is enabled, restart the service
         if (PreferencesManager.isTrackingEnabled()) {
-            Log.d(TAG, "Task removed but tracking enabled - scheduling restart")
             val restartIntent = Intent(applicationContext, TrackingLocationService::class.java).apply {
                 action = ACTION_START_TRACKING
             }
             val pendingIntent = PendingIntent.getService(
-                applicationContext,
-                1,
-                restartIntent,
+                applicationContext, 1, restartIntent,
                 PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
             )
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
@@ -983,19 +862,14 @@ class TrackingLocationService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // ========== NOTIFICATION POLLING (existing - works 100%) ==========
+    // ========== NOTIFICATION POLLING ==========
 
     private fun checkNotifications() {
-        // Get cookies from WebView store
         var cookie = CookieManager.getInstance().getCookie(NOTIF_COUNT_URL)
         if (cookie.isNullOrEmpty()) {
             cookie = CookieManager.getInstance().getCookie(BASE_URL)
         }
-
-        if (cookie.isNullOrEmpty()) {
-            Log.w(TAG, "Skipping notification check - no cookie")
-            return
-        }
+        if (cookie.isNullOrEmpty()) return
 
         val request = Request.Builder()
             .url(NOTIF_COUNT_URL)
@@ -1005,7 +879,7 @@ class TrackingLocationService : Service() {
 
         NetworkClient.client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Failed to check notifications", e)
+                Log.e(TAG, "Notification check failed", e)
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -1017,308 +891,22 @@ class TrackingLocationService : Service() {
                             if (json.has("count")) {
                                 val count = json.getInt("count")
                                 val lastCount = PreferencesManager.getLastNotificationCount()
-
-                                // Look for optional latest message details
                                 val latestTitle = if (json.has("latest_title")) json.getString("latest_title") else null
                                 val latestMessage = if (json.has("latest_message")) json.getString("latest_message") else null
 
-                                // Alert if count > 0 and either:
-                                // 1. It's the first run (lastCount == 0)
-                                // 2. The count has increased
                                 if (count > 0 && count > lastCount) {
                                     NotificationHelper.showNewMessageNotification(
-                                        this@TrackingLocationService,
-                                        count,
-                                        latestTitle,
-                                        latestMessage
+                                        this@TrackingLocationService, count, latestTitle, latestMessage
                                     )
                                 }
-
                                 PreferencesManager.setLastNotificationCount(count)
                             }
                         } catch (e: Exception) {
-                            Log.e(TAG, "Error parsing notification count: $body", e)
+                            Log.e(TAG, "Notification parse error", e)
                         }
-                    } else {
-                        Log.w(TAG, "Notification check failed: ${it.code} - $body")
                     }
                 }
             }
         })
-    }
-
-    private inner class LocationUploader(private val context: Context) {
-        private val httpClient = OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
-        private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
-        private val UPLOAD_URL = "https://www.relatives.co.za/tracking/api/update_location.php"
-
-        fun uploadLocation(
-            location: Location,
-            isMoving: Boolean,
-            speedKmh: Float,
-            clientEventId: String? = null,  // For idempotent uploads (prevents duplicates on retry)
-            onSuccess: (serverSettings: JSONObject?) -> Unit,
-            onAuthFailure: () -> Unit,
-            onTransientFailure: () -> Unit
-        ) {
-            val deviceUuid = PreferencesManager.getDeviceUuid()
-            val sessionToken = PreferencesManager.sessionToken
-            if (sessionToken.isNullOrBlank()) {
-                onAuthFailure()
-                return
-            }
-
-            // Generate client_event_id if not provided (for fresh uploads)
-            val eventId = clientEventId ?: UUID.randomUUID().toString()
-
-            val body = JSONObject().apply {
-                put("device_uuid", deviceUuid)
-                put("platform", "android")
-                put("device_name", Build.MODEL)
-                put("network_status", getNetworkStatus())
-                put("location_status", getLocationStatus())
-                put("permission_status", getPermissionStatus())
-                put("app_state", getAppState())
-                put("battery_level", getBatteryLevel() ?: JSONObject.NULL)
-                put("latitude", location.latitude)
-                put("longitude", location.longitude)
-                put("accuracy_m", location.accuracy.toInt())
-                put("speed_kmh", speedKmh)  // Use calculated speed, not just GPS speed
-                put("heading_deg", if (location.hasBearing()) location.bearing else 0)
-                put("altitude_m", if (location.hasAltitude()) location.altitude else JSONObject.NULL)
-                put("is_moving", isMoving)
-                put("source", "native")
-                put("session_token", sessionToken)
-                put("client_event_id", eventId)  // For server-side idempotency check
-                put("client_timestamp", System.currentTimeMillis())  // Original client timestamp
-            }
-
-            val request = Request.Builder()
-                .url(UPLOAD_URL)
-                .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer $sessionToken")
-                .addHeader("User-Agent", "RelativesAndroid/1.0")
-                .post(body.toString().toRequestBody(jsonMediaType))
-                .build()
-
-            httpClient.newCall(request).enqueue(createCallback(onSuccess, onAuthFailure, onTransientFailure))
-        }
-
-        fun uploadHeartbeat(
-            onSuccess: (serverSettings: JSONObject?) -> Unit,
-            onAuthFailure: () -> Unit,
-            onTransientFailure: () -> Unit
-        ) {
-            val deviceUuid = PreferencesManager.getDeviceUuid()
-            val sessionToken = PreferencesManager.sessionToken
-            if (sessionToken.isNullOrBlank()) {
-                onAuthFailure()
-                return
-            }
-
-            val body = JSONObject().apply {
-                put("device_uuid", deviceUuid)
-                put("platform", "android")
-                put("device_name", Build.MODEL)
-                put("network_status", getNetworkStatus())
-                put("location_status", getLocationStatus())
-                put("permission_status", getPermissionStatus())
-                put("app_state", getAppState())
-                put("battery_level", getBatteryLevel() ?: JSONObject.NULL)
-                put("source", "native")
-                put("session_token", sessionToken)
-            }
-
-            val request = Request.Builder()
-                .url(UPLOAD_URL)
-                .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer $sessionToken")
-                .addHeader("User-Agent", "RelativesAndroid/1.0")
-                .post(body.toString().toRequestBody(jsonMediaType))
-                .build()
-
-            Log.d(TAG, "Uploading heartbeat (state-only)")
-            httpClient.newCall(request).enqueue(createCallback(onSuccess, onAuthFailure, onTransientFailure))
-        }
-
-        // Fix #7: Batch upload for efficient queue flush
-        private val BATCH_UPLOAD_URL = "https://www.relatives.co.za/tracking/api/update_location_batch.php"
-
-        fun uploadLocationBatch(
-            locations: List<QueuedLocation>,
-            onSuccess: (serverSettings: JSONObject?) -> Unit,
-            onPartialSuccess: (failedItems: List<QueuedLocation>) -> Unit,
-            onAuthFailure: () -> Unit,
-            onTransientFailure: () -> Unit
-        ) {
-            val deviceUuid = PreferencesManager.getDeviceUuid()
-            val sessionToken = PreferencesManager.sessionToken
-            if (sessionToken.isNullOrBlank()) {
-                onAuthFailure()
-                return
-            }
-
-            // Build locations array
-            val locationsArray = org.json.JSONArray()
-            val locationMap = mutableMapOf<String, QueuedLocation>()  // Map client_event_id to QueuedLocation
-
-            locations.forEach { queued ->
-                locationMap[queued.clientEventId] = queued
-                locationsArray.put(JSONObject().apply {
-                    put("latitude", queued.latitude)
-                    put("longitude", queued.longitude)
-                    put("accuracy_m", queued.accuracy.toInt())
-                    put("speed_kmh", queued.speedKmh)
-                    put("heading_deg", queued.bearing ?: 0)
-                    put("altitude_m", queued.altitude ?: JSONObject.NULL)
-                    put("is_moving", queued.isMoving)
-                    put("battery_level", getBatteryLevel() ?: JSONObject.NULL)
-                    put("client_event_id", queued.clientEventId)
-                    put("client_timestamp", queued.timestamp)
-                })
-            }
-
-            val body = JSONObject().apply {
-                put("device_uuid", deviceUuid)
-                put("platform", "android")
-                put("device_name", Build.MODEL)
-                put("source", "native")
-                put("session_token", sessionToken)
-                put("locations", locationsArray)
-            }
-
-            val request = Request.Builder()
-                .url(BATCH_UPLOAD_URL)
-                .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer $sessionToken")
-                .addHeader("User-Agent", "RelativesAndroid/1.0")
-                .post(body.toString().toRequestBody(jsonMediaType))
-                .build()
-
-            Log.d(TAG, "Uploading batch of ${locations.size} locations")
-
-            httpClient.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    Log.e(TAG, "Batch upload network error: ${e.message}", e)
-                    onTransientFailure()
-                }
-
-                override fun onResponse(call: Call, response: Response) {
-                    response.use { resp ->
-                        val responseBody = try { resp.body?.string() } catch (e: Exception) { null }
-
-                        when {
-                            resp.isSuccessful -> {
-                                try {
-                                    val json = JSONObject(responseBody ?: "{}")
-                                    val serverSettings = json.optJSONObject("server_settings")
-
-                                    // Check for partial failures
-                                    val results = json.optJSONArray("results")
-                                    val failedItems = mutableListOf<QueuedLocation>()
-
-                                    if (results != null) {
-                                        for (i in 0 until results.length()) {
-                                            val result = results.getJSONObject(i)
-                                            val clientEventId = result.optString("client_event_id")
-                                            val success = result.optBoolean("success", false)
-
-                                            if (!success && clientEventId.isNotEmpty()) {
-                                                locationMap[clientEventId]?.let { failedItems.add(it) }
-                                            }
-                                        }
-                                    }
-
-                                    if (failedItems.isEmpty()) {
-                                        onSuccess(serverSettings)
-                                    } else {
-                                        onPartialSuccess(failedItems)
-                                    }
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "Failed to parse batch response: ${e.message}")
-                                    onSuccess(null)
-                                }
-                            }
-                            resp.code in listOf(401, 402, 403) -> {
-                                Log.e(TAG, "Batch upload auth failure (${resp.code}): $responseBody")
-                                onAuthFailure()
-                            }
-                            else -> {
-                                Log.e(TAG, "Batch upload failed (${resp.code}): $responseBody")
-                                onTransientFailure()
-                            }
-                        }
-                    }
-                }
-            })
-        }
-
-        private fun createCallback(
-            onSuccess: (serverSettings: JSONObject?) -> Unit,
-            onAuthFailure: () -> Unit,
-            onTransientFailure: () -> Unit
-        ) = object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Upload failed with network error: ${e.message}", e)
-                onTransientFailure()
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use { resp ->
-                    val responseBody = try { resp.body?.string() } catch (e: Exception) { null }
-
-                    when {
-                        resp.isSuccessful -> {
-                            val serverSettings = try {
-                                responseBody?.let { JSONObject(it).optJSONObject("server_settings") }
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Failed to parse server settings: ${e.message}")
-                                null
-                            }
-                            onSuccess(serverSettings)
-                        }
-                        resp.code in listOf(401, 402, 403) -> {
-                            // Log full response for auth failures
-                            Log.e(TAG, "Upload auth failure (${resp.code}): $responseBody")
-                            onAuthFailure()
-                        }
-                        else -> {
-                            // Log full response for any other failures - NO SILENT FAILS
-                            Log.e(TAG, "Upload failed (${resp.code}): $responseBody")
-                            onTransientFailure()
-                        }
-                    }
-                }
-            }
-        }
-
-        private fun getNetworkStatus(): String {
-            return try {
-                val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                val network = connectivityManager.activeNetwork
-                val capabilities = connectivityManager.getNetworkCapabilities(network)
-                if (capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true) "online" else "offline"
-            } catch (e: Exception) { "online" }
-        }
-
-        private fun getLocationStatus(): String {
-            return if (isLocationServicesEnabled()) "enabled" else "disabled"
-        }
-
-        private fun getPermissionStatus(): String {
-            return if (hasLocationPermission()) "granted" else "denied"
-        }
-
-        private fun getAppState(): String = "background"
-
-        private fun getBatteryLevel(): Int? {
-            return try {
-                val bm = context.getSystemService(BATTERY_SERVICE) as BatteryManager
-                bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            } catch (e: Exception) { null }
-        }
     }
 }
