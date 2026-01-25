@@ -190,16 +190,18 @@ $cacheVersion = '1.0.0';
 
         <!-- Options Overlay -->
         <div id="screen-options" class="options-overlay">
+            <button id="btn-options-close" class="options-close-btn" aria-label="Close">&times;</button>
             <div class="options-content">
                 <h2>OPTIONS</h2>
-                <div class="start-controls-hint">
-                    Joystick to move, Boost for speed
+                <div class="options-section">
+                    <div class="options-hint">
+                        Use the joystick to move, boost for speed bursts
+                    </div>
+                    <div class="options-buttons">
+                        <button id="btn-theme-toggle" class="neon-btn option-btn">Theme: Dark</button>
+                        <button id="btn-sound-toggle" class="neon-btn option-btn">Sound: On</button>
+                    </div>
                 </div>
-                <div class="options-buttons">
-                    <button id="btn-theme-toggle" class="neon-btn small">Theme: Dark</button>
-                    <button id="btn-sound-toggle" class="neon-btn small">Sound: On</button>
-                </div>
-                <button id="btn-options-close" class="neon-btn primary">Close</button>
             </div>
         </div>
 
