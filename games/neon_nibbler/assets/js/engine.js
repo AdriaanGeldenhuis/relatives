@@ -203,7 +203,7 @@ var NeonEngine = (function() {
 
         var isLight = document.documentElement.getAttribute('data-theme') === 'light';
 
-        // Draw outer glow pass first (strong bloom effect)
+        // First pass: outer glow/bloom for all edge walls
         for (var r = 0; r < maze.length; r++) {
             for (var c = 0; c < maze[r].length; c++) {
                 if (maze[r][c] !== 0) continue;
@@ -212,17 +212,21 @@ var NeonEngine = (function() {
                 var x = c * TILE_SIZE + OFFSET_X;
                 var y = r * TILE_SIZE + OFFSET_Y;
                 var ts = TILE_SIZE;
+                var gap = 2;
+                var radius = Math.max(4, ts * 0.12);
 
-                // Strong outer glow
-                wctx.shadowColor = isLight ? 'rgba(100,100,255,0.8)' : 'rgba(0,200,255,0.9)';
-                wctx.shadowBlur = 25;
-                wctx.fillStyle = 'rgba(0,150,255,0.01)';
-                wctx.fillRect(x + 2, y + 2, ts - 4, ts - 4);
+                // Strong outer bloom glow
+                wctx.shadowColor = isLight ? 'rgba(80,120,255,1)' : 'rgba(0,180,255,1)';
+                wctx.shadowBlur = 20;
+                wctx.strokeStyle = 'rgba(0,200,255,0.3)';
+                wctx.lineWidth = 3;
+                roundRect(wctx, x + gap, y + gap, ts - gap * 2, ts - gap * 2, radius);
+                wctx.stroke();
             }
         }
         wctx.shadowBlur = 0;
 
-        // Draw wall tiles with neon glass block style
+        // Second pass: draw the blocks
         for (var r2 = 0; r2 < maze.length; r2++) {
             for (var c2 = 0; c2 < maze[r2].length; c2++) {
                 if (maze[r2][c2] !== 0) continue;
@@ -230,84 +234,90 @@ var NeonEngine = (function() {
                 var y2 = r2 * TILE_SIZE + OFFSET_Y;
                 var edge = isEdgeWall(r2, c2);
                 var ts = TILE_SIZE;
-                var gap = 2; // Gap between blocks
-                var radius = 3; // Corner radius
+                var gap = 2;
+                var radius = Math.max(4, ts * 0.12);
 
                 if (edge) {
-                    // Main block fill - dark blue gradient
+                    // Main block fill - rich blue gradient
                     var blockGrad = wctx.createLinearGradient(x2, y2, x2 + ts, y2 + ts);
                     if (isLight) {
-                        blockGrad.addColorStop(0, 'rgba(70,70,160,0.95)');
-                        blockGrad.addColorStop(0.5, 'rgba(50,50,140,0.9)');
-                        blockGrad.addColorStop(1, 'rgba(40,40,120,0.95)');
+                        blockGrad.addColorStop(0, 'rgba(60,80,170,0.98)');
+                        blockGrad.addColorStop(0.4, 'rgba(45,65,150,0.95)');
+                        blockGrad.addColorStop(1, 'rgba(35,55,130,0.98)');
                     } else {
-                        blockGrad.addColorStop(0, 'rgba(20,50,120,0.95)');
-                        blockGrad.addColorStop(0.5, 'rgba(15,40,100,0.9)');
-                        blockGrad.addColorStop(1, 'rgba(10,30,80,0.95)');
+                        blockGrad.addColorStop(0, 'rgba(25,55,130,0.98)');
+                        blockGrad.addColorStop(0.4, 'rgba(18,45,115,0.95)');
+                        blockGrad.addColorStop(1, 'rgba(12,35,95,0.98)');
                     }
-
-                    // Draw rounded rectangle
                     wctx.fillStyle = blockGrad;
                     roundRect(wctx, x2 + gap, y2 + gap, ts - gap * 2, ts - gap * 2, radius);
                     wctx.fill();
 
-                    // Inner darker area (gives depth)
-                    var innerGrad = wctx.createRadialGradient(
-                        x2 + ts / 2, y2 + ts / 2, 0,
-                        x2 + ts / 2, y2 + ts / 2, ts * 0.6
+                    // Diagonal glass reflection - top left triangle
+                    wctx.globalAlpha = 0.45;
+                    var glassGrad = wctx.createLinearGradient(
+                        x2 + gap, y2 + gap,
+                        x2 + ts * 0.55, y2 + ts * 0.55
                     );
-                    innerGrad.addColorStop(0, isLight ? 'rgba(40,40,100,0.4)' : 'rgba(5,20,60,0.5)');
-                    innerGrad.addColorStop(1, 'rgba(0,0,0,0)');
-                    wctx.fillStyle = innerGrad;
-                    roundRect(wctx, x2 + gap + 4, y2 + gap + 4, ts - gap * 2 - 8, ts - gap * 2 - 8, radius);
-                    wctx.fill();
-
-                    // Glass highlight - top left corner reflection
-                    wctx.globalAlpha = 0.35;
-                    var glassGrad = wctx.createLinearGradient(x2 + gap, y2 + gap, x2 + ts * 0.6, y2 + ts * 0.6);
-                    glassGrad.addColorStop(0, isLight ? 'rgba(180,180,255,0.9)' : 'rgba(100,180,255,0.8)');
-                    glassGrad.addColorStop(0.3, isLight ? 'rgba(140,140,220,0.4)' : 'rgba(60,140,255,0.3)');
+                    glassGrad.addColorStop(0, isLight ? 'rgba(180,200,255,0.95)' : 'rgba(80,160,255,0.9)');
+                    glassGrad.addColorStop(0.5, isLight ? 'rgba(140,160,220,0.4)' : 'rgba(50,120,200,0.35)');
                     glassGrad.addColorStop(1, 'rgba(0,0,0,0)');
                     wctx.fillStyle = glassGrad;
                     wctx.beginPath();
                     wctx.moveTo(x2 + gap + radius, y2 + gap);
-                    wctx.lineTo(x2 + ts * 0.65, y2 + gap);
-                    wctx.lineTo(x2 + gap, y2 + ts * 0.65);
+                    wctx.lineTo(x2 + ts - gap - radius, y2 + gap);
+                    wctx.quadraticCurveTo(x2 + ts - gap, y2 + gap, x2 + ts - gap, y2 + gap + radius);
+                    wctx.lineTo(x2 + gap + radius, y2 + ts - gap);
+                    wctx.quadraticCurveTo(x2 + gap, y2 + ts - gap, x2 + gap, y2 + ts - gap - radius);
                     wctx.lineTo(x2 + gap, y2 + gap + radius);
                     wctx.quadraticCurveTo(x2 + gap, y2 + gap, x2 + gap + radius, y2 + gap);
+                    wctx.closePath();
                     wctx.fill();
                     wctx.globalAlpha = 1;
 
-                    // Neon border glow - outer stroke
-                    wctx.shadowColor = isLight ? 'rgba(100,150,255,0.9)' : 'rgba(0,220,255,1)';
-                    wctx.shadowBlur = 8;
-                    wctx.strokeStyle = isLight ? 'rgba(120,160,255,0.9)' : 'rgba(0,200,255,0.85)';
-                    wctx.lineWidth = 2;
+                    // Inner edge highlight - top
+                    wctx.strokeStyle = isLight ? 'rgba(160,190,255,0.7)' : 'rgba(70,170,255,0.6)';
+                    wctx.lineWidth = 1.5;
+                    wctx.beginPath();
+                    wctx.moveTo(x2 + gap + radius + 3, y2 + gap + 3);
+                    wctx.lineTo(x2 + ts - gap - radius - 3, y2 + gap + 3);
+                    wctx.stroke();
+
+                    // Inner edge highlight - left
+                    wctx.beginPath();
+                    wctx.moveTo(x2 + gap + 3, y2 + gap + radius + 3);
+                    wctx.lineTo(x2 + gap + 3, y2 + ts - gap - radius - 3);
+                    wctx.stroke();
+
+                    // Bright neon border with glow
+                    wctx.shadowColor = isLight ? 'rgba(100,180,255,1)' : 'rgba(0,220,255,1)';
+                    wctx.shadowBlur = 12;
+                    wctx.strokeStyle = isLight ? 'rgba(100,170,255,0.95)' : 'rgba(0,210,255,0.95)';
+                    wctx.lineWidth = 2.5;
                     roundRect(wctx, x2 + gap, y2 + gap, ts - gap * 2, ts - gap * 2, radius);
                     wctx.stroke();
                     wctx.shadowBlur = 0;
 
-                    // Inner bright edge line (top and left)
-                    wctx.strokeStyle = isLight ? 'rgba(180,200,255,0.6)' : 'rgba(100,220,255,0.5)';
-                    wctx.lineWidth = 1;
+                    // Extra bright corners for that neon effect
+                    wctx.fillStyle = isLight ? 'rgba(180,220,255,0.5)' : 'rgba(100,220,255,0.4)';
+                    // Top-left corner glow
                     wctx.beginPath();
-                    wctx.moveTo(x2 + gap + radius + 2, y2 + gap + 2);
-                    wctx.lineTo(x2 + ts - gap - radius - 2, y2 + gap + 2);
-                    wctx.stroke();
+                    wctx.arc(x2 + gap + radius, y2 + gap + radius, radius * 0.6, 0, Math.PI * 2);
+                    wctx.fill();
+                    // Top-right corner glow
                     wctx.beginPath();
-                    wctx.moveTo(x2 + gap + 2, y2 + gap + radius + 2);
-                    wctx.lineTo(x2 + gap + 2, y2 + ts - gap - radius - 2);
-                    wctx.stroke();
+                    wctx.arc(x2 + ts - gap - radius, y2 + gap + radius, radius * 0.5, 0, Math.PI * 2);
+                    wctx.fill();
 
                 } else {
-                    // Interior walls: darker sunken fill
+                    // Interior walls: darker fill matching the surrounding
                     var innerBlockGrad = wctx.createLinearGradient(x2, y2, x2 + ts, y2 + ts);
                     if (isLight) {
-                        innerBlockGrad.addColorStop(0, 'rgba(35,35,90,0.7)');
-                        innerBlockGrad.addColorStop(1, 'rgba(25,25,70,0.8)');
+                        innerBlockGrad.addColorStop(0, 'rgba(30,40,90,0.85)');
+                        innerBlockGrad.addColorStop(1, 'rgba(20,30,70,0.9)');
                     } else {
-                        innerBlockGrad.addColorStop(0, 'rgba(8,15,45,0.9)');
-                        innerBlockGrad.addColorStop(1, 'rgba(5,10,35,0.95)');
+                        innerBlockGrad.addColorStop(0, 'rgba(8,18,55,0.95)');
+                        innerBlockGrad.addColorStop(1, 'rgba(5,12,40,0.98)');
                     }
                     wctx.fillStyle = innerBlockGrad;
                     wctx.fillRect(x2, y2, ts, ts);
