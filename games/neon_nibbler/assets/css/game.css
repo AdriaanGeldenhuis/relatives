@@ -247,15 +247,15 @@ html, body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 40px;
+    gap: 32px;
     width: 100%;
     height: 100%;
-    padding: 48px;
+    padding: 32px 60px;
     box-sizing: border-box;
 }
 
 .options-content h2 {
-    font-size: 2.5rem;
+    font-size: 2.2rem;
     font-weight: 900;
     letter-spacing: 6px;
     background: linear-gradient(180deg, #ffffff 0%, var(--neon-cyan) 100%);
@@ -270,35 +270,40 @@ html, body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 32px;
+    gap: 24px;
 }
 
 .options-hint {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--text-secondary);
     text-align: center;
-    max-width: 300px;
+    max-width: 350px;
 }
 
 .options-buttons {
     display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
+    flex-direction: row;
+    gap: 24px;
+    flex-wrap: nowrap;
     justify-content: center;
+    align-items: center;
 }
 
 .neon-btn.option-btn {
-    padding: 16px 32px;
-    font-size: 1rem;
-    min-width: 160px;
+    padding: 20px 40px;
+    font-size: 1.1rem;
+    min-width: 180px;
     background: var(--glass-bg);
     border: 2px solid var(--glass-border);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 100, 255, 0.1);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .neon-btn.option-btn:active {
     border-color: var(--neon-cyan);
-    box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+    box-shadow: 0 0 30px rgba(0, 245, 255, 0.4);
+    transform: scale(0.95);
 }
 
 .neon-btn.option-btn::after {
@@ -797,10 +802,11 @@ html, body {
     .overlay-box { padding: 16px; gap: 10px; }
     .overlay-box h2 { font-size: 1.2rem; }
     /* Options overlay responsive */
-    .options-close-btn { top: 10px; right: 10px; width: 40px; height: 40px; font-size: 1.6rem; }
-    .options-content { padding: 24px; gap: 24px; }
-    .options-content h2 { font-size: 1.8rem; letter-spacing: 4px; }
-    .options-hint { font-size: 0.75rem; }
-    .options-section { gap: 20px; }
-    .neon-btn.option-btn { padding: 12px 24px; font-size: 0.85rem; min-width: 140px; }
+    .options-close-btn { top: 8px; right: 8px; width: 36px; height: 36px; font-size: 1.4rem; }
+    .options-content { padding: 16px 40px; gap: 20px; }
+    .options-content h2 { font-size: 1.4rem; letter-spacing: 3px; }
+    .options-hint { font-size: 0.7rem; max-width: 200px; }
+    .options-section { gap: 12px; }
+    .options-buttons { gap: 16px; }
+    .neon-btn.option-btn { padding: 14px 24px; font-size: 0.85rem; min-width: 130px; }
 }

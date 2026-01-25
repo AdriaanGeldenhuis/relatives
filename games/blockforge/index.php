@@ -170,12 +170,8 @@ $cacheVersion = '1.0.0';
 
             <!-- Game Area -->
             <div class="game-area">
-                <!-- Hold Piece -->
+                <!-- Timer (for timed modes) -->
                 <div class="side-panel left-panel">
-                    <div class="panel-box hold-box">
-                        <span class="panel-label">HOLD</span>
-                        <canvas id="hold-canvas" width="100" height="100"></canvas>
-                    </div>
                     <div class="panel-box timer-box" id="timer-box" style="display:none;">
                         <span class="panel-label">TIME</span>
                         <span class="timer-value" id="hud-timer">2:00</span>
@@ -188,13 +184,11 @@ $cacheVersion = '1.0.0';
                     <div class="combo-popup" id="combo-popup"></div>
                 </div>
 
-                <!-- Next Pieces -->
+                <!-- Next Piece -->
                 <div class="side-panel right-panel">
                     <div class="panel-box next-box">
                         <span class="panel-label">NEXT</span>
                         <canvas id="next-canvas-1" width="100" height="100"></canvas>
-                        <canvas id="next-canvas-2" width="100" height="80"></canvas>
-                        <canvas id="next-canvas-3" width="100" height="80"></canvas>
                     </div>
                 </div>
             </div>
@@ -215,9 +209,6 @@ $cacheVersion = '1.0.0';
                 <div class="ctrl-row ctrl-row-actions">
                     <button class="ctrl-btn ctrl-rotate" id="ctrl-rotate" aria-label="Rotate">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
-                    </button>
-                    <button class="ctrl-btn ctrl-hold" id="ctrl-hold" aria-label="Hold">
-                        <span>H</span>
                     </button>
                     <button class="ctrl-btn ctrl-drop" id="ctrl-drop" aria-label="Hard Drop">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/><path d="M7.41 14.59L12 19.17l4.59-4.58L18 16l-6 6-6-6z"/></svg>

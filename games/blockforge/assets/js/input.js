@@ -73,12 +73,6 @@ var BlockInput = (function() {
                     e.preventDefault();
                     emit('hardDrop');
                     break;
-                case 'KeyC':
-                case 'ShiftLeft':
-                case 'ShiftRight':
-                    e.preventDefault();
-                    emit('hold');
-                    break;
                 case 'KeyP':
                 case 'Escape':
                     e.preventDefault();
@@ -192,7 +186,6 @@ var BlockInput = (function() {
         bindBtn('ctrl-right', 'moveRight', true);
         bindBtn('ctrl-down', 'softDrop', true);
         bindBtn('ctrl-rotate', 'rotate', false);
-        bindBtn('ctrl-hold', 'hold', false);
         bindBtn('ctrl-drop', 'hardDrop', false);
         bindBtn('ctrl-pause', 'pause', false);
     }
