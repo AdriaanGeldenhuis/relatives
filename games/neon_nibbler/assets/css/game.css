@@ -204,32 +204,98 @@ html, body {
     display: flex;
 }
 
+.options-close-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 48px;
+    height: 48px;
+    border: 2px solid var(--glass-border);
+    border-radius: 50%;
+    background: var(--glass-bg);
+    color: var(--text-primary);
+    font-size: 2rem;
+    font-weight: 300;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 10;
+}
+
+.options-close-btn:hover,
+.options-close-btn:active {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.4);
+    transform: scale(1.1);
+}
+
 .options-content {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 28px;
+    gap: 40px;
     width: 100%;
     height: 100%;
-    padding: 32px;
+    padding: 48px;
     box-sizing: border-box;
 }
 
 .options-content h2 {
-    font-size: 2rem;
+    font-size: 2.5rem;
     font-weight: 900;
-    letter-spacing: 4px;
-    color: var(--text-primary);
-    text-shadow: 0 0 20px var(--neon-glow);
+    letter-spacing: 6px;
+    background: linear-gradient(180deg, #ffffff 0%, var(--neon-cyan) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 12px rgba(0, 245, 255, 0.5));
     margin: 0;
+}
+
+.options-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+}
+
+.options-hint {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-align: center;
+    max-width: 300px;
 }
 
 .options-buttons {
     display: flex;
-    gap: 16px;
+    gap: 20px;
     flex-wrap: wrap;
     justify-content: center;
+}
+
+.neon-btn.option-btn {
+    padding: 16px 32px;
+    font-size: 1rem;
+    min-width: 160px;
+    background: var(--glass-bg);
+    border: 2px solid var(--glass-border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.neon-btn.option-btn:active {
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+}
+
+.neon-btn.option-btn::after {
+    display: none;
 }
 
 /* ===== BUTTONS ===== */
@@ -723,4 +789,11 @@ html, body {
     .neon-btn { padding: 10px 28px; font-size: 0.9rem; }
     .overlay-box { padding: 16px; gap: 10px; }
     .overlay-box h2 { font-size: 1.2rem; }
+    /* Options overlay responsive */
+    .options-close-btn { top: 10px; right: 10px; width: 40px; height: 40px; font-size: 1.6rem; }
+    .options-content { padding: 24px; gap: 24px; }
+    .options-content h2 { font-size: 1.8rem; letter-spacing: 4px; }
+    .options-hint { font-size: 0.75rem; }
+    .options-section { gap: 20px; }
+    .neon-btn.option-btn { padding: 12px 24px; font-size: 0.85rem; min-width: 140px; }
 }
