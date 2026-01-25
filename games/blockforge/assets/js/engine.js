@@ -13,8 +13,6 @@ var BlockEngine = (function() {
     var grid = [];
     var currentPiece = null;
     var ghostPiece = null;
-    var holdPiece = null;
-    var holdUsed = false;
     var bag = null;
     var score = 0;
     var level = 1;
@@ -87,8 +85,6 @@ var BlockEngine = (function() {
         combo = -1;
         maxCombo = 0;
         backToBack = false;
-        holdPiece = null;
-        holdUsed = false;
         running = false;
         paused = false;
         gameOver = false;
@@ -155,7 +151,6 @@ var BlockEngine = (function() {
             return;
         }
 
-        holdUsed = false;
         lockTimer = 0;
         lockMoves = 0;
         dropTimer = 0;
@@ -261,24 +256,6 @@ var BlockEngine = (function() {
             }
         }
         return false;
-    }
-
-    function doHold() {
-        if (!running || paused || !currentPiece || holdUsed || gameOver) return false;
-        var prevHold = holdPiece;
-        holdPiece = currentPiece.name;
-        holdUsed = true;
-
-        if (prevHold) {
-            currentPiece = BlockPieces.createPiece(prevHold);
-            var shape = BlockPieces.getShape(prevHold, 0);
-            currentPiece.x = Math.floor((COLS - shape[0].length) / 2);
-            currentPiece.y = HIDDEN_ROWS - shape.length;
-        } else {
-            spawnPiece();
-        }
-        updateGhost();
-        return true;
     }
 
     function lockPiece() {
@@ -461,8 +438,7 @@ var BlockEngine = (function() {
                 y: ghostPiece.y - HIDDEN_ROWS,
                 rotation: ghostPiece.rotation
             } : null,
-            holdPiece: holdPiece,
-            nextPieces: bag ? bag.peek(3) : [],
+            nextPieces: bag ? bag.peek(1) : [],
             score: score,
             level: level,
             lines: lines,
@@ -514,7 +490,6 @@ var BlockEngine = (function() {
         moveDown: moveDown,
         hardDrop: hardDrop,
         rotate: rotate,
-        hold: doHold,
         getState: getState,
         getResult: getResult,
         getGrid: getGrid,

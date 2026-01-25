@@ -6,8 +6,7 @@ var BlockRenderer = (function() {
     'use strict';
 
     var canvas, ctx;
-    var holdCanvas, holdCtx;
-    var nextCanvases = [], nextCtxs = [];
+    var nextCanvas, nextCtx;
     var cellSize = 28;
     var boardCols = 10;
     var boardRows = 20;
@@ -48,14 +47,8 @@ var BlockRenderer = (function() {
         canvas = document.getElementById(canvasId);
         ctx = canvas.getContext('2d');
 
-        holdCanvas = document.getElementById('hold-canvas');
-        holdCtx = holdCanvas.getContext('2d');
-
-        for (var i = 1; i <= 3; i++) {
-            var nc = document.getElementById('next-canvas-' + i);
-            nextCanvases.push(nc);
-            nextCtxs.push(nc.getContext('2d'));
-        }
+        nextCanvas = document.getElementById('next-canvas-1');
+        nextCtx = nextCanvas.getContext('2d');
 
         resize();
         return { canvas: canvas, ctx: ctx };
@@ -78,15 +71,10 @@ var BlockRenderer = (function() {
         offsetX = 0;
         offsetY = 0;
 
-        // Size side canvases
+        // Size next canvas
         var previewCell = Math.floor(cellSize * 0.7);
-        holdCanvas.width = previewCell * 4 + 8;
-        holdCanvas.height = previewCell * 4 + 8;
-
-        for (var i = 0; i < 3; i++) {
-            nextCanvases[i].width = previewCell * 4 + 8;
-            nextCanvases[i].height = previewCell * (i === 0 ? 4 : 3) + 8;
-        }
+        nextCanvas.width = previewCell * 4 + 8;
+        nextCanvas.height = previewCell * 4 + 8;
     }
 
     function setTheme(t) {
@@ -278,62 +266,31 @@ var BlockRenderer = (function() {
         }
     }
 
-    // Render hold piece in side panel
-    function renderHold(pieceName) {
+    // Render next piece in side panel (only 1)
+    function renderNext(pieceNames) {
         var previewCell = Math.floor(cellSize * 0.7);
-        holdCtx.clearRect(0, 0, holdCanvas.width, holdCanvas.height);
-        if (!pieceName) return;
+        nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
 
-        var shape = BlockPieces.getShape(pieceName, 0);
-        var color = BlockPieces.getColor(pieceName);
-        var glowColor = BlockPieces.getGlowColor(pieceName);
-        var shadowColor = BlockPieces.getShadowColor(pieceName);
+        if (!pieceNames || !pieceNames[0]) return;
+        var name = pieceNames[0];
+        var shape = BlockPieces.getShape(name, 0);
+        var color = BlockPieces.getColor(name);
+        var glowColor = BlockPieces.getGlowColor(name);
+        var shadowColor = BlockPieces.getShadowColor(name);
 
-        var ox = Math.floor((holdCanvas.width - shape[0].length * previewCell) / 2);
-        var oy = Math.floor((holdCanvas.height - shape.length * previewCell) / 2);
+        var ox = Math.floor((nextCanvas.width - shape[0].length * previewCell) / 2);
+        var oy = Math.floor((nextCanvas.height - shape.length * previewCell) / 2);
 
-        holdCtx.save();
-        holdCtx.translate(ox, oy);
+        nextCtx.save();
+        nextCtx.translate(ox, oy);
         for (var r = 0; r < shape.length; r++) {
             for (var c = 0; c < shape[r].length; c++) {
                 if (shape[r][c]) {
-                    drawCell(holdCtx, c, r, previewCell, color, glowColor, shadowColor, 0.9);
+                    drawCell(nextCtx, c, r, previewCell, color, glowColor, shadowColor, 0.9);
                 }
             }
         }
-        holdCtx.restore();
-    }
-
-    // Render next pieces in side panel
-    function renderNext(pieceNames) {
-        var previewCell = Math.floor(cellSize * 0.7);
-        for (var i = 0; i < 3; i++) {
-            var nc = nextCtxs[i];
-            nc.clearRect(0, 0, nextCanvases[i].width, nextCanvases[i].height);
-
-            if (!pieceNames[i]) continue;
-            var name = pieceNames[i];
-            var shape = BlockPieces.getShape(name, 0);
-            var color = BlockPieces.getColor(name);
-            var glowColor = BlockPieces.getGlowColor(name);
-            var shadowColor = BlockPieces.getShadowColor(name);
-
-            var scale = i === 0 ? 1 : 0.8;
-            var cs = Math.floor(previewCell * scale);
-            var ox = Math.floor((nextCanvases[i].width - shape[0].length * cs) / 2);
-            var oy = Math.floor((nextCanvases[i].height - shape.length * cs) / 2);
-
-            nc.save();
-            nc.translate(ox, oy);
-            for (var r = 0; r < shape.length; r++) {
-                for (var c = 0; c < shape[r].length; c++) {
-                    if (shape[r][c]) {
-                        drawCell(nc, c, r, cs, color, glowColor, shadowColor, i === 0 ? 0.9 : 0.6);
-                    }
-                }
-            }
-            nc.restore();
-        }
+        nextCtx.restore();
     }
 
     // Line clear animation
@@ -440,8 +397,7 @@ var BlockRenderer = (function() {
         BlockParticles.update(dt);
         BlockParticles.render(ctx);
 
-        // Side panels
-        renderHold(state.holdPiece);
+        // Next piece panel
         renderNext(state.nextPieces || []);
 
         return clearDone;

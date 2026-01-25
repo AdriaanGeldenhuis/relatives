@@ -386,12 +386,6 @@
                     haptic([5]);
                 }
             },
-            hold: function() {
-                if (BlockEngine.hold()) {
-                    BlockAudio.hold();
-                    haptic([8]);
-                }
-            },
             pause: function() {
                 if (BlockEngine.isRunning() && !BlockEngine.isGameOver()) {
                     if (BlockEngine.isPaused()) {
