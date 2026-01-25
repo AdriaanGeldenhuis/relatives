@@ -207,7 +207,6 @@ var NeonEngine = (function() {
         for (var r = 0; r < maze.length; r++) {
             for (var c = 0; c < maze[r].length; c++) {
                 if (maze[r][c] !== 0) continue;
-                // Only glow edges (walls adjacent to paths)
                 if (!isEdgeWall(r, c)) continue;
 
                 var x = c * TILE_SIZE + OFFSET_X;
@@ -215,45 +214,105 @@ var NeonEngine = (function() {
                 var cx = x + TILE_SIZE / 2;
                 var cy = y + TILE_SIZE / 2;
 
-                wctx.shadowColor = isLight ? 'rgba(80,80,200,0.4)' : 'rgba(0,150,255,0.5)';
-                wctx.shadowBlur = 12;
+                wctx.shadowColor = isLight ? 'rgba(80,80,200,0.5)' : 'rgba(0,180,255,0.6)';
+                wctx.shadowBlur = 16;
                 wctx.fillStyle = 'transparent';
                 wctx.beginPath();
-                wctx.arc(cx, cy, TILE_SIZE * 0.35, 0, Math.PI * 2);
+                wctx.arc(cx, cy, TILE_SIZE * 0.4, 0, Math.PI * 2);
                 wctx.fill();
             }
         }
         wctx.shadowBlur = 0;
 
-        // Draw wall tiles with edge-aware rendering
+        // Draw wall tiles with 3D bevel effect
         for (var r2 = 0; r2 < maze.length; r2++) {
             for (var c2 = 0; c2 < maze[r2].length; c2++) {
                 if (maze[r2][c2] !== 0) continue;
                 var x2 = c2 * TILE_SIZE + OFFSET_X;
                 var y2 = r2 * TILE_SIZE + OFFSET_Y;
                 var edge = isEdgeWall(r2, c2);
+                var ts = TILE_SIZE;
+                var inset = 2;
 
                 if (edge) {
-                    // Edge walls: bright neon border
-                    var grad = wctx.createLinearGradient(x2, y2, x2 + TILE_SIZE, y2 + TILE_SIZE);
+                    // 3D Edge walls with bevel effect
+                    // Main face gradient (top-left to bottom-right for 3D depth)
+                    var faceGrad = wctx.createLinearGradient(x2, y2, x2 + ts, y2 + ts);
                     if (isLight) {
-                        grad.addColorStop(0, 'rgba(60,60,160,0.9)');
-                        grad.addColorStop(1, 'rgba(80,80,200,0.7)');
+                        faceGrad.addColorStop(0, 'rgba(90,90,180,0.95)');
+                        faceGrad.addColorStop(0.5, 'rgba(70,70,160,0.9)');
+                        faceGrad.addColorStop(1, 'rgba(50,50,140,0.85)');
                     } else {
-                        grad.addColorStop(0, 'rgba(0,80,200,0.9)');
-                        grad.addColorStop(1, 'rgba(20,40,150,0.7)');
+                        faceGrad.addColorStop(0, 'rgba(30,60,160,0.95)');
+                        faceGrad.addColorStop(0.5, 'rgba(20,50,140,0.9)');
+                        faceGrad.addColorStop(1, 'rgba(10,30,100,0.85)');
                     }
-                    wctx.fillStyle = grad;
-                    wctx.fillRect(x2 + 1, y2 + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+                    wctx.fillStyle = faceGrad;
+                    wctx.fillRect(x2 + inset, y2 + inset, ts - inset * 2, ts - inset * 2);
 
-                    // Bright edge line
-                    wctx.strokeStyle = isLight ? 'rgba(100,100,220,0.8)' : 'rgba(0,180,255,0.6)';
+                    // Top highlight (3D bevel - light from top-left)
+                    var topGrad = wctx.createLinearGradient(x2, y2, x2, y2 + ts * 0.3);
+                    topGrad.addColorStop(0, isLight ? 'rgba(180,180,255,0.7)' : 'rgba(100,180,255,0.6)');
+                    topGrad.addColorStop(1, 'rgba(0,0,0,0)');
+                    wctx.fillStyle = topGrad;
+                    wctx.fillRect(x2 + inset, y2 + inset, ts - inset * 2, ts * 0.4);
+
+                    // Left highlight
+                    var leftGrad = wctx.createLinearGradient(x2, y2, x2 + ts * 0.3, y2);
+                    leftGrad.addColorStop(0, isLight ? 'rgba(160,160,240,0.5)' : 'rgba(80,150,255,0.4)');
+                    leftGrad.addColorStop(1, 'rgba(0,0,0,0)');
+                    wctx.fillStyle = leftGrad;
+                    wctx.fillRect(x2 + inset, y2 + inset, ts * 0.4, ts - inset * 2);
+
+                    // Bottom shadow (3D depth)
+                    var botGrad = wctx.createLinearGradient(x2, y2 + ts * 0.7, x2, y2 + ts);
+                    botGrad.addColorStop(0, 'rgba(0,0,0,0)');
+                    botGrad.addColorStop(1, 'rgba(0,0,30,0.5)');
+                    wctx.fillStyle = botGrad;
+                    wctx.fillRect(x2 + inset, y2 + ts * 0.6, ts - inset * 2, ts * 0.4 - inset);
+
+                    // Right shadow
+                    var rightGrad = wctx.createLinearGradient(x2 + ts * 0.7, y2, x2 + ts, y2);
+                    rightGrad.addColorStop(0, 'rgba(0,0,0,0)');
+                    rightGrad.addColorStop(1, 'rgba(0,0,30,0.4)');
+                    wctx.fillStyle = rightGrad;
+                    wctx.fillRect(x2 + ts * 0.6, y2 + inset, ts * 0.4 - inset, ts - inset * 2);
+
+                    // Neon edge glow line
+                    wctx.strokeStyle = isLight ? 'rgba(120,120,255,0.8)' : 'rgba(0,200,255,0.7)';
                     wctx.lineWidth = 1.5;
-                    wctx.strokeRect(x2 + 1.5, y2 + 1.5, TILE_SIZE - 3, TILE_SIZE - 3);
+                    wctx.strokeRect(x2 + inset, y2 + inset, ts - inset * 2, ts - inset * 2);
+
+                    // Inner highlight line (top-left corner accent)
+                    wctx.strokeStyle = isLight ? 'rgba(200,200,255,0.5)' : 'rgba(150,220,255,0.4)';
+                    wctx.lineWidth = 1;
+                    wctx.beginPath();
+                    wctx.moveTo(x2 + inset + 2, y2 + ts * 0.4);
+                    wctx.lineTo(x2 + inset + 2, y2 + inset + 2);
+                    wctx.lineTo(x2 + ts * 0.4, y2 + inset + 2);
+                    wctx.stroke();
                 } else {
-                    // Interior walls: darker fill
-                    wctx.fillStyle = isLight ? 'rgba(50,50,120,0.5)' : 'rgba(10,15,60,0.8)';
-                    wctx.fillRect(x2, y2, TILE_SIZE, TILE_SIZE);
+                    // Interior walls: 3D sunken effect
+                    var innerGrad = wctx.createLinearGradient(x2, y2, x2 + ts, y2 + ts);
+                    if (isLight) {
+                        innerGrad.addColorStop(0, 'rgba(40,40,100,0.6)');
+                        innerGrad.addColorStop(1, 'rgba(30,30,80,0.7)');
+                    } else {
+                        innerGrad.addColorStop(0, 'rgba(8,12,50,0.85)');
+                        innerGrad.addColorStop(1, 'rgba(5,8,35,0.9)');
+                    }
+                    wctx.fillStyle = innerGrad;
+                    wctx.fillRect(x2, y2, ts, ts);
+
+                    // Subtle inner shadow for depth
+                    var innerShadow = wctx.createRadialGradient(
+                        x2 + ts / 2, y2 + ts / 2, 0,
+                        x2 + ts / 2, y2 + ts / 2, ts * 0.7
+                    );
+                    innerShadow.addColorStop(0, 'rgba(0,0,0,0.2)');
+                    innerShadow.addColorStop(1, 'rgba(0,0,0,0)');
+                    wctx.fillStyle = innerShadow;
+                    wctx.fillRect(x2, y2, ts, ts);
                 }
             }
         }
@@ -888,74 +947,197 @@ var NeonEngine = (function() {
                 var y = r * TILE_SIZE + TILE_SIZE / 2 + OFFSET_Y;
 
                 if (type === 1) {
-                    // Spark Dot
-                    ctx.fillStyle = '#ffff88';
-                    ctx.shadowColor = '#ffff00';
-                    ctx.shadowBlur = 4;
+                    // 3D Spark Dot - golden sphere
+                    var dotRadius = TILE_SIZE * 0.14;
+
+                    // Outer glow
+                    ctx.shadowColor = '#ffcc00';
+                    ctx.shadowBlur = 8;
+
+                    // 3D sphere gradient (light from top-left)
+                    var dotGrad = ctx.createRadialGradient(
+                        x - dotRadius * 0.3, y - dotRadius * 0.3, 0,
+                        x, y, dotRadius
+                    );
+                    dotGrad.addColorStop(0, '#ffffff');
+                    dotGrad.addColorStop(0.2, '#ffffcc');
+                    dotGrad.addColorStop(0.5, '#ffdd44');
+                    dotGrad.addColorStop(0.8, '#cc9900');
+                    dotGrad.addColorStop(1, '#886600');
+                    ctx.fillStyle = dotGrad;
                     ctx.beginPath();
-                    ctx.arc(x, y, TILE_SIZE * 0.12, 0, Math.PI * 2);
+                    ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
                     ctx.fill();
-                } else if (type === 2) {
-                    // Pulse Orb
-                    var pulse = 0.8 + Math.sin(time * 0.005) * 0.3;
-                    ctx.fillStyle = '#ff66ff';
-                    ctx.shadowColor = '#ff00ff';
-                    ctx.shadowBlur = 10 * pulse;
+
+                    // Specular highlight
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = 'rgba(255,255,255,0.8)';
                     ctx.beginPath();
-                    ctx.arc(x, y, TILE_SIZE * 0.25 * pulse, 0, Math.PI * 2);
+                    ctx.arc(x - dotRadius * 0.3, y - dotRadius * 0.3, dotRadius * 0.25, 0, Math.PI * 2);
+                    ctx.fill();
+
+                } else if (type === 2) {
+                    // 3D Pulse Orb - glowing magenta sphere
+                    var pulse = 0.85 + Math.sin(time * 0.005) * 0.15;
+                    var orbRadius = TILE_SIZE * 0.28 * pulse;
+
+                    // Outer bloom glow
+                    ctx.shadowColor = '#ff00ff';
+                    ctx.shadowBlur = 20 * pulse;
+                    ctx.globalAlpha = 0.3;
+                    ctx.fillStyle = '#ff44ff';
+                    ctx.beginPath();
+                    ctx.arc(x, y, orbRadius * 1.8, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Mid glow ring
+                    ctx.globalAlpha = 0.5;
+                    ctx.beginPath();
+                    ctx.arc(x, y, orbRadius * 1.3, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Core 3D sphere
+                    ctx.globalAlpha = 1;
+                    ctx.shadowBlur = 15;
+                    var orbGrad = ctx.createRadialGradient(
+                        x - orbRadius * 0.25, y - orbRadius * 0.25, 0,
+                        x, y, orbRadius
+                    );
+                    orbGrad.addColorStop(0, '#ffffff');
+                    orbGrad.addColorStop(0.15, '#ffccff');
+                    orbGrad.addColorStop(0.4, '#ff66ff');
+                    orbGrad.addColorStop(0.7, '#dd00dd');
+                    orbGrad.addColorStop(1, '#880088');
+                    ctx.fillStyle = orbGrad;
+                    ctx.beginPath();
+                    ctx.arc(x, y, orbRadius, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Inner energy core
+                    ctx.shadowBlur = 0;
+                    var coreGrad = ctx.createRadialGradient(x, y, 0, x, y, orbRadius * 0.5);
+                    coreGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
+                    coreGrad.addColorStop(0.5, 'rgba(255,150,255,0.4)');
+                    coreGrad.addColorStop(1, 'rgba(255,0,255,0)');
+                    ctx.fillStyle = coreGrad;
+                    ctx.beginPath();
+                    ctx.arc(x, y, orbRadius * 0.6, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Specular highlight
+                    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                    ctx.beginPath();
+                    ctx.arc(x - orbRadius * 0.3, y - orbRadius * 0.3, orbRadius * 0.2, 0, Math.PI * 2);
                     ctx.fill();
                 }
             }
         }
         ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
     }
 
     function renderPlayer() {
         var time = Date.now();
-        var pulse = 0.9 + Math.sin(time * 0.006) * 0.1;
-        var radius = TILE_SIZE * 0.35 * pulse;
-        var color = pulseMode ? '#ff00ff' : '#00f5ff';
-        var color2 = pulseMode ? '#ff88ff' : '#88ffff';
+        var pulse = 0.92 + Math.sin(time * 0.006) * 0.08;
+        var radius = TILE_SIZE * 0.38 * pulse;
+        var px = player.px;
+        var py = player.py;
 
-        // Outer bloom (large, soft)
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 25;
-        ctx.globalAlpha = 0.15;
-        ctx.fillStyle = color;
+        // Colors based on mode
+        var primaryColor = pulseMode ? '#ff00ff' : '#00f5ff';
+        var lightColor = pulseMode ? '#ffaaff' : '#aaffff';
+        var darkColor = pulseMode ? '#880088' : '#006688';
+
+        // Outer bloom layer 1 (largest, softest)
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 35;
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = primaryColor;
         ctx.beginPath();
-        ctx.arc(player.px, player.py, radius * 2.2, 0, Math.PI * 2);
+        ctx.arc(px, py, radius * 2.5, 0, Math.PI * 2);
         ctx.fill();
 
-        // Mid glow
-        ctx.shadowBlur = 15;
+        // Outer bloom layer 2
+        ctx.shadowBlur = 25;
+        ctx.globalAlpha = 0.2;
+        ctx.beginPath();
+        ctx.arc(px, py, radius * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Mid glow layer
+        ctx.shadowBlur = 18;
         ctx.globalAlpha = 0.35;
         ctx.beginPath();
-        ctx.arc(player.px, player.py, radius * 1.5, 0, Math.PI * 2);
+        ctx.arc(px, py, radius * 1.4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Core orb with gradient
-        ctx.globalAlpha = 1;
-        ctx.shadowBlur = 12;
-        var grad = ctx.createRadialGradient(
-            player.px - radius * 0.2, player.py - radius * 0.2, 0,
-            player.px, player.py, radius
-        );
-        grad.addColorStop(0, '#ffffff');
-        grad.addColorStop(0.3, color2);
-        grad.addColorStop(0.7, color);
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(player.px, player.py, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Specular highlight
+        // Ground shadow (subtle)
         ctx.shadowBlur = 0;
-        ctx.globalAlpha = 0.6;
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.ellipse(px + 2, py + radius * 0.9, radius * 0.7, radius * 0.25, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Main 3D orb with complex gradient
+        ctx.globalAlpha = 1;
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 15;
+
+        var orbGrad = ctx.createRadialGradient(
+            px - radius * 0.3, py - radius * 0.3, 0,
+            px, py, radius
+        );
+        orbGrad.addColorStop(0, '#ffffff');
+        orbGrad.addColorStop(0.15, lightColor);
+        orbGrad.addColorStop(0.4, primaryColor);
+        orbGrad.addColorStop(0.75, darkColor);
+        orbGrad.addColorStop(1, 'rgba(0,0,40,0.8)');
+        ctx.fillStyle = orbGrad;
+        ctx.beginPath();
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Inner energy core
+        ctx.shadowBlur = 0;
+        var coreGrad = ctx.createRadialGradient(px, py, 0, px, py, radius * 0.5);
+        coreGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
+        coreGrad.addColorStop(0.4, pulseMode ? 'rgba(255,200,255,0.5)' : 'rgba(200,255,255,0.5)');
+        coreGrad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = coreGrad;
+        ctx.beginPath();
+        ctx.arc(px, py, radius * 0.55, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Rim light (edge highlight - 3D effect)
+        ctx.globalAlpha = 0.4;
+        ctx.strokeStyle = lightColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, radius - 1, Math.PI * 0.8, Math.PI * 1.4);
+        ctx.stroke();
+
+        // Primary specular highlight
+        ctx.globalAlpha = 0.9;
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.arc(player.px - radius * 0.25, player.py - radius * 0.25, radius * 0.2, 0, Math.PI * 2);
+        ctx.ellipse(px - radius * 0.28, py - radius * 0.28, radius * 0.22, radius * 0.15, -Math.PI / 4, 0, Math.PI * 2);
         ctx.fill();
+
+        // Secondary smaller highlight
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.arc(px - radius * 0.1, py - radius * 0.4, radius * 0.08, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Animated energy ring
+        var ringPhase = (time * 0.003) % (Math.PI * 2);
+        ctx.globalAlpha = 0.3 + Math.sin(time * 0.008) * 0.15;
+        ctx.strokeStyle = primaryColor;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(px, py, radius * 1.15, ringPhase, ringPhase + Math.PI * 1.2);
+        ctx.stroke();
 
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
@@ -970,12 +1152,10 @@ var NeonEngine = (function() {
             if (!s.released) continue;
 
             var color = s.color;
-            var radius = TILE_SIZE * 0.35;
+            var radius = TILE_SIZE * 0.38;
 
             if (s.state === SENTINEL_STATES.VULNERABLE) {
-                // Flashing blue when vulnerable
                 var flash = Math.sin(time * 0.01) > 0;
-                // Blink faster near end
                 var elapsed = Date.now() - pulseStart;
                 if (elapsed > pulseDuration * 0.7) {
                     flash = Math.sin(time * 0.02) > 0;
@@ -983,19 +1163,25 @@ var NeonEngine = (function() {
                 color = flash ? '#4444ff' : '#ffffff';
             }
 
-            // Shimmer
-            var shimmer = 0.85 + Math.sin(time * 0.006 + i * 2) * 0.15;
-
-            // Body (diamond/rounded shape)
-            ctx.shadowColor = color;
-            ctx.shadowBlur = 8;
-            ctx.fillStyle = color;
-            ctx.globalAlpha = shimmer;
-
-            ctx.beginPath();
-            // Draw a rounded sentinel shape
+            var shimmer = 0.9 + Math.sin(time * 0.006 + i * 2) * 0.1;
             var sx = s.px;
             var sy = s.py;
+
+            // Outer glow/shadow
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 15;
+            ctx.globalAlpha = 0.4;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(sx, sy, radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw sentinel body path for clipping
+            ctx.globalAlpha = shimmer;
+            ctx.shadowBlur = 10;
+
+            // Create body path
+            ctx.beginPath();
             ctx.moveTo(sx, sy - radius);
             ctx.quadraticCurveTo(sx + radius, sy - radius * 0.3, sx + radius, sy + radius * 0.3);
             ctx.lineTo(sx + radius * 0.7, sy + radius);
@@ -1005,26 +1191,117 @@ var NeonEngine = (function() {
             ctx.lineTo(sx - radius * 0.7, sy + radius);
             ctx.lineTo(sx - radius, sy + radius * 0.3);
             ctx.quadraticCurveTo(sx - radius, sy - radius * 0.3, sx, sy - radius);
+            ctx.closePath();
+
+            // 3D body gradient (light from top-left)
+            var bodyGrad = ctx.createLinearGradient(
+                sx - radius, sy - radius,
+                sx + radius, sy + radius
+            );
+            // Parse color and create lighter/darker versions
+            var baseColor = color;
+            bodyGrad.addColorStop(0, lightenColor(baseColor, 40));
+            bodyGrad.addColorStop(0.3, baseColor);
+            bodyGrad.addColorStop(0.7, darkenColor(baseColor, 30));
+            bodyGrad.addColorStop(1, darkenColor(baseColor, 50));
+            ctx.fillStyle = bodyGrad;
             ctx.fill();
 
-            // Eyes
-            ctx.globalAlpha = 1;
+            // Top highlight arc
+            ctx.globalAlpha = 0.4;
             ctx.shadowBlur = 0;
-            ctx.fillStyle = '#fff';
+            var highlightGrad = ctx.createLinearGradient(sx, sy - radius, sx, sy);
+            highlightGrad.addColorStop(0, 'rgba(255,255,255,0.8)');
+            highlightGrad.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = highlightGrad;
             ctx.beginPath();
-            ctx.arc(sx - radius * 0.25, sy - radius * 0.1, radius * 0.18, 0, Math.PI * 2);
-            ctx.arc(sx + radius * 0.25, sy - radius * 0.1, radius * 0.18, 0, Math.PI * 2);
+            ctx.ellipse(sx, sy - radius * 0.3, radius * 0.6, radius * 0.4, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Pupils
-            ctx.fillStyle = s.state === SENTINEL_STATES.VULNERABLE ? '#ff0000' : '#111';
+            // Bottom tentacle shadows
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
             ctx.beginPath();
-            ctx.arc(sx - radius * 0.25, sy - radius * 0.05, radius * 0.08, 0, Math.PI * 2);
-            ctx.arc(sx + radius * 0.25, sy - radius * 0.05, radius * 0.08, 0, Math.PI * 2);
+            ctx.ellipse(sx, sy + radius * 0.8, radius * 0.7, radius * 0.25, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 3D Eyes with depth
+            ctx.globalAlpha = 1;
+            var eyeRadius = radius * 0.2;
+            var eyeY = sy - radius * 0.1;
+
+            // Eye sockets (shadow)
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.arc(sx - radius * 0.28, eyeY + 2, eyeRadius * 1.1, 0, Math.PI * 2);
+            ctx.arc(sx + radius * 0.28, eyeY + 2, eyeRadius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eyeballs with 3D gradient
+            var eyeGrad = ctx.createRadialGradient(
+                sx - radius * 0.28 - eyeRadius * 0.2, eyeY - eyeRadius * 0.2, 0,
+                sx - radius * 0.28, eyeY, eyeRadius
+            );
+            eyeGrad.addColorStop(0, '#ffffff');
+            eyeGrad.addColorStop(0.7, '#eeeeff');
+            eyeGrad.addColorStop(1, '#ccccdd');
+            ctx.fillStyle = eyeGrad;
+            ctx.beginPath();
+            ctx.arc(sx - radius * 0.28, eyeY, eyeRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            var eyeGrad2 = ctx.createRadialGradient(
+                sx + radius * 0.28 - eyeRadius * 0.2, eyeY - eyeRadius * 0.2, 0,
+                sx + radius * 0.28, eyeY, eyeRadius
+            );
+            eyeGrad2.addColorStop(0, '#ffffff');
+            eyeGrad2.addColorStop(0.7, '#eeeeff');
+            eyeGrad2.addColorStop(1, '#ccccdd');
+            ctx.fillStyle = eyeGrad2;
+            ctx.beginPath();
+            ctx.arc(sx + radius * 0.28, eyeY, eyeRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pupils with highlight
+            var pupilColor = s.state === SENTINEL_STATES.VULNERABLE ? '#cc0000' : '#111133';
+            var pupilRadius = eyeRadius * 0.45;
+
+            ctx.fillStyle = pupilColor;
+            ctx.beginPath();
+            ctx.arc(sx - radius * 0.28, eyeY + 1, pupilRadius, 0, Math.PI * 2);
+            ctx.arc(sx + radius * 0.28, eyeY + 1, pupilRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pupil highlights
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.beginPath();
+            ctx.arc(sx - radius * 0.28 - pupilRadius * 0.3, eyeY - pupilRadius * 0.2, pupilRadius * 0.35, 0, Math.PI * 2);
+            ctx.arc(sx + radius * 0.28 - pupilRadius * 0.3, eyeY - pupilRadius * 0.2, pupilRadius * 0.35, 0, Math.PI * 2);
             ctx.fill();
         }
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
+    }
+
+    // Helper functions for 3D color manipulation
+    function lightenColor(hex, percent) {
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        r = Math.min(255, r + (255 - r) * percent / 100);
+        g = Math.min(255, g + (255 - g) * percent / 100);
+        b = Math.min(255, b + (255 - b) * percent / 100);
+        return 'rgb(' + Math.round(r) + ',' + Math.round(g) + ',' + Math.round(b) + ')';
+    }
+
+    function darkenColor(hex, percent) {
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        r = Math.max(0, r * (100 - percent) / 100);
+        g = Math.max(0, g * (100 - percent) / 100);
+        b = Math.max(0, b * (100 - percent) / 100);
+        return 'rgb(' + Math.round(r) + ',' + Math.round(g) + ',' + Math.round(b) + ')';
     }
 
     function getState() { return state; }
