@@ -493,7 +493,7 @@ var NeonEngine = (function() {
 
             // Trail particles
             if (Math.random() < 0.4) {
-                NeonParticles.emitTrail(player.px, player.py, pulseMode ? '#ff00ff' : '#00f5ff');
+                NeonParticles.emitTrail(player.px, player.py, pulseMode ? '#ff00ff' : '#39ff14');
             }
         } else {
             player.px = player.col * TILE_SIZE + TILE_SIZE / 2 + OFFSET_X;
@@ -1066,10 +1066,10 @@ var NeonEngine = (function() {
         var px = player.px;
         var py = player.py;
 
-        // Colors based on mode
-        var primaryColor = pulseMode ? '#ff00ff' : '#00f5ff';
-        var lightColor = pulseMode ? '#ffaaff' : '#aaffff';
-        var darkColor = pulseMode ? '#880088' : '#006688';
+        // Colors based on mode - neon green for visibility
+        var primaryColor = pulseMode ? '#ff00ff' : '#39ff14';
+        var lightColor = pulseMode ? '#ffaaff' : '#aaffaa';
+        var darkColor = pulseMode ? '#880088' : '#1a8800';
 
         // Outer bloom layer 1 (largest, softest)
         ctx.shadowColor = primaryColor;
@@ -1125,7 +1125,7 @@ var NeonEngine = (function() {
         ctx.shadowBlur = 0;
         var coreGrad = ctx.createRadialGradient(px, py, 0, px, py, radius * 0.5);
         coreGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
-        coreGrad.addColorStop(0.4, pulseMode ? 'rgba(255,200,255,0.5)' : 'rgba(200,255,255,0.5)');
+        coreGrad.addColorStop(0.4, pulseMode ? 'rgba(255,200,255,0.5)' : 'rgba(200,255,200,0.5)');
         coreGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = coreGrad;
         ctx.beginPath();
