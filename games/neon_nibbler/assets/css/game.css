@@ -187,6 +187,13 @@ html, body {
     justify-content: center;
 }
 
+/* Options button - auto-resize to fit screen */
+#btn-options {
+    padding: clamp(10px, 2.5vmin, 16px) clamp(24px, 6vmin, 48px);
+    font-size: clamp(0.75rem, 2.2vmin, 1.1rem);
+    white-space: nowrap;
+}
+
 /* ===== OPTIONS OVERLAY ===== */
 .options-overlay {
     position: fixed;
