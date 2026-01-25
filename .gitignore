@@ -1,0 +1,13 @@
+# secrets
+.env
+.env.cache.php
+help/config.php
+
+# logs
+logs/
+help/logs/
+*.log
+
+# uploads (optional, but usually)
+uploads/
+saves/

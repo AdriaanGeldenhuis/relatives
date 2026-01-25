@@ -1,0 +1,16 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds",
+      "delegate_permission/common.use_as_origin"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "za.co.relatives.app",
+      "sha256_cert_fingerprints": [
+        "52:87:0D:27:32:10:F9:45:2E:B4:40:8B:94:FA:15:00:CB:F1:6D:13:88:46:A4:CC:F1:30:0D:66:13:CC:A6:96"
+      ]
+    }
+  }
+]

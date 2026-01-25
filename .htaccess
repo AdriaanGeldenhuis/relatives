@@ -1,0 +1,90 @@
+# ============================================
+# RELATIVES APP - OPTIMIZED .HTACCESS
+# ============================================
+
+# Enable Rewrite Engine
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    
+    # Force HTTPS
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# Service Workers - MUST BE ACCESSIBLE
+<FilesMatch "^(sw\.js|firebase-messaging-sw\.js)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Content-Type "application/javascript; charset=utf-8"
+    <IfModule mod_headers.c>
+        Header set Service-Worker-Allowed "/"
+    </IfModule>
+</FilesMatch>
+
+# Manifest
+<Files "manifest.json">
+    Header set Content-Type "application/manifest+json; charset=utf-8"
+</Files>
+
+# PHP Processing
+<FilesMatch "\.php$">
+    SetHandler application/x-httpd-php
+</FilesMatch>
+
+# Security Headers
+<IfModule mod_headers.c>
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    Header unset X-Powered-By
+    Header unset Server
+</IfModule>
+
+# Protect sensitive files
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<Files ".env">
+    Require all denied
+</Files>
+
+<Files ".env.cache.php">
+    Require all denied
+</Files>
+
+# PHP Settings
+<IfModule mod_php7.c>
+    php_value opcache.enable 1
+    php_value opcache.memory_consumption 128
+    php_value opcache.max_accelerated_files 10000
+    php_value opcache.revalidate_freq 2
+    php_value session.gc_maxlifetime 2592000
+    php_value session.cookie_lifetime 2592000
+</IfModule>
+
+# Cache static assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/jpg "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
+</IfModule>
+
+# Compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
+</IfModule>
+
+# Directory settings
+DirectoryIndex index.php index.html
+Options -Indexes +FollowSymLinks
+
+# END

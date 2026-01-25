@@ -1,0 +1,890 @@
+===Database relatykbvc_db1
+
+== Table structure for table audit_log
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|Yes|NULL
+|user_id|bigint(20)|Yes|NULL
+|action|varchar(100)|No|
+|entity_type|varchar(50)|Yes|NULL
+|entity_id|bigint(20)|Yes|NULL
+|meta|longtext|Yes|NULL
+|ip|varbinary(16)|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table cache
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|int(10)|No|
+|cache_key|varchar(255)|No|
+|cache_value|longtext|No|
+|expires_at|datetime|No|
+|created_at|datetime|Yes|current_timestamp()
+== Table structure for table chat_preferences
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|theme|varchar(50)|Yes|default
+|wallpaper|varchar(500)|Yes|NULL
+|show_read_receipts|tinyint(1)|Yes|1
+|smart_replies_enabled|tinyint(1)|Yes|1
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table devices
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|device_label|varchar(120)|No|Primary Device
+|**device_fingerprint**|char(64)|No|
+|device_type|enum(&#039;mobile&#039;, &#039;tablet&#039;, &#039;desktop&#039;)|Yes|mobile
+|last_seen|timestamp|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table events
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|user_id|bigint(20)|Yes|NULL
+|kind|enum(&#039;todo&#039;, &#039;study&#039;, &#039;work&#039;, &#039;other&#039;)|No|
+|title|varchar(200)|No|
+|notes|text|Yes|NULL
+|location|varchar(200)|Yes|NULL
+|starts_at|datetime|No|
+|ends_at|datetime|Yes|NULL
+|all_day|tinyint(1)|Yes|0
+|color|char(7)|Yes|#3498db
+|status|enum(&#039;pending&#039;, &#039;done&#039;, &#039;cancelled&#039;)|Yes|pending
+|reminder_minutes|int(11)|Yes|NULL
+|repeat_rule|varchar(100)|Yes|NULL
+|google_event_id|varchar(255)|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table families
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|name|varchar(120)|No|
+|owner_user_id|bigint(20)|Yes|NULL
+|current_plan_id|int(11)|Yes|NULL
+|subscription_status|enum(&#039;trial&#039;, &#039;active&#039;, &#039;locked&#039;, &#039;expired&#039;, &#039;cancelled&#039;)|No|trial
+|trial_started_at|datetime|Yes|NULL
+|trial_ends_at|datetime|Yes|NULL
+|subscription_expires_at|datetime|Yes|NULL
+|billing_platform|enum(&#039;google_play&#039;, &#039;apple_app_store&#039;, &#039;none&#039;)|No|none
+|**invite_code**|char(8)|No|
+|timezone|varchar(50)|Yes|Africa/Johannesburg
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table fcm_tokens
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|int(11)|No|
+|**user_id**|int(11)|No|
+|**token**|text|No|
+|created_at|datetime|No|current_timestamp()
+|**device_type**|varchar(20)|Yes|web
+|updated_at|datetime|No|
+== Table structure for table feature_usage
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**family_id**|bigint(20)|No|
+|**feature**|varchar(50)|No|
+|usage_count|int(11)|Yes|0
+|reset_at|datetime|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table geofence_events
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|user_id|bigint(20)|No|
+|family_id|bigint(20)|No|
+|place_id|int(11)|No|
+|event_type|enum(&#039;arrival&#039;, &#039;departure&#039;)|No|arrival
+|lat|decimal(10,7)|No|
+|lng|decimal(10,7)|No|
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table messages
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|user_id|bigint(20)|No|
+|message_type|enum(&#039;text&#039;, &#039;image&#039;, &#039;video&#039;, &#039;voice&#039;, &#039;file&#039;, &#039;poll&#039;, &#039;event&#039;, &#039;location&#039;)|Yes|text
+|content|text|Yes|NULL
+|media_path|varchar(500)|Yes|NULL
+|media_thumbnail|varchar(500)|Yes|NULL
+|reply_to_message_id|bigint(20)|Yes|NULL
+|pinned|tinyint(1)|Yes|0
+|self_destruct_seconds|int(11)|Yes|NULL
+|expires_at|datetime|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+|edited_at|timestamp|Yes|NULL
+|edit_count|int(11)|Yes|0
+|updated_at|timestamp|Yes|NULL
+|deleted_at|timestamp|Yes|NULL
+== Table structure for table message_archives
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|original_message_id|bigint(20)|No|
+|family_id|bigint(20)|No|
+|user_id|bigint(20)|No|
+|message_type|enum(&#039;text&#039;, &#039;image&#039;, &#039;video&#039;, &#039;voice&#039;, &#039;file&#039;, &#039;poll&#039;, &#039;event&#039;, &#039;location&#039;, &#039;audio&#039;)|Yes|text
+|content|text|Yes|NULL
+|media_path|varchar(500)|Yes|NULL
+|created_at|timestamp|Yes|NULL
+|archived_at|timestamp|Yes|current_timestamp()
+== Table structure for table message_delivery_status
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**message_id**|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|status|enum(&#039;sent&#039;, &#039;delivered&#039;, &#039;read&#039;)|Yes|sent
+|delivered_at|timestamp|Yes|NULL
+|read_at|timestamp|Yes|NULL
+|updated_at|timestamp|Yes|current_timestamp()
+== Table structure for table message_edit_history
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|message_id|bigint(20)|No|
+|previous_content|text|Yes|NULL
+|edited_by|bigint(20)|No|
+|edited_at|timestamp|Yes|current_timestamp()
+== Table structure for table message_mentions
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|message_id|bigint(20)|No|
+|mentioned_user_id|bigint(20)|No|
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table message_polls
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**message_id**|bigint(20)|No|
+|question|varchar(500)|No|
+|multiple_choice|tinyint(1)|Yes|0
+|closes_at|datetime|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table message_queue
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|user_id|bigint(20)|No|
+|family_id|bigint(20)|No|
+|temp_id|varchar(100)|No|
+|message_type|varchar(50)|Yes|NULL
+|content|text|Yes|NULL
+|media_path|varchar(500)|Yes|NULL
+|reply_to_message_id|bigint(20)|Yes|NULL
+|retry_count|int(11)|Yes|0
+|status|enum(&#039;pending&#039;, &#039;processing&#039;, &#039;sent&#039;, &#039;failed&#039;)|Yes|pending
+|error_message|text|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+|sent_at|timestamp|Yes|NULL
+== Table structure for table message_reactions
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**message_id**|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|**emoji**|varchar(10)|No|
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table message_reads
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**message_id**|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|read_at|timestamp|Yes|current_timestamp()
+== Table structure for table message_search_index
+
+|------
+|Column|Type|Null|Default
+|------
+|//**message_id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|search_content|text|Yes|NULL
+|has_media|tinyint(1)|Yes|0
+|has_reactions|tinyint(1)|Yes|0
+|indexed_at|timestamp|Yes|current_timestamp()
+== Table structure for table message_settings
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**family_id**|bigint(20)|No|
+|max_messages|int(11)|Yes|500
+|auto_delete_days|int(11)|Yes|NULL
+|allow_editing|tinyint(1)|Yes|1
+|edit_time_limit_minutes|int(11)|Yes|15
+|allow_deletion|tinyint(1)|Yes|1
+|require_admin_for_bulk|tinyint(1)|Yes|1
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|current_timestamp()
+== Table structure for table message_threads
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|root_message_id|bigint(20)|No|
+|message_count|int(11)|Yes|1
+|last_reply_at|timestamp|Yes|current_timestamp()
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table notes
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|user_id|bigint(20)|Yes|NULL
+|type|enum(&#039;text&#039;, &#039;voice&#039;)|No|text
+|title|varchar(160)|Yes|NULL
+|body|text|Yes|NULL
+|audio_path|varchar(255)|Yes|NULL
+|color|char(7)|Yes|#ffffff
+|pinned|tinyint(1)|Yes|0
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table notifications
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|int(11)|No|
+|user_id|int(11)|No|
+|from_user_id|int(11)|Yes|NULL
+|type|varchar(50)|No|system
+|priority|enum(&#039;low&#039;, &#039;normal&#039;, &#039;high&#039;, &#039;urgent&#039;)|Yes|normal
+|category|varchar(50)|Yes|NULL
+|icon|varchar(100)|Yes|NULL
+|sound|varchar(100)|Yes|NULL
+|vibrate|tinyint(1)|Yes|1
+|requires_interaction|tinyint(1)|Yes|0
+|expires_at|datetime|Yes|NULL
+|title|varchar(255)|No|
+|message|text|No|
+|data_json|text|Yes|NULL
+|action_url|varchar(500)|Yes|NULL
+|is_read|tinyint(1)|No|0
+|read_at|datetime|Yes|NULL
+|dismissed_at|datetime|Yes|NULL
+|created_at|datetime|No|current_timestamp()
+== Table structure for table notification_delivery_log
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|notification_id|int(11)|Yes|NULL
+|user_id|int(11)|No|
+|delivery_method|enum(&#039;database&#039;, &#039;push&#039;, &#039;email&#039;, &#039;sms&#039;)|No|
+|status|enum(&#039;pending&#039;, &#039;sent&#039;, &#039;delivered&#039;, &#039;failed&#039;, &#039;bounced&#039;)|Yes|pending
+|fcm_message_id|varchar(255)|Yes|NULL
+|error_message|text|Yes|NULL
+|retry_count|int(11)|Yes|0
+|sent_at|timestamp|Yes|NULL
+|delivered_at|timestamp|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table notification_preferences
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|**category**|varchar(50)|No|
+|enabled|tinyint(1)|No|1
+|push_enabled|tinyint(1)|No|1
+|sound_enabled|tinyint(1)|No|1
+|vibrate_enabled|tinyint(1)|No|1
+|custom_sound|varchar(100)|Yes|NULL
+|min_priority|enum(&#039;low&#039;, &#039;normal&#039;, &#039;high&#039;, &#039;urgent&#039;)|Yes|low
+|quiet_hours_enabled|tinyint(1)|Yes|0
+|quiet_hours_start|time|Yes|NULL
+|quiet_hours_end|time|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table payment_history
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|provider|enum(&#039;google_play&#039;, &#039;apple_app_store&#039;, &#039;manual&#039;)|No|manual
+|external_id|varchar(255)|Yes|NULL
+|external_raw|text|Yes|NULL
+|subscription_id|bigint(20)|Yes|NULL
+|amount_cents|int(11)|No|
+|currency|varchar(3)|No|ZAR
+|status|enum(&#039;pending&#039;, &#039;successful&#039;, &#039;failed&#039;, &#039;refunded&#039;)|No|pending
+|description|varchar(500)|Yes|NULL
+|metadata|longtext|Yes|NULL
+|created_at|timestamp|No|current_timestamp()
+== Table structure for table pinned_messages
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**family_id**|bigint(20)|Yes|NULL
+|**message_id**|bigint(20)|Yes|NULL
+|pinned_by|bigint(20)|Yes|NULL
+|pinned_at|timestamp|No|current_timestamp()
+== Table structure for table plans
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|int(11)|No|
+|**code**|varchar(100)|No|
+|name|varchar(100)|No|
+|billing_period|enum(&#039;monthly&#039;, &#039;yearly&#039;)|No|monthly
+|price_cents|int(11)|No|
+|currency|varchar(3)|No|ZAR
+|max_members|int(11)|No|0
+|is_active|tinyint(1)|No|1
+|created_at|timestamp|No|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table poll_options
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|poll_id|bigint(20)|No|
+|option_text|varchar(200)|No|
+|sort_order|int(11)|Yes|0
+== Table structure for table poll_votes
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**option_id**|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table push_subscriptions
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|user_id|bigint(20)|No|
+|endpoint|text|No|
+|p256dh|varchar(255)|No|
+|auth|varchar(255)|No|
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table scheduled_messages
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|user_id|bigint(20)|No|
+|message_type|varchar(50)|Yes|NULL
+|content|text|Yes|NULL
+|media_path|varchar(500)|Yes|NULL
+|scheduled_for|datetime|No|
+|sent|tinyint(1)|Yes|0
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table schedule_events
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|user_id|bigint(20)|No|
+|added_by|bigint(20)|No|
+|assigned_to|bigint(20)|Yes|NULL
+|title|varchar(200)|No|
+|notes|text|Yes|NULL
+|kind|enum(&#039;study&#039;, &#039;work&#039;, &#039;todo&#039;, &#039;break&#039;, &#039;focus&#039;)|No|todo
+|starts_at|datetime|No|
+|ends_at|datetime|No|
+|all_day|tinyint(1)|Yes|0
+|color|char(7)|Yes|#667eea
+|status|enum(&#039;pending&#039;, &#039;in_progress&#039;, &#039;done&#039;, &#039;cancelled&#039;)|Yes|pending
+|reminder_minutes|int(11)|Yes|NULL
+|repeat_rule|varchar(100)|Yes|NULL
+|parent_event_id|bigint(20)|Yes|NULL
+|focus_mode|tinyint(1)|Yes|0
+|actual_start|datetime|Yes|NULL
+|actual_end|datetime|Yes|NULL
+|productivity_rating|tinyint(1)|Yes|NULL
+|pomodoro_count|int(11)|Yes|0
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table schedule_productivity
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|family_id|bigint(20)|No|
+|**date**|date|No|
+|study_minutes|int(11)|Yes|0
+|work_minutes|int(11)|Yes|0
+|focus_minutes|int(11)|Yes|0
+|completed_tasks|int(11)|Yes|0
+|total_tasks|int(11)|Yes|0
+|productivity_score|decimal(5,2)|Yes|0.00
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table search_history
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|int(11)|No|
+|user_id|int(11)|No|
+|family_id|int(11)|No|
+|query|text|No|
+|results_count|int(11)|Yes|0
+|clicked_result|varchar(255)|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table sessions
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|user_id|bigint(20)|No|
+|**session_token**|char(64)|No|
+|csrf_token|char(64)|No|
+|ip|varbinary(16)|Yes|NULL
+|user_agent|varchar(255)|Yes|NULL
+|expires_at|datetime|No|
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table shopping_bulk_operations
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|user_id|bigint(20)|No|
+|operation_type|enum(&#039;delete&#039;, &#039;move&#039;, &#039;mark_bought&#039;, &#039;assign&#039;)|No|
+|item_count|int(11)|No|
+|details|longtext|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table shopping_history
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|list_id|bigint(20)|No|
+|item_name|varchar(160)|No|
+|qty|varchar(40)|Yes|NULL
+|price|decimal(10,2)|Yes|NULL
+|category|varchar(50)|Yes|NULL
+|store|varchar(100)|Yes|NULL
+|bought_by|bigint(20)|Yes|NULL
+|bought_at|timestamp|Yes|current_timestamp()
+== Table structure for table shopping_items
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|list_id|bigint(20)|No|
+|added_by|bigint(20)|Yes|NULL
+|assigned_to|bigint(20)|Yes|NULL
+|name|varchar(160)|No|
+|qty|varchar(40)|Yes|NULL
+|price|decimal(10,2)|Yes|NULL
+|currency|varchar(3)|Yes|ZAR
+|store|varchar(100)|Yes|NULL
+|category|varchar(50)|Yes|NULL
+|status|enum(&#039;pending&#039;, &#039;bought&#039;, &#039;deleted&#039;)|Yes|pending
+|sort_order|int(11)|Yes|0
+|is_recurring|tinyint(1)|Yes|0
+|recurring_frequency|varchar(20)|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+|bought_at|timestamp|Yes|NULL
+== Table structure for table shopping_lists
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|name|varchar(120)|No|Main List
+|icon|varchar(50)|Yes|?
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table shopping_list_shares
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|list_id|bigint(20)|No|
+|**share_token**|char(32)|No|
+|created_by|bigint(20)|No|
+|expires_at|datetime|No|
+|views|int(11)|Yes|0
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table shopping_price_history
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|item_name|varchar(160)|No|
+|family_id|bigint(20)|No|
+|price|decimal(10,2)|No|
+|currency|varchar(3)|Yes|ZAR
+|store|varchar(100)|Yes|NULL
+|recorded_at|timestamp|Yes|current_timestamp()
+== Table structure for table shopping_templates
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|name|varchar(120)|No|
+|icon|varchar(50)|Yes|?
+|items|longtext|No|
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table story_views
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**story_id**|bigint(20)|No|
+|**viewer_id**|bigint(20)|No|
+|viewed_at|timestamp|Yes|current_timestamp()
+== Table structure for table subscriptions
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|provider|enum(&#039;google_play&#039;, &#039;apple_app_store&#039;, &#039;manual&#039;)|No|google_play
+|store_product_id|varchar(100)|Yes|NULL
+|store_purchase_token|varchar(255)|Yes|NULL
+|store_order_id|varchar(100)|Yes|NULL
+|plan_id|int(11)|No|
+|status|enum(&#039;trial&#039;, &#039;active&#039;, &#039;expired&#039;, &#039;cancelled&#039;, &#039;refunded&#039;, &#039;paused&#039;)|No|active
+|current_period_start|datetime|Yes|NULL
+|expires_at|datetime|Yes|NULL
+|cancelled_at|datetime|Yes|NULL
+|raw_payload|longtext|Yes|NULL
+|last_verified_at|datetime|Yes|NULL
+|created_at|timestamp|No|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table tracking_devices
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|user_id|bigint(20)|No|
+|**device_uuid**|varchar(191)|No|
+|platform|enum(&#039;android&#039;, &#039;ios&#039;, &#039;web&#039;)|No|android
+|device_name|varchar(120)|Yes|NULL
+|last_seen|timestamp|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table tracking_events
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|user_id|bigint(20)|No|
+|family_id|bigint(20)|No|
+|device_id|bigint(20)|Yes|NULL
+|event_type|enum(&#039;enter_zone&#039;, &#039;exit_zone&#039;, &#039;sos&#039;, &#039;tracking_paused&#039;, &#039;tracking_resumed&#039;, &#039;location_stale&#039;, &#039;speed_alert&#039;, &#039;battery_low&#039;)|No|
+|zone_id|bigint(20)|Yes|NULL
+|latitude|decimal(10,7)|Yes|NULL
+|longitude|decimal(10,7)|Yes|NULL
+|payload_json|text|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table tracking_locations
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|device_id|bigint(20)|No|
+|user_id|bigint(20)|No|
+|family_id|bigint(20)|No|
+|latitude|decimal(10,7)|No|
+|longitude|decimal(10,7)|No|
+|accuracy_m|int(11)|Yes|NULL
+|speed_kmh|decimal(6,2)|Yes|NULL
+|heading_deg|decimal(5,2)|Yes|NULL
+|altitude_m|decimal(8,2)|Yes|NULL
+|is_moving|tinyint(1)|Yes|0
+|battery_level|tinyint(3)|Yes|NULL
+|source|enum(&#039;native&#039;, &#039;web&#039;)|Yes|native
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table tracking_settings
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|family_id|bigint(20)|No|
+|update_interval_seconds|int(11)|Yes|10
+|history_retention_days|int(11)|Yes|30
+|show_speed|tinyint(1)|Yes|1
+|show_battery|tinyint(1)|Yes|1
+|show_accuracy|tinyint(1)|Yes|1
+|is_tracking_enabled|tinyint(1)|Yes|1
+|high_accuracy_mode|tinyint(1)|Yes|1
+|background_tracking|tinyint(1)|Yes|1
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table tracking_zones
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|name|varchar(191)|No|
+|type|enum(&#039;circle&#039;, &#039;polygon&#039;)|Yes|circle
+|center_lat|decimal(10,7)|Yes|NULL
+|center_lng|decimal(10,7)|Yes|NULL
+|radius_m|int(11)|Yes|NULL
+|polygon_json|text|Yes|NULL
+|color|varchar(32)|Yes|#667eea
+|icon|varchar(50)|Yes|?
+|is_active|tinyint(1)|Yes|1
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Table structure for table typing_indicators
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**family_id**|bigint(20)|Yes|NULL
+|**user_id**|bigint(20)|Yes|NULL
+|updated_at|timestamp|No|current_timestamp()
+== Table structure for table users
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|family_id|bigint(20)|No|
+|role|enum(&#039;owner&#039;, &#039;admin&#039;, &#039;member&#039;)|No|member
+|**email**|varchar(190)|No|
+|password_hash|varchar(255)|No|
+|reset_token|varchar(255)|Yes|NULL
+|reset_token_expires|timestamp|Yes|NULL
+|full_name|varchar(120)|No|
+|avatar_color|char(7)|Yes|#667eea
+|has_avatar|tinyint(1)|Yes|0
+|avatar_url|varchar(500)|Yes|NULL
+|location_color|char(7)|Yes|#667eea
+|location_sharing|tinyint(1)|No|1
+|location_tracking_mode|enum(&#039;when_app_open&#039;, &#039;always&#039;)|Yes|when_app_open
+|location_update_interval|int(11)|Yes|300
+|location_color_sharing|tinyint(1)|Yes|1
+|phone|varchar(20)|Yes|NULL
+|location_enabled|tinyint(1)|Yes|0
+|status|enum(&#039;active&#039;, &#039;pending&#039;, &#039;disabled&#039;)|Yes|active
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+|last_login|timestamp|Yes|NULL
+== Triggers users
+
+|------
+|Name|Time|Event|Definition
+|------
+|set_family_owner|AFTER|INSERT|BEGIN
+  IF NEW.role = &#039;owner&#039; THEN
+    UPDATE families 
+    SET owner_user_id = NEW.id 
+    WHERE id = NEW.family_id 
+      AND owner_user_id IS NULL;
+  END IF;
+END
+== Table structure for table user_stories
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|user_id|bigint(20)|No|
+|family_id|bigint(20)|No|
+|media_path|varchar(500)|Yes|NULL
+|caption|text|Yes|NULL
+|expires_at|datetime|No|
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table voice_analytics
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|family_id|bigint(20)|No|
+|total_commands|int(11)|Yes|0
+|successful_commands|int(11)|Yes|0
+|failed_commands|int(11)|Yes|0
+|most_used_intent|varchar(100)|Yes|NULL
+|avg_response_time_ms|int(11)|Yes|NULL
+|last_command_at|timestamp|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|current_timestamp()
+== Table structure for table voice_commands
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|int(11)|No|
+|user_id|int(11)|No|
+|family_id|int(11)|No|
+|command_text|text|No|
+|action_taken|varchar(100)|Yes|NULL
+|success|tinyint(1)|Yes|0
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table voice_command_log
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|user_id|bigint(20)|No|
+|transcript|text|No|
+|intent|varchar(100)|Yes|NULL
+|slots|longtext|Yes|NULL
+|response_time_ms|int(11)|Yes|NULL
+|success|tinyint(1)|Yes|1
+|created_at|timestamp|Yes|current_timestamp()
+== Stand-in structure for view v_message_stats
+
+|------
+|Column|Type|Null|Default
+|------
+|family_id|bigint(20)|No|
+|total_messages|bigint(21)|No|0
+|text_messages|bigint(21)|No|0
+|image_messages|bigint(21)|No|0
+|video_messages|bigint(21)|No|0
+|audio_messages|bigint(21)|No|0
+|active_senders|bigint(21)|No|0
+|last_message_at|timestamp|Yes|current_timestamp()
+== Stand-in structure for view v_unread_messages
+
+|------
+|Column|Type|Null|Default
+|------
+|id|bigint(20)|No|0
+|family_id|bigint(20)|No|
+|sender_id|bigint(20)|No|
+|recipient_id|bigint(20)|No|0
+|content|text|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+== Table structure for table weather_cache
+
+|------
+|Column|Type|Null|Default
+|------
+|id|int(11)|No|
+|//**location_lat**//|decimal(10,8)|No|
+|//**location_lon**//|decimal(11,8)|No|
+|//**cache_type**//|varchar(50)|No|current
+|location_name|varchar(255)|Yes|NULL
+|weather_data|longtext|No|
+|cached_at|timestamp|Yes|current_timestamp()
+|expires_at|timestamp|No|
+== Table structure for table weather_notification_schedule
+
+|------
+|Column|Type|Null|Default
+|------
+|//**id**//|bigint(20)|No|
+|**user_id**|bigint(20)|No|
+|enabled|tinyint(1)|No|1
+|notification_time|time|No|07:00:00
+|voice_enabled|tinyint(1)|No|1
+|include_forecast|tinyint(1)|No|1
+|last_sent_date|date|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()
+|updated_at|timestamp|Yes|NULL
+== Structure for view v_message_stats
+
+|------
+|Column|Type|Null|Default
+|------
+|family_id|bigint(20)|No|
+|total_messages|bigint(21)|No|0
+|text_messages|bigint(21)|No|0
+|image_messages|bigint(21)|No|0
+|video_messages|bigint(21)|No|0
+|audio_messages|bigint(21)|No|0
+|active_senders|bigint(21)|No|0
+|last_message_at|timestamp|Yes|current_timestamp()
+== Structure for view v_unread_messages
+
+|------
+|Column|Type|Null|Default
+|------
+|id|bigint(20)|No|0
+|family_id|bigint(20)|No|
+|sender_id|bigint(20)|No|
+|recipient_id|bigint(20)|No|0
+|content|text|Yes|NULL
+|created_at|timestamp|Yes|current_timestamp()

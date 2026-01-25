@@ -1,0 +1,14 @@
+{
+    "name": "Snake Classic",
+    "short_name": "Snake",
+    "description": "Classic Nokia-style snake game with family and global leaderboards",
+    "start_url": "/games/snake/",
+    "scope": "/games/snake/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#1a1a2e",
+    "theme_color": "#1a1a2e",
+    "categories": ["games", "entertainment"],
+    "lang": "en",
+    "dir": "ltr"
+}

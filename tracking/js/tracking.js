@@ -1,0 +1,1751 @@
+/**
+ * ============================================
+ * RELATIVES TRACKING MAP - v5.0 OPTIMIZED
+ * ============================================
+ *
+ * Changes from v4.0:
+ * - Smart polling: foreground (5-10s) vs background (stopped)
+ * - Optional Mapbox tiles with fallback to OSM
+ * - Configurable polling intervals from server
+ * - Better visibility change handling
+ */
+
+console.log('Tracking Map v5.0 loading...');
+
+class TrackingMapProfessional {
+    constructor() {
+        this.map = null;
+        this.markers = new Map();
+        this.balloonMarkers = new Map();
+        this.tetherLines = new Map();
+        this.accuracyCircles = new Map();
+        this.historyPolylines = [];
+        this.zones = new Map();
+        this.config = window.TrackingConfig || {};
+        this.updateInterval = null;
+        this.zonesVisible = true;
+        this.currentMapStyle = 'light';
+        this.currentTileLayer = null;
+        this.isLoading = false;
+        this.isSidebarOpen = false;
+        this.lastUpdateTime = 0;
+        this.isViewingMember = false; // Track if user is actively viewing someone
+
+        // Polling configuration (from server or defaults)
+        this.pollingConfig = {
+            foreground: Math.max(5, this.config.pollingIntervalViewing || 10), // Fast when viewing
+            default: Math.max(10, this.config.pollingIntervalDefault || 30),   // Normal
+            min: Math.max(5, this.config.pollingIntervalMin || 5)              // Minimum allowed
+        };
+
+        // Track previous status for change detection
+        this.previousStatus = new Map();
+
+        // Map styles - Mapbox if token available, else free tiles
+        this.mapStyles = this.buildMapStyles();
+
+        this.init();
+    }
+
+    buildMapStyles() {
+        const mapboxToken = this.config.mapboxToken;
+
+        if (mapboxToken) {
+            // Mapbox styles (better quality)
+            return {
+                light: {
+                    // Streets style is more colorful and vibrant than light-v11
+                    url: `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+                    attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>',
+                    name: 'Streets',
+                    tileSize: 512,
+                    zoomOffset: -1
+                },
+                dark: {
+                    // dark-v11 has full street names and labels
+                    url: `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+                    attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>',
+                    name: 'Dark',
+                    tileSize: 512,
+                    zoomOffset: -1
+                },
+                satellite: {
+                    url: `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+                    attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>',
+                    name: 'Satellite',
+                    tileSize: 512,
+                    zoomOffset: -1
+                }
+            };
+        } else {
+            // Free tile providers (fallback) - using more colorful options
+            return {
+                light: {
+                    // CartoDB Voyager is colorful and modern looking
+                    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://carto.com/attributions">CARTO</a>',
+                    name: 'Voyager'
+                },
+                dark: {
+                    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://carto.com/attributions">CARTO</a>',
+                    name: 'Dark'
+                },
+                satellite: {
+                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    attribution: 'Tiles &copy; Esri',
+                    name: 'Satellite'
+                }
+            };
+        }
+    }
+
+    // ============================================
+    // INITIALIZATION
+    // ============================================
+
+    init() {
+        console.log('Initializing tracking map...');
+
+        try {
+            if (typeof L === 'undefined') {
+                throw new Error('Leaflet library not loaded');
+            }
+
+            this.initMap();
+            this.setupEventListeners();
+            this.loadZones();
+            this.fetchCurrentLocations();
+            this.startPolling();
+            this.loadSettings();
+            this.notifyAndroidTrackingVisible();
+            this.requestLocationBoost(5);
+
+            setTimeout(() => {
+                if (this.markers.size > 0) {
+                    this.fitAllMembers();
+                } else {
+                    this.centerOnMyLocation(true);
+                }
+            }, 2000);
+
+            console.log('Map initialized successfully');
+            console.log(`Polling config: foreground=${this.pollingConfig.foreground}s, default=${this.pollingConfig.default}s`);
+
+        } catch (error) {
+            console.error('Map initialization failed:', error);
+            this.showToast('Failed to initialize map: ' + error.message, 'error');
+        }
+    }
+
+    initMap() {
+        const mapElement = document.getElementById('trackingMap');
+
+        if (!mapElement) {
+            throw new Error('Map container not found');
+        }
+
+        this.map = L.map('trackingMap', {
+            zoomControl: true,
+            attributionControl: true,
+            minZoom: 3,
+            maxZoom: 19,
+            zoomAnimation: true,
+            fadeAnimation: true,
+            markerZoomAnimation: true,
+            preferCanvas: false,
+            worldCopyJump: true,
+            tap: true,
+            tapTolerance: 15
+        }).setView(this.config.defaultCenter || [-26.2041, 28.0473], this.config.defaultZoom || 12);
+
+        // Load saved map style or default to 'light'
+        const savedStyle = localStorage.getItem('mapStyle');
+        this.setMapStyle((savedStyle && this.mapStyles[savedStyle]) ? savedStyle : 'light');
+
+        this.map.zoomControl.setPosition('bottomright');
+
+        L.control.scale({
+            position: 'bottomleft',
+            imperial: false,
+            metric: true
+        }).addTo(this.map);
+
+        this.map.on('zoomend', () => {
+            this.updateMarkerSizes();
+        });
+    }
+
+    setMapStyle(style = 'light') {
+        if (this.currentTileLayer) {
+            this.map.removeLayer(this.currentTileLayer);
+        }
+
+        const styleConfig = this.mapStyles[style] || this.mapStyles.light;
+
+        const tileOptions = {
+            attribution: styleConfig.attribution,
+            maxZoom: 19,
+            minZoom: 3,
+            crossOrigin: true,
+            updateWhenIdle: false,
+            updateWhenZooming: true,
+            keepBuffer: 2
+        };
+
+        // Add Mapbox-specific options if present
+        if (styleConfig.tileSize) {
+            tileOptions.tileSize = styleConfig.tileSize;
+        }
+        if (styleConfig.zoomOffset !== undefined) {
+            tileOptions.zoomOffset = styleConfig.zoomOffset;
+        }
+
+        this.currentTileLayer = L.tileLayer(styleConfig.url, tileOptions).addTo(this.map);
+
+        this.currentMapStyle = style;
+
+        // Set theme attribute for CSS
+        document.documentElement.setAttribute('data-theme', style === 'light' ? 'light' : 'dark');
+
+        localStorage.setItem('mapStyle', style);
+
+        console.log(`Map style: ${styleConfig.name}${this.config.mapboxToken ? ' (Mapbox)' : ' (OSM)'}`);
+    }
+
+    detectThemePreference() {
+        const savedStyle = localStorage.getItem('mapStyle');
+        if (savedStyle && this.mapStyles[savedStyle]) {
+            this.setMapStyle(savedStyle);
+        } else {
+            this.setMapStyle('light');
+        }
+    }
+
+    // ============================================
+    // EVENT LISTENERS
+    // ============================================
+
+    setupEventListeners() {
+        // Toolbar buttons
+        this.addClickListener('myLocationBtn', () => this.centerOnMyLocation());
+        this.addClickListener('familyViewBtn', () => this.fitAllMembers());
+        this.addClickListener('zonesToggleBtn', () => this.toggleZonesVisibility());
+        this.addClickListener('historyBtn', () => this.openHistoryModal());
+        this.addClickListener('mapStyleBtn', () => this.cycleMapStyle());
+        this.addClickListener('settingsBtn', () => this.openSettingsModal());
+
+        // Sidebar
+        this.addClickListener('sidebarToggleMobile', () => this.toggleSidebar());
+        this.addClickListener('sidebarClose', () => this.toggleSidebar());
+
+        // Search
+        const searchInput = document.getElementById('memberSearch');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => this.filterMembers(e.target.value));
+        }
+
+        // Settings form
+        const settingsForm = document.getElementById('settingsForm');
+        if (settingsForm) {
+            settingsForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveSettings();
+            });
+        }
+
+        // Member cards - auto-close sidebar and boost polling
+        document.querySelectorAll('.member-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                if (!e.target.closest('.member-actions')) {
+                    const userId = parseInt(card.dataset.userId);
+
+                    // Mark as viewing a member (boosts polling)
+                    this.isViewingMember = true;
+                    this.restartPolling();
+
+                    // Close sidebar
+                    if (this.isSidebarOpen) {
+                        this.toggleSidebar();
+                    }
+
+                    setTimeout(() => {
+                        this.centerOnMember(userId);
+                    }, 300);
+                }
+            });
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeAllModals();
+                if (this.isSidebarOpen) {
+                    this.toggleSidebar();
+                }
+            }
+        });
+
+        // Modal backdrop clicks
+        document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+            backdrop.addEventListener('click', () => {
+                backdrop.closest('.modal')?.classList.remove('active');
+            });
+        });
+
+        // ========== VISIBILITY CHANGE - Smart polling ==========
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // Tab hidden - stop polling completely
+                this.notifyAndroidTrackingHidden();
+                this.stopPolling();
+                console.log('Tab hidden - polling stopped');
+            } else {
+                // Tab visible - restart polling
+                this.notifyAndroidTrackingVisible();
+                this.requestLocationBoost(5);
+                this.startPolling();
+                this.fetchCurrentLocations(); // Immediate fetch
+                console.log('Tab visible - polling resumed');
+            }
+        });
+
+        window.addEventListener('focus', () => {
+            this.notifyAndroidTrackingVisible();
+            this.requestLocationBoost(5);
+            if (!this.updateInterval && !document.hidden) {
+                this.startPolling();
+                this.fetchCurrentLocations();
+            }
+        });
+
+        window.addEventListener('blur', () => {
+            this.notifyAndroidTrackingHidden();
+            this.isViewingMember = false; // Reset viewing state
+        });
+
+        window.addEventListener('beforeunload', () => {
+            this.notifyAndroidTrackingHidden();
+            this.stopPolling();
+        });
+
+        window.addEventListener('resize', () => {
+            this.map.invalidateSize();
+        });
+
+        // Reset viewing state after some idle time
+        let idleTimer;
+        const resetViewing = () => {
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+                if (this.isViewingMember) {
+                    this.isViewingMember = false;
+                    this.restartPolling();
+                    console.log('Idle - reverting to default polling');
+                }
+            }, 60000); // 1 minute idle
+        };
+
+        ['mousemove', 'touchstart', 'click'].forEach(event => {
+            document.addEventListener(event, resetViewing, { passive: true });
+        });
+    }
+
+    addClickListener(id, handler) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handler();
+            });
+
+            element.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handler();
+            });
+        }
+    }
+
+    // ============================================
+    // POLLING - Smart foreground/background
+    // ============================================
+
+    startPolling() {
+        if (this.updateInterval) {
+            clearInterval(this.updateInterval);
+        }
+
+        // Don't poll if tab is hidden
+        if (document.hidden) {
+            console.log('Tab hidden - not starting polling');
+            return;
+        }
+
+        // Determine polling interval based on state
+        let intervalSeconds;
+        if (this.isViewingMember) {
+            intervalSeconds = this.pollingConfig.foreground;
+            console.log(`Viewing member - fast polling (${intervalSeconds}s)`);
+        } else {
+            intervalSeconds = this.pollingConfig.default;
+            console.log(`Normal polling (${intervalSeconds}s)`);
+        }
+
+        const intervalMs = intervalSeconds * 1000;
+
+        this.updateInterval = setInterval(() => {
+            if (!document.hidden) {
+                this.fetchCurrentLocations();
+            }
+        }, intervalMs);
+    }
+
+    stopPolling() {
+        if (this.updateInterval) {
+            clearInterval(this.updateInterval);
+            this.updateInterval = null;
+        }
+    }
+
+    restartPolling() {
+        this.stopPolling();
+        this.startPolling();
+    }
+
+    // ============================================
+    // LOCATION FETCHING
+    // ============================================
+
+    async fetchCurrentLocations() {
+        if (this.isLoading) return;
+
+        this.isLoading = true;
+        const fetchStartTime = performance.now();
+
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+            const response = await fetch('/tracking/api/get_current_locations.php', {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to fetch locations');
+            }
+
+            this.updateMarkers(data.members || []);
+            this.updateMemberList(data.members || []);
+            this.updateLastUpdateTime();
+
+            const fetchEndTime = performance.now();
+            const cacheHit = data.cache_hit ? ' (cache)' : '';
+            console.log(`Fetch: ${(fetchEndTime - fetchStartTime).toFixed(0)}ms${cacheHit}`);
+
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                console.error('Fetch timeout');
+            } else {
+                console.error('Fetch error:', error);
+            }
+        } finally {
+            this.isLoading = false;
+        }
+    }
+
+    updateMarkers(members) {
+        const existingIds = new Set(this.markers.keys());
+        const currentIds = new Set();
+
+        // Group members by proximity (within ~100 meters) to detect clustering
+        const clusters = this.clusterMembersByProximity(members, 0.001); // ~100m threshold
+
+        members.forEach(member => {
+            currentIds.add(member.user_id);
+
+            if (!member.location || !member.location.lat || !member.location.lng) {
+                return;
+            }
+
+            const position = [member.location.lat, member.location.lng];
+
+            // Find which cluster this member belongs to
+            const cluster = clusters.find(c => c.members.some(m => m.user_id === member.user_id));
+            const membersAtLocation = cluster ? cluster.members : [member];
+            const isClustered = membersAtLocation.length > 1;
+
+            if (this.markers.has(member.user_id)) {
+                const marker = this.markers.get(member.user_id);
+
+                // Check if cluster status changed - if so, recreate marker
+                const wasInCluster = marker._wasInCluster || false;
+                if (wasInCluster !== isClustered || (isClustered && membersAtLocation.length !== (marker._clusterSize || 0))) {
+                    // Cluster status changed - remove and recreate
+                    this.removeMarker(member.user_id);
+                    this.createMarker(member, position, isClustered, membersAtLocation);
+                } else {
+                    // Just update position
+                    this.animateMarker(marker, position);
+
+                    if (this.accuracyCircles.has(member.user_id)) {
+                        const circle = this.accuracyCircles.get(member.user_id);
+                        circle.setLatLng(position);
+                        circle.setRadius(member.location.accuracy_m || 20);
+                    }
+
+                    const popup = marker.getPopup();
+                    if (popup) {
+                        popup.setContent(this.createPopupContent(member));
+                    }
+                }
+            } else {
+                this.createMarker(member, position, isClustered, membersAtLocation);
+            }
+
+            // Store cluster state on marker for next update
+            if (this.markers.has(member.user_id)) {
+                const marker = this.markers.get(member.user_id);
+                marker._wasInCluster = isClustered;
+                marker._clusterSize = membersAtLocation.length;
+            }
+        });
+
+        existingIds.forEach(id => {
+            if (!currentIds.has(id)) {
+                this.removeMarker(id);
+            }
+        });
+    }
+
+    createMarker(member, position, isClustered = false, membersAtLocation = []) {
+        const isMe = member.user_id === this.config.userId;
+        const color = member.avatar_color || '#667eea';
+
+        // Get marker content (avatar image or initial)
+        let markerContent;
+        if (member.has_avatar && member.avatar_url) {
+            markerContent = `<img src="${member.avatar_url}" alt="${member.name}" style="width: 100%; height: 100%; object-fit: cover;">`;
+        } else {
+            markerContent = member.name ? member.name.charAt(0).toUpperCase() : '?';
+        }
+
+        // Pin dimensions - compact teardrop shape
+        const pinWidth = isMe ? 48 : 42;
+        const pinHeight = isMe ? 58 : 52;
+        const avatarSize = isMe ? 38 : 34;
+
+        // Calculate rotation angle for clustered members
+        let rotationAngle = 0;
+        if (isClustered && membersAtLocation.length > 1) {
+            const memberIndex = membersAtLocation.findIndex(m => m.user_id === member.user_id);
+            rotationAngle = (360 / membersAtLocation.length) * memberIndex;
+        }
+
+        // Create teardrop pin marker with SVG
+        const pinHtml = `
+            <div class="location-pin-wrapper" style="
+                width: ${pinWidth + 20}px;
+                height: ${pinHeight + 30}px;
+                position: relative;
+            ">
+                <div class="location-pin ${isMe ? 'is-me' : ''}" style="
+                    position: absolute;
+                    bottom: 0;
+                    left: 50%;
+                    transform-origin: bottom center;
+                    transform: translateX(-50%) rotate(${rotationAngle}deg);
+                    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+                ">
+                    <!-- Teardrop SVG shape -->
+                    <svg width="${pinWidth}" height="${pinHeight}" viewBox="0 0 48 58" fill="none">
+                        <!-- Pin shape - teardrop -->
+                        <path d="M24 58 C24 58 0 35 0 22 C0 10 10.7 0 24 0 C37.3 0 48 10 48 22 C48 35 24 58 24 58Z"
+                              fill="${color}" stroke="white" stroke-width="3"/>
+                    </svg>
+
+                    <!-- Avatar circle inside pin -->
+                    <div style="
+                        position: absolute;
+                        top: 5px;
+                        left: 50%;
+                        transform: translateX(-50%) rotate(${-rotationAngle}deg);
+                        width: ${avatarSize}px;
+                        height: ${avatarSize}px;
+                        border-radius: 50%;
+                        overflow: hidden;
+                        background: white;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: ${isMe ? 18 : 16}px;
+                        font-weight: 900;
+                        color: ${color};
+                    ">
+                        ${markerContent}
+                    </div>
+
+                    <!-- Status indicator -->
+                    ${member.status === 'online' || member.status === 'idle' ? `
+                        <div style="
+                            position: absolute;
+                            top: 2px;
+                            right: 2px;
+                            width: 12px;
+                            height: 12px;
+                            background: ${member.status === 'online' ? '#43e97b' : '#ffa502'};
+                            border: 2px solid white;
+                            border-radius: 50%;
+                            transform: rotate(${-rotationAngle}deg);
+                            z-index: 3;
+                        "></div>
+                    ` : ''}
+                </div>
+
+                <!-- YOU badge (outside rotation) -->
+                ${isMe ? `
+                    <div style="
+                        position: absolute;
+                        bottom: ${pinHeight + 5}px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: linear-gradient(135deg, #667eea, #764ba2);
+                        color: white;
+                        padding: 2px 8px;
+                        border-radius: 8px;
+                        font-size: 9px;
+                        font-weight: 800;
+                        white-space: nowrap;
+                        box-shadow: 0 2px 6px rgba(102,126,234,0.4);
+                        z-index: 10;
+                    ">YOU</div>
+                ` : ''}
+            </div>
+        `;
+
+        // Icon anchor at the very bottom tip of the pin
+        const icon = L.divIcon({
+            html: pinHtml,
+            className: `location-pin-container ${isMe ? 'is-me' : ''}`,
+            iconSize: [pinWidth + 20, pinHeight + 30],
+            iconAnchor: [(pinWidth + 20) / 2, pinHeight + 15],
+            popupAnchor: [0, -(pinHeight + 10)]
+        });
+
+        const marker = L.marker(position, {
+            icon: icon,
+            zIndexOffset: isMe ? 1000 : (isClustered ? 100 + (membersAtLocation.findIndex(m => m.user_id === member.user_id) || 0) : 50),
+            riseOnHover: true
+        }).addTo(this.map);
+
+        marker.bindPopup(this.createPopupContent(member), {
+            closeButton: true,
+            maxWidth: this.getResponsivePopupWidth(),
+            minWidth: 240,
+            className: 'custom-popup',
+            autoPan: true,
+            autoPanPadding: [50, 50]
+        });
+
+        marker.on('click', () => {
+            this.isViewingMember = true;
+            this.restartPolling();
+            setTimeout(() => this.centerOnMember(member.user_id), 100);
+        });
+
+        this.markers.set(member.user_id, marker);
+
+        // Add accuracy circle if configured
+        if (this.settings?.show_accuracy && member.location?.accuracy_m) {
+            const circle = L.circle(position, {
+                radius: member.location.accuracy_m,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.1,
+                weight: 1,
+                opacity: 0.3
+            }).addTo(this.map);
+            this.accuracyCircles.set(member.user_id, circle);
+        }
+
+        this.updateMemberCardStatus(member.user_id, true);
+    }
+
+    getResponsivePopupWidth() {
+        const width = window.innerWidth;
+        if (width < 480) return 260;
+        if (width < 768) return 280;
+        return 320;
+    }
+
+    removeMarker(userId) {
+        const marker = this.markers.get(userId);
+        const balloonMarker = this.balloonMarkers.get(userId);
+        const circle = this.accuracyCircles.get(userId);
+        const tetherLine = this.tetherLines.get(userId);
+
+        if (marker) {
+            this.map.removeLayer(marker);
+            this.markers.delete(userId);
+        }
+
+        if (balloonMarker) {
+            this.map.removeLayer(balloonMarker);
+            this.balloonMarkers.delete(userId);
+        }
+
+        if (circle) {
+            this.map.removeLayer(circle);
+            this.accuracyCircles.delete(userId);
+        }
+
+        if (tetherLine) {
+            this.map.removeLayer(tetherLine);
+            this.tetherLines.delete(userId);
+        }
+
+        this.updateMemberCardStatus(userId, false);
+    }
+
+    updateMemberCardStatus(userId, isTracking) {
+        const memberCard = document.querySelector(`.member-card[data-user-id="${userId}"]`);
+        if (memberCard) {
+            memberCard.setAttribute('data-tracking', isTracking ? 'true' : 'false');
+        }
+    }
+
+    createPopupContent(member) {
+        const lastSeen = member.last_seen ? this.formatRelativeTime(new Date(member.last_seen)) : 'Unknown';
+        const speed = member.location?.speed_kmh || 0;
+        const battery = member.location?.battery_level || 0;
+        const accuracy = member.location?.accuracy_m || 0;
+        const isMe = member.user_id === this.config.userId;
+
+        const popupWidth = this.getResponsivePopupWidth();
+        const isMobile = window.innerWidth < 768;
+
+        return `
+            <div style="padding: ${isMobile ? '16px' : '20px'}; min-width: ${popupWidth - 40}px; background: var(--bg-secondary); color: var(--text-primary);">
+                <div style="display: flex; align-items: center; gap: ${isMobile ? '12px' : '16px'}; margin-bottom: ${isMobile ? '14px' : '18px'};">
+                    <div style="
+                        width: ${isMobile ? '48px' : '56px'};
+                        height: ${isMobile ? '48px' : '56px'};
+                        border-radius: 50%;
+                        background: ${member.avatar_color || '#667eea'};
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: ${isMobile ? '22px' : '26px'};
+                        font-weight: 900;
+                        color: white;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+                        position: relative;
+                        overflow: hidden;
+                        flex-shrink: 0;
+                    ">
+                        ${member.has_avatar && member.avatar_url ? `
+                            <img src="${member.avatar_url}" alt="${member.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                        ` : (member.name ? member.name.charAt(0).toUpperCase() : '?')}
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                            <span style="font-weight: 900; font-size: ${isMobile ? '16px' : '18px'}; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                ${member.name || 'Unknown'}
+                            </span>
+                            ${isMe ? `<span style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 800;">You</span>` : ''}
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="${member.status === 'online' ? '#43e97b' : member.status === 'idle' ? '#ffa502' : '#6c757d'}">
+                                <circle cx="12" cy="12" r="10"></circle>
+                            </svg>
+                            <span class="member-status" style="font-size: ${isMobile ? '12px' : '13px'}; font-weight: 700; color: ${member.status === 'online' ? '#43e97b' : member.status === 'idle' ? '#ffa502' : '#6c757d'};">
+                                ${member.status === 'online' ? 'Tracking' : member.status === 'idle' ? 'Idle' : member.status === 'no_location' ? 'No location yet' : `Offline (${(() => { const mins = Math.floor((member.seconds_ago || 0) / 60); return mins >= 60 ? Math.floor(mins/60) + 'h' : mins + 'm'; })()})`}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: ${speed > 0 || battery > 0 ? '1fr 1fr' : '1fr'}; gap: ${isMobile ? '10px' : '12px'}; padding: ${isMobile ? '10px' : '12px'}; background: var(--bg-tertiary); border-radius: 12px; margin-bottom: ${isMobile ? '14px' : '16px'};">
+                    <div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;">Last Seen</div>
+                        <div style="font-size: ${isMobile ? '13px' : '14px'}; font-weight: 800; color: var(--text-primary);">${lastSeen}</div>
+                    </div>
+                    ${speed > 0 ? `<div><div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;">Speed</div><div style="font-size: ${isMobile ? '13px' : '14px'}; font-weight: 800; color: var(--text-primary);">${speed.toFixed(1)} km/h</div></div>` : ''}
+                    ${battery > 0 ? `<div><div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;">Battery</div><div style="font-size: ${isMobile ? '13px' : '14px'}; font-weight: 800; color: ${battery < 20 ? '#ff4757' : 'var(--text-primary)'};">${battery}%</div></div>` : ''}
+                    ${accuracy > 0 ? `<div><div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;">Accuracy</div><div style="font-size: ${isMobile ? '13px' : '14px'}; font-weight: 800; color: var(--text-primary);">±${accuracy}m</div></div>` : ''}
+                </div>
+
+                <div style="display: flex; gap: 8px;">
+                    ${!isMe ? `<button onclick="window.TrackingMap.centerOnMember(${member.user_id}); return false;" style="flex: 1; padding: ${isMobile ? '10px' : '12px'}; background: linear-gradient(135deg, #667eea, #764ba2); border: none; border-radius: 10px; color: white; font-weight: 800; cursor: pointer; font-size: ${isMobile ? '12px' : '13px'}; display: flex; align-items: center; justify-content: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="10" r="3"></circle><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 6.9 8 11.7z"></path></svg>Center</button>` : ''}
+                    <button onclick="window.TrackingMap.showMemberHistory(${member.user_id}); return false;" style="flex: 1; padding: ${isMobile ? '10px' : '12px'}; background: var(--bg-tertiary); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-primary); font-weight: 800; cursor: pointer; font-size: ${isMobile ? '12px' : '13px'}; display: flex; align-items: center; justify-content: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>History</button>
+                </div>
+            </div>
+        `;
+    }
+
+    animateMarker(marker, newPosition, duration = 1000) {
+        const currentPosition = marker.getLatLng();
+        const startTime = Date.now();
+        const startLat = currentPosition.lat;
+        const startLng = currentPosition.lng;
+        const deltaLat = newPosition[0] - startLat;
+        const deltaLng = newPosition[1] - startLng;
+
+        const animate = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+
+            const lat = startLat + (deltaLat * eased);
+            const lng = startLng + (deltaLng * eased);
+
+            marker.setLatLng([lat, lng]);
+
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            }
+        };
+
+        animate();
+    }
+
+    updateMemberList(members) {
+        if (!Array.isArray(members)) return;
+
+        members.forEach(member => {
+            try {
+                if (!member || typeof member.user_id === 'undefined') return;
+
+                const memberCard = document.querySelector(`.member-card[data-user-id="${member.user_id}"]`);
+                if (!memberCard) return;
+
+                const lastSeenEl = memberCard.querySelector('.last-seen-time');
+                if (lastSeenEl) {
+                    if (member.last_seen) {
+                        try {
+                            const date = new Date(member.last_seen);
+                            if (!isNaN(date.getTime())) {
+                                lastSeenEl.textContent = this.formatRelativeTime(date);
+                            } else {
+                                lastSeenEl.textContent = '--';
+                            }
+                        } catch (e) {
+                            lastSeenEl.textContent = '--';
+                        }
+                    } else {
+                        lastSeenEl.textContent = '--';
+                    }
+                }
+
+                const speedEl = memberCard.querySelector('.member-speed');
+                if (speedEl) {
+                    const hasSpeed = member.location?.speed_kmh != null && !isNaN(member.location.speed_kmh);
+                    speedEl.textContent = hasSpeed ? `${member.location.speed_kmh.toFixed(1)} km/h` : '-- km/h';
+                }
+
+                const batteryEl = memberCard.querySelector('.member-battery');
+                if (batteryEl) {
+                    const hasBattery = member.location?.battery_level != null && !isNaN(member.location.battery_level);
+                    if (hasBattery) {
+                        batteryEl.textContent = `${member.location.battery_level}%`;
+                        batteryEl.style.color = member.location.battery_level < 20 ? '#ff4757' : '';
+                    } else {
+                        batteryEl.textContent = '--%';
+                        batteryEl.style.color = '';
+                    }
+                }
+
+                const status = member.status;
+                const isTracking = status === 'online';
+                const isIdle = status === 'idle';
+                const hasNoLocation = status === 'no_location';
+
+                // Detect status change
+                const previousStatus = this.previousStatus.get(member.user_id);
+                const statusChanged = previousStatus && previousStatus !== status;
+                this.previousStatus.set(member.user_id, status);
+
+                // Trigger visual feedback on status change
+                if (statusChanged) {
+                    this.onStatusChange(member, previousStatus, status, memberCard);
+                }
+
+                memberCard.setAttribute('data-tracking', isTracking ? 'true' : 'false');
+                memberCard.setAttribute('data-status', status);
+
+                // Simple 3-tier: Tracking (green) / Idle (amber) / Offline (grey)
+                const statusColor = isTracking ? '#43e97b' : isIdle ? '#ffa502' : '#6c757d';
+
+                const statusText = memberCard.querySelector('.member-status');
+                if (statusText) {
+                    statusText.style.color = statusColor;
+                    const spanEl = statusText.querySelector('span') || statusText;
+                    const mins = Math.floor((member.seconds_ago || 0) / 60);
+                    const hours = Math.floor(mins / 60);
+
+                    if (isTracking) {
+                        spanEl.textContent = 'Tracking';
+                    } else if (isIdle) {
+                        spanEl.textContent = 'Idle';
+                    } else if (hasNoLocation) {
+                        spanEl.textContent = 'No location yet';
+                    } else {
+                        spanEl.textContent = hours > 0 ? `Offline (${hours}h)` : `Offline (${mins}m)`;
+                    }
+                }
+
+            } catch (error) {
+                console.error(`Error updating member ${member.user_id}:`, error);
+            }
+        });
+    }
+
+    updateLastUpdateTime() {
+        const lastUpdateEl = document.getElementById('lastUpdate');
+        if (lastUpdateEl) {
+            lastUpdateEl.textContent = 'Just now';
+        }
+        this.lastUpdateTime = Date.now();
+    }
+
+    // Handle status change with visual feedback
+    onStatusChange(member, oldStatus, newStatus, memberCard) {
+        const isMe = member.user_id === this.config.userId;
+        const name = isMe ? 'You' : (member.name || 'Someone');
+
+        // Add flash animation to card
+        memberCard.classList.add('status-changed');
+        setTimeout(() => memberCard.classList.remove('status-changed'), 2000);
+
+        // 3-tier status toasts: online (Tracking) / idle / offline
+        if (newStatus === 'online' && oldStatus !== 'online') {
+            this.showStatusToast(`${name} is now tracking`, 'success', member);
+        } else if (oldStatus === 'online' && newStatus === 'idle') {
+            this.showStatusToast(`${name} went idle`, 'warning', member);
+        } else if (newStatus === 'offline' && oldStatus !== 'offline') {
+            this.showStatusToast(`${name} went offline`, 'error', member);
+        }
+
+        console.log(`Status: ${name} ${oldStatus} → ${newStatus}`);
+    }
+
+    // Show status change toast with member info
+    showStatusToast(message, type, member) {
+        document.querySelectorAll('.status-toast').forEach(t => t.remove());
+
+        const colors = {
+            success: '#43e97b',
+            error: '#ff6b6b',
+            warning: '#ffa502',
+            info: '#4facfe'
+        };
+
+        const toast = document.createElement('div');
+        toast.className = 'status-toast';
+
+        const avatarContent = member.has_avatar && member.avatar_url
+            ? `<img src="${member.avatar_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`
+            : (member.name ? member.name.charAt(0).toUpperCase() : '?');
+
+        toast.innerHTML = `
+            <div style="
+                position: fixed;
+                top: 90px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(26, 29, 46, 0.98);
+                backdrop-filter: blur(40px) saturate(180%);
+                color: white;
+                padding: 14px 24px;
+                border-radius: 50px;
+                font-weight: 700;
+                font-size: 14px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.1);
+                z-index: 10001;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                animation: statusToastIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+                cursor: pointer;
+            " onclick="window.TrackingMap.centerOnMember(${member.user_id}); this.parentElement.remove();">
+                <div style="
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 50%;
+                    background: ${member.avatar_color || '#667eea'};
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 16px;
+                    font-weight: 900;
+                    color: white;
+                    border: 2px solid ${colors[type]};
+                    overflow: hidden;
+                ">${avatarContent}</div>
+                <span>${message}</span>
+            </div>
+        `;
+
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            const innerDiv = toast.querySelector('div');
+            if (innerDiv) {
+                innerDiv.style.animation = 'statusToastOut 0.3s ease forwards';
+            }
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+
+    updateMarkerSizes() {
+        const zoom = this.map.getZoom();
+        const scale = Math.max(0.6, Math.min(1.4, zoom / 14));
+
+        this.markers.forEach((marker) => {
+            const element = marker.getElement();
+            if (element) {
+                const markerDiv = element.querySelector('.custom-marker');
+                if (markerDiv) {
+                    markerDiv.style.transform = `scale(${scale})`;
+                }
+            }
+        });
+    }
+
+    // ============================================
+    // ZONES
+    // ============================================
+
+    loadZones() {
+        if (!this.config.zones || this.config.zones.length === 0) {
+            return;
+        }
+
+        this.config.zones.forEach(zone => {
+            try {
+                let layer;
+
+                if (zone.type === 'circle' && zone.center_lat && zone.center_lng && zone.radius_m) {
+                    layer = L.circle([zone.center_lat, zone.center_lng], {
+                        radius: zone.radius_m,
+                        color: zone.color || '#667eea',
+                        fillColor: zone.color || '#667eea',
+                        fillOpacity: 0.12,
+                        weight: 2.5,
+                        opacity: 0.7
+                    }).addTo(this.map);
+
+                } else if (zone.type === 'polygon' && zone.polygon_json) {
+                    const coordinates = JSON.parse(zone.polygon_json);
+                    layer = L.polygon(coordinates, {
+                        color: zone.color || '#667eea',
+                        fillColor: zone.color || '#667eea',
+                        fillOpacity: 0.12,
+                        weight: 2.5,
+                        opacity: 0.7
+                    }).addTo(this.map);
+                }
+
+                if (layer) {
+                    layer.bindPopup(`
+                        <div style="padding: 18px; text-align: center; background: var(--bg-secondary); color: var(--text-primary);">
+                            <div style="font-size: 40px; margin-bottom: 10px;">${zone.icon || '📍'}</div>
+                            <div style="font-weight: 900; font-size: 18px; color: var(--text-primary); margin-bottom: 6px;">${zone.name}</div>
+                            ${zone.radius_m ? `<div style="font-size: 13px; color: var(--text-muted); font-weight: 600;">Radius: ${zone.radius_m}m</div>` : ''}
+                        </div>
+                    `);
+
+                    this.zones.set(zone.id, layer);
+                }
+            } catch (error) {
+                console.error(`Failed to load zone ${zone.id}:`, error);
+            }
+        });
+
+        console.log(`Loaded ${this.zones.size} zones`);
+    }
+
+    toggleZonesVisibility() {
+        this.zonesVisible = !this.zonesVisible;
+        const btn = document.getElementById('zonesToggleBtn');
+
+        this.zones.forEach(layer => {
+            if (this.zonesVisible) {
+                if (!this.map.hasLayer(layer)) layer.addTo(this.map);
+            } else {
+                if (this.map.hasLayer(layer)) this.map.removeLayer(layer);
+            }
+        });
+
+        if (btn) btn.classList.toggle('active', this.zonesVisible);
+        this.showToast(`Zones ${this.zonesVisible ? 'shown' : 'hidden'}`, 'info');
+    }
+
+    toggleZone(zoneId) {
+        const layer = this.zones.get(zoneId);
+        if (!layer) return;
+
+        const zoneCard = document.querySelector(`.zone-card[data-zone-id="${zoneId}"]`);
+        const toggleBtn = zoneCard?.querySelector('.zone-toggle');
+
+        if (this.map.hasLayer(layer)) {
+            this.map.removeLayer(layer);
+            toggleBtn?.classList.add('hidden');
+        } else {
+            layer.addTo(this.map);
+            toggleBtn?.classList.remove('hidden');
+        }
+    }
+
+    openZoneCreator() {
+        this.showToast('Zone creator coming soon!', 'info');
+    }
+
+    // ============================================
+    // MAP CONTROLS
+    // ============================================
+
+    centerOnMyLocation(smooth = false) {
+        const myMarker = this.markers.get(this.config.userId);
+
+        if (myMarker) {
+            const position = myMarker.getLatLng();
+
+            if (smooth) {
+                this.map.flyTo(position, 16, { duration: 1.5, easeLinearity: 0.25 });
+            } else {
+                this.map.setView(position, 16);
+            }
+
+            setTimeout(() => myMarker.openPopup(), smooth ? 1500 : 100);
+        } else {
+            this.showToast('Your location not available yet', 'warning');
+        }
+    }
+
+    centerOnMember(userId) {
+        const marker = this.markers.get(userId);
+        const balloonMarker = this.balloonMarkers.get(userId);
+        const targetMarker = balloonMarker || marker;
+
+        if (targetMarker) {
+            const position = targetMarker.getLatLng();
+
+            this.map.flyTo(position, 17, { duration: 1.2, easeLinearity: 0.25 });
+            setTimeout(() => targetMarker.openPopup(), 1200);
+        } else {
+            this.showToast('Member location not available', 'warning');
+        }
+    }
+
+    fitAllMembers() {
+        if (this.markers.size === 0) {
+            this.showToast('No locations available', 'warning');
+            return;
+        }
+
+        const bounds = L.latLngBounds();
+        this.markers.forEach(marker => bounds.extend(marker.getLatLng()));
+
+        this.map.flyToBounds(bounds, {
+            padding: [60, 60],
+            duration: 1.2,
+            easeLinearity: 0.25,
+            maxZoom: 16
+        });
+    }
+
+    cycleMapStyle() {
+        const styles = ['light', 'dark', 'satellite'];
+        const currentIndex = styles.indexOf(this.currentMapStyle);
+        const nextIndex = (currentIndex + 1) % styles.length;
+        const nextStyle = styles[nextIndex];
+
+        this.setMapStyle(nextStyle);
+        this.showToast(`Map: ${this.mapStyles[nextStyle].name}`, 'info');
+    }
+
+    // ============================================
+    // SIDEBAR
+    // ============================================
+
+    toggleSidebar() {
+        const sidebar = document.getElementById('trackingSidebar');
+        if (sidebar) {
+            this.isSidebarOpen = !this.isSidebarOpen;
+            sidebar.classList.toggle('active', this.isSidebarOpen);
+        }
+    }
+
+    filterMembers(query) {
+        const searchQuery = query.toLowerCase().trim();
+        const memberCards = document.querySelectorAll('.member-card');
+
+        memberCards.forEach(card => {
+            const name = card.dataset.name || '';
+            card.style.display = name.includes(searchQuery) ? 'flex' : 'none';
+        });
+    }
+
+    // ============================================
+    // HISTORY MODAL
+    // ============================================
+
+    openHistoryModal() {
+        const modal = document.getElementById('historyModal');
+        if (modal) modal.classList.add('active');
+    }
+
+    closeHistoryModal() {
+        const modal = document.getElementById('historyModal');
+        if (modal) modal.classList.remove('active');
+        this.clearHistory();
+    }
+
+    async loadHistory() {
+        const memberSelect = document.getElementById('historyMemberSelect');
+        const dateSelect = document.getElementById('historyDateSelect');
+        const resultsDiv = document.getElementById('historyResults');
+
+        if (!memberSelect || !dateSelect || !resultsDiv) return;
+
+        const userId = memberSelect.value;
+        const date = dateSelect.value;
+
+        if (!userId || !date) {
+            this.showToast('Please select a member and date', 'warning');
+            return;
+        }
+
+        resultsDiv.innerHTML = `<div class="empty-state"><div class="loading-spinner"></div><p style="margin-top: 20px; color: var(--text-secondary);">Loading history...</p></div>`;
+
+        try {
+            const response = await fetch(`/tracking/api/get_location_history.php?user_id=${userId}&date=${date}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error || 'Failed to load history');
+
+            this.displayHistory(data.points, data.stops, data.user_name);
+
+        } catch (error) {
+            console.error('Failed to load history:', error);
+            resultsDiv.innerHTML = `<div class="empty-state"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><p style="color: #ff6b6b; margin-top: 20px; font-weight: 700;">Failed to load history</p></div>`;
+            this.showToast('Failed to load history', 'error');
+        }
+    }
+
+    displayHistory(points, stops, userName) {
+        const resultsDiv = document.getElementById('historyResults');
+        if (!resultsDiv) return;
+
+        this.clearHistory();
+
+        if (!points || points.length === 0) {
+            resultsDiv.innerHTML = `<div class="empty-state"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><p style="margin-top: 20px; color: var(--text-secondary); font-weight: 700;">No location data for this date</p></div>`;
+            return;
+        }
+
+        // Filter out points with invalid coordinates
+        const validPoints = points.filter(p =>
+            p &&
+            p.lat !== null &&
+            p.lat !== undefined &&
+            p.lng !== null &&
+            p.lng !== undefined &&
+            !isNaN(parseFloat(p.lat)) &&
+            !isNaN(parseFloat(p.lng))
+        );
+
+        if (validPoints.length === 0) {
+            resultsDiv.innerHTML = `<div class="empty-state"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><p style="margin-top: 20px; color: var(--text-secondary); font-weight: 700;">No valid location data for this date</p></div>`;
+            return;
+        }
+
+        const coordinates = validPoints.map(p => [parseFloat(p.lat), parseFloat(p.lng)]);
+        const polyline = L.polyline(coordinates, {
+            color: '#667eea',
+            weight: 4,
+            opacity: 0.8,
+            smoothFactor: 1.5,
+            lineCap: 'round',
+            lineJoin: 'round'
+        }).addTo(this.map);
+
+        this.historyPolylines.push(polyline);
+
+        // Start marker
+        const startMarker = L.circleMarker(coordinates[0], {
+            radius: 8,
+            fillColor: '#43e97b',
+            color: 'white',
+            weight: 3,
+            opacity: 1,
+            fillOpacity: 1
+        }).addTo(this.map);
+
+        startMarker.bindPopup(`<div style="padding: 14px; text-align: center; background: var(--bg-secondary); color: var(--text-primary);"><div style="font-size: 28px; margin-bottom: 8px;">🚀</div><div style="font-weight: 800;">Start</div><div style="font-size: 12px; color: var(--text-secondary);">${validPoints[0].ts ? new Date(validPoints[0].ts).toLocaleTimeString() : ''}</div></div>`);
+        this.historyPolylines.push(startMarker);
+
+        // End marker
+        const endMarker = L.circleMarker(coordinates[coordinates.length - 1], {
+            radius: 8,
+            fillColor: '#ff4757',
+            color: 'white',
+            weight: 3,
+            opacity: 1,
+            fillOpacity: 1
+        }).addTo(this.map);
+
+        endMarker.bindPopup(`<div style="padding: 14px; text-align: center; background: var(--bg-secondary); color: var(--text-primary);"><div style="font-size: 28px; margin-bottom: 8px;">🏁</div><div style="font-weight: 800;">End</div><div style="font-size: 12px; color: var(--text-secondary);">${validPoints[validPoints.length - 1].ts ? new Date(validPoints[validPoints.length - 1].ts).toLocaleTimeString() : ''}</div></div>`);
+        this.historyPolylines.push(endMarker);
+
+        // Stop markers - filter valid stops only
+        if (stops && stops.length > 0) {
+            const validStops = stops.filter(s =>
+                s &&
+                s.lat !== null &&
+                s.lat !== undefined &&
+                s.lng !== null &&
+                s.lng !== undefined &&
+                !isNaN(parseFloat(s.lat)) &&
+                !isNaN(parseFloat(s.lng))
+            );
+            validStops.forEach(stop => {
+                const stopMarker = L.circleMarker([parseFloat(stop.lat), parseFloat(stop.lng)], {
+                    radius: 10,
+                    fillColor: '#ffa502',
+                    color: 'white',
+                    weight: 3,
+                    opacity: 1,
+                    fillOpacity: 0.9
+                }).addTo(this.map);
+
+                stopMarker.bindPopup(`<div style="padding: 16px; text-align: center; min-width: 200px; background: var(--bg-secondary); color: var(--text-primary);"><div style="font-size: 32px; margin-bottom: 10px;">⏸️</div><div style="font-weight: 900; margin-bottom: 10px;">Stop</div><div style="background: var(--bg-tertiary); border-radius: 10px; padding: 10px; margin-bottom: 8px;"><div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px; font-weight: 700;">Duration</div><div style="font-size: 18px; font-weight: 900; color: #ffa502;">${this.formatDuration(stop.duration_min)}</div></div><div style="font-size: 12px; color: var(--text-secondary);">${stop.start} - ${stop.end}</div></div>`);
+                this.historyPolylines.push(stopMarker);
+            });
+        }
+
+        this.map.flyToBounds(polyline.getBounds(), { padding: [60, 60], duration: 1.2 });
+
+        const distance = this.calculateDistance(coordinates);
+        const totalDuration = stops?.length > 0 ? stops.reduce((sum, s) => sum + s.duration_min, 0) : 0;
+
+        resultsDiv.innerHTML = `<div style="background: var(--bg-tertiary); border: 1px solid var(--glass-border); border-radius: 16px; padding: 24px; margin-top: 20px;"><div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#667eea" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg><h3 style="font-size: 18px; font-weight: 900; color: var(--text-primary);">Route Summary - ${userName}</h3></div><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px;"><div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">📍 Points</div><div style="font-size: 28px; font-weight: 900; color: var(--text-primary);">${validPoints.length}</div></div><div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">⏸️ Stops</div><div style="font-size: 28px; font-weight: 900; color: #ffa502;">${stops?.length || 0}</div></div><div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">🛣️ Distance</div><div style="font-size: 28px; font-weight: 900; color: #667eea;">${distance.toFixed(1)} km</div></div>${totalDuration > 0 ? `<div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; text-align: center;"><div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">⏱️ Stop Time</div><div style="font-size: 28px; font-weight: 900; color: var(--text-primary);">${this.formatDuration(totalDuration)}</div></div>` : ''}</div></div>`;
+    }
+
+    clearHistory() {
+        this.historyPolylines.forEach(layer => this.map.removeLayer(layer));
+        this.historyPolylines = [];
+    }
+
+    showMemberHistory(userId) {
+        const memberSelect = document.getElementById('historyMemberSelect');
+        if (memberSelect) memberSelect.value = userId;
+        this.openHistoryModal();
+    }
+
+    // ============================================
+    // SETTINGS MODAL
+    // ============================================
+
+    openSettingsModal() {
+        const modal = document.getElementById('settingsModal');
+        if (modal) {
+            modal.classList.add('active');
+            this.loadSettings();
+        }
+    }
+
+    closeSettingsModal() {
+        const modal = document.getElementById('settingsModal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    async loadSettings() {
+        try {
+            const response = await fetch('/tracking/api/get_settings.php', {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+            if (!data.success || !data.settings) return;
+
+            const form = document.getElementById('settingsForm');
+            if (!form) return;
+
+            const settings = data.settings;
+
+            const updateIntervalEl = form.querySelector('[name="update_interval_seconds"]');
+            if (updateIntervalEl) updateIntervalEl.value = settings.update_interval_seconds || 10;
+
+            const isTrackingEl = form.querySelector('[name="is_tracking_enabled"]');
+            if (isTrackingEl) isTrackingEl.checked = settings.is_tracking_enabled !== false;
+
+            const highAccuracyEl = form.querySelector('[name="high_accuracy_mode"]');
+            if (highAccuracyEl) highAccuracyEl.checked = settings.high_accuracy_mode !== false;
+
+            const backgroundEl = form.querySelector('[name="background_tracking"]');
+            if (backgroundEl) backgroundEl.checked = settings.background_tracking !== false;
+
+            const showSpeedEl = form.querySelector('[name="show_speed"]');
+            if (showSpeedEl) showSpeedEl.checked = settings.show_speed !== false;
+
+            const showBatteryEl = form.querySelector('[name="show_battery"]');
+            if (showBatteryEl) showBatteryEl.checked = settings.show_battery !== false;
+
+            const historyRetentionEl = form.querySelector('[name="history_retention_days"]');
+            if (historyRetentionEl) historyRetentionEl.value = settings.history_retention_days || 30;
+
+        } catch (error) {
+            console.error('Failed to load settings:', error);
+        }
+    }
+
+    async saveSettings() {
+        const form = document.getElementById('settingsForm');
+        if (!form) return;
+
+        const formData = new FormData(form);
+        const settings = {};
+
+        formData.forEach((value, key) => {
+            const input = form.querySelector(`[name="${key}"]`);
+            if (input?.type === 'checkbox') {
+                settings[key] = input.checked ? 1 : 0;
+            } else {
+                settings[key] = value;
+            }
+        });
+
+        this.showLoading(true);
+
+        try {
+            const response = await fetch('/tracking/api/save_settings.php', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(settings)
+            });
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error || 'Failed to save settings');
+
+            this.showToast('Settings saved!', 'success');
+            this.closeSettingsModal();
+
+            // Update Android settings
+            if (window.Android && typeof window.Android.updateTrackingSettings === 'function') {
+                window.Android.updateTrackingSettings(
+                    parseInt(settings.update_interval_seconds),
+                    settings.high_accuracy_mode === 1
+                );
+            }
+
+            // Update polling config
+            const newIntervalSeconds = parseInt(settings.update_interval_seconds);
+            if (newIntervalSeconds && newIntervalSeconds !== this.pollingConfig.default) {
+                this.pollingConfig.default = newIntervalSeconds;
+                this.restartPolling();
+            }
+
+        } catch (error) {
+            console.error('Failed to save settings:', error);
+            this.showToast('Failed to save settings: ' + error.message, 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // ============================================
+    // UI HELPERS
+    // ============================================
+
+    closeAllModals() {
+        document.querySelectorAll('.modal.active').forEach(modal => modal.classList.remove('active'));
+        this.clearHistory();
+    }
+
+    showLoading(show) {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.style.display = show ? 'flex' : 'none';
+    }
+
+    showToast(message, type = 'info') {
+        document.querySelectorAll('.toast-notification').forEach(t => t.remove());
+
+        const colors = { success: '#43e97b', error: '#ff6b6b', warning: '#ffa502', info: '#4facfe' };
+        const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.innerHTML = `<div style="position: fixed; bottom: 30px; right: 30px; background: rgba(26, 29, 46, 0.98); backdrop-filter: blur(40px) saturate(180%); color: white; padding: 18px 26px; border-radius: 14px; font-weight: 700; font-size: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); z-index: 10001; border-left: 4px solid ${colors[type]}; display: flex; align-items: center; gap: 14px; animation: slideInRight 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); max-width: 420px; font-family: 'Plus Jakarta Sans', sans-serif;"><div style="width: 36px; height: 36px; border-radius: 50%; background: ${colors[type]}; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; font-weight: 900; box-shadow: 0 4px 12px ${colors[type]}40;">${icons[type]}</div><span>${message}</span></div>`;
+
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.animation = 'slideOutRight 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 3500);
+    }
+
+    // ============================================
+    // ANDROID BRIDGE
+    // ============================================
+
+    notifyAndroidTrackingVisible() {
+        try {
+            if (window.Android?.onTrackingScreenVisible) {
+                window.Android.onTrackingScreenVisible();
+            }
+        } catch (e) {}
+    }
+
+    notifyAndroidTrackingHidden() {
+        try {
+            if (window.Android?.onTrackingScreenHidden) {
+                window.Android.onTrackingScreenHidden();
+            }
+        } catch (e) {}
+    }
+
+    requestLocationBoost(intervalSeconds = 5) {
+        try {
+            if (window.Android?.requestLocationBoost) {
+                window.Android.requestLocationBoost(intervalSeconds);
+            }
+        } catch (e) {}
+    }
+
+    // ============================================
+    // UTILITY FUNCTIONS
+    // ============================================
+
+    formatRelativeTime(date) {
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) return `${diffHours}h ago`;
+
+        const diffDays = Math.floor(diffHours / 24);
+        if (diffDays < 7) return `${diffDays}d ago`;
+
+        return date.toLocaleDateString();
+    }
+
+    formatDuration(minutes) {
+        if (minutes < 60) return `${Math.round(minutes)}m`;
+        const hours = Math.floor(minutes / 60);
+        const mins = Math.round(minutes % 60);
+        return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+    }
+
+    calculateDistance(coordinates) {
+        let distance = 0;
+
+        for (let i = 1; i < coordinates.length; i++) {
+            const [lat1, lon1] = coordinates[i - 1];
+            const [lat2, lon2] = coordinates[i];
+
+            const R = 6371;
+            const dLat = this.toRad(lat2 - lat1);
+            const dLon = this.toRad(lon2 - lon1);
+
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            distance += R * c;
+        }
+
+        return distance;
+    }
+
+    toRad(degrees) {
+        return degrees * (Math.PI / 180);
+    }
+
+    // ============================================
+    // CLUSTERING & SPREADING ALGORITHMS
+    // ============================================
+
+    /**
+     * Cluster members by proximity threshold
+     * @param {Array} members - Array of member objects with location
+     * @param {number} threshold - Distance threshold in degrees (~0.001 = 100m)
+     * @returns {Array} Array of cluster objects with center and members
+     */
+    clusterMembersByProximity(members, threshold = 0.001) {
+        const membersWithLocation = members.filter(m =>
+            m.location && m.location.lat && m.location.lng
+        );
+
+        const clusters = [];
+        const assigned = new Set();
+
+        membersWithLocation.forEach(member => {
+            if (assigned.has(member.user_id)) return;
+
+            // Start a new cluster with this member
+            const cluster = {
+                center: { lat: member.location.lat, lng: member.location.lng },
+                members: [member]
+            };
+
+            // Find all nearby members
+            membersWithLocation.forEach(other => {
+                if (other.user_id === member.user_id || assigned.has(other.user_id)) return;
+
+                const distance = Math.sqrt(
+                    Math.pow(member.location.lat - other.location.lat, 2) +
+                    Math.pow(member.location.lng - other.location.lng, 2)
+                );
+
+                if (distance <= threshold) {
+                    cluster.members.push(other);
+                    assigned.add(other.user_id);
+                }
+            });
+
+            // Calculate cluster center as average
+            if (cluster.members.length > 1) {
+                const sumLat = cluster.members.reduce((sum, m) => sum + m.location.lat, 0);
+                const sumLng = cluster.members.reduce((sum, m) => sum + m.location.lng, 0);
+                cluster.center = {
+                    lat: sumLat / cluster.members.length,
+                    lng: sumLng / cluster.members.length
+                };
+            }
+
+            assigned.add(member.user_id);
+            clusters.push(cluster);
+        });
+
+        return clusters;
+    }
+
+    /**
+     * Calculate spiral offset position for clustered markers
+     * Spreads markers in a spiral pattern around the center point
+     * @param {number} centerLat - Center latitude
+     * @param {number} centerLng - Center longitude
+     * @param {number} index - Member index in cluster (0-based)
+     * @param {number} total - Total members in cluster
+     * @returns {Object} { lat, lng } of offset position
+     */
+    calculateSpiralOffset(centerLat, centerLng, index, total) {
+        if (total <= 1) {
+            return { lat: centerLat, lng: centerLng };
+        }
+
+        // Small offset - just enough to see each avatar (~50-70 meters)
+        // 0.0005 degrees ≈ 55 meters
+        const baseOffset = 0.0005;
+
+        // Distribute evenly in a circle
+        const angleStep = (2 * Math.PI) / total;
+        const startAngle = -Math.PI / 2; // Start from top
+        const angle = startAngle + (index * angleStep);
+
+        // Calculate offset position
+        const lat = centerLat + Math.sin(angle) * baseOffset;
+        const lng = centerLng + Math.cos(angle) * baseOffset * 1.2;
+
+        return { lat, lng };
+    }
+}
+
+// ============================================
+// GLOBAL INSTANCE & INITIALIZATION
+// ============================================
+
+let TrackingMap;
+
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing tracking map...');
+
+    try {
+        TrackingMap = new TrackingMapProfessional();
+        window.TrackingMap = TrackingMap;
+        console.log('Tracking map instance created');
+    } catch (error) {
+        console.error('Failed to create tracking map:', error);
+
+        const mapContainer = document.getElementById('trackingMap');
+        if (mapContainer) {
+            mapContainer.innerHTML = `<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 40px; text-align: center; background: linear-gradient(135deg, #667eea, #764ba2);"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" style="margin-bottom: 24px; opacity: 0.8;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><h2 style="font-size: 28px; font-weight: 900; margin-bottom: 14px; color: white;">Failed to load map</h2><p style="font-size: 15px; color: rgba(255,255,255,0.7); margin-bottom: 24px; max-width: 400px; font-weight: 600;">${error.message}</p><button onclick="location.reload()" style="padding: 14px 32px; background: white; border: none; border-radius: 14px; color: #667eea; font-weight: 800; cursor: pointer; font-size: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);">🔄 Reload Page</button></div>`;
+        }
+    }
+});
+
+// Inject styles
+const style = document.createElement('style');
+style.textContent = `
+    /* Toast animations */
+    @keyframes slideInRight { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes slideOutRight { to { transform: translateX(400px); opacity: 0; } }
+
+    /* Standard marker styles */
+    .custom-marker { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .custom-marker.is-me { animation: pulseMarker 2.5s ease-in-out infinite; }
+    @keyframes pulseMarker { 0%, 100% { box-shadow: 0 6px 20px rgba(0,0,0,0.4); } 50% { box-shadow: 0 6px 20px rgba(0,0,0,0.4), 0 0 0 15px rgba(102, 126, 234, 0.15); } }
+
+    /* Balloon marker styles */
+    .balloon-marker { cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .balloon-marker:hover { transform: scale(1.08) translateY(-4px); z-index: 10000 !important; }
+    .balloon-marker.is-me .balloon-avatar { animation: pulseAvatar 2.5s ease-in-out infinite; }
+    @keyframes pulseAvatar { 0%, 100% { box-shadow: 0 4px 16px rgba(0,0,0,0.35); } 50% { box-shadow: 0 4px 16px rgba(0,0,0,0.35), 0 0 0 12px rgba(102, 126, 234, 0.2); } }
+
+    /* Location dot styles */
+    .location-dot-container { z-index: 1 !important; }
+    .location-dot { animation: dotPulse 2s ease-in-out infinite; transition: all 0.3s ease; }
+    @keyframes dotPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+
+    /* Tether line animation */
+    .tether-line { pointer-events: none; }
+
+    /* Popup responsive */
+    .leaflet-popup-content-wrapper { max-width: 95vw !important; }
+    @media (max-width: 480px) { .leaflet-popup-content-wrapper { max-width: 90vw !important; } }
+
+    /* Member marker container positioning fix */
+    .member-marker-container { overflow: visible !important; }
+    .balloon-marker-container { overflow: visible !important; }
+`;
+document.head.appendChild(style);
+
+console.log('Tracking JavaScript v5.0 loaded');
