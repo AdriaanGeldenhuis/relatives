@@ -7,7 +7,7 @@ var NeonEngine = (function() {
 
     // Constants
     var TILE_SIZE = 0;
-    var MOVE_SCALE = 600; // Fixed reference for movement speed (independent of screen size)
+    var MOVE_SCALE = 480; // Fixed reference for movement speed (independent of screen size)
     var OFFSET_X = 0;
     var OFFSET_Y = 0;
     var MAX_LIVES = 3;
@@ -172,7 +172,7 @@ var NeonEngine = (function() {
                 color: SENTINEL_COLORS[i % SENTINEL_COLORS.length],
                 chaseTimer: Math.random() * config.chaseInterval,
                 released: i === 0, // First sentinel starts released
-                releaseDelay: i * 2000
+                releaseDelay: i * 1500
             });
         }
 
@@ -739,7 +739,7 @@ var NeonEngine = (function() {
                 lastTime = performance.now();
                 accumulator = 0;
                 loop(performance.now());
-            }, 1500);
+            }, 1000);
         }
     }
 
@@ -764,7 +764,7 @@ var NeonEngine = (function() {
             s.moving = false;
             s.state = SENTINEL_STATES.PATROL;
             s.released = i === 0;
-            s.releaseDelay = i * 2000;
+            s.releaseDelay = i * 1500;
         }
 
         if (pulseMode) endPulseMode();
@@ -790,7 +790,7 @@ var NeonEngine = (function() {
             level++;
             startLevel(level);
             start();
-        }, 2500);
+        }, 1800);
     }
 
     function gameOver() {
