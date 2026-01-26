@@ -405,8 +405,8 @@ var MahjongGame = (function() {
     }
 
     // ========== SHUFFLE ==========
-    function shuffleRemaining() {
-        if (shufflesRemaining <= 0) return;
+    function shuffleRemaining(silent) {
+        if (shufflesRemaining <= 0 && shufflesRemaining !== Infinity) return;
 
         var activeTiles = tiles.filter(function(t) { return !t.removed; });
 
@@ -419,15 +419,32 @@ var MahjongGame = (function() {
             t.symbol = symbols[i];
         });
 
-        shufflesRemaining--;
+        if (shufflesRemaining !== Infinity) {
+            shufflesRemaining--;
+        }
         hintedTiles = [];
         selected = null;
         updateFreeTiles();
 
-        MahjongAudio.play('shuffle');
+        if (!silent) {
+            MahjongAudio.play('shuffle');
+        }
     }
 
     function showNoMoves() {
+        // If unlimited shuffles, auto-shuffle silently
+        if (shufflesRemaining === Infinity) {
+            var attempts = 0;
+            while (!hasAvailableMoves() && attempts < 10) {
+                shuffleRemaining(true);
+                attempts++;
+            }
+            if (hasAvailableMoves()) {
+                MahjongAudio.play('shuffle');
+            }
+            return;
+        }
+
         if (shufflesRemaining > 0) {
             showOverlay('nomoves');
         } else {
