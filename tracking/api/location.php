@@ -3,6 +3,13 @@
  * POST /tracking/api/location.php
  *
  * Submit a single location update.
+ *
+ * Supports both new format and old Android app format:
+ * - latitude/longitude -> lat/lng
+ * - device_uuid -> device_id
+ * - speed_kmh -> speed_mps (converted)
+ * - heading_deg -> bearing_deg
+ * - client_timestamp -> recorded_at
  */
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
@@ -30,8 +37,89 @@ if (!$input) {
     jsonError('invalid_json', 'Invalid JSON body', 400);
 }
 
-// Validate
-$validation = TrackingValidator::validateLocation($input);
+// ============================================
+// TRANSLATE OLD FIELD NAMES TO NEW FORMAT
+// (for Android app compatibility)
+// ============================================
+$translated = [];
+
+// Required fields - translate latitude/longitude to lat/lng
+if (isset($input['latitude'])) {
+    $translated['lat'] = $input['latitude'];
+} elseif (isset($input['lat'])) {
+    $translated['lat'] = $input['lat'];
+}
+
+if (isset($input['longitude'])) {
+    $translated['lng'] = $input['longitude'];
+} elseif (isset($input['lng'])) {
+    $translated['lng'] = $input['lng'];
+}
+
+// Accuracy
+if (isset($input['accuracy_m'])) {
+    $translated['accuracy_m'] = $input['accuracy_m'];
+} elseif (isset($input['accuracy'])) {
+    $translated['accuracy_m'] = $input['accuracy'];
+}
+
+// Speed - convert km/h to m/s if needed
+if (isset($input['speed_mps'])) {
+    $translated['speed_mps'] = $input['speed_mps'];
+} elseif (isset($input['speed_kmh'])) {
+    $translated['speed_mps'] = $input['speed_kmh'] / 3.6;
+} elseif (isset($input['speed'])) {
+    $translated['speed_mps'] = $input['speed'];
+}
+
+// Bearing/heading
+if (isset($input['bearing_deg'])) {
+    $translated['bearing_deg'] = $input['bearing_deg'];
+} elseif (isset($input['heading_deg'])) {
+    $translated['bearing_deg'] = $input['heading_deg'];
+} elseif (isset($input['heading'])) {
+    $translated['bearing_deg'] = $input['heading'];
+}
+
+// Altitude
+if (isset($input['altitude_m'])) {
+    $translated['altitude_m'] = $input['altitude_m'];
+} elseif (isset($input['altitude'])) {
+    $translated['altitude_m'] = $input['altitude'];
+}
+
+// Device ID
+if (isset($input['device_id'])) {
+    $translated['device_id'] = $input['device_id'];
+} elseif (isset($input['device_uuid'])) {
+    $translated['device_id'] = $input['device_uuid'];
+}
+
+// Platform
+if (isset($input['platform'])) {
+    $translated['platform'] = $input['platform'];
+}
+
+// App version
+if (isset($input['app_version'])) {
+    $translated['app_version'] = $input['app_version'];
+}
+
+// Timestamp - convert unix timestamp to ISO if needed
+if (isset($input['recorded_at'])) {
+    $translated['recorded_at'] = $input['recorded_at'];
+} elseif (isset($input['client_timestamp'])) {
+    $ts = $input['client_timestamp'];
+    if ($ts > 1000000000000) {
+        $ts = $ts / 1000;
+    }
+    $translated['recorded_at'] = date('Y-m-d H:i:s', (int)$ts);
+} elseif (isset($input['timestamp'])) {
+    $translated['recorded_at'] = $input['timestamp'];
+}
+
+// Validate (using translated input)
+$validation = TrackingValidator::validateLocation($translated);
 if (!$validation['valid']) {
     jsonError('validation_failed', implode(', ', $validation['errors']), 400);
 }
@@ -56,9 +144,10 @@ $geofenceEngine = new GeofenceEngine($geofenceRepo, $eventsRepo, $alertsEngine);
 // Get settings
 $settings = $settingsRepo->get($familyId);
 
-// Check accuracy
-if (isset($location['accuracy_m']) && $location['accuracy_m'] > $settings['min_accuracy_m']) {
-    jsonError('poor_accuracy', "Accuracy {$location['accuracy_m']}m exceeds threshold {$settings['min_accuracy_m']}m", 422);
+// Check accuracy - More lenient for mobile apps (allow up to 500m)
+$maxAccuracy = max($settings['min_accuracy_m'], 500);
+if (isset($location['accuracy_m']) && $location['accuracy_m'] > $maxAccuracy) {
+    jsonError('poor_accuracy', "Accuracy {$location['accuracy_m']}m exceeds threshold {$maxAccuracy}m", 422);
 }
 
 // Rate limit check
@@ -73,11 +162,14 @@ if (!$rateCheck['allowed']) {
     ]);
 }
 
-// Session gate check (Mode 1)
-$sessionCheck = $sessionGate->check($familyId);
-if (!$sessionCheck['allowed']) {
-    jsonError('session_off', $sessionCheck['message'], 409);
-}
+// Session gate check (Mode 1) - BYPASSED for Android app compatibility
+// The old tracking system didn't have session gating, so the Android app
+// expects to always be able to upload locations. We accept and store them
+// even without an active session.
+// $sessionCheck = $sessionGate->check($familyId);
+// if (!$sessionCheck['allowed']) {
+//     jsonError('session_off', $sessionCheck['message'], 409);
+// }
 
 // Dedupe check
 $dedupeCheck = $dedupe->check($userId, $familyId, $location);
