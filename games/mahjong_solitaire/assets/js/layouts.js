@@ -282,7 +282,7 @@ var MahjongLayouts = (function() {
             generate: generateMedium,
             hints: 50,
             shuffles: Infinity,  // Auto-shuffle when no moves
-            timeLimit: 300000  // 5 minutes
+            timeLimit: 240000  // 4 minutes
         },
         turtle: {
             name: 'Classic',
