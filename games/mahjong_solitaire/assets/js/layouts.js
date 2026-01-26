@@ -215,6 +215,22 @@ var MahjongLayouts = (function() {
         { type: 'shape', value: 'diamond', color: '#8b5cf6' }
     ];
 
+    // Medium mode symbols - nature & objects (12 symbols)
+    var MEDIUM_SYMBOLS = [
+        { type: 'nature', value: 'sun', color: '#f59e0b' },
+        { type: 'nature', value: 'moon', color: '#8b5cf6' },
+        { type: 'nature', value: 'leaf', color: '#22c55e' },
+        { type: 'nature', value: 'flower', color: '#ec4899' },
+        { type: 'nature', value: 'cloud', color: '#60a5fa' },
+        { type: 'nature', value: 'drop', color: '#3b82f6' },
+        { type: 'nature', value: 'flame', color: '#f97316' },
+        { type: 'nature', value: 'snowflake', color: '#67e8f9' },
+        { type: 'object', value: 'crown', color: '#eab308' },
+        { type: 'object', value: 'bell', color: '#fbbf24' },
+        { type: 'object', value: 'gem', color: '#a855f7' },
+        { type: 'object', value: 'bolt', color: '#facc15' }
+    ];
+
     // Get required number of unique symbols for tile count
     function getSymbolsForCount(tileCount, layoutName) {
         var pairsNeeded = tileCount / 2;
@@ -230,7 +246,17 @@ var MahjongLayouts = (function() {
             return symbols;
         }
 
-        // Other modes: use more variety
+        // Medium mode: use 12 nature/object symbols
+        if (layoutName === 'medium') {
+            var symbolIndex = 0;
+            while (symbols.length < pairsNeeded) {
+                symbols.push(MEDIUM_SYMBOLS[symbolIndex % MEDIUM_SYMBOLS.length]);
+                symbolIndex++;
+            }
+            return symbols;
+        }
+
+        // Classic mode: use all variety
         var symbolIndex = 0;
         while (symbols.length < pairsNeeded) {
             symbols.push(SYMBOLS[symbolIndex % SYMBOLS.length]);
@@ -254,8 +280,8 @@ var MahjongLayouts = (function() {
             name: 'Medium',
             tiles: 72,
             generate: generateMedium,
-            hints: 10,
-            shuffles: 5,
+            hints: 50,
+            shuffles: Infinity,  // Auto-shuffle when no moves
             timeLimit: 300000  // 5 minutes
         },
         turtle: {
