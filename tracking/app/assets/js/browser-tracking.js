@@ -15,6 +15,7 @@ window.BrowserTracking = {
     watchId: null,
     lastUploadTime: 0,
     UPLOAD_INTERVAL_MS: 30000, // 30 seconds
+    MAX_ACCURACY_M: 500, // Only upload if accuracy better than 500m
 
     init() {
         // Only run in browser context
@@ -100,6 +101,14 @@ window.BrowserTracking = {
     },
 
     async uploadLocation(position) {
+        const accuracy = Math.round(position.coords.accuracy) || 9999;
+
+        // Skip if accuracy is too poor
+        if (accuracy > this.MAX_ACCURACY_M) {
+            console.log(`Browser location skipped: accuracy ${accuracy}m > ${this.MAX_ACCURACY_M}m threshold`);
+            return;
+        }
+
         this.lastUploadTime = Date.now();
 
         const locationData = {
