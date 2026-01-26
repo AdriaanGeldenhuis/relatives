@@ -1,24 +1,37 @@
 <?php
+declare(strict_types=1);
+
 /**
  * Tracking Events Page
  */
 
+// Start session first
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
+// Quick session check
+if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+    header('Location: /login.php', true, 302);
     exit;
 }
 
+// Load bootstrap
 require_once __DIR__ . '/../../core/bootstrap.php';
 
-$auth = new Auth($db);
-$user = $auth->getCurrentUser();
+// Validate session with database
+try {
+    $auth = new Auth($db);
+    $user = $auth->getCurrentUser();
 
-if (!$user) {
-    header('Location: /login.php');
+    if (!$user) {
+        header('Location: /login.php?session_expired=1', true, 302);
+        exit;
+    }
+
+} catch (Exception $e) {
+    error_log('Tracking events error: ' . $e->getMessage());
+    header('Location: /login.php?error=1', true, 302);
     exit;
 }
 

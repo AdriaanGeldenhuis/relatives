@@ -1,28 +1,39 @@
 <?php
+declare(strict_types=1);
+
 /**
  * Tracking Dashboard
  *
  * Fullscreen Mapbox map with family member locations.
  */
 
+// Start session first
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Check auth
-if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
+// Quick session check
+if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+    header('Location: /login.php', true, 302);
     exit;
 }
 
+// Load bootstrap
 require_once __DIR__ . '/../../core/bootstrap.php';
 
-// Get user
-$auth = new Auth($db);
-$user = $auth->getCurrentUser();
+// Validate session with database
+try {
+    $auth = new Auth($db);
+    $user = $auth->getCurrentUser();
 
-if (!$user) {
-    header('Location: /login.php');
+    if (!$user) {
+        header('Location: /login.php?session_expired=1', true, 302);
+        exit;
+    }
+
+} catch (Exception $e) {
+    error_log('Tracking page error: ' . $e->getMessage());
+    header('Location: /login.php?error=1', true, 302);
     exit;
 }
 
@@ -31,7 +42,7 @@ require_once __DIR__ . '/../../core/SubscriptionManager.php';
 $subscriptionManager = new SubscriptionManager($db);
 
 if ($subscriptionManager->isFamilyLocked($user['family_id'])) {
-    header('Location: /subscription/locked.php');
+    header('Location: /subscription/locked.php', true, 302);
     exit;
 }
 
