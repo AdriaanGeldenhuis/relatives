@@ -443,7 +443,7 @@ var BlockEngine = (function() {
             level: level,
             lines: lines,
             combo: Math.max(0, combo),
-            showGhost: true,
+            showGhost: false,
             running: running,
             paused: paused,
             gameOver: gameOver,
