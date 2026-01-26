@@ -184,6 +184,15 @@ $pageTitle = 'Family Tracking';
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
+    <!-- Footer Navigation -->
+    <footer class="tracking-footer">
+        <a href="/home/" class="footer-nav-btn" title="Home">🏠</a>
+        <a href="/messages/" class="footer-nav-btn" title="Messages">💬</a>
+        <a href="/shopping/" class="footer-nav-btn" title="Shopping">🛒</a>
+        <a href="/calendar/" class="footer-nav-btn" title="Calendar">📅</a>
+        <a href="/notifications/" class="footer-nav-btn" title="Notifications">🔔</a>
+    </footer>
+
     <!-- Config -->
     <script>
         window.TRACKING_CONFIG = {
@@ -208,6 +217,7 @@ $pageTitle = 'Family Tracking';
     <script src="assets/js/follow.js"></script>
     <script src="assets/js/directions.js"></script>
     <script src="assets/js/polling.js"></script>
+    <script src="assets/js/browser-tracking.js"></script>
     <script src="assets/js/bootstrap.js"></script>
 </body>
 </html>

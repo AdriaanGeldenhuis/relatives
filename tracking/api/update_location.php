@@ -1,11 +1,13 @@
 <?php
 /**
- * POST /tracking/api/location.php
+ * COMPATIBILITY SHIM - Old API endpoint
  *
- * Submit a single location update.
+ * Translates old field names to new format and processes location update.
+ * This allows the Android app to work with the rebuilt tracking system.
  *
- * Supports both new format and old Android app format:
- * - latitude/longitude -> lat/lng
+ * Old format -> New format:
+ * - latitude -> lat
+ * - longitude -> lng
  * - device_uuid -> device_id
  * - speed_kmh -> speed_mps (converted)
  * - heading_deg -> bearing_deg
@@ -39,8 +41,8 @@ if (!$input) {
 
 // ============================================
 // TRANSLATE OLD FIELD NAMES TO NEW FORMAT
-// (for Android app compatibility)
 // ============================================
+
 $translated = [];
 
 // Required fields - translate latitude/longitude to lat/lng
@@ -118,13 +120,20 @@ if (isset($input['recorded_at'])) {
     $translated['recorded_at'] = $input['timestamp'];
 }
 
-// Validate (using translated input)
+// ============================================
+// VALIDATE (using new validator)
+// ============================================
+
 $validation = TrackingValidator::validateLocation($translated);
 if (!$validation['valid']) {
     jsonError('validation_failed', implode(', ', $validation['errors']), 400);
 }
 
 $location = $validation['cleaned'];
+
+// ============================================
+// PROCESS (same as location.php)
+// ============================================
 
 // Initialize services
 $settingsRepo = new SettingsRepo($db, $trackingCache);
@@ -144,7 +153,7 @@ $geofenceEngine = new GeofenceEngine($geofenceRepo, $eventsRepo, $alertsEngine);
 // Get settings
 $settings = $settingsRepo->get($familyId);
 
-// Check accuracy - More lenient for mobile apps (allow up to 500m)
+// Check accuracy - More lenient for Android app (allow up to 500m instead of default 100m)
 $maxAccuracy = max($settings['min_accuracy_m'], 500);
 if (isset($location['accuracy_m']) && $location['accuracy_m'] > $maxAccuracy) {
     jsonError('poor_accuracy', "Accuracy {$location['accuracy_m']}m exceeds threshold {$maxAccuracy}m", 422);

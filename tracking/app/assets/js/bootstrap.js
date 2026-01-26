@@ -34,6 +34,7 @@
         Follow.init();
         Directions.init();
         Polling.init();
+        BrowserTracking.init();
 
         console.log('Tracking app initialized');
     });

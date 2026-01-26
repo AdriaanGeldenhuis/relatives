@@ -20,6 +20,17 @@ class TrackingJsInterface(private val context: Context) {
         private const val TAG = "TrackingJsInterface"
     }
 
+    /**
+     * Returns true if native tracking is enabled.
+     * Called by web page to skip browser-based geolocation.
+     */
+    @JavascriptInterface
+    fun isTrackingEnabled(): Boolean {
+        val enabled = PreferencesManager.isTrackingEnabled()
+        Log.d(TAG, "isTrackingEnabled() called - returning: $enabled")
+        return enabled
+    }
+
     @JavascriptInterface
     fun onTrackingScreenVisible() {
         Log.d(TAG, "onTrackingScreenVisible - sending boost hint to service")
