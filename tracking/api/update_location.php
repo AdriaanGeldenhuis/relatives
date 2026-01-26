@@ -153,9 +153,10 @@ $geofenceEngine = new GeofenceEngine($geofenceRepo, $eventsRepo, $alertsEngine);
 // Get settings
 $settings = $settingsRepo->get($familyId);
 
-// Check accuracy
-if (isset($location['accuracy_m']) && $location['accuracy_m'] > $settings['min_accuracy_m']) {
-    jsonError('poor_accuracy', "Accuracy {$location['accuracy_m']}m exceeds threshold {$settings['min_accuracy_m']}m", 422);
+// Check accuracy - More lenient for Android app (allow up to 500m instead of default 100m)
+$maxAccuracy = max($settings['min_accuracy_m'], 500);
+if (isset($location['accuracy_m']) && $location['accuracy_m'] > $maxAccuracy) {
+    jsonError('poor_accuracy', "Accuracy {$location['accuracy_m']}m exceeds threshold {$maxAccuracy}m", 422);
 }
 
 // Rate limit check
@@ -170,11 +171,14 @@ if (!$rateCheck['allowed']) {
     ]);
 }
 
-// Session gate check (Mode 1)
-$sessionCheck = $sessionGate->check($familyId);
-if (!$sessionCheck['allowed']) {
-    jsonError('session_off', $sessionCheck['message'], 409);
-}
+// Session gate check (Mode 1) - BYPASSED for Android app compatibility
+// The old tracking system didn't have session gating, so the Android app
+// expects to always be able to upload locations. We accept and store them
+// even without an active session.
+// $sessionCheck = $sessionGate->check($familyId);
+// if (!$sessionCheck['allowed']) {
+//     jsonError('session_off', $sessionCheck['message'], 409);
+// }
 
 // Dedupe check
 $dedupeCheck = $dedupe->check($userId, $familyId, $location);
