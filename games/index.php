@@ -197,14 +197,15 @@ $games = [
         'highlight' => true
     ],
     [
-        'id' => 'memory',
-        'name' => 'Memory Match',
-        'icon' => '🧠',
-        'description' => 'Test your memory with this classic card matching game.',
-        'url' => '/games/memory/',
-        'color' => '#9b59b6',
-        'features' => ['Multiple Levels', 'Time Challenge', 'Family Competition'],
-        'available' => false
+        'id' => 'mahjong',
+        'name' => 'Mahjong Solitaire',
+        'icon' => '🀄',
+        'description' => 'Classic tile-matching puzzle! Match free tiles, clear the board, 3 difficulty levels.',
+        'url' => '/games/mahjong_solitaire/',
+        'color' => '#4ade80',
+        'features' => ['3 Layouts', 'Hint System', 'Beautiful 4K Graphics'],
+        'available' => true,
+        'highlight' => true
     ],
     [
         'id' => 'trivia',
