@@ -208,6 +208,7 @@ $pageTitle = 'Family Tracking';
     <script src="assets/js/follow.js"></script>
     <script src="assets/js/directions.js"></script>
     <script src="assets/js/polling.js"></script>
+    <script src="assets/js/browser-tracking.js"></script>
     <script src="assets/js/bootstrap.js"></script>
 </body>
 </html>
