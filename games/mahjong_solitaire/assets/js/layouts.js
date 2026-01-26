@@ -162,47 +162,47 @@ var MahjongLayouts = (function() {
         return tiles; // 144 tiles
     }
 
-    // Tile symbols (procedural drawing, no images needed)
+    // Tile symbols - Modern icons with colors
     var SYMBOLS = [
-        // Dots (circles) 1-9
-        { type: 'dots', value: 1 },
-        { type: 'dots', value: 2 },
-        { type: 'dots', value: 3 },
-        { type: 'dots', value: 4 },
-        { type: 'dots', value: 5 },
-        { type: 'dots', value: 6 },
-        { type: 'dots', value: 7 },
-        { type: 'dots', value: 8 },
-        { type: 'dots', value: 9 },
-        // Bamboo (lines) 1-9
-        { type: 'bamboo', value: 1 },
-        { type: 'bamboo', value: 2 },
-        { type: 'bamboo', value: 3 },
-        { type: 'bamboo', value: 4 },
-        { type: 'bamboo', value: 5 },
-        { type: 'bamboo', value: 6 },
-        { type: 'bamboo', value: 7 },
-        { type: 'bamboo', value: 8 },
-        { type: 'bamboo', value: 9 },
-        // Characters (numbers) 1-9
-        { type: 'character', value: 1 },
-        { type: 'character', value: 2 },
-        { type: 'character', value: 3 },
-        { type: 'character', value: 4 },
-        { type: 'character', value: 5 },
-        { type: 'character', value: 6 },
-        { type: 'character', value: 7 },
-        { type: 'character', value: 8 },
-        { type: 'character', value: 9 },
-        // Winds
-        { type: 'wind', value: 'E' },
-        { type: 'wind', value: 'S' },
-        { type: 'wind', value: 'W' },
-        { type: 'wind', value: 'N' },
-        // Dragons
-        { type: 'dragon', value: 'R' }, // Red
-        { type: 'dragon', value: 'G' }, // Green
-        { type: 'dragon', value: 'W' }  // White
+        // Shapes (Red)
+        { type: 'shape', value: 'circle', color: '#ef4444' },
+        { type: 'shape', value: 'square', color: '#ef4444' },
+        { type: 'shape', value: 'triangle', color: '#ef4444' },
+        { type: 'shape', value: 'diamond', color: '#ef4444' },
+        { type: 'shape', value: 'star', color: '#ef4444' },
+        { type: 'shape', value: 'heart', color: '#ef4444' },
+        { type: 'shape', value: 'hexagon', color: '#ef4444' },
+        { type: 'shape', value: 'cross', color: '#ef4444' },
+        { type: 'shape', value: 'crescent', color: '#ef4444' },
+        // Nature (Green)
+        { type: 'nature', value: 'sun', color: '#f59e0b' },
+        { type: 'nature', value: 'moon', color: '#8b5cf6' },
+        { type: 'nature', value: 'leaf', color: '#22c55e' },
+        { type: 'nature', value: 'flower', color: '#ec4899' },
+        { type: 'nature', value: 'tree', color: '#22c55e' },
+        { type: 'nature', value: 'cloud', color: '#60a5fa' },
+        { type: 'nature', value: 'drop', color: '#3b82f6' },
+        { type: 'nature', value: 'flame', color: '#f97316' },
+        { type: 'nature', value: 'snowflake', color: '#67e8f9' },
+        // Objects (Blue/Purple)
+        { type: 'object', value: 'crown', color: '#eab308' },
+        { type: 'object', value: 'bell', color: '#fbbf24' },
+        { type: 'object', value: 'gem', color: '#a855f7' },
+        { type: 'object', value: 'key', color: '#78716c' },
+        { type: 'object', value: 'bolt', color: '#facc15' },
+        { type: 'object', value: 'apple', color: '#dc2626' },
+        { type: 'object', value: 'cherry', color: '#e11d48' },
+        { type: 'object', value: 'grape', color: '#7c3aed' },
+        { type: 'object', value: 'lemon', color: '#fde047' },
+        // Symbols (Various)
+        { type: 'symbol', value: 'plus', color: '#14b8a6' },
+        { type: 'symbol', value: 'minus', color: '#f43f5e' },
+        { type: 'symbol', value: 'multiply', color: '#8b5cf6' },
+        { type: 'symbol', value: 'spiral', color: '#06b6d4' },
+        { type: 'symbol', value: 'wave', color: '#0ea5e9' },
+        { type: 'symbol', value: 'infinity', color: '#6366f1' },
+        { type: 'symbol', value: 'target', color: '#ef4444' },
+        { type: 'symbol', value: 'eye', color: '#3b82f6' }
     ];
 
     // Get required number of unique symbols for tile count

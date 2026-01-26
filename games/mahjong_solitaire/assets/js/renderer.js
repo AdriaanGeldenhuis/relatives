@@ -325,160 +325,432 @@ var MahjongRenderer = (function() {
 
         var cx = x + w / 2;
         var cy = y + h / 2;
-        var scale = boardScale * 0.7;
+        var s = Math.min(w, h) * 0.35;
 
         ctx.save();
         ctx.translate(cx, cy);
+        ctx.fillStyle = symbol.color || '#333';
+        ctx.strokeStyle = symbol.color || '#333';
+        ctx.lineWidth = 2 * boardScale;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
 
-        if (symbol.type === 'dots') {
-            drawDots(symbol.value, scale);
-        } else if (symbol.type === 'bamboo') {
-            drawBamboo(symbol.value, scale);
-        } else if (symbol.type === 'character') {
-            drawCharacter(symbol.value, scale);
-        } else if (symbol.type === 'wind') {
-            drawWind(symbol.value, scale);
-        } else if (symbol.type === 'dragon') {
-            drawDragon(symbol.value, scale);
+        switch(symbol.value) {
+            // Shapes
+            case 'circle': drawCircle(s); break;
+            case 'square': drawSquare(s); break;
+            case 'triangle': drawTriangle(s); break;
+            case 'diamond': drawDiamond(s); break;
+            case 'star': drawStar(s); break;
+            case 'heart': drawHeart(s); break;
+            case 'hexagon': drawHexagon(s); break;
+            case 'cross': drawCross(s); break;
+            case 'crescent': drawCrescent(s); break;
+            // Nature
+            case 'sun': drawSun(s); break;
+            case 'moon': drawMoon(s); break;
+            case 'leaf': drawLeaf(s); break;
+            case 'flower': drawFlower(s); break;
+            case 'tree': drawTree(s); break;
+            case 'cloud': drawCloud(s); break;
+            case 'drop': drawDrop(s); break;
+            case 'flame': drawFlame(s); break;
+            case 'snowflake': drawSnowflake(s); break;
+            // Objects
+            case 'crown': drawCrown(s); break;
+            case 'bell': drawBell(s); break;
+            case 'gem': drawGem(s); break;
+            case 'key': drawKey(s); break;
+            case 'bolt': drawBolt(s); break;
+            case 'apple': drawApple(s); break;
+            case 'cherry': drawCherry(s); break;
+            case 'grape': drawGrape(s); break;
+            case 'lemon': drawLemon(s); break;
+            // Symbols
+            case 'plus': drawPlus(s); break;
+            case 'minus': drawMinus(s); break;
+            case 'multiply': drawMultiply(s); break;
+            case 'spiral': drawSpiral(s); break;
+            case 'wave': drawWave(s); break;
+            case 'infinity': drawInfinity(s); break;
+            case 'target': drawTarget(s); break;
+            case 'eye': drawEye(s); break;
         }
 
         ctx.restore();
     }
 
-    function drawDots(value, scale) {
-        var s = 8 * scale;
-        var positions = getDotPositions(value);
-
-        ctx.fillStyle = theme.symbolRed;
-
-        positions.forEach(function(p) {
-            ctx.beginPath();
-            ctx.arc(p.x * s, p.y * s, s * 0.4, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Inner highlight
-            ctx.fillStyle = '#ff6b6b';
-            ctx.beginPath();
-            ctx.arc(p.x * s - s * 0.1, p.y * s - s * 0.1, s * 0.15, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = theme.symbolRed;
-        });
+    // Shape drawings
+    function drawCircle(s) {
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.8, 0, Math.PI * 2);
+        ctx.fill();
     }
 
-    function getDotPositions(value) {
-        var patterns = {
-            1: [{ x: 0, y: 0 }],
-            2: [{ x: 0, y: -1 }, { x: 0, y: 1 }],
-            3: [{ x: 0, y: -1.2 }, { x: 0, y: 0 }, { x: 0, y: 1.2 }],
-            4: [{ x: -0.8, y: -0.8 }, { x: 0.8, y: -0.8 }, { x: -0.8, y: 0.8 }, { x: 0.8, y: 0.8 }],
-            5: [{ x: -0.8, y: -0.8 }, { x: 0.8, y: -0.8 }, { x: 0, y: 0 }, { x: -0.8, y: 0.8 }, { x: 0.8, y: 0.8 }],
-            6: [{ x: -0.8, y: -1 }, { x: 0.8, y: -1 }, { x: -0.8, y: 0 }, { x: 0.8, y: 0 }, { x: -0.8, y: 1 }, { x: 0.8, y: 1 }],
-            7: [{ x: -0.8, y: -1.2 }, { x: 0.8, y: -1.2 }, { x: -0.8, y: 0 }, { x: 0, y: 0 }, { x: 0.8, y: 0 }, { x: -0.8, y: 1.2 }, { x: 0.8, y: 1.2 }],
-            8: [{ x: -0.8, y: -1.2 }, { x: 0, y: -1.2 }, { x: 0.8, y: -1.2 }, { x: -0.8, y: 0 }, { x: 0.8, y: 0 }, { x: -0.8, y: 1.2 }, { x: 0, y: 1.2 }, { x: 0.8, y: 1.2 }],
-            9: [{ x: -0.8, y: -1.2 }, { x: 0, y: -1.2 }, { x: 0.8, y: -1.2 }, { x: -0.8, y: 0 }, { x: 0, y: 0 }, { x: 0.8, y: 0 }, { x: -0.8, y: 1.2 }, { x: 0, y: 1.2 }, { x: 0.8, y: 1.2 }]
-        };
-        return patterns[value] || [];
+    function drawSquare(s) {
+        ctx.fillRect(-s * 0.7, -s * 0.7, s * 1.4, s * 1.4);
     }
 
-    function drawBamboo(value, scale) {
-        var s = 6 * scale;
-        ctx.strokeStyle = theme.symbolGreen;
-        ctx.fillStyle = theme.symbolGreen;
-        ctx.lineWidth = 2 * scale;
-        ctx.lineCap = 'round';
+    function drawTriangle(s) {
+        ctx.beginPath();
+        ctx.moveTo(0, -s * 0.9);
+        ctx.lineTo(s * 0.85, s * 0.7);
+        ctx.lineTo(-s * 0.85, s * 0.7);
+        ctx.closePath();
+        ctx.fill();
+    }
 
-        if (value === 1) {
-            // Special: bird/peacock for 1 bamboo
-            ctx.fillStyle = theme.symbolGreen;
-            ctx.beginPath();
-            ctx.arc(0, 0, s * 1.5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = theme.tileFace;
-            ctx.beginPath();
-            ctx.arc(-s * 0.4, -s * 0.3, s * 0.3, 0, Math.PI * 2);
-            ctx.fill();
-            return;
+    function drawDiamond(s) {
+        ctx.beginPath();
+        ctx.moveTo(0, -s);
+        ctx.lineTo(s * 0.7, 0);
+        ctx.lineTo(0, s);
+        ctx.lineTo(-s * 0.7, 0);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawStar(s) {
+        ctx.beginPath();
+        for (var i = 0; i < 5; i++) {
+            var angle = (i * 144 - 90) * Math.PI / 180;
+            var r = s * 0.9;
+            if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+            else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
         }
+        ctx.closePath();
+        ctx.fill();
+    }
 
-        var positions = getBambooPositions(value);
-        positions.forEach(function(p) {
+    function drawHeart(s) {
+        ctx.beginPath();
+        ctx.moveTo(0, s * 0.8);
+        ctx.bezierCurveTo(-s, s * 0.2, -s, -s * 0.5, 0, -s * 0.2);
+        ctx.bezierCurveTo(s, -s * 0.5, s, s * 0.2, 0, s * 0.8);
+        ctx.fill();
+    }
+
+    function drawHexagon(s) {
+        ctx.beginPath();
+        for (var i = 0; i < 6; i++) {
+            var angle = (i * 60 - 90) * Math.PI / 180;
+            var x = Math.cos(angle) * s * 0.85;
+            var y = Math.sin(angle) * s * 0.85;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawCross(s) {
+        ctx.fillRect(-s * 0.25, -s * 0.85, s * 0.5, s * 1.7);
+        ctx.fillRect(-s * 0.85, -s * 0.25, s * 1.7, s * 0.5);
+    }
+
+    function drawCrescent(s) {
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#f5f0e6';
+        ctx.beginPath();
+        ctx.arc(s * 0.35, -s * 0.1, s * 0.65, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Nature drawings
+    function drawSun(s) {
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        for (var i = 0; i < 8; i++) {
+            var angle = i * 45 * Math.PI / 180;
             ctx.beginPath();
-            ctx.moveTo(p.x * s, p.y * s - s * 1.5);
-            ctx.lineTo(p.x * s, p.y * s + s * 1.5);
+            ctx.moveTo(Math.cos(angle) * s * 0.6, Math.sin(angle) * s * 0.6);
+            ctx.lineTo(Math.cos(angle) * s * 0.95, Math.sin(angle) * s * 0.95);
+            ctx.lineWidth = 3 * boardScale;
             ctx.stroke();
+        }
+    }
 
-            // Bamboo segments
-            for (var i = -1; i <= 1; i++) {
-                ctx.beginPath();
-                ctx.moveTo(p.x * s - s * 0.3, p.y * s + i * s);
-                ctx.lineTo(p.x * s + s * 0.3, p.y * s + i * s);
-                ctx.stroke();
-            }
+    function drawMoon(s) {
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#f5f0e6';
+        ctx.beginPath();
+        ctx.arc(s * 0.35, -s * 0.2, s * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function drawLeaf(s) {
+        ctx.beginPath();
+        ctx.moveTo(0, -s * 0.9);
+        ctx.quadraticCurveTo(s * 0.9, -s * 0.3, s * 0.3, s * 0.9);
+        ctx.quadraticCurveTo(0, s * 0.5, -s * 0.3, s * 0.9);
+        ctx.quadraticCurveTo(-s * 0.9, -s * 0.3, 0, -s * 0.9);
+        ctx.fill();
+    }
+
+    function drawFlower(s) {
+        for (var i = 0; i < 5; i++) {
+            var angle = (i * 72 - 90) * Math.PI / 180;
+            ctx.beginPath();
+            ctx.ellipse(Math.cos(angle) * s * 0.4, Math.sin(angle) * s * 0.4, s * 0.45, s * 0.3, angle, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function drawTree(s) {
+        ctx.fillRect(-s * 0.15, s * 0.3, s * 0.3, s * 0.6);
+        ctx.beginPath();
+        ctx.moveTo(0, -s * 0.9);
+        ctx.lineTo(s * 0.7, s * 0.4);
+        ctx.lineTo(-s * 0.7, s * 0.4);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawCloud(s) {
+        ctx.beginPath();
+        ctx.arc(-s * 0.3, s * 0.1, s * 0.45, 0, Math.PI * 2);
+        ctx.arc(s * 0.25, s * 0.1, s * 0.5, 0, Math.PI * 2);
+        ctx.arc(0, -s * 0.25, s * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function drawDrop(s) {
+        ctx.beginPath();
+        ctx.moveTo(0, -s * 0.9);
+        ctx.quadraticCurveTo(s * 0.8, s * 0.2, 0, s * 0.9);
+        ctx.quadraticCurveTo(-s * 0.8, s * 0.2, 0, -s * 0.9);
+        ctx.fill();
+    }
+
+    function drawFlame(s) {
+        ctx.beginPath();
+        ctx.moveTo(0, -s * 0.9);
+        ctx.quadraticCurveTo(s * 0.5, -s * 0.3, s * 0.4, s * 0.3);
+        ctx.quadraticCurveTo(s * 0.2, s * 0.1, 0, s * 0.9);
+        ctx.quadraticCurveTo(-s * 0.2, s * 0.1, -s * 0.4, s * 0.3);
+        ctx.quadraticCurveTo(-s * 0.5, -s * 0.3, 0, -s * 0.9);
+        ctx.fill();
+    }
+
+    function drawSnowflake(s) {
+        ctx.lineWidth = 2.5 * boardScale;
+        for (var i = 0; i < 6; i++) {
+            var angle = i * 60 * Math.PI / 180;
+            ctx.save();
+            ctx.rotate(angle);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(0, -s * 0.85);
+            ctx.moveTo(0, -s * 0.5);
+            ctx.lineTo(-s * 0.2, -s * 0.7);
+            ctx.moveTo(0, -s * 0.5);
+            ctx.lineTo(s * 0.2, -s * 0.7);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    // Object drawings
+    function drawCrown(s) {
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.8, s * 0.5);
+        ctx.lineTo(-s * 0.8, -s * 0.1);
+        ctx.lineTo(-s * 0.4, s * 0.2);
+        ctx.lineTo(0, -s * 0.7);
+        ctx.lineTo(s * 0.4, s * 0.2);
+        ctx.lineTo(s * 0.8, -s * 0.1);
+        ctx.lineTo(s * 0.8, s * 0.5);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawBell(s) {
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.6, s * 0.5);
+        ctx.quadraticCurveTo(-s * 0.6, -s * 0.2, 0, -s * 0.7);
+        ctx.quadraticCurveTo(s * 0.6, -s * 0.2, s * 0.6, s * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, s * 0.7, s * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function drawGem(s) {
+        ctx.beginPath();
+        ctx.moveTo(0, -s * 0.9);
+        ctx.lineTo(s * 0.7, -s * 0.3);
+        ctx.lineTo(s * 0.5, s * 0.9);
+        ctx.lineTo(-s * 0.5, s * 0.9);
+        ctx.lineTo(-s * 0.7, -s * 0.3);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawKey(s) {
+        ctx.beginPath();
+        ctx.arc(0, -s * 0.5, s * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#f5f0e6';
+        ctx.beginPath();
+        ctx.arc(0, -s * 0.5, s * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fillRect(-s * 0.12, -s * 0.2, s * 0.24, s * 1.1);
+        ctx.fillRect(s * 0.12, s * 0.5, s * 0.25, s * 0.15);
+        ctx.fillRect(s * 0.12, s * 0.75, s * 0.18, s * 0.12);
+    }
+
+    function drawBolt(s) {
+        ctx.beginPath();
+        ctx.moveTo(s * 0.2, -s * 0.9);
+        ctx.lineTo(-s * 0.3, s * 0.1);
+        ctx.lineTo(s * 0.1, s * 0.1);
+        ctx.lineTo(-s * 0.2, s * 0.9);
+        ctx.lineTo(s * 0.3, -s * 0.1);
+        ctx.lineTo(-s * 0.1, -s * 0.1);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawApple(s) {
+        ctx.beginPath();
+        ctx.arc(-s * 0.25, s * 0.15, s * 0.55, 0, Math.PI * 2);
+        ctx.arc(s * 0.25, s * 0.15, s * 0.55, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#22c55e';
+        ctx.fillRect(-s * 0.08, -s * 0.9, s * 0.16, s * 0.4);
+    }
+
+    function drawCherry(s) {
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = 2 * boardScale;
+        ctx.beginPath();
+        ctx.moveTo(0, -s * 0.7);
+        ctx.quadraticCurveTo(-s * 0.3, -s * 0.3, -s * 0.4, s * 0.2);
+        ctx.moveTo(0, -s * 0.7);
+        ctx.quadraticCurveTo(s * 0.3, -s * 0.3, s * 0.4, s * 0.2);
+        ctx.stroke();
+        ctx.fillStyle = ctx.fillStyle;
+        ctx.beginPath();
+        ctx.arc(-s * 0.4, s * 0.45, s * 0.4, 0, Math.PI * 2);
+        ctx.arc(s * 0.4, s * 0.45, s * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function drawGrape(s) {
+        var positions = [
+            {x: 0, y: -s * 0.5}, {x: -s * 0.35, y: -s * 0.15}, {x: s * 0.35, y: -s * 0.15},
+            {x: 0, y: -s * 0.15}, {x: -s * 0.18, y: s * 0.25}, {x: s * 0.18, y: s * 0.25}, {x: 0, y: s * 0.6}
+        ];
+        positions.forEach(function(p) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, s * 0.28, 0, Math.PI * 2);
+            ctx.fill();
         });
     }
 
-    function getBambooPositions(value) {
-        var patterns = {
-            2: [{ x: -0.6, y: 0 }, { x: 0.6, y: 0 }],
-            3: [{ x: 0, y: -1 }, { x: -0.6, y: 0.8 }, { x: 0.6, y: 0.8 }],
-            4: [{ x: -0.6, y: -0.8 }, { x: 0.6, y: -0.8 }, { x: -0.6, y: 0.8 }, { x: 0.6, y: 0.8 }],
-            5: [{ x: 0, y: -1 }, { x: -0.8, y: 0 }, { x: 0.8, y: 0 }, { x: -0.4, y: 1 }, { x: 0.4, y: 1 }],
-            6: [{ x: -0.6, y: -1 }, { x: 0.6, y: -1 }, { x: -0.6, y: 0 }, { x: 0.6, y: 0 }, { x: -0.6, y: 1 }, { x: 0.6, y: 1 }],
-            7: [{ x: 0, y: -1.2 }, { x: -0.7, y: -0.2 }, { x: 0.7, y: -0.2 }, { x: -0.7, y: 0.8 }, { x: 0, y: 0.8 }, { x: 0.7, y: 0.8 }, { x: 0, y: 1.8 }],
-            8: [{ x: -0.6, y: -1.2 }, { x: 0.6, y: -1.2 }, { x: -0.6, y: -0.2 }, { x: 0.6, y: -0.2 }, { x: -0.6, y: 0.8 }, { x: 0.6, y: 0.8 }, { x: -0.6, y: 1.8 }, { x: 0.6, y: 1.8 }],
-            9: [{ x: -0.7, y: -1.2 }, { x: 0, y: -1.2 }, { x: 0.7, y: -1.2 }, { x: -0.7, y: 0 }, { x: 0, y: 0 }, { x: 0.7, y: 0 }, { x: -0.7, y: 1.2 }, { x: 0, y: 1.2 }, { x: 0.7, y: 1.2 }]
-        };
-        return patterns[value] || [];
+    function drawLemon(s) {
+        ctx.beginPath();
+        ctx.ellipse(0, 0, s * 0.9, s * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(s * 0.75, 0);
+        ctx.lineTo(s * 1, -s * 0.15);
+        ctx.lineTo(s * 0.85, 0);
+        ctx.closePath();
+        ctx.fill();
     }
 
-    function drawCharacter(value, scale) {
-        var s = 14 * scale;
-        ctx.font = 'bold ' + s + 'px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = theme.symbolPrimary;
-
-        // Chinese numeral characters
-        var chars = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
-        ctx.fillText(chars[value] || value, 0, -s * 0.3);
-
-        // "wan" character below
-        ctx.font = s * 0.7 + 'px serif';
-        ctx.fillStyle = theme.symbolRed;
-        ctx.fillText('萬', 0, s * 0.5);
+    // Symbol drawings
+    function drawPlus(s) {
+        ctx.fillRect(-s * 0.2, -s * 0.8, s * 0.4, s * 1.6);
+        ctx.fillRect(-s * 0.8, -s * 0.2, s * 1.6, s * 0.4);
     }
 
-    function drawWind(value, scale) {
-        var s = 16 * scale;
-        ctx.font = 'bold ' + s + 'px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        var chars = { E: '東', S: '南', W: '西', N: '北' };
-        var colors = { E: theme.symbolGreen, S: theme.symbolRed, W: theme.symbolBlue, N: theme.symbolPrimary };
-
-        ctx.fillStyle = colors[value] || theme.symbolPrimary;
-        ctx.fillText(chars[value] || value, 0, 0);
+    function drawMinus(s) {
+        ctx.fillRect(-s * 0.8, -s * 0.2, s * 1.6, s * 0.4);
     }
 
-    function drawDragon(value, scale) {
-        var s = 16 * scale;
-        ctx.font = 'bold ' + s + 'px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+    function drawMultiply(s) {
+        ctx.save();
+        ctx.rotate(Math.PI / 4);
+        ctx.fillRect(-s * 0.18, -s * 0.8, s * 0.36, s * 1.6);
+        ctx.fillRect(-s * 0.8, -s * 0.18, s * 1.6, s * 0.36);
+        ctx.restore();
+    }
 
-        if (value === 'R') {
-            ctx.fillStyle = theme.symbolRed;
-            ctx.fillText('中', 0, 0);
-        } else if (value === 'G') {
-            ctx.fillStyle = theme.symbolGreen;
-            ctx.fillText('發', 0, 0);
-        } else {
-            // White dragon - frame only
-            ctx.strokeStyle = theme.symbolBlue;
-            ctx.lineWidth = 2 * scale;
-            ctx.strokeRect(-s * 0.5, -s * 0.6, s, s * 1.2);
+    function drawSpiral(s) {
+        ctx.lineWidth = 3 * boardScale;
+        ctx.beginPath();
+        for (var i = 0; i < 720; i += 10) {
+            var angle = i * Math.PI / 180;
+            var r = s * 0.1 + (i / 720) * s * 0.7;
+            var x = Math.cos(angle) * r;
+            var y = Math.sin(angle) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
         }
+        ctx.stroke();
+    }
+
+    function drawWave(s) {
+        ctx.lineWidth = 4 * boardScale;
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.9, 0);
+        ctx.quadraticCurveTo(-s * 0.45, -s * 0.6, 0, 0);
+        ctx.quadraticCurveTo(s * 0.45, s * 0.6, s * 0.9, 0);
+        ctx.stroke();
+    }
+
+    function drawInfinity(s) {
+        ctx.lineWidth = 4 * boardScale;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(s * 0.5, -s * 0.6, s * 0.9, -s * 0.3, s * 0.9, 0);
+        ctx.bezierCurveTo(s * 0.9, s * 0.3, s * 0.5, s * 0.6, 0, 0);
+        ctx.bezierCurveTo(-s * 0.5, -s * 0.6, -s * 0.9, -s * 0.3, -s * 0.9, 0);
+        ctx.bezierCurveTo(-s * 0.9, s * 0.3, -s * 0.5, s * 0.6, 0, 0);
+        ctx.stroke();
+    }
+
+    function drawTarget(s) {
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#f5f0e6';
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function drawEye(s) {
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.9, 0);
+        ctx.quadraticCurveTo(0, -s * 0.7, s * 0.9, 0);
+        ctx.quadraticCurveTo(0, s * 0.7, -s * 0.9, 0);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.2, 0, Math.PI * 2);
+        ctx.fill();
     }
 
     function roundRect(ctx, x, y, w, h, r) {
