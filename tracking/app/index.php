@@ -47,7 +47,7 @@ if ($subscriptionManager->isFamilyLocked($user['family_id'])) {
 }
 
 // Get Mapbox token
-$mapboxToken = $_ENV['MAPBOX_API_KEY'] ?? '';
+$mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 
 // Get family members for initial render
 $stmt = $db->prepare("
@@ -77,7 +77,7 @@ $pageTitle = 'Family Tracking';
 
     <!-- PWA -->
     <meta name="theme-color" content="#667eea">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body class="tracking-page">
