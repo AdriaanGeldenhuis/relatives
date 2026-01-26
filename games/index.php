@@ -125,11 +125,11 @@ try {
 $familyLeaderboard = [];
 try {
     $stmt = $db->prepare("
-        SELECT u.full_name, u.avatar_color, MAX(s.score) as best_score
+        SELECT u.id as user_id, u.full_name, u.avatar_color, MAX(s.score) as best_score
         FROM snake_scores s
         JOIN users u ON s.user_id = u.id
         WHERE s.family_id = ? AND s.flagged = 0
-        GROUP BY s.user_id, u.full_name, u.avatar_color
+        GROUP BY s.user_id, u.id, u.full_name, u.avatar_color
         ORDER BY best_score DESC
         LIMIT 5
     ");
@@ -756,7 +756,14 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <?php echo $index + 1; ?>
                             </span>
                             <div class="leaderboard-avatar" style="background: <?php echo htmlspecialchars($entry['avatar_color'] ?? '#667eea'); ?>">
-                                <?php echo strtoupper(substr($entry['full_name'] ?? '?', 0, 1)); ?>
+                                <?php
+                                $avatarPath = __DIR__ . "/../saves/{$entry['user_id']}/avatar/avatar.webp";
+                                if (file_exists($avatarPath)):
+                                ?>
+                                    <img src="/saves/<?php echo $entry['user_id']; ?>/avatar/avatar.webp?v=<?php echo filemtime($avatarPath); ?>" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                                <?php else: ?>
+                                    <?php echo strtoupper(substr($entry['full_name'] ?? '?', 0, 1)); ?>
+                                <?php endif; ?>
                             </div>
                             <div class="leaderboard-info">
                                 <div class="leaderboard-name"><?php echo htmlspecialchars($entry['full_name']); ?></div>
