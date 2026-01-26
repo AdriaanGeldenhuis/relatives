@@ -206,26 +206,6 @@ $games = [
         'features' => ['3 Layouts', 'Hint System', 'Beautiful 4K Graphics'],
         'available' => true,
         'highlight' => true
-    ],
-    [
-        'id' => 'trivia',
-        'name' => 'Family Trivia',
-        'icon' => '❓',
-        'description' => 'Quiz night! Test your knowledge across various categories.',
-        'url' => '/games/trivia/',
-        'color' => '#e74c3c',
-        'features' => ['Multiplayer', 'Custom Questions', 'Weekly Tournaments'],
-        'available' => false
-    ],
-    [
-        'id' => 'puzzle',
-        'name' => 'Sliding Puzzle',
-        'icon' => '🧩',
-        'description' => 'Classic sliding tile puzzle with family photos.',
-        'url' => '/games/puzzle/',
-        'color' => '#3498db',
-        'features' => ['Custom Images', 'Difficulty Levels', 'Speed Records'],
-        'available' => false
     ]
 ];
 
