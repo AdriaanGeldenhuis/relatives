@@ -1,16 +1,38 @@
 <?php
-require_once __DIR__ . '/../../includes/auth.php';
-require_once __DIR__ . '/../../includes/header.php';
+declare(strict_types=1);
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+    header('Location: /login.php', true, 302);
+    exit;
+}
+
+require_once __DIR__ . '/../../core/bootstrap.php';
+
+try {
+    $auth = new Auth($db);
+    $user = $auth->getCurrentUser();
+    if (!$user) {
+        header('Location: /login.php?session_expired=1', true, 302);
+        exit;
+    }
+} catch (Exception $e) {
+    header('Location: /login.php?error=1', true, 302);
+    exit;
+}
 
 $pageTitle = 'Memory Match';
-$pageDescription = 'Classic tile-matching puzzle game with beautiful 3D visuals';
+$cacheVersion = '1.0.0';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="description" content="<?php echo $pageDescription; ?>">
+    <meta name="description" content="Classic tile-matching puzzle game with beautiful 3D visuals">
     <title><?php echo $pageTitle; ?> - Relatives</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1a1a2e">
