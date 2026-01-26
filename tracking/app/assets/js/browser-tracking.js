@@ -25,7 +25,9 @@ window.BrowserTracking = {
         }
 
         // Skip if native app is handling tracking
-        if (window.Android?.isTrackingEnabled && window.Android.isTrackingEnabled()) {
+        // Check TrackingBridge (Android WebView interface)
+        const nativeInterface = window.TrackingBridge || window.Android;
+        if (nativeInterface?.isTrackingEnabled && nativeInterface.isTrackingEnabled()) {
             console.log('Native app tracking active - skipping browser geolocation');
             return;
         }
