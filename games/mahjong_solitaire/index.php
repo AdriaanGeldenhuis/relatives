@@ -197,7 +197,8 @@ $cacheVersion = '1.0.0';
             </div>
             <div id="results-message" class="results-message"></div>
             <div class="overlay-buttons">
-                <button id="btn-play-again" class="btn-primary">Play Again</button>
+                <button id="btn-next-level" class="btn-primary">Next Level</button>
+                <button id="btn-play-again" class="btn-secondary">Play Again</button>
                 <button id="btn-menu" class="btn-secondary">Menu</button>
             </div>
         </div>

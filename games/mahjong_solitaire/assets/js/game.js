@@ -20,6 +20,8 @@ var MahjongGame = (function() {
     var paused = false;
     var gameOver = false;
     var currentLayout = 'simple';
+    var currentLevel = 1;
+    var maxLevels = 3;
     var hintsRemaining = Infinity;
     var shufflesRemaining = Infinity;
 
@@ -132,9 +134,11 @@ var MahjongGame = (function() {
     }
 
     // ========== GAME START ==========
-    function startGame(layoutName) {
+    function startGame(layoutName, level) {
         currentLayout = layoutName || 'simple';
-        var layout = MahjongLayouts.getLayout(currentLayout);
+        currentLevel = level || 1;
+        var layout = MahjongLayouts.getLayout(currentLayout, currentLevel);
+        maxLevels = layout.maxLevels;
 
         hintsRemaining = layout.hints;
         shufflesRemaining = layout.shuffles;
@@ -550,22 +554,47 @@ var MahjongGame = (function() {
         running = false;
         stopGameLoop();
 
-        document.getElementById('results-title').textContent = won ? 'You Win!' : 'Game Over';
+        var hasNextLevel = won && currentLevel < maxLevels;
+
+        document.getElementById('results-title').textContent = won ? 'Level ' + currentLevel + ' Complete!' : 'Game Over';
         document.getElementById('results-time').textContent = formatTime(elapsedMs);
         document.getElementById('results-moves').textContent = moves;
 
         var message = '';
         if (won) {
-            if (elapsedMs < 60000) message = 'Speed demon!';
-            else if (elapsedMs < 120000) message = 'Great job!';
-            else message = 'Well done!';
+            if (currentLevel === maxLevels) {
+                message = 'You mastered all levels!';
+            } else if (elapsedMs < 60000) {
+                message = 'Speed demon! Ready for level ' + (currentLevel + 1) + '?';
+            } else if (elapsedMs < 120000) {
+                message = 'Great job! Try level ' + (currentLevel + 1) + '!';
+            } else {
+                message = 'Well done! Continue to level ' + (currentLevel + 1) + '!';
+            }
             MahjongAudio.play('win');
         } else {
-            message = 'No more moves available.';
+            if (timeRemaining <= 0) {
+                message = 'Time\'s up!';
+            } else {
+                message = 'No more moves available.';
+            }
         }
         document.getElementById('results-message').textContent = message;
 
+        // Show/hide Next Level button
+        var nextLevelBtn = document.getElementById('btn-next-level');
+        if (nextLevelBtn) {
+            nextLevelBtn.style.display = hasNextLevel ? '' : 'none';
+        }
+
         showOverlay('results');
+    }
+
+    function nextLevel() {
+        if (currentLevel < maxLevels) {
+            hideOverlay();
+            startGame(currentLayout, currentLevel + 1);
+        }
     }
 
     // ========== INPUT ==========
@@ -655,7 +684,12 @@ var MahjongGame = (function() {
         document.getElementById('btn-play-again').addEventListener('click', function() {
             MahjongAudio.play('select');
             hideOverlay();
-            startGame(currentLayout);
+            startGame(currentLayout, currentLevel);
+        });
+
+        document.getElementById('btn-next-level').addEventListener('click', function() {
+            MahjongAudio.play('select');
+            nextLevel();
         });
 
         document.getElementById('btn-menu').addEventListener('click', function() {

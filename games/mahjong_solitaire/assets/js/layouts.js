@@ -266,36 +266,58 @@ var MahjongLayouts = (function() {
         return symbols;
     }
 
-    // Layouts registry
+    // Layouts registry with 3 levels each
     var LAYOUTS = {
         simple: {
             name: 'Easy',
             tiles: 36,
             generate: generateSimple,
-            hints: Infinity,
-            shuffles: Infinity,
-            timeLimit: 180000  // 3 minutes
+            maxLevels: 3,
+            levels: [
+                { timeLimit: 180000, hints: Infinity, shuffles: Infinity },  // Level 1: 3 min
+                { timeLimit: 150000, hints: Infinity, shuffles: Infinity },  // Level 2: 2:30
+                { timeLimit: 120000, hints: Infinity, shuffles: Infinity }   // Level 3: 2 min
+            ]
         },
         medium: {
             name: 'Medium',
             tiles: 72,
             generate: generateMedium,
-            hints: 50,
-            shuffles: Infinity,  // Auto-shuffle when no moves
-            timeLimit: 240000  // 4 minutes
+            maxLevels: 3,
+            levels: [
+                { timeLimit: 240000, hints: 50, shuffles: Infinity },  // Level 1: 4 min
+                { timeLimit: 210000, hints: 30, shuffles: Infinity },  // Level 2: 3:30
+                { timeLimit: 180000, hints: 20, shuffles: Infinity }   // Level 3: 3 min
+            ]
         },
         turtle: {
             name: 'Classic',
             tiles: 144,
             generate: generateTurtleSimplified,
-            hints: 5,
-            shuffles: 3,
-            timeLimit: 600000  // 10 minutes
+            maxLevels: 3,
+            levels: [
+                { timeLimit: 600000, hints: 10, shuffles: 5 },   // Level 1: 10 min
+                { timeLimit: 480000, hints: 5, shuffles: 3 },    // Level 2: 8 min
+                { timeLimit: 360000, hints: 3, shuffles: 2 }     // Level 3: 6 min
+            ]
         }
     };
 
-    function getLayout(name) {
-        return LAYOUTS[name] || LAYOUTS.simple;
+    function getLayout(name, level) {
+        var layout = LAYOUTS[name] || LAYOUTS.simple;
+        var lvl = Math.min(Math.max(level || 1, 1), layout.maxLevels) - 1;
+        var levelConfig = layout.levels[lvl];
+
+        return {
+            name: layout.name,
+            tiles: layout.tiles,
+            generate: layout.generate,
+            maxLevels: layout.maxLevels,
+            currentLevel: lvl + 1,
+            hints: levelConfig.hints,
+            shuffles: levelConfig.shuffles,
+            timeLimit: levelConfig.timeLimit
+        };
     }
 
     function getLayoutNames() {
