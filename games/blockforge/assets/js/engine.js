@@ -60,8 +60,8 @@ var BlockEngine = (function() {
     var onPieceSpawn = null;
 
     function getDropInterval() {
-        // Speed curve: starts at 750ms, decreases with level
-        var base = 750;
+        // Speed curve: starts at 500ms, decreases with level
+        var base = 500;
         var interval = base * Math.pow(0.85, level - 1);
         return Math.max(interval, 50);
     }
