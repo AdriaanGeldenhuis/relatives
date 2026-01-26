@@ -77,3 +77,176 @@ Real-time family location tracking with geofences, alerts, and events.
 - Respects `users.location_sharing` setting
 - Family isolation enforced on all queries
 - Session-based auth (no custom tokens)
+
+---
+
+## Native App Contract
+
+This section documents the requirements for native iOS/Android apps to integrate with the tracking API.
+
+### Authentication
+
+Native apps use the same session-based authentication as the web app:
+
+1. User logs in via web or app (creates PHP session)
+2. Session cookie (`RELATIVES_SESSION`) is stored and sent with all requests
+3. No separate API tokens for tracking
+
+### Location Payload
+
+```json
+{
+    "lat": -26.2041,
+    "lng": 28.0473,
+    "accuracy_m": 10.5,
+    "speed_mps": 5.2,
+    "bearing_deg": 180.0,
+    "altitude_m": 1500.0,
+    "recorded_at": "2024-01-15T14:30:00Z",
+    "device_id": "abc123-device-uuid",
+    "platform": "ios",
+    "app_version": "2.1.0"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `lat` | float | Yes | Latitude (-90 to 90) |
+| `lng` | float | Yes | Longitude (-180 to 180) |
+| `accuracy_m` | float | No | Horizontal accuracy in meters |
+| `speed_mps` | float | No | Speed in meters per second |
+| `bearing_deg` | float | No | Bearing/heading (0-360) |
+| `altitude_m` | float | No | Altitude in meters |
+| `recorded_at` | string | No | ISO 8601 timestamp (defaults to now) |
+| `device_id` | string | No | Unique device identifier |
+| `platform` | string | No | "ios" or "android" |
+| `app_version` | string | No | App version string |
+
+### Mode 1: Live Session Behavior
+
+When the family is configured for Mode 1 (Live Session):
+
+1. **Before starting high-power tracking**, call:
+   ```
+   GET /tracking/api/session_status.php
+   ```
+
+   Response:
+   ```json
+   {
+       "success": true,
+       "data": {
+           "mode": 1,
+           "session": {
+               "active": true,
+               "expires_in_seconds": 280
+           },
+           "should_track": true
+       }
+   }
+   ```
+
+2. **If `should_track` is `false`**:
+   - Stop high-power GPS tracking
+   - Optionally send coarse heartbeat every 5-10 minutes
+   - Check `session_status` periodically (every 1-2 minutes)
+
+3. **If `should_track` is `true`**:
+   - Start tracking at configured interval (`moving_interval_seconds`)
+   - Upload locations to `POST /tracking/api/location.php`
+
+4. **Handle `session_off` error**:
+   If location upload returns:
+   ```json
+   {
+       "success": false,
+       "error": "session_off",
+       "message": "No active tracking session"
+   }
+   ```
+   Stop tracking and wait for session to become active.
+
+### Mode 2: Motion-Based Behavior
+
+When configured for Mode 2:
+
+1. **Always** monitor device motion (accelerometer/activity recognition)
+
+2. **When moving**:
+   - Upload locations at `moving_interval_seconds` (e.g., 30s)
+   - Server determines motion state from speed/distance
+
+3. **When idle**:
+   - Upload heartbeat at `idle_interval_seconds` (e.g., 5 min)
+   - Server will not store in history, only update current
+
+4. **Motion detection**:
+   - Use iOS: `CMMotionActivityManager`
+   - Use Android: `ActivityRecognitionClient`
+   - Fallback: significant location change APIs
+
+### Batch Uploads
+
+For offline/buffered locations:
+
+```
+POST /tracking/api/batch.php
+
+{
+    "locations": [
+        { "lat": ..., "lng": ..., "recorded_at": "..." },
+        { "lat": ..., "lng": ..., "recorded_at": "..." }
+    ]
+}
+```
+
+- Maximum 100 locations per batch
+- Locations should be sorted by `recorded_at` (oldest first)
+- Server processes each and returns per-location results
+
+### Error Handling
+
+| HTTP Code | Error | Action |
+|-----------|-------|--------|
+| 401 | `not_authenticated` | Redirect to login |
+| 402 | `subscription_locked` | Show subscription prompt |
+| 403 | `location_sharing_disabled` | Show privacy settings prompt |
+| 409 | `session_off` | Stop tracking, wait for session |
+| 422 | `poor_accuracy` | Discard point, try again |
+| 429 | `rate_limited` | Wait `retry_after` seconds |
+
+### Recommended Upload Strategy
+
+```
+function uploadLocation(location):
+    // Check session first (Mode 1)
+    if (mode == 1):
+        status = GET /session_status
+        if not status.should_track:
+            return  // Don't upload
+
+    // Upload
+    result = POST /location, location
+
+    if result.error == "rate_limited":
+        sleep(result.retry_after)
+        return uploadLocation(location)
+
+    if result.error == "session_off":
+        stopTracking()
+        scheduleSessionCheck()
+        return
+
+    if result.success:
+        // Success! Check for geofence events
+        if result.geofence_events.length > 0:
+            showLocalNotification(result.geofence_events)
+```
+
+### Battery Optimization
+
+- **Mode 1**: Only track when someone is viewing the dashboard
+- **Mode 2**: Use significant location change APIs when idle
+- **iOS**: Use `allowsBackgroundLocationUpdates` sparingly
+- **Android**: Use `FusedLocationProviderClient` with appropriate priority
+- **Always**: Respect `min_accuracy_m` setting (don't upload poor fixes)
