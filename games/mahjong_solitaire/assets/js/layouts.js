@@ -228,21 +228,24 @@ var MahjongLayouts = (function() {
             tiles: 36,
             generate: generateSimple,
             hints: Infinity,
-            shuffles: 3
+            shuffles: Infinity,
+            timeLimit: 180000  // 3 minutes
         },
         medium: {
             name: 'Medium',
             tiles: 72,
             generate: generateMedium,
-            hints: 5,
-            shuffles: 2
+            hints: 10,
+            shuffles: 5,
+            timeLimit: 300000  // 5 minutes
         },
         turtle: {
             name: 'Classic',
             tiles: 144,
             generate: generateTurtleSimplified,
-            hints: 3,
-            shuffles: 1
+            hints: 5,
+            shuffles: 3,
+            timeLimit: 600000  // 10 minutes
         }
     };
 

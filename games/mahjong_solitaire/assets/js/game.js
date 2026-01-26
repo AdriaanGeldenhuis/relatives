@@ -14,12 +14,14 @@ var MahjongGame = (function() {
     var moves = 0;
     var startTime = 0;
     var elapsedMs = 0;
+    var timeLimit = 180000;  // Default 3 minutes
+    var timeRemaining = 180000;
     var running = false;
     var paused = false;
     var gameOver = false;
     var currentLayout = 'simple';
     var hintsRemaining = Infinity;
-    var shufflesRemaining = 3;
+    var shufflesRemaining = Infinity;
 
     // Settings
     var settings = {
@@ -136,6 +138,8 @@ var MahjongGame = (function() {
 
         hintsRemaining = layout.hints;
         shufflesRemaining = layout.shuffles;
+        timeLimit = layout.timeLimit || 180000;
+        timeRemaining = timeLimit;
 
         // Generate tiles from layout
         var positions = layout.generate();
@@ -443,7 +447,14 @@ var MahjongGame = (function() {
 
             if (!paused && !gameOver) {
                 elapsedMs = Date.now() - startTime;
+                timeRemaining = Math.max(0, timeLimit - elapsedMs);
                 updateTimer();
+
+                // Check if time ran out
+                if (timeRemaining <= 0) {
+                    endGame(false);
+                    return;
+                }
             }
 
             // Render
@@ -479,7 +490,15 @@ var MahjongGame = (function() {
         if (!settings.showTimer) return;
         var el = document.getElementById('hud-timer');
         if (el) {
-            el.textContent = formatTime(elapsedMs);
+            el.textContent = formatTime(timeRemaining);
+            // Make timer red when low
+            if (timeRemaining < 30000) {
+                el.style.color = '#ef4444';
+            } else if (timeRemaining < 60000) {
+                el.style.color = '#f59e0b';
+            } else {
+                el.style.color = '';
+            }
         }
     }
 
