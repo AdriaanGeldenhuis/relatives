@@ -197,9 +197,9 @@ $games = [
         'highlight' => true
     ],
     [
-        'id' => 'mahjong',
-        'name' => 'Mahjong Solitaire',
-        'icon' => '🀄',
+        'id' => 'memory',
+        'name' => 'Memory Match',
+        'icon' => '🧠',
         'description' => 'Classic tile-matching puzzle! Match free tiles, clear the board, 3 difficulty levels.',
         'url' => '/games/mahjong_solitaire/',
         'color' => '#4ade80',

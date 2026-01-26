@@ -1,6 +1,6 @@
 {
-  "name": "Mahjong Solitaire",
-  "short_name": "Mahjong",
+  "name": "Memory Match",
+  "short_name": "Memory",
   "description": "Classic tile-matching puzzle game with beautiful 3D visuals",
   "start_url": "/games/mahjong_solitaire/",
   "display": "standalone",

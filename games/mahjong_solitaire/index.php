@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/header.php';
 
-$pageTitle = 'Mahjong Solitaire';
+$pageTitle = 'Memory Match';
 $pageDescription = 'Classic tile-matching puzzle game with beautiful 3D visuals';
 ?>
 <!DOCTYPE html>
@@ -26,8 +26,8 @@ $pageDescription = 'Classic tile-matching puzzle game with beautiful 3D visuals'
     <div id="screen-menu" class="screen active">
         <div class="menu-container">
             <div class="menu-header">
-                <h1 class="game-title">Mahjong</h1>
-                <p class="game-subtitle">Solitaire</p>
+                <h1 class="game-title">Memory</h1>
+                <p class="game-subtitle">Match</p>
             </div>
 
             <div class="menu-cards">
