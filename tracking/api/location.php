@@ -26,11 +26,10 @@ $user = requireAuth();
 $userId = $user['id'];
 $familyId = $user['family_id'];
 
-// Check if user has location sharing enabled - BYPASSED
-// The privacy toggle needs a UI first. For now, allow all users to track.
-// if (!$siteContext->hasLocationSharing()) {
-//     jsonError('location_sharing_disabled', 'Location sharing is disabled for your account', 403);
-// }
+// Check if user has location sharing enabled
+if (!$siteContext->hasLocationSharing()) {
+    jsonError('location_sharing_disabled', 'Location sharing is disabled for your account', 403);
+}
 
 // Parse input
 $input = json_decode(file_get_contents('php://input'), true);

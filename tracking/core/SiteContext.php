@@ -93,9 +93,9 @@ class SiteContext
     }
 
     /**
-     * Get family members (all active members).
+     * Get family members (with location_sharing enabled).
      */
-    public function getFamilyMembers(bool $onlyWithSharing = false): array
+    public function getFamilyMembers(bool $onlyWithSharing = true): array
     {
         $user = $this->getUser();
         if (!$user) {
@@ -108,10 +108,9 @@ class SiteContext
             WHERE family_id = ? AND status = 'active'
         ";
 
-        // location_sharing filter bypassed - no UI to toggle it yet
-        // if ($onlyWithSharing) {
-        //     $sql .= " AND location_sharing = 1";
-        // }
+        if ($onlyWithSharing) {
+            $sql .= " AND location_sharing = 1";
+        }
 
         $sql .= " ORDER BY role = 'owner' DESC, role = 'admin' DESC, full_name ASC";
 

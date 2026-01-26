@@ -53,7 +53,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $stmt = $db->prepare("
     SELECT id, full_name as name, avatar_color, has_avatar
     FROM users
-    WHERE family_id = ? AND status = 'active'
+    WHERE family_id = ? AND status = 'active' AND location_sharing = 1
     ORDER BY full_name
 ");
 $stmt->execute([$user['family_id']]);

@@ -153,7 +153,7 @@ class LocationRepo
             return $cached;
         }
 
-        // Query with user info (all active family members)
+        // Query with user info (only users with location_sharing enabled)
         $stmt = $this->db->prepare("
             SELECT
                 tc.*,
@@ -164,6 +164,7 @@ class LocationRepo
             JOIN users u ON tc.user_id = u.id
             WHERE tc.family_id = ?
               AND u.status = 'active'
+              AND u.location_sharing = 1
             ORDER BY tc.updated_at DESC
         ");
         $stmt->execute([$familyId]);
@@ -252,7 +253,7 @@ class LocationRepo
             JOIN users u ON tl.user_id = u.id
             WHERE tl.family_id = ?
               AND tl.recorded_at >= ?
-              AND u.status = 'active'
+              AND u.location_sharing = 1
         ";
         $params = [$familyId, $startTime];
 
