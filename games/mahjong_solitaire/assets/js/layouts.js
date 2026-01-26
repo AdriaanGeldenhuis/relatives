@@ -205,13 +205,32 @@ var MahjongLayouts = (function() {
         { type: 'symbol', value: 'eye', color: '#3b82f6' }
     ];
 
+    // Easy mode symbols - simple, distinct, colorful (only 6)
+    var EASY_SYMBOLS = [
+        { type: 'shape', value: 'circle', color: '#ef4444' },
+        { type: 'shape', value: 'square', color: '#3b82f6' },
+        { type: 'shape', value: 'triangle', color: '#22c55e' },
+        { type: 'shape', value: 'star', color: '#f59e0b' },
+        { type: 'shape', value: 'heart', color: '#ec4899' },
+        { type: 'shape', value: 'diamond', color: '#8b5cf6' }
+    ];
+
     // Get required number of unique symbols for tile count
-    function getSymbolsForCount(tileCount) {
+    function getSymbolsForCount(tileCount, layoutName) {
         var pairsNeeded = tileCount / 2;
         var symbols = [];
 
-        // Cycle through symbols, 4 of each (2 pairs per symbol in classic mahjong)
-        // For simplicity, we'll use 2 of each (1 pair)
+        // Easy mode: use only 6 symbols, more pairs of each
+        if (layoutName === 'simple') {
+            var symbolIndex = 0;
+            while (symbols.length < pairsNeeded) {
+                symbols.push(EASY_SYMBOLS[symbolIndex % EASY_SYMBOLS.length]);
+                symbolIndex++;
+            }
+            return symbols;
+        }
+
+        // Other modes: use more variety
         var symbolIndex = 0;
         while (symbols.length < pairsNeeded) {
             symbols.push(SYMBOLS[symbolIndex % SYMBOLS.length]);

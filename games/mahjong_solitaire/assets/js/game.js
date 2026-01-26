@@ -189,8 +189,8 @@ var MahjongGame = (function() {
         var activeTiles = tiles.filter(function(t) { return !t.removed; });
         var numPairs = activeTiles.length / 2;
 
-        // Get symbols
-        var symbols = MahjongLayouts.getSymbolsForCount(activeTiles.length);
+        // Get symbols (pass layout name for difficulty-appropriate symbols)
+        var symbols = MahjongLayouts.getSymbolsForCount(activeTiles.length, currentLayout);
 
         // Create pairs
         var symbolPairs = [];
