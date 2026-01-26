@@ -125,11 +125,11 @@ try {
 $familyLeaderboard = [];
 try {
     $stmt = $db->prepare("
-        SELECT u.full_name, u.avatar_color, MAX(s.score) as best_score
+        SELECT u.id as user_id, u.full_name, u.avatar_color, MAX(s.score) as best_score
         FROM snake_scores s
         JOIN users u ON s.user_id = u.id
         WHERE s.family_id = ? AND s.flagged = 0
-        GROUP BY s.user_id, u.full_name, u.avatar_color
+        GROUP BY s.user_id, u.id, u.full_name, u.avatar_color
         ORDER BY best_score DESC
         LIMIT 5
     ");
@@ -200,31 +200,12 @@ $games = [
         'id' => 'memory',
         'name' => 'Memory Match',
         'icon' => '🧠',
-        'description' => 'Test your memory with this classic card matching game.',
-        'url' => '/games/memory/',
-        'color' => '#9b59b6',
-        'features' => ['Multiple Levels', 'Time Challenge', 'Family Competition'],
-        'available' => false
-    ],
-    [
-        'id' => 'trivia',
-        'name' => 'Family Trivia',
-        'icon' => '❓',
-        'description' => 'Quiz night! Test your knowledge across various categories.',
-        'url' => '/games/trivia/',
-        'color' => '#e74c3c',
-        'features' => ['Multiplayer', 'Custom Questions', 'Weekly Tournaments'],
-        'available' => false
-    ],
-    [
-        'id' => 'puzzle',
-        'name' => 'Sliding Puzzle',
-        'icon' => '🧩',
-        'description' => 'Classic sliding tile puzzle with family photos.',
-        'url' => '/games/puzzle/',
-        'color' => '#3498db',
-        'features' => ['Custom Images', 'Difficulty Levels', 'Speed Records'],
-        'available' => false
+        'description' => 'Classic tile-matching puzzle! Match free tiles, clear the board, 3 difficulty levels.',
+        'url' => '/games/mahjong_solitaire/',
+        'color' => '#4ade80',
+        'features' => ['3 Layouts', 'Hint System', 'Beautiful 4K Graphics'],
+        'available' => true,
+        'highlight' => true
     ]
 ];
 
@@ -775,7 +756,14 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <?php echo $index + 1; ?>
                             </span>
                             <div class="leaderboard-avatar" style="background: <?php echo htmlspecialchars($entry['avatar_color'] ?? '#667eea'); ?>">
-                                <?php echo strtoupper(substr($entry['full_name'] ?? '?', 0, 1)); ?>
+                                <?php
+                                $avatarPath = __DIR__ . "/../saves/{$entry['user_id']}/avatar/avatar.webp";
+                                if (file_exists($avatarPath)):
+                                ?>
+                                    <img src="/saves/<?php echo $entry['user_id']; ?>/avatar/avatar.webp?v=<?php echo filemtime($avatarPath); ?>" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                                <?php else: ?>
+                                    <?php echo strtoupper(substr($entry['full_name'] ?? '?', 0, 1)); ?>
+                                <?php endif; ?>
                             </div>
                             <div class="leaderboard-info">
                                 <div class="leaderboard-name"><?php echo htmlspecialchars($entry['full_name']); ?></div>

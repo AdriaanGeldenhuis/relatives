@@ -1,0 +1,23 @@
+{
+  "name": "Memory Match",
+  "short_name": "Memory",
+  "description": "Classic tile-matching puzzle game with beautiful 3D visuals",
+  "start_url": "/games/mahjong_solitaire/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d1f17",
+  "theme_color": "#0d1f17",
+  "icons": [
+    {
+      "src": "/assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["games", "puzzle"]
+}
