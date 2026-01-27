@@ -951,3 +951,46 @@ body.tracking-page {
 .hidden {
     display: none !important;
 }
+
+/* ===========================================
+   Global Footer Overrides for Tracking Page
+   =========================================== */
+
+.tracking-page .global-footer {
+    z-index: 999;
+}
+
+.tracking-page .global-footer .footer-btn {
+    width: 47px !important;
+    height: 47px !important;
+    font-size: 24px !important;
+    border-radius: 50% !important;
+}
+
+.tracking-page .global-footer .mic-btn {
+    font-size: 24px !important;
+}
+
+.tracking-page .global-footer .tracking-btn {
+    font-size: 24px !important;
+}
+
+.tracking-page .global-footer .plus-btn {
+    font-size: 28px !important;
+}
+
+.tracking-page .global-footer .help-btn-footer {
+    font-size: 24px !important;
+}
+
+@media (max-width: 768px) {
+    .tracking-page .global-footer .footer-btn {
+        width: 43px !important;
+        height: 43px !important;
+        font-size: 21px !important;
+    }
+
+    .tracking-page .global-footer .plus-btn {
+        font-size: 24px !important;
+    }
+}
