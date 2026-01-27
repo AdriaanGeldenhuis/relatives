@@ -57,7 +57,7 @@ window.TrackingAPI = {
 
     // Location endpoints
     async sendLocation(location) {
-        return this.request('location.php', {
+        return this.request('simple_location.php', {
             method: 'POST',
             body: location
         });
@@ -71,7 +71,7 @@ window.TrackingAPI = {
     },
 
     async getCurrent() {
-        return this.request('current.php');
+        return this.request('simple_current.php');
     },
 
     async getHistory(params = {}) {
