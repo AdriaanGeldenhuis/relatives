@@ -111,76 +111,69 @@ body {
 
 .family-panel {
     position: fixed;
-    top: var(--header-height);
-    left: 0;
-    right: 0;
-    width: 100%;
-    max-height: none;
+    bottom: 340px;
+    right: 12px;
+    width: 280px;
+    max-height: 300px;
     background: rgba(26, 32, 44, 0.95);
     backdrop-filter: blur(10px);
-    border-radius: 0;
+    border-radius: var(--radius-lg);
     z-index: 80;
     box-shadow: var(--shadow-lg);
     overflow: hidden;
-}
-
-.family-panel-header {
-    padding: 12px 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    border-bottom: 1px solid var(--gray-700);
-    user-select: none;
-}
-
-.family-panel-header:hover {
-    background: var(--gray-800);
-}
-
-.panel-chevron {
-    transition: transform 0.2s;
-}
-
-.family-panel.collapsed .panel-chevron {
-    transform: rotate(-90deg);
-}
-
-.family-panel.collapsed .family-panel-content {
     display: none;
 }
 
+.family-panel.open {
+    display: block;
+}
+
+.family-panel-header {
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--gray-700);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.family-panel-close {
+    background: none;
+    border: none;
+    color: var(--gray-400);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.family-panel-close:hover {
+    color: white;
+}
+
 .family-panel-content {
-    max-height: 200px;
+    max-height: 250px;
     overflow-y: auto;
     overflow-x: hidden;
 }
 
 .family-list {
-    padding: 8px 12px;
+    padding: 8px;
     display: flex;
-    flex-wrap: nowrap;
-    gap: 8px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-}
-
-.family-list::-webkit-scrollbar {
-    display: none;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .member-item {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 8px 12px;
+    gap: 10px;
+    padding: 8px 10px;
     border-radius: var(--radius);
     cursor: pointer;
     transition: background 0.2s;
-    flex-shrink: 0;
-    min-width: 70px;
 }
 
 .member-item:hover {
@@ -192,26 +185,25 @@ body {
 }
 
 .member-avatar {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 12px;
     color: white;
     flex-shrink: 0;
 }
 
 .member-info {
-    text-align: center;
+    flex: 1;
     min-width: 0;
-    max-width: 80px;
 }
 
 .member-name {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
@@ -219,11 +211,10 @@ body {
 }
 
 .member-status {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--gray-400);
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 4px;
 }
 
@@ -676,37 +667,14 @@ body {
 
 /* Mobile breakpoint */
 @media (max-width: 480px) {
-    /* Family panel stays at top on mobile */
-    .family-panel-header {
-        padding: 8px 12px;
-    }
-
-    .family-panel-content {
-        max-height: 120px;
-    }
-
-    /* Compact member items on mobile */
-    .member-item {
-        padding: 6px 8px;
-        min-width: 60px;
-    }
-
-    .member-avatar {
-        width: 32px;
-        height: 32px;
-        font-size: 12px;
-    }
-
-    .member-name {
-        font-size: 11px;
-    }
-
-    .member-status {
-        font-size: 9px;
-    }
-
-    .member-info {
-        max-width: 60px;
+    /* Family panel adjustments for mobile */
+    .family-panel {
+        width: calc(100% - 24px);
+        left: 12px;
+        right: 12px;
+        bottom: auto;
+        top: calc(var(--header-height) + 8px);
+        max-height: 280px;
     }
 
     /* Map controls repositioned */
@@ -819,23 +787,10 @@ body {
 
 /* Small mobile breakpoint */
 @media (max-width: 360px) {
-    .member-item {
-        padding: 4px 6px;
-        min-width: 50px;
-    }
-
-    .member-avatar {
-        width: 28px;
-        height: 28px;
-        font-size: 10px;
-    }
-
-    .member-name {
-        font-size: 10px;
-    }
-
-    .member-info {
-        max-width: 50px;
+    .family-panel {
+        width: calc(100% - 16px);
+        left: 8px;
+        right: 8px;
     }
 
     .map-controls {
@@ -865,17 +820,8 @@ body {
 
 /* Landscape mobile */
 @media (max-height: 500px) and (orientation: landscape) {
-    .family-panel-content {
-        max-height: 80px;
-    }
-
-    .member-item {
-        padding: 4px 8px;
-    }
-
-    .member-avatar {
-        width: 28px;
-        height: 28px;
+    .family-panel {
+        max-height: 200px;
     }
 
     .map-controls {
@@ -1401,9 +1347,8 @@ html.native-app .map-controls {
 
 /* Adjust family panel for safe areas */
 html.native-app .family-panel {
-    top: calc(var(--header-height) + var(--safe-area-top));
-    left: var(--safe-area-left);
-    right: var(--safe-area-right);
+    right: calc(12px + var(--safe-area-right));
+    bottom: calc(340px + var(--safe-area-bottom));
 }
 
 /* Adjust member popup for safe areas */
@@ -1457,6 +1402,14 @@ html.platform-ios .family-panel-content {
 
 /* Native app mobile adjustments */
 @media (max-width: 480px) {
+    html.native-app .family-panel {
+        width: calc(100% - 24px - var(--safe-area-left) - var(--safe-area-right));
+        left: calc(12px + var(--safe-area-left));
+        right: calc(12px + var(--safe-area-right));
+        bottom: auto;
+        top: calc(var(--header-height) + var(--safe-area-top) + 8px);
+    }
+
     html.native-app .map-controls {
         right: calc(10px + var(--safe-area-right));
         bottom: calc(80px + var(--safe-area-bottom));

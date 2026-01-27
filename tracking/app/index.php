@@ -86,13 +86,15 @@ require_once __DIR__ . '/../../shared/components/header.php';
         <span class="session-text">Live session active</span>
     </div>
 
-    <!-- Family Panel (collapsible) -->
+    <!-- Family Panel (popup) -->
     <div id="family-panel" class="family-panel">
-        <div class="family-panel-header" id="family-panel-toggle">
+        <div class="family-panel-header">
             <span>Family</span>
-            <svg class="panel-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M6 9l6 6 6-6"/>
-            </svg>
+            <button class="family-panel-close" id="family-panel-close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
         </div>
         <div class="family-panel-content">
             <div id="family-list" class="family-list">
@@ -103,6 +105,14 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
     <!-- Controls -->
     <div class="map-controls">
+        <button id="btn-family" class="control-btn" title="Family members">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+        </button>
         <button id="btn-center-all" class="control-btn" title="Fit all members">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
