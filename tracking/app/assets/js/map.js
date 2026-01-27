@@ -7,6 +7,14 @@ window.TrackingMap = {
     markers: {},
     geofenceCircles: {},
     directionsLayer: null,
+    currentTheme: 'dark',
+
+    // Map style URLs
+    themes: {
+        dark: 'mapbox://styles/mapbox/dark-v11',
+        light: 'mapbox://styles/mapbox/light-v11',
+        satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
+    },
 
     /**
      * Initialize map
@@ -16,9 +24,15 @@ window.TrackingMap = {
 
         mapboxgl.accessToken = config.mapboxToken;
 
+        // Load saved theme from localStorage
+        const savedTheme = localStorage.getItem('tracking_map_theme');
+        if (savedTheme && this.themes[savedTheme]) {
+            this.currentTheme = savedTheme;
+        }
+
         this.map = new mapboxgl.Map({
             container: 'map',
-            style: 'mapbox://styles/mapbox/dark-v11',
+            style: this.themes[this.currentTheme],
             center: [config.defaultCenter[1], config.defaultCenter[0]], // lng, lat
             zoom: config.defaultZoom,
             attributionControl: false
@@ -358,6 +372,61 @@ window.TrackingMap = {
     },
 
     /**
+     * Set map theme/style
+     */
+    setTheme(theme) {
+        if (!this.themes[theme]) return;
+
+        this.currentTheme = theme;
+        localStorage.setItem('tracking_map_theme', theme);
+
+        // Change map style
+        this.map.setStyle(this.themes[theme]);
+
+        // Re-add directions layer after style change
+        this.map.once('style.load', () => {
+            // Re-add directions source/layer
+            if (!this.map.getSource('directions')) {
+                this.map.addSource('directions', {
+                    type: 'geojson',
+                    data: { type: 'FeatureCollection', features: [] }
+                });
+
+                this.map.addLayer({
+                    id: 'directions-line',
+                    type: 'line',
+                    source: 'directions',
+                    layout: {
+                        'line-join': 'round',
+                        'line-cap': 'round'
+                    },
+                    paint: {
+                        'line-color': '#667eea',
+                        'line-width': 4,
+                        'line-opacity': 0.8
+                    }
+                });
+            }
+
+            // Re-add geofences if they were showing
+            if (TrackingState.showGeofences) {
+                this.geofenceCircles = {};
+                this.showGeofences();
+            }
+        });
+
+        // Dispatch theme changed event
+        window.dispatchEvent(new CustomEvent('map:themeChanged', { detail: { theme } }));
+    },
+
+    /**
+     * Get current theme
+     */
+    getTheme() {
+        return this.currentTheme;
+    },
+
+    /**
      * Get user's current location
      */
     getCurrentLocation() {
@@ -367,13 +436,24 @@ window.TrackingMap = {
                 return;
             }
 
+            // Check if HTTPS (required for geolocation in modern browsers)
+            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                reject({ code: 0, message: 'HTTPS required for geolocation' });
+                return;
+            }
+
             navigator.geolocation.getCurrentPosition(
                 pos => resolve({
                     lat: pos.coords.latitude,
-                    lng: pos.coords.longitude
+                    lng: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy
                 }),
                 err => reject(err),
-                { enableHighAccuracy: true, timeout: 10000 }
+                {
+                    enableHighAccuracy: true,
+                    timeout: 15000,        // Increased from 10s to 15s
+                    maximumAge: 60000      // Accept cached position up to 1 minute old
+                }
             );
         });
     }

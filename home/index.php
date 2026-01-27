@@ -41,15 +41,28 @@ try {
 // Get user's last known location for weather
 $userLocation = null;
 try {
+    // First try tracking_current (most recent location)
     $stmt = $db->prepare("
-        SELECT latitude, longitude, accuracy_m, created_at
-        FROM tracking_locations
+        SELECT lat, lng, accuracy_m, updated_at as created_at
+        FROM tracking_current
         WHERE user_id = ?
-        ORDER BY created_at DESC
         LIMIT 1
     ");
     $stmt->execute([$user['id']]);
     $userLocation = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // Fallback to tracking_locations if no current location
+    if (!$userLocation) {
+        $stmt = $db->prepare("
+            SELECT lat, lng, accuracy_m, created_at
+            FROM tracking_locations
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$user['id']]);
+        $userLocation = $stmt->fetch(PDO::FETCH_ASSOC);
+    }
 } catch (Exception $e) {
     error_log('Location fetch error: ' . $e->getMessage());
 }
@@ -638,9 +651,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 <!-- Pass user location to JavaScript -->
 <script>
 window.USER_LOCATION = <?php echo $userLocation ? json_encode([
-    'lat' => (float)$userLocation['latitude'],
-    'lng' => (float)$userLocation['longitude'],
-    'accuracy' => (int)$userLocation['accuracy_m'],
+    'lat' => (float)$userLocation['lat'],
+    'lng' => (float)$userLocation['lng'],
+    'accuracy' => isset($userLocation['accuracy_m']) ? (int)$userLocation['accuracy_m'] : null,
     'timestamp' => $userLocation['created_at']
 ]) : 'null'; ?>;
 </script>

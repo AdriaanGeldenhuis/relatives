@@ -20,7 +20,27 @@ window.UIControls = {
                 const loc = await TrackingMap.getCurrentLocation();
                 TrackingMap.panTo(loc.lat, loc.lng, 15);
             } catch (err) {
-                Toast.show('Could not get your location', 'error');
+                console.error('Geolocation error:', err);
+
+                // Provide specific error messages based on error code
+                let message = 'Could not get your location';
+
+                if (err.code === 1) {
+                    // PERMISSION_DENIED
+                    message = 'Location permission denied. Please enable location access in your browser settings.';
+                } else if (err.code === 2) {
+                    // POSITION_UNAVAILABLE
+                    message = 'Location unavailable. Please check if GPS/Location is enabled on your device.';
+                } else if (err.code === 3) {
+                    // TIMEOUT
+                    message = 'Location request timed out. Please try again.';
+                } else if (!navigator.geolocation) {
+                    message = 'Geolocation is not supported by your browser.';
+                } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                    message = 'Location requires HTTPS. Please use a secure connection.';
+                }
+
+                Toast.show(message, 'error');
             }
         });
 
@@ -39,6 +59,34 @@ window.UIControls = {
         document.getElementById('btn-settings').addEventListener('click', () => {
             window.location.href = 'settings.php';
         });
+
+        // Map theme button
+        document.getElementById('btn-map-theme').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleThemePicker();
+        });
+
+        // Theme picker options
+        document.querySelectorAll('.theme-option').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const theme = btn.dataset.theme;
+                TrackingMap.setTheme(theme);
+                this.updateThemeSelection(theme);
+                this.hideThemePicker();
+            });
+        });
+
+        // Close theme picker on outside click
+        document.addEventListener('click', (e) => {
+            const themePicker = document.getElementById('theme-picker');
+            const themeBtn = document.getElementById('btn-map-theme');
+            if (!themePicker.contains(e.target) && !themeBtn.contains(e.target)) {
+                this.hideThemePicker();
+            }
+        });
+
+        // Initialize theme selection indicator
+        this.updateThemeSelection(TrackingMap.currentTheme || 'dark');
 
         // Popup controls
         document.getElementById('popup-close').addEventListener('click', () => this.hidePopup());
@@ -81,6 +129,9 @@ window.UIControls = {
             status += ' - ' + Format.timeAgo(member.updated_at);
         }
         document.getElementById('popup-status').textContent = status;
+
+        // Update member details
+        this.updateMemberDetails(member);
 
         // Update follow button text
         const followBtn = document.getElementById('btn-follow');
@@ -145,6 +196,131 @@ window.UIControls = {
         } catch (err) {
             Toast.show(err.message || 'Could not get directions', 'error');
         }
+    },
+
+    /**
+     * Toggle theme picker visibility
+     */
+    toggleThemePicker() {
+        const themePicker = document.getElementById('theme-picker');
+        themePicker.classList.toggle('hidden');
+
+        if (!themePicker.classList.contains('hidden')) {
+            document.getElementById('btn-map-theme').classList.add('active');
+        } else {
+            document.getElementById('btn-map-theme').classList.remove('active');
+        }
+    },
+
+    /**
+     * Hide theme picker
+     */
+    hideThemePicker() {
+        const themePicker = document.getElementById('theme-picker');
+        themePicker.classList.add('hidden');
+        document.getElementById('btn-map-theme').classList.remove('active');
+    },
+
+    /**
+     * Update theme selection indicator
+     */
+    updateThemeSelection(theme) {
+        document.querySelectorAll('.theme-option').forEach(btn => {
+            if (btn.dataset.theme === theme) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    },
+
+    /**
+     * Update member details in popup
+     */
+    updateMemberDetails(member) {
+        // Speed
+        const speedRow = document.getElementById('detail-speed');
+        const speedValue = document.getElementById('popup-speed');
+        if (member.speed_mps && member.speed_mps > 0) {
+            speedValue.textContent = Format.speed(member.speed_mps);
+            speedRow.classList.remove('hidden');
+        } else {
+            speedValue.textContent = 'Stationary';
+            speedRow.classList.remove('hidden');
+        }
+
+        // Bearing / Direction
+        const bearingRow = document.getElementById('detail-bearing');
+        const bearingValue = document.getElementById('popup-bearing');
+        if (member.bearing_deg !== null && member.bearing_deg !== undefined) {
+            bearingValue.textContent = this.formatBearing(member.bearing_deg);
+            bearingRow.classList.remove('hidden');
+        } else {
+            bearingRow.classList.add('hidden');
+        }
+
+        // Accuracy
+        const accuracyRow = document.getElementById('detail-accuracy');
+        const accuracyValue = document.getElementById('popup-accuracy');
+        if (member.accuracy_m) {
+            accuracyValue.textContent = '±' + Math.round(member.accuracy_m) + ' m';
+            accuracyRow.classList.remove('hidden');
+        } else {
+            accuracyRow.classList.add('hidden');
+        }
+
+        // Updated time
+        const updatedValue = document.getElementById('popup-updated');
+        if (member.updated_at) {
+            updatedValue.textContent = Format.timeAgo(member.updated_at);
+        } else if (member.recorded_at) {
+            updatedValue.textContent = Format.timeAgo(member.recorded_at);
+        } else {
+            updatedValue.textContent = '--';
+        }
+
+        // Coordinates / Address
+        const coordsValue = document.getElementById('popup-coordinates');
+        if (member.lat && member.lng) {
+            coordsValue.textContent = 'Loading address...';
+            this.reverseGeocode(member.lat, member.lng).then(address => {
+                coordsValue.textContent = address;
+            });
+        } else {
+            coordsValue.textContent = '--';
+        }
+    },
+
+    /**
+     * Reverse geocode coordinates to address
+     */
+    async reverseGeocode(lat, lng) {
+        try {
+            const token = window.TRACKING_CONFIG.mapboxToken;
+            const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&types=address,place,locality,neighborhood`;
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.features && data.features.length > 0) {
+                // Get the most specific address available
+                const place = data.features[0];
+                return place.place_name.split(',').slice(0, 2).join(',');
+            }
+            return lat.toFixed(5) + ', ' + lng.toFixed(5);
+        } catch (err) {
+            console.error('Geocoding error:', err);
+            return lat.toFixed(5) + ', ' + lng.toFixed(5);
+        }
+    },
+
+    /**
+     * Format bearing to compass direction
+     */
+    formatBearing(degrees) {
+        const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+        const index = Math.round(degrees / 45) % 8;
+        return directions[index] + ' (' + Math.round(degrees) + '°)';
     }
 };
 

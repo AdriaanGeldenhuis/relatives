@@ -1,8 +1,8 @@
 <?php
 /**
  * ============================================
- * GLOBAL HEADER v9.1
- * Added notification bell with live badge
+ * GLOBAL HEADER v9.2
+ * Added user profile dropdown with settings
  * ============================================
  */
 
@@ -17,10 +17,10 @@ if (empty($activePage) || $activePage === 'index.php') {
     $activePage = 'home';
 }
 
-$appVersion = '10.0.1';
+$appVersion = '10.0.2';
 // Use static cache version - bump this when deploying CSS/JS changes
 // DO NOT use time() as it defeats browser caching!
-$cacheVersion = '10.0.1';
+$cacheVersion = '10.0.2';
 $buildTime = $cacheVersion;
 
 // Get unread notification count
@@ -293,27 +293,14 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             background: rgba(255, 255, 255, 0.06);
             padding: 8px 10px;
             border-radius: 10px;
-            text-decoration: none;
-            color: inherit;
             cursor: pointer;
-            transition: all 0.3s;
+            position: relative;
+            transition: all 0.3s ease;
         }
 
         .user-profile:hover {
             background: rgba(255, 255, 255, 0.12);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        }
-
-        .profile-arrow {
-            color: rgba(255, 255, 255, 0.5);
-            font-size: 16px;
-            transition: transform 0.3s;
-        }
-
-        .user-profile:hover .profile-arrow {
-            transform: translateX(4px);
-            color: rgba(255, 255, 255, 0.8);
+            transform: translateY(-1px);
         }
 
         .user-avatar {
@@ -351,6 +338,109 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+
+        /* User Profile Dropdown Styles */
+        .user-profile-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            margin-left: auto;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            transition: transform 0.3s ease;
+        }
+
+        .user-profile.active .user-profile-toggle {
+            transform: rotate(180deg);
+        }
+
+        .user-profile-dropdown {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            right: 0;
+            background: rgba(15, 12, 41, 0.98);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            margin-bottom: 8px;
+            padding: 8px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+            z-index: 100;
+        }
+
+        .user-profile.active .user-profile-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .profile-dropdown-header {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 8px;
+        }
+
+        .profile-dropdown-header .user-name {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .profile-dropdown-header .user-email {
+            font-size: 11px;
+        }
+
+        .profile-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            color: white;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .profile-dropdown-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .profile-dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateX(4px);
+        }
+
+        .profile-dropdown-item .item-icon {
+            font-size: 16px;
+            width: 24px;
+            text-align: center;
+        }
+
+        .profile-dropdown-item .item-text {
+            flex: 1;
+        }
+
+        .profile-dropdown-item .item-arrow {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+        }
+
+        .profile-dropdown-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 8px 0;
         }
 
         .logout-btn {
@@ -797,7 +887,61 @@ if (isset($db) && isset($_SESSION['user_id'])) {
 
         <div class="mobile-sidebar-footer">
             <?php if (isset($user)): ?>
-            <a href="/profile/" class="user-profile" title="Edit Profile">
+            <div class="user-profile" id="userProfileToggle">
+                <!-- Dropdown Menu -->
+                <div class="user-profile-dropdown" id="userProfileDropdown">
+                    <div class="profile-dropdown-header">
+                        <div class="user-name"><?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?></div>
+                        <div class="user-email"><?php echo htmlspecialchars($user['email'] ?? ''); ?></div>
+                    </div>
+
+                    <a href="/profile/" class="profile-dropdown-item">
+                        <span class="item-icon">👤</span>
+                        <span class="item-text">My Profile</span>
+                        <span class="item-arrow">›</span>
+                    </a>
+
+                    <a href="/profile/picture.php" class="profile-dropdown-item">
+                        <span class="item-icon">📷</span>
+                        <span class="item-text">Change Profile Picture</span>
+                        <span class="item-arrow">›</span>
+                    </a>
+
+                    <a href="/profile/settings.php" class="profile-dropdown-item">
+                        <span class="item-icon">⚙️</span>
+                        <span class="item-text">Account Settings</span>
+                        <span class="item-arrow">›</span>
+                    </a>
+
+                    <a href="/profile/notifications.php" class="profile-dropdown-item">
+                        <span class="item-icon">🔔</span>
+                        <span class="item-text">Notification Preferences</span>
+                        <span class="item-arrow">›</span>
+                    </a>
+
+                    <a href="/profile/privacy.php" class="profile-dropdown-item">
+                        <span class="item-icon">🔒</span>
+                        <span class="item-text">Privacy & Security</span>
+                        <span class="item-arrow">›</span>
+                    </a>
+
+                    <?php if (in_array($user['role'] ?? '', ['owner', 'admin'])): ?>
+                    <a href="/profile/subscription.php" class="profile-dropdown-item">
+                        <span class="item-icon">💳</span>
+                        <span class="item-text">Subscription & Billing</span>
+                        <span class="item-arrow">›</span>
+                    </a>
+                    <?php endif; ?>
+
+                    <div class="profile-dropdown-divider"></div>
+
+                    <a href="/help/" class="profile-dropdown-item">
+                        <span class="item-icon">❓</span>
+                        <span class="item-text">Help & Support</span>
+                        <span class="item-arrow">›</span>
+                    </a>
+                </div>
+
                 <div class="user-avatar" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
                     <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
                 </div>
@@ -805,10 +949,10 @@ if (isset($db) && isset($_SESSION['user_id'])) {
                     <div class="user-name"><?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?></div>
                     <div class="user-email"><?php echo htmlspecialchars($user['email'] ?? ''); ?></div>
                 </div>
-                <div class="profile-arrow">→</div>
-            </a>
+                <div class="user-profile-toggle">▲</div>
+            </div>
             <?php endif; ?>
-            
+
             <a href="/logout.php" class="logout-btn">
                 <span>🚪</span> Logout
             </a>

@@ -1,14 +1,14 @@
 /**
  * ============================================
- * GLOBAL HEADER JAVASCRIPT v3.2
- * Added notification badge updates
+ * GLOBAL HEADER JAVASCRIPT v3.4
+ * Added user profile dropdown menu
  * ============================================
  */
 
 (function() {
     'use strict';
 
-    console.log('🔧 Header JavaScript v3.3 initializing...');
+    console.log('🔧 Header JavaScript v3.4 initializing...');
 
     // Detect native Android app WebView
     const isNativeApp = navigator.userAgent.includes('RelativesAndroidApp');
@@ -28,7 +28,9 @@
             sidebar: document.getElementById('mobileSidebar'),
             loader: document.getElementById('appLoader'),
             notificationBell: document.getElementById('notificationBell'),
-            notificationBadge: document.getElementById('notificationBadge')
+            notificationBadge: document.getElementById('notificationBadge'),
+            userProfileToggle: document.getElementById('userProfileToggle'),
+            userProfileDropdown: document.getElementById('userProfileDropdown')
         };
         
         const missing = [];
@@ -68,7 +70,26 @@
             toggleMenu();
         }
     }
-    
+
+    // User Profile Dropdown Toggle
+    function toggleUserProfileDropdown(e) {
+        if (!elements.userProfileToggle) return;
+
+        // Don't toggle if clicking on a link inside the dropdown
+        if (e && e.target.closest('.profile-dropdown-item')) {
+            return;
+        }
+
+        e && e.stopPropagation();
+        elements.userProfileToggle.classList.toggle('active');
+    }
+
+    function closeUserProfileDropdown() {
+        if (elements.userProfileToggle) {
+            elements.userProfileToggle.classList.remove('active');
+        }
+    }
+
     function hideLoader() {
         if (elements.loader) {
             elements.loader.classList.add('hidden');
@@ -195,8 +216,25 @@
             if (e.key === 'Escape' && isMenuOpen) {
                 closeMenu();
             }
+            if (e.key === 'Escape') {
+                closeUserProfileDropdown();
+            }
         });
         console.log('✅ Escape key listener attached');
+
+        // User Profile Dropdown Toggle
+        if (elements.userProfileToggle) {
+            elements.userProfileToggle.addEventListener('click', toggleUserProfileDropdown);
+            console.log('✅ User profile dropdown toggle attached');
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (elements.userProfileToggle &&
+                    !elements.userProfileToggle.contains(e.target)) {
+                    closeUserProfileDropdown();
+                }
+            });
+        }
 
         // Setup visibility/focus handling based on app mode
         if (isNativeApp) {
@@ -279,7 +317,9 @@
         close: closeMenu,
         open: () => { if (!isMenuOpen) toggleMenu(); },
         updateNotificationBadge: updateNotificationBadge,
-        refreshNotifications: fetchNotificationCount
+        refreshNotifications: fetchNotificationCount,
+        toggleProfileDropdown: toggleUserProfileDropdown,
+        closeProfileDropdown: closeUserProfileDropdown
     };
     
 })();
