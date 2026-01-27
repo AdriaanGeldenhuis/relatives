@@ -60,6 +60,34 @@ window.UIControls = {
             window.location.href = 'settings.php';
         });
 
+        // Map theme button
+        document.getElementById('btn-map-theme').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleThemePicker();
+        });
+
+        // Theme picker options
+        document.querySelectorAll('.theme-option').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const theme = btn.dataset.theme;
+                TrackingMap.setTheme(theme);
+                this.updateThemeSelection(theme);
+                this.hideThemePicker();
+            });
+        });
+
+        // Close theme picker on outside click
+        document.addEventListener('click', (e) => {
+            const themePicker = document.getElementById('theme-picker');
+            const themeBtn = document.getElementById('btn-map-theme');
+            if (!themePicker.contains(e.target) && !themeBtn.contains(e.target)) {
+                this.hideThemePicker();
+            }
+        });
+
+        // Initialize theme selection indicator
+        this.updateThemeSelection(TrackingMap.currentTheme || 'dark');
+
         // Popup controls
         document.getElementById('popup-close').addEventListener('click', () => this.hidePopup());
         document.getElementById('btn-follow').addEventListener('click', () => this.startFollow());
@@ -165,6 +193,42 @@ window.UIControls = {
         } catch (err) {
             Toast.show(err.message || 'Could not get directions', 'error');
         }
+    },
+
+    /**
+     * Toggle theme picker visibility
+     */
+    toggleThemePicker() {
+        const themePicker = document.getElementById('theme-picker');
+        themePicker.classList.toggle('hidden');
+
+        if (!themePicker.classList.contains('hidden')) {
+            document.getElementById('btn-map-theme').classList.add('active');
+        } else {
+            document.getElementById('btn-map-theme').classList.remove('active');
+        }
+    },
+
+    /**
+     * Hide theme picker
+     */
+    hideThemePicker() {
+        const themePicker = document.getElementById('theme-picker');
+        themePicker.classList.add('hidden');
+        document.getElementById('btn-map-theme').classList.remove('active');
+    },
+
+    /**
+     * Update theme selection indicator
+     */
+    updateThemeSelection(theme) {
+        document.querySelectorAll('.theme-option').forEach(btn => {
+            if (btn.dataset.theme === theme) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
     }
 };
 
