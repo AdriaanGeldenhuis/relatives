@@ -24,6 +24,12 @@
     --radius: 8px;
     --radius-lg: 12px;
     --header-height: 68px;
+
+    /* Safe area insets for native app shells */
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
 }
 
 /* ===========================================
@@ -32,8 +38,21 @@
 
 body {
     background: var(--gray-900) !important;
-    overflow: hidden !important;
     padding-bottom: 0 !important;
+}
+
+/* Only hide overflow on map page, allow scrolling on sub-pages */
+body:has(.tracking-page-wrapper) {
+    overflow: hidden !important;
+}
+
+/* Settings, events, geofences pages need scrolling */
+body.settings-page,
+body.events-page,
+body.geofences-page {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    min-height: 100vh;
 }
 
 /* ===========================================
@@ -68,17 +87,16 @@ body {
 
 .session-indicator {
     position: fixed;
-    top: calc(var(--header-height) + 8px);
-    left: 50%;
-    transform: translateX(-50%);
+    top: calc(var(--header-height) + 4px);
+    right: 12px;
     background: rgba(26, 32, 44, 0.95);
     backdrop-filter: blur(10px);
-    padding: 8px 16px;
+    padding: 6px 12px;
     border-radius: 20px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    gap: 6px;
+    font-size: 12px;
     z-index: 90;
     box-shadow: var(--shadow-md);
 }
@@ -106,58 +124,66 @@ body {
 
 .family-panel {
     position: fixed;
-    top: calc(var(--header-height) + 8px);
+    bottom: 340px;
     right: 12px;
     width: 280px;
-    max-height: calc(100vh - var(--header-height) - 100px);
+    max-height: 300px;
     background: rgba(26, 32, 44, 0.95);
     backdrop-filter: blur(10px);
     border-radius: var(--radius-lg);
     z-index: 80;
     box-shadow: var(--shadow-lg);
     overflow: hidden;
-}
-
-.family-panel-header {
-    padding: 12px 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    border-bottom: 1px solid var(--gray-700);
-    user-select: none;
-}
-
-.family-panel-header:hover {
-    background: var(--gray-800);
-}
-
-.panel-chevron {
-    transition: transform 0.2s;
-}
-
-.family-panel.collapsed .panel-chevron {
-    transform: rotate(-90deg);
-}
-
-.family-panel.collapsed .family-panel-content {
     display: none;
 }
 
+.family-panel.open {
+    display: block;
+}
+
+.family-panel-header {
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--gray-700);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.family-panel-close {
+    background: none;
+    border: none;
+    color: var(--gray-400);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.family-panel-close:hover {
+    color: white;
+}
+
 .family-panel-content {
-    max-height: 400px;
+    max-height: 250px;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .family-list {
     padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .member-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: 10px;
+    padding: 8px 10px;
     border-radius: var(--radius);
     cursor: pointer;
     transition: background 0.2s;
@@ -172,14 +198,14 @@ body {
 }
 
 .member-avatar {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 12px;
     color: white;
     flex-shrink: 0;
 }
@@ -190,7 +216,7 @@ body {
 }
 
 .member-name {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
@@ -198,11 +224,11 @@ body {
 }
 
 .member-status {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--gray-400);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
 }
 
 .status-dot {
@@ -620,26 +646,296 @@ body {
 }
 
 /* ===========================================
-   Responsive
+   Responsive - Mobile First
    =========================================== */
 
+/* Touch device optimizations */
+@media (pointer: coarse) {
+    /* Larger touch targets */
+    .control-btn {
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
+        min-height: 48px;
+    }
+
+    .member-item {
+        padding: 12px 14px;
+        min-height: 56px;
+    }
+
+    .popup-btn {
+        padding: 14px;
+        min-height: 48px;
+    }
+
+    .popup-close {
+        width: 44px;
+        height: 44px;
+        font-size: 28px;
+    }
+
+    /* Prevent text selection on interactive elements */
+    .control-btn,
+    .member-item,
+    .popup-btn,
+    .family-panel-header {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
+
+    /* Active states for touch feedback */
+    .control-btn:active {
+        transform: scale(0.95);
+        background: var(--gray-600);
+    }
+
+    .member-item:active {
+        background: var(--gray-600);
+    }
+
+    .popup-btn:active {
+        transform: scale(0.98);
+    }
+}
+
+/* Tablet breakpoint */
+@media (max-width: 768px) {
+    .member-popup {
+        max-width: 340px;
+    }
+
+    .map-controls {
+        bottom: 90px;
+    }
+
+    .directions-stats {
+        gap: 12px;
+    }
+
+    .stat-value {
+        font-size: 18px;
+    }
+}
+
+/* Mobile breakpoint */
 @media (max-width: 480px) {
+    /* Family panel adjustments for mobile */
     .family-panel {
         width: calc(100% - 24px);
         left: 12px;
         right: 12px;
-        top: auto;
-        bottom: 160px;
-        max-height: 200px;
+        bottom: auto;
+        top: calc(var(--header-height) + 8px);
+        max-height: 280px;
     }
 
-    .family-panel.collapsed {
-        bottom: 160px;
+    /* Map controls repositioned */
+    .map-controls {
+        bottom: 80px;
+        right: 10px;
+        gap: 6px;
+    }
+
+    .control-btn {
+        width: 42px;
+        height: 42px;
+    }
+
+    .control-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    /* Session indicator compact */
+    .session-indicator {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    /* Member popup fullwidth on mobile */
+    .member-popup {
+        width: calc(100% - 20px);
+        max-width: none;
+        left: 10px;
+        right: 10px;
+        bottom: 16px;
+        transform: none;
+        border-radius: var(--radius-lg);
+    }
+
+    .popup-header {
+        padding: 12px;
+    }
+
+    .popup-avatar {
+        width: 42px;
+        height: 42px;
+        font-size: 16px;
+    }
+
+    .popup-name {
+        font-size: 15px;
+    }
+
+    .popup-actions {
+        padding: 10px;
+        gap: 6px;
+    }
+
+    .popup-btn {
+        padding: 12px 10px;
+        font-size: 13px;
+        gap: 6px;
+    }
+
+    .popup-btn svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    /* Directions info compact */
+    .directions-info {
+        left: 10px;
+        right: 10px;
+        padding: 12px;
+        bottom: 16px;
+    }
+
+    .directions-header {
+        margin-bottom: 8px;
+    }
+
+    .directions-stats {
+        gap: 10px;
+    }
+
+    .stat-value {
+        font-size: 16px;
+    }
+
+    .stat-label {
+        font-size: 11px;
+    }
+
+    /* Toast adjustments */
+    .toast-container {
+        bottom: 70px;
+        width: calc(100% - 20px);
+        left: 10px;
+        transform: none;
+    }
+
+    .toast {
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+
+    /* Offline indicator */
+    .offline-indicator {
+        font-size: 12px;
+        padding: 6px 12px;
+    }
+}
+
+/* Small mobile breakpoint */
+@media (max-width: 360px) {
+    .family-panel {
+        width: calc(100% - 16px);
+        left: 8px;
+        right: 8px;
     }
 
     .map-controls {
-        bottom: 80px;
+        right: 8px;
+        bottom: 75px;
     }
+
+    .control-btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .member-popup {
+        left: 8px;
+        right: 8px;
+        width: calc(100% - 16px);
+    }
+
+    .popup-actions {
+        flex-direction: column;
+    }
+
+    .popup-btn {
+        width: 100%;
+    }
+}
+
+/* Landscape mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+    .family-panel {
+        max-height: 200px;
+    }
+
+    .map-controls {
+        bottom: 10px;
+        right: 10px;
+        flex-direction: row;
+    }
+
+    .member-popup {
+        max-width: 300px;
+        bottom: 10px;
+    }
+}
+
+/* ===========================================
+   Sub-page Topbar
+   =========================================== */
+
+.tracking-topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: var(--gray-800);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 12px;
+    z-index: 100;
+    border-bottom: 1px solid var(--gray-700);
+}
+
+.tracking-topbar .back-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray-300);
+    text-decoration: none;
+    border-radius: var(--radius);
+    transition: background 0.2s;
+}
+
+.tracking-topbar .back-btn:hover {
+    background: var(--gray-700);
+    color: white;
+}
+
+.tracking-topbar .topbar-title {
+    flex: 1;
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+}
+
+.tracking-topbar .topbar-actions {
+    display: flex;
+    gap: 8px;
 }
 
 /* ===========================================
@@ -650,6 +946,7 @@ body {
     min-height: 100vh;
     background: var(--gray-900);
     padding-top: 56px;
+    padding-bottom: 40px;
 }
 
 .settings-container {
@@ -933,9 +1230,375 @@ body {
     color: var(--primary);
 }
 
+/* ===========================================
+   Mobile Styles for Sub-Pages
+   =========================================== */
+
+@media (max-width: 480px) {
+    /* Settings page mobile */
+    .settings-page {
+        padding-top: var(--header-height);
+    }
+
+    .settings-container {
+        padding: 12px;
+    }
+
+    .settings-section {
+        padding: 14px;
+        margin-bottom: 12px;
+    }
+
+    .settings-section h2 {
+        font-size: 15px;
+        margin-bottom: 12px;
+    }
+
+    .setting-row {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 0;
+    }
+
+    .setting-label {
+        font-size: 13px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .setting-description {
+        width: 100%;
+        margin-top: 2px;
+    }
+
+    .setting-input {
+        width: 100px;
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+
+    .setting-select {
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+
+    .toggle {
+        flex-shrink: 0;
+    }
+
+    /* Events page mobile */
+    .events-page {
+        padding-top: var(--header-height);
+    }
+
+    .events-container {
+        padding: 12px;
+    }
+
+    .events-filters {
+        gap: 6px;
+        margin-bottom: 16px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .filter-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .event-item {
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .event-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .event-icon svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .event-title {
+        font-size: 13px;
+    }
+
+    .event-meta {
+        font-size: 11px;
+    }
+
+    /* Geofences page mobile */
+    .geofences-page {
+        padding-top: var(--header-height);
+    }
+
+    .geofences-container {
+        padding: 12px;
+    }
+
+    .geofence-card {
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+
+    .geofence-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .geofence-name {
+        font-size: 14px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .geofence-meta {
+        font-size: 12px;
+        width: 100%;
+        margin-top: 2px;
+    }
+
+    .geofence-actions {
+        width: 100%;
+        margin-top: 8px;
+    }
+
+    .btn-sm {
+        flex: 1;
+        padding: 8px 10px;
+        font-size: 12px;
+        text-align: center;
+        justify-content: center;
+    }
+
+    .add-geofence-btn {
+        padding: 14px;
+        font-size: 13px;
+    }
+}
+
+/* Touch-friendly toggle on mobile */
+@media (pointer: coarse) {
+    .toggle {
+        width: 52px;
+        height: 32px;
+    }
+
+    .toggle-slider:before {
+        height: 26px;
+        width: 26px;
+    }
+
+    .toggle input:checked + .toggle-slider:before {
+        transform: translateX(20px);
+    }
+
+    .btn-sm {
+        min-height: 40px;
+    }
+
+    .filter-btn {
+        min-height: 36px;
+    }
+
+    .add-geofence-btn {
+        min-height: 48px;
+    }
+}
+
 /* Utility */
 .hidden {
     display: none !important;
+}
+
+/* ===========================================
+   Native App Shell Styles
+   =========================================== */
+
+/* When running in native app shell */
+html.native-app {
+    /* Extend background under status bar */
+    background: var(--gray-900);
+}
+
+html.native-app body {
+    /* Account for status bar in native apps */
+    padding-top: var(--safe-area-top);
+}
+
+/* Hide global header in native app (app has its own) */
+html.native-app .global-header {
+    /* Adjust for safe area when visible */
+    padding-top: var(--safe-area-top);
+}
+
+/* Adjust tracking wrapper for native */
+html.native-app .tracking-page-wrapper {
+    top: calc(var(--header-height) + var(--safe-area-top));
+    bottom: var(--safe-area-bottom);
+    left: var(--safe-area-left);
+    right: var(--safe-area-right);
+}
+
+/* Adjust map controls for safe areas */
+html.native-app .map-controls {
+    right: calc(12px + var(--safe-area-right));
+    bottom: calc(100px + var(--safe-area-bottom));
+}
+
+/* Adjust family panel for safe areas */
+html.native-app .family-panel {
+    right: calc(12px + var(--safe-area-right));
+    bottom: calc(340px + var(--safe-area-bottom));
+}
+
+/* Adjust member popup for safe areas */
+html.native-app .member-popup {
+    bottom: calc(20px + var(--safe-area-bottom));
+    left: calc(50%);
+    width: calc(100% - 24px - var(--safe-area-left) - var(--safe-area-right));
+}
+
+/* Adjust directions info for safe areas */
+html.native-app .directions-info {
+    bottom: calc(20px + var(--safe-area-bottom));
+    left: calc(12px + var(--safe-area-left));
+    right: calc(12px + var(--safe-area-right));
+}
+
+/* Adjust toast container for safe areas */
+html.native-app .toast-container {
+    bottom: calc(80px + var(--safe-area-bottom));
+}
+
+/* Session indicator adjustment */
+html.native-app .session-indicator {
+    top: calc(var(--header-height) + var(--safe-area-top) + 8px);
+}
+
+/* Loading overlay covers safe areas */
+html.native-app .loading-overlay {
+    padding-top: var(--safe-area-top);
+    padding-bottom: var(--safe-area-bottom);
+}
+
+/* ===========================================
+   Platform-Specific Styles
+   =========================================== */
+
+/* Android-specific adjustments */
+html.platform-android .tracking-page-wrapper {
+    /* Android status bar is typically 24dp */
+}
+
+/* iOS-specific adjustments */
+html.platform-ios {
+    /* Ensure smooth scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
+}
+
+html.platform-ios .family-panel-content {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Native app mobile adjustments */
+@media (max-width: 480px) {
+    html.native-app .family-panel {
+        width: calc(100% - 24px - var(--safe-area-left) - var(--safe-area-right));
+        left: calc(12px + var(--safe-area-left));
+        right: calc(12px + var(--safe-area-right));
+        bottom: auto;
+        top: calc(var(--header-height) + var(--safe-area-top) + 8px);
+    }
+
+    html.native-app .map-controls {
+        right: calc(10px + var(--safe-area-right));
+        bottom: calc(80px + var(--safe-area-bottom));
+    }
+
+    html.native-app .member-popup {
+        left: calc(10px + var(--safe-area-left));
+        right: calc(10px + var(--safe-area-right));
+        width: auto;
+        transform: none;
+        bottom: calc(16px + var(--safe-area-bottom));
+    }
+
+    html.native-app .toast-container {
+        bottom: calc(70px + var(--safe-area-bottom));
+        left: calc(10px + var(--safe-area-left));
+        right: calc(10px + var(--safe-area-right));
+        width: auto;
+        transform: none;
+    }
+
+    html.native-app .session-indicator {
+        top: calc(var(--header-height) + var(--safe-area-top) + 4px);
+        font-size: 11px;
+        padding: 4px 10px;
+    }
+
+    html.native-app .offline-indicator {
+        top: calc(var(--header-height) + var(--safe-area-top) + 4px);
+    }
+}
+
+/* PWA standalone mode */
+@media (display-mode: standalone) {
+    body {
+        /* PWA running standalone */
+        padding-top: var(--safe-area-top);
+    }
+
+    .tracking-page-wrapper {
+        top: calc(var(--header-height) + var(--safe-area-top));
+        bottom: var(--safe-area-bottom);
+    }
+
+    .map-controls {
+        bottom: calc(100px + var(--safe-area-bottom));
+    }
+
+    .member-popup {
+        bottom: calc(20px + var(--safe-area-bottom));
+    }
+
+    .toast-container {
+        bottom: calc(80px + var(--safe-area-bottom));
+    }
+}
+
+/* ===========================================
+   Offline Indicator
+   =========================================== */
+
+.offline-indicator {
+    position: fixed;
+    top: calc(var(--header-height) + var(--safe-area-top) + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--warning);
+    color: var(--gray-900);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 95;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    box-shadow: var(--shadow-md);
+}
+
+.offline-indicator.visible {
+    display: flex;
+}
+
+.offline-indicator svg {
+    width: 16px;
+    height: 16px;
 }
 
 /* ===========================================

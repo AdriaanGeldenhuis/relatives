@@ -5,24 +5,51 @@
 window.FamilyPanel = {
     panel: null,
     list: null,
-    isCollapsed: false,
+    toggleBtn: null,
+    isOpen: false,
 
     init() {
         this.panel = document.getElementById('family-panel');
         this.list = document.getElementById('family-list');
-        const toggle = document.getElementById('family-panel-toggle');
+        this.toggleBtn = document.getElementById('btn-family');
+        const closeBtn = document.getElementById('family-panel-close');
 
-        // Toggle collapse
-        toggle.addEventListener('click', () => this.toggleCollapse());
+        // Toggle panel with button
+        this.toggleBtn.addEventListener('click', () => this.toggle());
+
+        // Close panel with close button
+        closeBtn.addEventListener('click', () => this.close());
+
+        // Close panel when clicking outside
+        document.addEventListener('click', (e) => {
+            if (this.isOpen &&
+                !this.panel.contains(e.target) &&
+                !this.toggleBtn.contains(e.target)) {
+                this.close();
+            }
+        });
 
         // Listen for state changes
         TrackingState.on('members:updated', (members) => this.render(members));
         TrackingState.on('member:selected', (userId) => this.highlightMember(userId));
     },
 
-    toggleCollapse() {
-        this.isCollapsed = !this.isCollapsed;
-        this.panel.classList.toggle('collapsed', this.isCollapsed);
+    toggle() {
+        this.isOpen = !this.isOpen;
+        this.panel.classList.toggle('open', this.isOpen);
+        this.toggleBtn.classList.toggle('active', this.isOpen);
+    },
+
+    open() {
+        this.isOpen = true;
+        this.panel.classList.add('open');
+        this.toggleBtn.classList.add('active');
+    },
+
+    close() {
+        this.isOpen = false;
+        this.panel.classList.remove('open');
+        this.toggleBtn.classList.remove('active');
     },
 
     render(members) {
