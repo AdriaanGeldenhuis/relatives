@@ -59,48 +59,22 @@ $stmt = $db->prepare("
 $stmt->execute([$user['family_id']]);
 $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Set up page variables for global header
 $pageTitle = 'Family Tracking';
+$pageCSS = ['/tracking/app/assets/css/tracking.css'];
+
+// Include global header
+require_once __DIR__ . '/../../shared/components/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title><?= htmlspecialchars($pageTitle) ?> - Relatives</title>
 
-    <!-- Mapbox GL JS -->
-    <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
-    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+<!-- Mapbox GL JS -->
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
 
-    <!-- Tracking CSS -->
-    <link rel="stylesheet" href="assets/css/tracking.css">
-
-    <!-- PWA -->
-    <meta name="theme-color" content="#667eea">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-</head>
-<body class="tracking-page">
+<!-- Tracking Page Wrapper -->
+<div class="tracking-page-wrapper">
     <!-- Map Container -->
     <div id="map"></div>
-
-    <!-- Top Bar -->
-    <div class="tracking-topbar">
-        <a href="/home/" class="back-btn">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-        </a>
-        <div class="topbar-title">Family Tracking</div>
-        <div class="topbar-actions">
-            <button id="btn-settings" class="icon-btn" title="Settings">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
-                </svg>
-            </button>
-        </div>
-    </div>
 
     <!-- Session Indicator -->
     <div id="session-indicator" class="session-indicator hidden">
@@ -148,6 +122,12 @@ $pageTitle = 'Family Tracking';
                 <circle cx="12" cy="12" r="10"/>
             </svg>
         </button>
+        <button id="btn-settings" class="control-btn" title="Settings">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+        </button>
     </div>
 
     <!-- Member Popup (for directions etc) -->
@@ -183,41 +163,33 @@ $pageTitle = 'Family Tracking';
 
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
+</div>
 
-    <!-- Footer Navigation -->
-    <footer class="tracking-footer">
-        <a href="/home/" class="footer-nav-btn" title="Home">🏠</a>
-        <a href="/messages/" class="footer-nav-btn" title="Messages">💬</a>
-        <a href="/shopping/" class="footer-nav-btn" title="Shopping">🛒</a>
-        <a href="/calendar/" class="footer-nav-btn" title="Calendar">📅</a>
-        <a href="/notifications/" class="footer-nav-btn" title="Notifications">🔔</a>
-    </footer>
+<!-- Config -->
+<script>
+    window.TRACKING_CONFIG = {
+        mapboxToken: '<?= htmlspecialchars($mapboxToken) ?>',
+        userId: <?= (int)$user['id'] ?>,
+        familyId: <?= (int)$user['family_id'] ?>,
+        userName: '<?= htmlspecialchars($user['name']) ?>',
+        members: <?= json_encode($members) ?>,
+        apiBase: '/tracking/api',
+        defaultCenter: [-26.2041, 28.0473], // Johannesburg
+        defaultZoom: 12
+    };
+</script>
 
-    <!-- Config -->
-    <script>
-        window.TRACKING_CONFIG = {
-            mapboxToken: '<?= htmlspecialchars($mapboxToken) ?>',
-            userId: <?= (int)$user['id'] ?>,
-            familyId: <?= (int)$user['family_id'] ?>,
-            userName: '<?= htmlspecialchars($user['name']) ?>',
-            members: <?= json_encode($members) ?>,
-            apiBase: '/tracking/api',
-            defaultCenter: [-26.2041, 28.0473], // Johannesburg
-            defaultZoom: 12
-        };
-    </script>
+<!-- Tracking JS -->
+<script src="/tracking/app/assets/js/format.js"></script>
+<script src="/tracking/app/assets/js/api.js"></script>
+<script src="/tracking/app/assets/js/state.js"></script>
+<script src="/tracking/app/assets/js/map.js"></script>
+<script src="/tracking/app/assets/js/family-panel.js"></script>
+<script src="/tracking/app/assets/js/ui-controls.js"></script>
+<script src="/tracking/app/assets/js/follow.js"></script>
+<script src="/tracking/app/assets/js/directions.js"></script>
+<script src="/tracking/app/assets/js/polling.js"></script>
+<script src="/tracking/app/assets/js/browser-tracking.js"></script>
+<script src="/tracking/app/assets/js/bootstrap.js"></script>
 
-    <!-- Tracking JS -->
-    <script src="assets/js/format.js"></script>
-    <script src="assets/js/api.js"></script>
-    <script src="assets/js/state.js"></script>
-    <script src="assets/js/map.js"></script>
-    <script src="assets/js/family-panel.js"></script>
-    <script src="assets/js/ui-controls.js"></script>
-    <script src="assets/js/follow.js"></script>
-    <script src="assets/js/directions.js"></script>
-    <script src="assets/js/polling.js"></script>
-    <script src="assets/js/browser-tracking.js"></script>
-    <script src="assets/js/bootstrap.js"></script>
-</body>
-</html>
+<?php require_once __DIR__ . '/../../shared/components/footer.php'; ?>
