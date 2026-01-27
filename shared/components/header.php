@@ -925,6 +925,14 @@ if (isset($db) && isset($_SESSION['user_id'])) {
                         <span class="item-arrow">›</span>
                     </a>
 
+                    <?php if (in_array($user['role'] ?? '', ['owner', 'admin'])): ?>
+                    <a href="/profile/subscription.php" class="profile-dropdown-item">
+                        <span class="item-icon">💳</span>
+                        <span class="item-text">Subscription & Billing</span>
+                        <span class="item-arrow">›</span>
+                    </a>
+                    <?php endif; ?>
+
                     <div class="profile-dropdown-divider"></div>
 
                     <a href="/help/" class="profile-dropdown-item">

@@ -119,6 +119,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
                 <span class="settings-link-arrow"></span>
             </a>
+
+            <?php if (in_array($user['role'] ?? '', ['owner', 'admin'])): ?>
+            <a href="/profile/subscription.php" class="settings-link">
+                <div class="settings-link-content">
+                    <span class="settings-link-icon">Subscription & Billing</span>
+                </div>
+                <span class="settings-link-arrow"></span>
+            </a>
+            <?php endif; ?>
         </div>
 
         <!-- Family Info -->
