@@ -38,8 +38,21 @@
 
 body {
     background: var(--gray-900) !important;
-    overflow: hidden !important;
     padding-bottom: 0 !important;
+}
+
+/* Only hide overflow on map page, allow scrolling on sub-pages */
+body:has(.tracking-page-wrapper) {
+    overflow: hidden !important;
+}
+
+/* Settings, events, geofences pages need scrolling */
+body.settings-page,
+body.events-page,
+body.geofences-page {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    min-height: 100vh;
 }
 
 /* ===========================================
@@ -837,6 +850,54 @@ body {
 }
 
 /* ===========================================
+   Sub-page Topbar
+   =========================================== */
+
+.tracking-topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: var(--gray-800);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 12px;
+    z-index: 100;
+    border-bottom: 1px solid var(--gray-700);
+}
+
+.tracking-topbar .back-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray-300);
+    text-decoration: none;
+    border-radius: var(--radius);
+    transition: background 0.2s;
+}
+
+.tracking-topbar .back-btn:hover {
+    background: var(--gray-700);
+    color: white;
+}
+
+.tracking-topbar .topbar-title {
+    flex: 1;
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+}
+
+.tracking-topbar .topbar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* ===========================================
    Settings Page
    =========================================== */
 
@@ -844,6 +905,7 @@ body {
     min-height: 100vh;
     background: var(--gray-900);
     padding-top: 56px;
+    padding-bottom: 40px;
 }
 
 .settings-container {
