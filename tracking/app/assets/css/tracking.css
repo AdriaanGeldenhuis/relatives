@@ -330,6 +330,47 @@ body {
     color: white;
 }
 
+.popup-details {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--gray-700);
+}
+
+.detail-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--gray-800);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-row svg {
+    color: var(--gray-500);
+    flex-shrink: 0;
+}
+
+.detail-label {
+    font-size: 13px;
+    color: var(--gray-400);
+    flex-shrink: 0;
+    min-width: 70px;
+}
+
+.detail-value {
+    font-size: 13px;
+    color: white;
+    font-weight: 500;
+    margin-left: auto;
+    text-align: right;
+}
+
+.detail-row.hidden {
+    display: none;
+}
+
 .popup-actions {
     display: flex;
     padding: 12px;

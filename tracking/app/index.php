@@ -167,6 +167,51 @@ require_once __DIR__ . '/../../shared/components/header.php';
             </div>
             <button class="popup-close" id="popup-close">&times;</button>
         </div>
+
+        <!-- Member Details -->
+        <div class="popup-details" id="popup-details">
+            <div class="detail-row" id="detail-speed">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                <span class="detail-label">Speed</span>
+                <span class="detail-value" id="popup-speed">--</span>
+            </div>
+            <div class="detail-row" id="detail-bearing">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+                </svg>
+                <span class="detail-label">Direction</span>
+                <span class="detail-value" id="popup-bearing">--</span>
+            </div>
+            <div class="detail-row" id="detail-accuracy">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="12" cy="12" r="6"/>
+                    <circle cx="12" cy="12" r="2"/>
+                </svg>
+                <span class="detail-label">Accuracy</span>
+                <span class="detail-value" id="popup-accuracy">--</span>
+            </div>
+            <div class="detail-row" id="detail-updated">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span class="detail-label">Updated</span>
+                <span class="detail-value" id="popup-updated">--</span>
+            </div>
+            <div class="detail-row" id="detail-coordinates">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span class="detail-label">Location</span>
+                <span class="detail-value" id="popup-coordinates">--</span>
+            </div>
+        </div>
+
         <div class="popup-actions">
             <button class="popup-btn" id="btn-follow">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

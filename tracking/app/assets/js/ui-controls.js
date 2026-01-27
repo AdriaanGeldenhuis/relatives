@@ -130,6 +130,9 @@ window.UIControls = {
         }
         document.getElementById('popup-status').textContent = status;
 
+        // Update member details
+        this.updateMemberDetails(member);
+
         // Update follow button text
         const followBtn = document.getElementById('btn-follow');
         if (TrackingState.followingMember === userId) {
@@ -229,6 +232,69 @@ window.UIControls = {
                 btn.classList.remove('active');
             }
         });
+    },
+
+    /**
+     * Update member details in popup
+     */
+    updateMemberDetails(member) {
+        // Speed
+        const speedRow = document.getElementById('detail-speed');
+        const speedValue = document.getElementById('popup-speed');
+        if (member.speed_mps && member.speed_mps > 0) {
+            speedValue.textContent = Format.speed(member.speed_mps);
+            speedRow.classList.remove('hidden');
+        } else {
+            speedValue.textContent = 'Stationary';
+            speedRow.classList.remove('hidden');
+        }
+
+        // Bearing / Direction
+        const bearingRow = document.getElementById('detail-bearing');
+        const bearingValue = document.getElementById('popup-bearing');
+        if (member.bearing_deg !== null && member.bearing_deg !== undefined) {
+            bearingValue.textContent = this.formatBearing(member.bearing_deg);
+            bearingRow.classList.remove('hidden');
+        } else {
+            bearingRow.classList.add('hidden');
+        }
+
+        // Accuracy
+        const accuracyRow = document.getElementById('detail-accuracy');
+        const accuracyValue = document.getElementById('popup-accuracy');
+        if (member.accuracy_m) {
+            accuracyValue.textContent = '±' + Math.round(member.accuracy_m) + ' m';
+            accuracyRow.classList.remove('hidden');
+        } else {
+            accuracyRow.classList.add('hidden');
+        }
+
+        // Updated time
+        const updatedValue = document.getElementById('popup-updated');
+        if (member.updated_at) {
+            updatedValue.textContent = Format.timeAgo(member.updated_at);
+        } else if (member.recorded_at) {
+            updatedValue.textContent = Format.timeAgo(member.recorded_at);
+        } else {
+            updatedValue.textContent = '--';
+        }
+
+        // Coordinates
+        const coordsValue = document.getElementById('popup-coordinates');
+        if (member.lat && member.lng) {
+            coordsValue.textContent = member.lat.toFixed(5) + ', ' + member.lng.toFixed(5);
+        } else {
+            coordsValue.textContent = '--';
+        }
+    },
+
+    /**
+     * Format bearing to compass direction
+     */
+    formatBearing(degrees) {
+        const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+        const index = Math.round(degrees / 45) % 8;
+        return directions[index] + ' (' + Math.round(degrees) + '°)';
     }
 };
 
