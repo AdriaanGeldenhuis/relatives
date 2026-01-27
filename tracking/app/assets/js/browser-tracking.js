@@ -122,7 +122,8 @@ window.BrowserTracking = {
             altitude_m: position.coords.altitude ? Math.round(position.coords.altitude) : null,
             device_id: 'web-browser-' + (window.TRACKING_CONFIG?.userId || 'unknown'),
             platform: 'web',
-            app_version: 'web-1.0'
+            app_version: 'web-1.0',
+            recorded_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
         };
 
         try {
