@@ -127,7 +127,21 @@
             .tracking-btn:hover {
                 transform: scale(1.1) translateY(-5px);
             }
-            
+
+            .help-btn-footer {
+                width: 47px;
+                height: 47px;
+                border-radius: 50%;
+                background: linear-gradient(135deg, #f093fb, #f5576c);
+                color: white;
+                font-size: 24px;
+                box-shadow: 0 10px 40px rgba(240, 147, 251, 0.5);
+            }
+
+            .help-btn-footer:hover {
+                transform: scale(1.1) translateY(-5px);
+            }
+
             .plus-wrapper {
                 position: relative;
             }
