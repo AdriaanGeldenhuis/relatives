@@ -293,6 +293,27 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             background: rgba(255, 255, 255, 0.06);
             padding: 8px 10px;
             border-radius: 10px;
+            text-decoration: none;
+            color: inherit;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .user-profile:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .profile-arrow {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 16px;
+            transition: transform 0.3s;
+        }
+
+        .user-profile:hover .profile-arrow {
+            transform: translateX(4px);
+            color: rgba(255, 255, 255, 0.8);
         }
 
         .user-avatar {
@@ -776,7 +797,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
 
         <div class="mobile-sidebar-footer">
             <?php if (isset($user)): ?>
-            <div class="user-profile">
+            <a href="/profile/" class="user-profile" title="Edit Profile">
                 <div class="user-avatar" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
                     <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
                 </div>
@@ -784,7 +805,8 @@ if (isset($db) && isset($_SESSION['user_id'])) {
                     <div class="user-name"><?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?></div>
                     <div class="user-email"><?php echo htmlspecialchars($user['email'] ?? ''); ?></div>
                 </div>
-            </div>
+                <div class="profile-arrow">→</div>
+            </a>
             <?php endif; ?>
             
             <a href="/logout.php" class="logout-btn">
