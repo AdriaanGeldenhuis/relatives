@@ -59,42 +59,22 @@ $stmt = $db->prepare("
 $stmt->execute([$user['family_id']]);
 $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Set up page variables for global header
 $pageTitle = 'Family Tracking';
+$pageCSS = ['/tracking/app/assets/css/tracking.css'];
+
+// Include global header
+require_once __DIR__ . '/../../shared/components/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title><?= htmlspecialchars($pageTitle) ?> - Relatives</title>
 
-    <!-- Mapbox GL JS -->
-    <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
-    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+<!-- Mapbox GL JS -->
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
 
-    <!-- Tracking CSS -->
-    <link rel="stylesheet" href="assets/css/tracking.css">
-
-    <!-- PWA -->
-    <meta name="theme-color" content="#667eea">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-</head>
-<body class="tracking-page">
+<!-- Tracking Page Wrapper -->
+<div class="tracking-page-wrapper">
     <!-- Map Container -->
     <div id="map"></div>
-
-    <!-- Top Bar -->
-    <div class="tracking-topbar">
-        <a href="/home/" class="back-btn">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-        </a>
-        <div class="topbar-title">Family Tracking</div>
-        <div class="topbar-actions">
-        </div>
-    </div>
 
     <!-- Session Indicator -->
     <div id="session-indicator" class="session-indicator hidden">
@@ -183,33 +163,33 @@ $pageTitle = 'Family Tracking';
 
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
+</div>
 
-    <!-- Config -->
-    <script>
-        window.TRACKING_CONFIG = {
-            mapboxToken: '<?= htmlspecialchars($mapboxToken) ?>',
-            userId: <?= (int)$user['id'] ?>,
-            familyId: <?= (int)$user['family_id'] ?>,
-            userName: '<?= htmlspecialchars($user['name']) ?>',
-            members: <?= json_encode($members) ?>,
-            apiBase: '/tracking/api',
-            defaultCenter: [-26.2041, 28.0473], // Johannesburg
-            defaultZoom: 12
-        };
-    </script>
+<!-- Config -->
+<script>
+    window.TRACKING_CONFIG = {
+        mapboxToken: '<?= htmlspecialchars($mapboxToken) ?>',
+        userId: <?= (int)$user['id'] ?>,
+        familyId: <?= (int)$user['family_id'] ?>,
+        userName: '<?= htmlspecialchars($user['name']) ?>',
+        members: <?= json_encode($members) ?>,
+        apiBase: '/tracking/api',
+        defaultCenter: [-26.2041, 28.0473], // Johannesburg
+        defaultZoom: 12
+    };
+</script>
 
-    <!-- Tracking JS -->
-    <script src="assets/js/format.js"></script>
-    <script src="assets/js/api.js"></script>
-    <script src="assets/js/state.js"></script>
-    <script src="assets/js/map.js"></script>
-    <script src="assets/js/family-panel.js"></script>
-    <script src="assets/js/ui-controls.js"></script>
-    <script src="assets/js/follow.js"></script>
-    <script src="assets/js/directions.js"></script>
-    <script src="assets/js/polling.js"></script>
-    <script src="assets/js/browser-tracking.js"></script>
-    <script src="assets/js/bootstrap.js"></script>
+<!-- Tracking JS -->
+<script src="/tracking/app/assets/js/format.js"></script>
+<script src="/tracking/app/assets/js/api.js"></script>
+<script src="/tracking/app/assets/js/state.js"></script>
+<script src="/tracking/app/assets/js/map.js"></script>
+<script src="/tracking/app/assets/js/family-panel.js"></script>
+<script src="/tracking/app/assets/js/ui-controls.js"></script>
+<script src="/tracking/app/assets/js/follow.js"></script>
+<script src="/tracking/app/assets/js/directions.js"></script>
+<script src="/tracking/app/assets/js/polling.js"></script>
+<script src="/tracking/app/assets/js/browser-tracking.js"></script>
+<script src="/tracking/app/assets/js/bootstrap.js"></script>
 
-<?php $cacheVersion = '10.0.0'; ?>
 <?php require_once __DIR__ . '/../../shared/components/footer.php'; ?>
