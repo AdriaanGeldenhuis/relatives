@@ -69,8 +69,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
 <!-- PWA Manifest for Native App Shell Support -->
 <link rel="manifest" href="/tracking/app/manifest.json">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
 
 <!-- Mapbox GL JS -->
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
