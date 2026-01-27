@@ -8,6 +8,7 @@ window.Polling = {
     locationInterval: null,
     keepaliveInterval: null,
     isRunning: false,
+    isFirstFetch: true,
 
     // Intervals in ms
     LOCATION_POLL_MS: 10000, // 10 seconds
@@ -71,6 +72,12 @@ window.Polling = {
 
                 // Hide loading on first successful fetch
                 document.getElementById('loading-overlay').classList.add('hidden');
+
+                // On first fetch, zoom to closest family member
+                if (this.isFirstFetch && response.data.members && response.data.members.length > 0) {
+                    this.isFirstFetch = false;
+                    this.zoomToClosestMember(response.data.members);
+                }
             }
         } catch (err) {
             console.error('Failed to fetch locations:', err);
@@ -80,6 +87,75 @@ window.Polling = {
                 window.location.href = '/login.php';
             }
         }
+    },
+
+    /**
+     * Zoom to the closest family member based on user's current location
+     */
+    async zoomToClosestMember(members) {
+        // Filter members with valid locations (exclude current user)
+        const membersWithLocation = members.filter(m =>
+            m.lat && m.lng && m.user_id !== window.TRACKING_CONFIG.userId
+        );
+
+        if (membersWithLocation.length === 0) {
+            // No other members with location, try to fit all or use default
+            if (members.length > 0) {
+                TrackingMap.fitAll();
+            }
+            return;
+        }
+
+        try {
+            // Try to get user's current location
+            const userLocation = await TrackingMap.getCurrentLocation();
+
+            // Find closest member
+            let closestMember = null;
+            let closestDistance = Infinity;
+
+            membersWithLocation.forEach(member => {
+                const distance = this.calculateDistance(
+                    userLocation.lat, userLocation.lng,
+                    parseFloat(member.lat), parseFloat(member.lng)
+                );
+
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestMember = member;
+                }
+            });
+
+            if (closestMember) {
+                console.log(`Zooming to closest member: ${closestMember.name} (${Math.round(closestDistance)}m away)`);
+                TrackingMap.panTo(parseFloat(closestMember.lat), parseFloat(closestMember.lng), 15);
+
+                // Optionally select the member
+                TrackingState.selectMember(closestMember.user_id);
+            }
+        } catch (err) {
+            // Could not get user location, just fit all members
+            console.log('Could not get user location, fitting all members');
+            TrackingMap.fitAll();
+        }
+    },
+
+    /**
+     * Calculate distance between two points using Haversine formula
+     */
+    calculateDistance(lat1, lng1, lat2, lng2) {
+        const R = 6371000; // Earth's radius in meters
+        const dLat = this.toRad(lat2 - lat1);
+        const dLng = this.toRad(lng2 - lng1);
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) *
+                  Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    },
+
+    toRad(deg) {
+        return deg * (Math.PI / 180);
     },
 
     async sendKeepalive() {
