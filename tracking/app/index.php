@@ -207,7 +207,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                     <circle cx="12" cy="10" r="3"/>
                 </svg>
-                <span class="detail-label">Location</span>
+                <span class="detail-label">Address</span>
                 <span class="detail-value" id="popup-coordinates">--</span>
             </div>
         </div>

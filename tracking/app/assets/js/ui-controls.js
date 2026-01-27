@@ -279,12 +279,38 @@ window.UIControls = {
             updatedValue.textContent = '--';
         }
 
-        // Coordinates
+        // Coordinates / Address
         const coordsValue = document.getElementById('popup-coordinates');
         if (member.lat && member.lng) {
-            coordsValue.textContent = member.lat.toFixed(5) + ', ' + member.lng.toFixed(5);
+            coordsValue.textContent = 'Loading address...';
+            this.reverseGeocode(member.lat, member.lng).then(address => {
+                coordsValue.textContent = address;
+            });
         } else {
             coordsValue.textContent = '--';
+        }
+    },
+
+    /**
+     * Reverse geocode coordinates to address
+     */
+    async reverseGeocode(lat, lng) {
+        try {
+            const token = window.TRACKING_CONFIG.mapboxToken;
+            const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&types=address,place,locality,neighborhood`;
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.features && data.features.length > 0) {
+                // Get the most specific address available
+                const place = data.features[0];
+                return place.place_name.split(',').slice(0, 2).join(',');
+            }
+            return lat.toFixed(5) + ', ' + lng.toFixed(5);
+        } catch (err) {
+            console.error('Geocoding error:', err);
+            return lat.toFixed(5) + ', ' + lng.toFixed(5);
         }
     },
 
