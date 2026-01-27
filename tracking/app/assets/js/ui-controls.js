@@ -20,7 +20,27 @@ window.UIControls = {
                 const loc = await TrackingMap.getCurrentLocation();
                 TrackingMap.panTo(loc.lat, loc.lng, 15);
             } catch (err) {
-                Toast.show('Could not get your location', 'error');
+                console.error('Geolocation error:', err);
+
+                // Provide specific error messages based on error code
+                let message = 'Could not get your location';
+
+                if (err.code === 1) {
+                    // PERMISSION_DENIED
+                    message = 'Location permission denied. Please enable location access in your browser settings.';
+                } else if (err.code === 2) {
+                    // POSITION_UNAVAILABLE
+                    message = 'Location unavailable. Please check if GPS/Location is enabled on your device.';
+                } else if (err.code === 3) {
+                    // TIMEOUT
+                    message = 'Location request timed out. Please try again.';
+                } else if (!navigator.geolocation) {
+                    message = 'Geolocation is not supported by your browser.';
+                } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                    message = 'Location requires HTTPS. Please use a secure connection.';
+                }
+
+                Toast.show(message, 'error');
             }
         });
 

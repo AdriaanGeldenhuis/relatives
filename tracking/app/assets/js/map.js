@@ -367,13 +367,24 @@ window.TrackingMap = {
                 return;
             }
 
+            // Check if HTTPS (required for geolocation in modern browsers)
+            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                reject({ code: 0, message: 'HTTPS required for geolocation' });
+                return;
+            }
+
             navigator.geolocation.getCurrentPosition(
                 pos => resolve({
                     lat: pos.coords.latitude,
-                    lng: pos.coords.longitude
+                    lng: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy
                 }),
                 err => reject(err),
-                { enableHighAccuracy: true, timeout: 10000 }
+                {
+                    enableHighAccuracy: true,
+                    timeout: 15000,        // Increased from 10s to 15s
+                    maximumAge: 60000      // Accept cached position up to 1 minute old
+                }
             );
         });
     }
