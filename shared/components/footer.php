@@ -134,7 +134,9 @@
                 border-radius: 50%;
                 background: linear-gradient(135deg, #f093fb, #f5576c);
                 color: white;
-                font-size: 24px;
+                font-size: 28px;
+                font-weight: 700;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                 box-shadow: 0 10px 40px rgba(240, 147, 251, 0.5);
             }
 
@@ -423,7 +425,7 @@
 
             <div class="footer-right">
                 <button class="footer-btn help-btn-footer" id="helpBtn" title="Help">
-                 ❓
+                    ?
                 </button>
     
                 <a href="/tracking/index.php" class="footer-btn tracking-btn">
