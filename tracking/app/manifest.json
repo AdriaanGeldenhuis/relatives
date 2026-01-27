@@ -1,0 +1,37 @@
+{
+    "name": "Relatives Family Tracking",
+    "short_name": "Tracking",
+    "description": "Real-time family location tracking with geofences and alerts",
+    "start_url": "/tracking/app/",
+    "scope": "/tracking/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#1a202c",
+    "theme_color": "#667eea",
+    "categories": ["utilities", "lifestyle"],
+    "lang": "en",
+    "dir": "ltr",
+    "icons": [
+        {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "screenshots": [],
+    "prefer_related_applications": true,
+    "related_applications": [
+        {
+            "platform": "play",
+            "id": "com.relatives.app",
+            "url": "https://play.google.com/store/apps/details?id=com.relatives.app"
+        }
+    ]
+}

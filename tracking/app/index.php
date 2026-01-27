@@ -67,6 +67,11 @@ $pageCSS = ['/tracking/app/assets/css/tracking.css'];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 
+<!-- PWA Manifest for Native App Shell Support -->
+<link rel="manifest" href="/tracking/app/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
 <!-- Mapbox GL JS -->
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
@@ -183,6 +188,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
 <script src="/tracking/app/assets/js/format.js"></script>
 <script src="/tracking/app/assets/js/api.js"></script>
 <script src="/tracking/app/assets/js/state.js"></script>
+<script src="/tracking/app/assets/js/native-bridge.js"></script>
 <script src="/tracking/app/assets/js/map.js"></script>
 <script src="/tracking/app/assets/js/family-panel.js"></script>
 <script src="/tracking/app/assets/js/ui-controls.js"></script>
@@ -191,5 +197,33 @@ require_once __DIR__ . '/../../shared/components/header.php';
 <script src="/tracking/app/assets/js/polling.js"></script>
 <script src="/tracking/app/assets/js/browser-tracking.js"></script>
 <script src="/tracking/app/assets/js/bootstrap.js"></script>
+
+<!-- Service Worker Registration -->
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/tracking/app/sw.js', {
+                scope: '/tracking/'
+            }).then((registration) => {
+                console.log('[SW] Registered:', registration.scope);
+
+                // Check for updates
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            // New content available, show refresh prompt
+                            if (window.Toast) {
+                                Toast.show('Update available. Refresh for latest version.', 'info');
+                            }
+                        }
+                    });
+                });
+            }).catch((error) => {
+                console.warn('[SW] Registration failed:', error);
+            });
+        });
+    }
+</script>
 
 <?php require_once __DIR__ . '/../../shared/components/footer.php'; ?>

@@ -25,10 +25,16 @@ window.BrowserTracking = {
         }
 
         // Skip if native app is handling tracking
-        // Check TrackingBridge (Android WebView interface)
+        // Check NativeBridge first, then legacy interfaces
+        if (window.NativeBridge?.isNativeApp && window.NativeBridge.isTrackingEnabled()) {
+            console.log('Native app tracking active - skipping browser geolocation');
+            return;
+        }
+
+        // Legacy check for TrackingBridge or Android interface
         const nativeInterface = window.TrackingBridge || window.Android;
         if (nativeInterface?.isTrackingEnabled && nativeInterface.isTrackingEnabled()) {
-            console.log('Native app tracking active - skipping browser geolocation');
+            console.log('Native app tracking active (legacy) - skipping browser geolocation');
             return;
         }
 

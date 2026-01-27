@@ -24,6 +24,12 @@
     --radius: 8px;
     --radius-lg: 12px;
     --header-height: 68px;
+
+    /* Safe area insets for native app shells */
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
 }
 
 /* ===========================================
@@ -895,6 +901,152 @@ body {
 /* Utility */
 .hidden {
     display: none !important;
+}
+
+/* ===========================================
+   Native App Shell Styles
+   =========================================== */
+
+/* When running in native app shell */
+html.native-app {
+    /* Extend background under status bar */
+    background: var(--gray-900);
+}
+
+html.native-app body {
+    /* Account for status bar in native apps */
+    padding-top: var(--safe-area-top);
+}
+
+/* Hide global header in native app (app has its own) */
+html.native-app .global-header {
+    /* Adjust for safe area when visible */
+    padding-top: var(--safe-area-top);
+}
+
+/* Adjust tracking wrapper for native */
+html.native-app .tracking-page-wrapper {
+    top: calc(var(--header-height) + var(--safe-area-top));
+    bottom: var(--safe-area-bottom);
+    left: var(--safe-area-left);
+    right: var(--safe-area-right);
+}
+
+/* Adjust map controls for safe areas */
+html.native-app .map-controls {
+    right: calc(12px + var(--safe-area-right));
+    bottom: calc(100px + var(--safe-area-bottom));
+}
+
+/* Adjust family panel for safe areas */
+html.native-app .family-panel {
+    right: calc(12px + var(--safe-area-right));
+    top: calc(var(--header-height) + var(--safe-area-top) + 8px);
+}
+
+/* Adjust member popup for safe areas */
+html.native-app .member-popup {
+    bottom: calc(20px + var(--safe-area-bottom));
+    left: calc(50%);
+    width: calc(100% - 24px - var(--safe-area-left) - var(--safe-area-right));
+}
+
+/* Adjust directions info for safe areas */
+html.native-app .directions-info {
+    bottom: calc(20px + var(--safe-area-bottom));
+    left: calc(12px + var(--safe-area-left));
+    right: calc(12px + var(--safe-area-right));
+}
+
+/* Adjust toast container for safe areas */
+html.native-app .toast-container {
+    bottom: calc(80px + var(--safe-area-bottom));
+}
+
+/* Session indicator adjustment */
+html.native-app .session-indicator {
+    top: calc(var(--header-height) + var(--safe-area-top) + 8px);
+}
+
+/* Loading overlay covers safe areas */
+html.native-app .loading-overlay {
+    padding-top: var(--safe-area-top);
+    padding-bottom: var(--safe-area-bottom);
+}
+
+/* ===========================================
+   Platform-Specific Styles
+   =========================================== */
+
+/* Android-specific adjustments */
+html.platform-android .tracking-page-wrapper {
+    /* Android status bar is typically 24dp */
+}
+
+/* iOS-specific adjustments */
+html.platform-ios {
+    /* Ensure smooth scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
+}
+
+html.platform-ios .family-panel-content {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* PWA standalone mode */
+@media (display-mode: standalone) {
+    body {
+        /* PWA running standalone */
+        padding-top: var(--safe-area-top);
+    }
+
+    .tracking-page-wrapper {
+        top: calc(var(--header-height) + var(--safe-area-top));
+        bottom: var(--safe-area-bottom);
+    }
+
+    .map-controls {
+        bottom: calc(100px + var(--safe-area-bottom));
+    }
+
+    .member-popup {
+        bottom: calc(20px + var(--safe-area-bottom));
+    }
+
+    .toast-container {
+        bottom: calc(80px + var(--safe-area-bottom));
+    }
+}
+
+/* ===========================================
+   Offline Indicator
+   =========================================== */
+
+.offline-indicator {
+    position: fixed;
+    top: calc(var(--header-height) + var(--safe-area-top) + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--warning);
+    color: var(--gray-900);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 95;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    box-shadow: var(--shadow-md);
+}
+
+.offline-indicator.visible {
+    display: flex;
+}
+
+.offline-indicator svg {
+    width: 16px;
+    height: 16px;
 }
 
 /* ===========================================
