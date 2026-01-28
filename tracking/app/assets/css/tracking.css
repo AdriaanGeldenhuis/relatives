@@ -125,7 +125,7 @@ body.geofences-page {
 .family-panel {
     position: fixed;
     bottom: 340px;
-    right: 12px;
+    right: 70px;
     width: 280px;
     max-height: 300px;
     background: rgba(26, 32, 44, 0.95);
@@ -1523,7 +1523,7 @@ html.native-app .map-controls {
 
 /* Adjust family panel for safe areas */
 html.native-app .family-panel {
-    right: calc(12px + var(--safe-area-right));
+    right: calc(70px + var(--safe-area-right));
     bottom: calc(340px + var(--safe-area-bottom));
 }
 
