@@ -885,6 +885,7 @@ html, body {
     grid-template-columns: repeat(8, 1fr);
     gap: 4px;
     padding: var(--space-xs);
+    padding-bottom: var(--space-md);
     touch-action: pan-y;
 }
 
