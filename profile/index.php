@@ -57,13 +57,15 @@ require_once __DIR__ . '/../shared/components/header.php';
 <main class="main-content">
     <div class="profile-container">
 
+        <?php $avatarPath = '/saves/' . $user['id'] . '/avatar/avatar.webp'; ?>
         <div class="profile-header">
             <a href="/profile/picture.php" class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>; text-decoration: none;">
-                <?php if (!empty($user['profile_picture'])): ?>
-                    <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>" alt="Profile Picture">
-                <?php else: ?>
+                <img src="<?php echo htmlspecialchars($avatarPath); ?>?t=<?php echo time(); ?>"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                     alt="Profile Picture" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-size:48px; font-weight:800;">
                     <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
-                <?php endif; ?>
+                </span>
                 <div class="profile-avatar-edit">Change</div>
             </a>
 

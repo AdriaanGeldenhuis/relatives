@@ -101,7 +101,7 @@ $stats['shopping_lists'] = (int)$stmt->fetchColumn();
 
 // Recent activity (last 10)
 $stmt = $db->prepare("
-    SELECT al.action, al.entity_type, al.created_at, u.full_name, u.avatar_color
+    SELECT al.action, al.entity_type, al.created_at, al.user_id, u.full_name, u.avatar_color
     FROM audit_log al
     LEFT JOIN users u ON al.user_id = u.id
     WHERE al.family_id = ?
@@ -466,8 +466,14 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php foreach ($members as $member): ?>
                     <div class="member-card glass-card <?php echo $member['status']; ?>" data-user-id="<?php echo $member['id']; ?>">
                         <div class="member-header">
+                            <?php $avatarPath = '/saves/' . $member['id'] . '/avatar/avatar.webp'; ?>
                             <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
-                                <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                                <img src="<?php echo htmlspecialchars($avatarPath); ?>"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                     style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-weight:800;">
+                                    <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                                </span>
                             </div>
                             <div class="member-info">
                                 <div class="member-name"><?php echo htmlspecialchars($member['full_name']); ?></div>
@@ -558,8 +564,14 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php else: ?>
                     <?php foreach ($recentActivity as $activity): ?>
                         <div class="activity-item">
+                            <?php $activityAvatarPath = '/saves/' . $activity['user_id'] . '/avatar/avatar.webp'; ?>
                             <div class="activity-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#667eea'); ?>">
-                                <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
+                                <img src="<?php echo htmlspecialchars($activityAvatarPath); ?>"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                     style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-weight:600;">
+                                    <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
+                                </span>
                             </div>
                             <div class="activity-content">
                                 <div class="activity-text">

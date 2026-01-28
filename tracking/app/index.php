@@ -59,6 +59,12 @@ $stmt = $db->prepare("
 $stmt->execute([$user['family_id']]);
 $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Add avatar paths for members
+foreach ($members as &$member) {
+    $member['avatar_url'] = '/saves/' . $member['id'] . '/avatar/avatar.webp';
+}
+unset($member);
+
 // Set up page variables for global header
 $pageTitle = 'Family Tracking';
 $pageCSS = ['/tracking/app/assets/css/tracking.css'];
