@@ -153,9 +153,10 @@ window.TrackingMap = {
             .setLngLat([member.lng, member.lat])
             .addTo(this.map);
 
-        this.markers[member.user_id] = marker;
-        this.markers[member.user_id].element = el;
-        this.markers[member.user_id].data = member;
+        const markerId = String(member.user_id);
+        this.markers[markerId] = marker;
+        this.markers[markerId].element = el;
+        this.markers[markerId].data = member;
     },
 
     /**
