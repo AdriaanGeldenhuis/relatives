@@ -887,61 +887,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
 
         <div class="mobile-sidebar-footer">
             <?php if (isset($user)): ?>
-            <div class="user-profile" id="userProfileToggle">
-                <!-- Dropdown Menu -->
-                <div class="user-profile-dropdown" id="userProfileDropdown">
-                    <div class="profile-dropdown-header">
-                        <div class="user-name"><?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?></div>
-                        <div class="user-email"><?php echo htmlspecialchars($user['email'] ?? ''); ?></div>
-                    </div>
-
-                    <a href="/profile/" class="profile-dropdown-item">
-                        <span class="item-icon">👤</span>
-                        <span class="item-text">My Profile</span>
-                        <span class="item-arrow">›</span>
-                    </a>
-
-                    <a href="/profile/picture.php" class="profile-dropdown-item">
-                        <span class="item-icon">📷</span>
-                        <span class="item-text">Change Profile Picture</span>
-                        <span class="item-arrow">›</span>
-                    </a>
-
-                    <a href="/profile/settings.php" class="profile-dropdown-item">
-                        <span class="item-icon">⚙️</span>
-                        <span class="item-text">Account Settings</span>
-                        <span class="item-arrow">›</span>
-                    </a>
-
-                    <a href="/profile/notifications.php" class="profile-dropdown-item">
-                        <span class="item-icon">🔔</span>
-                        <span class="item-text">Notification Preferences</span>
-                        <span class="item-arrow">›</span>
-                    </a>
-
-                    <a href="/profile/privacy.php" class="profile-dropdown-item">
-                        <span class="item-icon">🔒</span>
-                        <span class="item-text">Privacy & Security</span>
-                        <span class="item-arrow">›</span>
-                    </a>
-
-                    <?php if (in_array($user['role'] ?? '', ['owner', 'admin'])): ?>
-                    <a href="/profile/subscription.php" class="profile-dropdown-item">
-                        <span class="item-icon">💳</span>
-                        <span class="item-text">Subscription & Billing</span>
-                        <span class="item-arrow">›</span>
-                    </a>
-                    <?php endif; ?>
-
-                    <div class="profile-dropdown-divider"></div>
-
-                    <a href="/help/" class="profile-dropdown-item">
-                        <span class="item-icon">❓</span>
-                        <span class="item-text">Help & Support</span>
-                        <span class="item-arrow">›</span>
-                    </a>
-                </div>
-
+            <a href="/profile/" class="user-profile" style="text-decoration: none;">
                 <div class="user-avatar" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
                     <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
                 </div>
@@ -949,8 +895,8 @@ if (isset($db) && isset($_SESSION['user_id'])) {
                     <div class="user-name"><?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?></div>
                     <div class="user-email"><?php echo htmlspecialchars($user['email'] ?? ''); ?></div>
                 </div>
-                <div class="user-profile-toggle">▲</div>
-            </div>
+                <div class="user-profile-toggle">›</div>
+            </a>
             <?php endif; ?>
 
             <a href="/logout.php" class="logout-btn">
