@@ -74,58 +74,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($file['size'] > $maxSize) {
                 $error = 'File is too large. Maximum size is 5MB.';
             } else {
-                // Create uploads directory if it doesn't exist
-                $uploadDir = __DIR__ . '/../uploads/profiles/';
+                // Create user's avatar directory
+                $uploadDir = __DIR__ . '/../saves/' . $user['id'] . '/avatar/';
                 if (!is_dir($uploadDir)) {
                     mkdir($uploadDir, 0755, true);
                 }
 
-                // Generate unique filename
-                $extension = match($mimeType) {
-                    'image/jpeg' => 'jpg',
-                    'image/png' => 'png',
-                    'image/gif' => 'gif',
-                    'image/webp' => 'webp',
-                    default => 'jpg'
-                };
-                $filename = 'profile_' . $user['id'] . '_' . time() . '.' . $extension;
-                $filepath = $uploadDir . $filename;
+                $filepath = $uploadDir . 'avatar.webp';
 
-                // Move uploaded file
-                if (move_uploaded_file($file['tmp_name'], $filepath)) {
-                    // Delete old profile picture if exists
-                    if (!empty($user['profile_picture'])) {
-                        $oldFile = __DIR__ . '/..' . $user['profile_picture'];
-                        if (file_exists($oldFile)) {
-                            unlink($oldFile);
-                        }
+                // Load image based on type
+                $sourceImage = null;
+                switch ($mimeType) {
+                    case 'image/jpeg':
+                        $sourceImage = imagecreatefromjpeg($file['tmp_name']);
+                        break;
+                    case 'image/png':
+                        $sourceImage = imagecreatefrompng($file['tmp_name']);
+                        break;
+                    case 'image/gif':
+                        $sourceImage = imagecreatefromgif($file['tmp_name']);
+                        break;
+                    case 'image/webp':
+                        $sourceImage = imagecreatefromwebp($file['tmp_name']);
+                        break;
+                }
+
+                if ($sourceImage) {
+                    // Preserve transparency for PNG
+                    imagepalettetotruecolor($sourceImage);
+                    imagealphablending($sourceImage, true);
+                    imagesavealpha($sourceImage, true);
+
+                    // Save as webp with good quality
+                    if (imagewebp($sourceImage, $filepath, 85)) {
+                        imagedestroy($sourceImage);
+                        $success = 'Profile picture uploaded successfully!';
+                    } else {
+                        imagedestroy($sourceImage);
+                        $error = 'Failed to convert image. Please try again.';
                     }
-
-                    // Update database
-                    $pictureUrl = '/uploads/profiles/' . $filename;
-                    $stmt = $db->prepare("UPDATE users SET profile_picture = ? WHERE id = ?");
-                    $stmt->execute([$pictureUrl, $user['id']]);
-                    $user['profile_picture'] = $pictureUrl;
-                    $success = 'Profile picture uploaded successfully!';
                 } else {
-                    $error = 'Failed to save the image. Please try again.';
+                    $error = 'Failed to process the image. Please try again.';
                 }
             }
         }
 
         // Handle picture removal
         if (isset($_POST['remove_picture'])) {
-            if (!empty($user['profile_picture'])) {
-                $oldFile = __DIR__ . '/..' . $user['profile_picture'];
-                if (file_exists($oldFile)) {
-                    unlink($oldFile);
-                }
-
-                $stmt = $db->prepare("UPDATE users SET profile_picture = NULL WHERE id = ?");
-                $stmt->execute([$user['id']]);
-                $user['profile_picture'] = null;
-                $success = 'Profile picture removed.';
+            $avatarFile = __DIR__ . '/../saves/' . $user['id'] . '/avatar/avatar.webp';
+            if (file_exists($avatarFile)) {
+                unlink($avatarFile);
             }
+            $success = 'Profile picture removed.';
         }
 
     } catch (Exception $e) {
@@ -143,13 +143,15 @@ require_once __DIR__ . '/../shared/components/header.php';
 <main class="main-content">
     <div class="profile-container">
 
+        <?php $avatarPath = '/saves/' . $user['id'] . '/avatar/avatar.webp'; ?>
         <div class="profile-header">
             <div class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
-                <?php if (!empty($user['profile_picture'])): ?>
-                    <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>?t=<?php echo time(); ?>" alt="Profile Picture">
-                <?php else: ?>
+                <img src="<?php echo htmlspecialchars($avatarPath); ?>?t=<?php echo time(); ?>"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                     alt="Profile Picture" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-size:48px; font-weight:800;">
                     <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
-                <?php endif; ?>
+                </span>
             </div>
             <div class="profile-name"><?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?></div>
         </div>
@@ -183,7 +185,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
             </form>
 
-            <?php if (!empty($user['profile_picture'])): ?>
+            <?php if (file_exists(__DIR__ . '/../saves/' . $user['id'] . '/avatar/avatar.webp')): ?>
                 <form method="POST" style="margin-top: 15px;">
                     <button type="submit" name="remove_picture" value="1" class="btn btn-danger btn-block" onclick="return confirm('Remove your profile picture?')">
                         Remove Current Picture
