@@ -38,7 +38,30 @@ class HT_Auth {
      * Get current family ID
      */
     public static function familyId(): ?int {
-        return isset($_SESSION['family_id']) ? (int) $_SESSION['family_id'] : null;
+        // Check direct session variable first
+        if (isset($_SESSION['family_id'])) {
+            return (int) $_SESSION['family_id'];
+        }
+
+        // Check user_data structure (main app stores it here)
+        if (isset($_SESSION['user_data']['family_id'])) {
+            return (int) $_SESSION['user_data']['family_id'];
+        }
+
+        // Fallback: get from database if user is logged in
+        if (self::isLoggedIn()) {
+            $user = HT_DB::fetchOne(
+                "SELECT family_id FROM users WHERE id = ?",
+                [self::userId()]
+            );
+            if ($user && $user['family_id']) {
+                // Cache it for future calls
+                $_SESSION['family_id'] = (int) $user['family_id'];
+                return (int) $user['family_id'];
+            }
+        }
+
+        return null;
     }
 
     /**
