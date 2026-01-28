@@ -607,7 +607,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php foreach ($familyMembers as $member): ?>
                     <button onclick="applyBulkAssign(<?php echo $member['id']; ?>)" class="assign-option">
                         <div class="assign-avatar" style="background: <?php echo $member['avatar_color']; ?>">
-                            <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                            <img src="/saves/<?php echo (int)$member['id']; ?>/avatar/avatar.webp"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                 style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                            <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($member['full_name'], 0, 1)); ?></span>
                         </div>
                         <span class="assign-name"><?php echo htmlspecialchars($member['full_name']); ?></span>
                     </button>

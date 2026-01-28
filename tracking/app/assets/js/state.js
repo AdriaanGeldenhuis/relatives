@@ -50,7 +50,8 @@ window.TrackingState = {
      * Get member by ID
      */
     getMember(userId) {
-        return this.members.find(m => m.user_id === userId);
+        // Use loose equality to handle both string and integer IDs
+        return this.members.find(m => m.user_id == userId);
     },
 
     /**

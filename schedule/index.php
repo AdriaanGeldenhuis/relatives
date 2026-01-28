@@ -499,18 +499,24 @@ require_once __DIR__ . '/../shared/components/header.php';
                             <!-- Footer -->
                             <div class="note-footer event-footer">
                                 <div class="note-author">
-                                    <div class="author-avatar-mini" 
+                                    <div class="author-avatar-mini"
                                          style="background: <?php echo htmlspecialchars($event['avatar_color']); ?>">
-                                        <?php echo strtoupper(substr($event['added_by_name'] ?? 'You', 0, 1)); ?>
+                                        <img src="/saves/<?php echo (int)$event['created_by']; ?>/avatar/avatar.webp"
+                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                             style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                                        <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($event['added_by_name'] ?? 'You', 0, 1)); ?></span>
                                     </div>
                                     <span><?php echo htmlspecialchars($event['added_by_name'] ?? 'You'); ?></span>
                                 </div>
                                 <?php if ($event['assigned_to_name']): ?>
                                     <div class="event-assigned">
-                                        → 
-                                        <div class="author-avatar-mini" 
+                                        →
+                                        <div class="author-avatar-mini"
                                              style="background: <?php echo htmlspecialchars($event['assigned_color']); ?>">
-                                            <?php echo strtoupper(substr($event['assigned_to_name'], 0, 1)); ?>
+                                            <img src="/saves/<?php echo (int)$event['assigned_to']; ?>/avatar/avatar.webp"
+                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                                 style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                                            <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($event['assigned_to_name'], 0, 1)); ?></span>
                                         </div>
                                         <span><?php echo htmlspecialchars($event['assigned_to_name']); ?></span>
                                     </div>
@@ -973,7 +979,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php foreach ($familyMembers as $member): ?>
                     <button onclick="applyBulkAssign(<?php echo $member['id']; ?>)" class="assign-btn">
                         <div class="assign-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
-                            <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                            <img src="/saves/<?php echo (int)$member['id']; ?>/avatar/avatar.webp"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                 style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                            <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($member['full_name'], 0, 1)); ?></span>
                         </div>
                         <span><?php echo htmlspecialchars($member['full_name']); ?></span>
                     </button>

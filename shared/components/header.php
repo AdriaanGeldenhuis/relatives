@@ -889,7 +889,10 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             <?php if (isset($user)): ?>
             <a href="/profile/" class="user-profile" style="text-decoration: none;">
                 <div class="user-avatar" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
-                    <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
+                    <img src="/saves/<?php echo (int)$user['id']; ?>/avatar/avatar.webp"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                         style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                    <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?></span>
                 </div>
                 <div class="user-info">
                     <div class="user-name"><?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?></div>
