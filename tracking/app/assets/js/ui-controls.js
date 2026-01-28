@@ -117,10 +117,15 @@ window.UIControls = {
         const member = TrackingState.getMember(userId);
         if (!member) return;
 
-        // Update popup content
+        // Update popup content with avatar image
         const avatar = document.getElementById('popup-avatar');
         avatar.style.backgroundColor = member.avatar_color;
-        avatar.textContent = Format.initials(member.name);
+        avatar.innerHTML = `
+            <img src="${member.avatar_url}"
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                 style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+            <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${Format.initials(member.name)}</span>
+        `;
 
         document.getElementById('popup-name').textContent = member.name;
 
