@@ -26,7 +26,123 @@ document.addEventListener('DOMContentLoaded', function() {
     initParticles();
     initNoteAnimations();
     updateStats();
+    initQuickActionButtons();
 });
+
+// ============================================
+// QUICK ACTION BUTTONS - NATIVE APP FIX
+// ============================================
+
+function initQuickActionButtons() {
+    // Find all quick action buttons and attach proper event listeners
+    // This fixes the issue where inline onclick doesn't work in native Android WebView apps
+
+    const quickActionBtns = document.querySelectorAll('.quick-action-btn');
+
+    quickActionBtns.forEach(btn => {
+        // Get the onclick attribute to determine the action
+        const onclickAttr = btn.getAttribute('onclick');
+
+        if (onclickAttr) {
+            // Remove the inline onclick to prevent double-firing
+            btn.removeAttribute('onclick');
+
+            // Create handler based on the original onclick content
+            const handler = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                // Parse and execute the original onclick action
+                if (onclickAttr.includes("showCreateNoteModal('text')")) {
+                    showCreateNoteModal('text');
+                } else if (onclickAttr.includes("showCreateNoteModal('voice')")) {
+                    showCreateNoteModal('voice');
+                } else if (onclickAttr.includes('searchInput')) {
+                    document.getElementById('searchInput').focus();
+                }
+            };
+
+            // Add both click and touch events for maximum compatibility
+            btn.addEventListener('click', handler);
+
+            // Add touchstart for visual feedback
+            btn.addEventListener('touchstart', function(e) {
+                btn.classList.add('touched');
+            }, { passive: true });
+
+            // Add touchend for native app support (touchstart can cause issues with scrolling)
+            btn.addEventListener('touchend', function(e) {
+                btn.classList.remove('touched');
+                // Prevent the click event from also firing
+                e.preventDefault();
+                handler(e);
+            }, { passive: false });
+
+            // Remove touched class if touch is cancelled
+            btn.addEventListener('touchcancel', function() {
+                btn.classList.remove('touched');
+            }, { passive: true });
+        }
+    });
+
+    console.log('✅ Quick action buttons initialized for native app compatibility');
+
+    // Also fix recording control buttons for native app
+    initRecordingButtons();
+}
+
+// Initialize recording buttons with proper event listeners
+function initRecordingButtons() {
+    const startBtn = document.getElementById('startRecordBtn');
+    const stopBtn = document.getElementById('stopRecordBtn');
+    const playBtn = document.getElementById('playRecordBtn');
+
+    if (startBtn) {
+        startBtn.removeAttribute('onclick');
+        addTouchAndClickHandler(startBtn, startRecording);
+    }
+
+    if (stopBtn) {
+        stopBtn.removeAttribute('onclick');
+        addTouchAndClickHandler(stopBtn, stopRecording);
+    }
+
+    if (playBtn) {
+        playBtn.removeAttribute('onclick');
+        addTouchAndClickHandler(playBtn, playRecording);
+    }
+
+    console.log('✅ Recording buttons initialized for native app compatibility');
+}
+
+// Helper function to add both touch and click handlers
+function addTouchAndClickHandler(element, handler) {
+    let touchHandled = false;
+
+    element.addEventListener('touchstart', function() {
+        element.classList.add('touched');
+    }, { passive: true });
+
+    element.addEventListener('touchend', function(e) {
+        element.classList.remove('touched');
+        e.preventDefault();
+        touchHandled = true;
+        handler();
+        // Reset flag after a short delay
+        setTimeout(() => { touchHandled = false; }, 300);
+    }, { passive: false });
+
+    element.addEventListener('touchcancel', function() {
+        element.classList.remove('touched');
+    }, { passive: true });
+
+    element.addEventListener('click', function(e) {
+        // Only handle if not already handled by touch
+        if (!touchHandled) {
+            handler();
+        }
+    });
+}
 
 // ============================================
 // PARTICLES BACKGROUND - DISABLED FOR PERFORMANCE

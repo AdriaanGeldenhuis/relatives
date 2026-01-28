@@ -211,6 +211,11 @@ body {
     gap: var(--space-xs);
     font-weight: 700;
     font-size: 0.85rem;
+    /* Native app touch fixes */
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.2);
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .quick-action-btn:hover {
@@ -219,8 +224,18 @@ body {
     box-shadow: var(--shadow-lg);
 }
 
-.quick-action-btn:active {
+.quick-action-btn:active,
+.quick-action-btn.touched {
     transform: translateY(-2px) scale(1.02);
+    background: var(--glass-heavy);
+}
+
+/* Ensure buttons are clickable on touch devices */
+@media (pointer: coarse) {
+    .quick-action-btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
 }
 
 .qa-icon {
@@ -798,8 +813,17 @@ body {
     font-size: 1.125rem;
 }
 
-.btn:active {
+.btn:active,
+.btn.touched {
     transform: translateY(0) scale(0.98);
+}
+
+/* Touch device improvements for all buttons */
+.btn {
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.2);
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .btn-icon {
