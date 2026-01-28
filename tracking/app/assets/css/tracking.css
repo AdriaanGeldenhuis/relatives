@@ -88,7 +88,8 @@ body.geofences-page {
 .session-indicator {
     position: fixed;
     top: calc(var(--header-height) + 4px);
-    right: 12px;
+    left: 50%;
+    transform: translateX(-50%);
     background: rgba(26, 32, 44, 0.95);
     backdrop-filter: blur(10px);
     padding: 6px 12px;
@@ -131,7 +132,7 @@ body.geofences-page {
     background: rgba(26, 32, 44, 0.95);
     backdrop-filter: blur(10px);
     border-radius: var(--radius-lg);
-    z-index: 80;
+    z-index: 85;
     box-shadow: var(--shadow-lg);
     overflow: hidden;
     display: none;
@@ -288,7 +289,7 @@ body.geofences-page {
 
 .member-popup {
     position: fixed;
-    bottom: 20px;
+    top: calc(var(--header-height) + 50px);
     left: 50%;
     transform: translateX(-50%);
     width: calc(100% - 24px);
@@ -833,7 +834,7 @@ body.geofences-page {
         max-width: none;
         left: 10px;
         right: 10px;
-        bottom: 16px;
+        top: calc(var(--header-height) + 45px);
         transform: none;
         border-radius: var(--radius-lg);
     }
@@ -959,7 +960,7 @@ body.geofences-page {
 
     .member-popup {
         max-width: 300px;
-        bottom: 10px;
+        top: calc(var(--header-height) + 45px);
     }
 }
 
@@ -1529,7 +1530,7 @@ html.native-app .family-panel {
 
 /* Adjust member popup for safe areas */
 html.native-app .member-popup {
-    bottom: calc(20px + var(--safe-area-bottom));
+    top: calc(var(--header-height) + var(--safe-area-top) + 50px);
     left: calc(50%);
     width: calc(100% - 24px - var(--safe-area-left) - var(--safe-area-right));
 }
@@ -1596,7 +1597,7 @@ html.platform-ios .family-panel-content {
         right: calc(10px + var(--safe-area-right));
         width: auto;
         transform: none;
-        bottom: calc(16px + var(--safe-area-bottom));
+        top: calc(var(--header-height) + var(--safe-area-top) + 45px);
     }
 
     html.native-app .toast-container {
@@ -1635,7 +1636,7 @@ html.platform-ios .family-panel-content {
     }
 
     .member-popup {
-        bottom: calc(20px + var(--safe-area-bottom));
+        top: calc(var(--header-height) + var(--safe-area-top) + 50px);
     }
 
     .toast-container {
