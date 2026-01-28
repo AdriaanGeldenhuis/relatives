@@ -101,7 +101,7 @@ $stats['shopping_lists'] = (int)$stmt->fetchColumn();
 
 // Recent activity (last 10)
 $stmt = $db->prepare("
-    SELECT al.action, al.entity_type, al.created_at, u.full_name, u.avatar_color
+    SELECT al.action, al.entity_type, al.created_at, u.full_name, u.avatar_color, u.profile_picture
     FROM audit_log al
     LEFT JOIN users u ON al.user_id = u.id
     WHERE al.family_id = ?
@@ -466,9 +466,13 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php foreach ($members as $member): ?>
                     <div class="member-card glass-card <?php echo $member['status']; ?>" data-user-id="<?php echo $member['id']; ?>">
                         <div class="member-header">
-                            <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
-                                <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
-                            </div>
+                            <?php if (!empty($member['profile_picture'])): ?>
+                                <div class="member-avatar" style="background-image: url('<?php echo htmlspecialchars($member['profile_picture']); ?>'); background-size: cover; background-position: center;"></div>
+                            <?php else: ?>
+                                <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
+                                    <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="member-info">
                                 <div class="member-name"><?php echo htmlspecialchars($member['full_name']); ?></div>
                                 <div class="member-email"><?php echo htmlspecialchars($member['email']); ?></div>
@@ -558,9 +562,13 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php else: ?>
                     <?php foreach ($recentActivity as $activity): ?>
                         <div class="activity-item">
-                            <div class="activity-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#667eea'); ?>">
-                                <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
-                            </div>
+                            <?php if (!empty($activity['profile_picture'])): ?>
+                                <div class="activity-avatar" style="background-image: url('<?php echo htmlspecialchars($activity['profile_picture']); ?>'); background-size: cover; background-position: center;"></div>
+                            <?php else: ?>
+                                <div class="activity-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#667eea'); ?>">
+                                    <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="activity-content">
                                 <div class="activity-text">
                                     <strong><?php echo htmlspecialchars($activity['full_name'] ?? 'Someone'); ?></strong>
