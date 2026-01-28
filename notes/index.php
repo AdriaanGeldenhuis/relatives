@@ -98,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'color' => $color,
                         'pinned' => 0,
                         'audio_path' => $audioPath,
+                        'user_id' => $user['id'],
                         'user_name' => $user['full_name'],
                         'avatar_color' => $user['avatar_color'],
                         'created_at' => date('Y-m-d H:i:s')
@@ -365,9 +366,12 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                             <div class="note-footer">
                                 <div class="note-author">
-                                    <div class="author-avatar-mini" 
+                                    <div class="author-avatar-mini"
                                          style="background: <?php echo htmlspecialchars($note['avatar_color']); ?>">
-                                        <?php echo strtoupper(substr($note['full_name'], 0, 1)); ?>
+                                        <img src="/saves/<?php echo (int)$note['user_id']; ?>/avatar/avatar.webp"
+                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                             style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                                        <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($note['full_name'], 0, 1)); ?></span>
                                     </div>
                                     <span><?php echo htmlspecialchars($note['full_name']); ?></span>
                                 </div>
@@ -473,9 +477,12 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                             <div class="note-footer">
                                 <div class="note-author">
-                                    <div class="author-avatar-mini" 
+                                    <div class="author-avatar-mini"
                                          style="background: <?php echo htmlspecialchars($note['avatar_color']); ?>">
-                                        <?php echo strtoupper(substr($note['full_name'], 0, 1)); ?>
+                                        <img src="/saves/<?php echo (int)$note['user_id']; ?>/avatar/avatar.webp"
+                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                             style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                                        <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($note['full_name'], 0, 1)); ?></span>
                                     </div>
                                     <span><?php echo htmlspecialchars($note['full_name']); ?></span>
                                 </div>
