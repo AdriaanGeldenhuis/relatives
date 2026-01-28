@@ -288,7 +288,7 @@ body.geofences-page {
 
 .member-popup {
     position: fixed;
-    bottom: 20px;
+    top: calc(var(--header-height) + 12px);
     left: 50%;
     transform: translateX(-50%);
     width: calc(100% - 24px);
@@ -833,7 +833,7 @@ body.geofences-page {
         max-width: none;
         left: 10px;
         right: 10px;
-        bottom: 16px;
+        top: calc(var(--header-height) + 8px);
         transform: none;
         border-radius: var(--radius-lg);
     }
@@ -959,7 +959,7 @@ body.geofences-page {
 
     .member-popup {
         max-width: 300px;
-        bottom: 10px;
+        top: calc(var(--header-height) + 8px);
     }
 }
 
@@ -1529,7 +1529,7 @@ html.native-app .family-panel {
 
 /* Adjust member popup for safe areas */
 html.native-app .member-popup {
-    bottom: calc(20px + var(--safe-area-bottom));
+    top: calc(var(--header-height) + var(--safe-area-top) + 12px);
     left: calc(50%);
     width: calc(100% - 24px - var(--safe-area-left) - var(--safe-area-right));
 }
@@ -1596,7 +1596,7 @@ html.platform-ios .family-panel-content {
         right: calc(10px + var(--safe-area-right));
         width: auto;
         transform: none;
-        bottom: calc(16px + var(--safe-area-bottom));
+        top: calc(var(--header-height) + var(--safe-area-top) + 8px);
     }
 
     html.native-app .toast-container {
@@ -1635,7 +1635,7 @@ html.platform-ios .family-panel-content {
     }
 
     .member-popup {
-        bottom: calc(20px + var(--safe-area-bottom));
+        top: calc(var(--header-height) + var(--safe-area-top) + 12px);
     }
 
     .toast-container {

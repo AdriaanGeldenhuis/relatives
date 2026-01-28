@@ -83,6 +83,9 @@ window.FamilyPanel = {
                 if (member) {
                     TrackingMap.panTo(member.lat, member.lng, 15);
                 }
+
+                // Close the family panel after selecting a member
+                this.close();
             });
         });
     },
