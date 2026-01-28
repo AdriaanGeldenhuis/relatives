@@ -127,12 +127,14 @@ window.TrackingMap = {
     createMarker(member) {
         const el = document.createElement('div');
         el.className = 'marker';
-        const markerInner = member.avatar_url
-            ? `<div class="marker-inner" style="background-image: url('${member.avatar_url}'); background-size: cover; background-position: center;"></div>`
-            : `<div class="marker-inner" style="background-color: ${member.avatar_color}">${Format.initials(member.name)}</div>`;
         el.innerHTML = `
             <div class="marker-pulse"></div>
-            ${markerInner}
+            <div class="marker-inner" style="background-color: ${member.avatar_color}">
+                <img src="${member.avatar_url}"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                     style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                <span class="marker-fallback" style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${Format.initials(member.name)}</span>
+            </div>
         `;
 
         // Update class based on status

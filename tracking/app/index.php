@@ -59,14 +59,9 @@ $stmt = $db->prepare("
 $stmt->execute([$user['family_id']]);
 $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Add avatar paths for members who have custom avatars
+// Add avatar paths for members
 foreach ($members as &$member) {
-    $avatarPath = '/saves/' . $member['id'] . '/avatar/avatar.webp';
-    if (file_exists(__DIR__ . '/../..' . $avatarPath)) {
-        $member['avatar_url'] = $avatarPath;
-    } else {
-        $member['avatar_url'] = null;
-    }
+    $member['avatar_url'] = '/saves/' . $member['id'] . '/avatar/avatar.webp';
 }
 unset($member);
 

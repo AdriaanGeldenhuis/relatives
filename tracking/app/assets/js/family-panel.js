@@ -56,10 +56,12 @@ window.FamilyPanel = {
         this.list.innerHTML = members.map(member => `
             <div class="member-item ${member.user_id === TrackingState.selectedMember ? 'active' : ''}"
                  data-user-id="${member.user_id}">
-                ${member.avatar_url
-                    ? `<div class="member-avatar" style="background-image: url('${member.avatar_url}'); background-size: cover; background-position: center;"></div>`
-                    : `<div class="member-avatar" style="background-color: ${member.avatar_color}">${Format.initials(member.name)}</div>`
-                }
+                <div class="member-avatar" style="background-color: ${member.avatar_color}">
+                    <img src="${member.avatar_url}"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                         style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                    <span class="avatar-fallback" style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${Format.initials(member.name)}</span>
+                </div>
                 <div class="member-info">
                     <div class="member-name">${this.escapeHtml(member.name)}</div>
                     <div class="member-status">

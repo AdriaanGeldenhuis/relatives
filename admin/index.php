@@ -466,16 +466,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php foreach ($members as $member): ?>
                     <div class="member-card glass-card <?php echo $member['status']; ?>" data-user-id="<?php echo $member['id']; ?>">
                         <div class="member-header">
-                            <?php
-                            $avatarPath = '/saves/' . $member['id'] . '/avatar/avatar.webp';
-                            $avatarExists = file_exists(__DIR__ . '/..' . $avatarPath);
-                            if ($avatarExists): ?>
-                                <div class="member-avatar" style="background-image: url('<?php echo htmlspecialchars($avatarPath); ?>'); background-size: cover; background-position: center;"></div>
-                            <?php else: ?>
-                                <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
+                            <?php $avatarPath = '/saves/' . $member['id'] . '/avatar/avatar.webp'; ?>
+                            <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
+                                <img src="<?php echo htmlspecialchars($avatarPath); ?>"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                     style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-weight:800;">
                                     <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
-                                </div>
-                            <?php endif; ?>
+                                </span>
+                            </div>
                             <div class="member-info">
                                 <div class="member-name"><?php echo htmlspecialchars($member['full_name']); ?></div>
                                 <div class="member-email"><?php echo htmlspecialchars($member['email']); ?></div>
@@ -565,16 +564,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php else: ?>
                     <?php foreach ($recentActivity as $activity): ?>
                         <div class="activity-item">
-                            <?php
-                            $activityAvatarPath = '/saves/' . $activity['user_id'] . '/avatar/avatar.webp';
-                            $activityAvatarExists = $activity['user_id'] && file_exists(__DIR__ . '/..' . $activityAvatarPath);
-                            if ($activityAvatarExists): ?>
-                                <div class="activity-avatar" style="background-image: url('<?php echo htmlspecialchars($activityAvatarPath); ?>'); background-size: cover; background-position: center;"></div>
-                            <?php else: ?>
-                                <div class="activity-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#667eea'); ?>">
+                            <?php $activityAvatarPath = '/saves/' . $activity['user_id'] . '/avatar/avatar.webp'; ?>
+                            <div class="activity-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#667eea'); ?>">
+                                <img src="<?php echo htmlspecialchars($activityAvatarPath); ?>"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                     style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-weight:600;">
                                     <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
-                                </div>
-                            <?php endif; ?>
+                                </span>
+                            </div>
                             <div class="activity-content">
                                 <div class="activity-text">
                                     <strong><?php echo htmlspecialchars($activity['full_name'] ?? 'Someone'); ?></strong>

@@ -86,9 +86,8 @@ try {
             $timeAgo = floor($secondsSince / 86400) . ' days ago';
         }
 
-        // Check for custom avatar
-        $avatarPath = '/saves/' . $row['user_id'] . '/avatar/avatar.webp';
-        $avatarUrl = file_exists(__DIR__ . '/../..' . $avatarPath) ? $avatarPath : null;
+        // Avatar path
+        $avatarUrl = '/saves/' . $row['user_id'] . '/avatar/avatar.webp';
 
         $members[] = [
             'user_id' => (int)$row['user_id'],
