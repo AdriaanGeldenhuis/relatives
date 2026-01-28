@@ -86,11 +86,16 @@ try {
             $timeAgo = floor($secondsSince / 86400) . ' days ago';
         }
 
+        // Check for custom avatar
+        $avatarPath = '/saves/' . $row['user_id'] . '/avatar/avatar.webp';
+        $avatarUrl = file_exists(__DIR__ . '/../..' . $avatarPath) ? $avatarPath : null;
+
         $members[] = [
             'user_id' => (int)$row['user_id'],
             'name' => $row['name'],
             'avatar_color' => $row['avatar_color'],
             'has_avatar' => (bool)$row['has_avatar'],
+            'avatar_url' => $avatarUrl,
             'lat' => (float)$row['lat'],
             'lng' => (float)$row['lng'],
             'accuracy_m' => $row['accuracy_m'] ? (float)$row['accuracy_m'] : null,
