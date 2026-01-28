@@ -226,19 +226,75 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <p class="greeting-subtitle">Capture ideas, reminders, and memories together</p>
                 
                 <div class="quick-actions">
-                    <button onclick="showCreateNoteModal('text')" class="quick-action-btn">
+                    <button id="btnNewNote" class="quick-action-btn" data-action="text">
                         <span class="qa-icon">📝</span>
                         <span>New Note</span>
                     </button>
-                    <button onclick="showCreateNoteModal('voice')" class="quick-action-btn">
+                    <button id="btnVoiceNote" class="quick-action-btn" data-action="voice">
                         <span class="qa-icon">🎤</span>
                         <span>Voice Note</span>
                     </button>
-                    <button onclick="document.getElementById('searchInput').focus()" class="quick-action-btn">
+                    <button id="btnSearch" class="quick-action-btn" data-action="search">
                         <span class="qa-icon">🔍</span>
                         <span>Search</span>
                     </button>
                 </div>
+
+                <!-- INLINE SCRIPT FOR NATIVE APP COMPATIBILITY -->
+                <script>
+                (function() {
+                    // Immediately attach handlers - no waiting for DOMContentLoaded
+                    function handleAction(action) {
+                        if (action === 'text') {
+                            document.getElementById('createTextNoteModal').classList.add('active');
+                            setTimeout(function() {
+                                var noteBody = document.getElementById('noteBody');
+                                if (noteBody) noteBody.focus();
+                            }, 100);
+                        } else if (action === 'voice') {
+                            document.getElementById('createVoiceNoteModal').classList.add('active');
+                            if (typeof resetVoiceRecorder === 'function') resetVoiceRecorder();
+                        } else if (action === 'search') {
+                            document.getElementById('searchInput').focus();
+                        }
+                    }
+
+                    function setupButton(btn) {
+                        if (!btn) return;
+                        var action = btn.getAttribute('data-action');
+                        var handled = false;
+
+                        btn.addEventListener('touchstart', function(e) {
+                            btn.style.transform = 'translateY(-2px) scale(1.02)';
+                            btn.style.background = 'rgba(255,255,255,0.18)';
+                        }, {passive: true});
+
+                        btn.addEventListener('touchend', function(e) {
+                            btn.style.transform = '';
+                            btn.style.background = '';
+                            e.preventDefault();
+                            handled = true;
+                            handleAction(action);
+                            setTimeout(function() { handled = false; }, 300);
+                        }, {passive: false});
+
+                        btn.addEventListener('touchcancel', function() {
+                            btn.style.transform = '';
+                            btn.style.background = '';
+                        }, {passive: true});
+
+                        btn.addEventListener('click', function(e) {
+                            if (!handled) handleAction(action);
+                        });
+                    }
+
+                    setupButton(document.getElementById('btnNewNote'));
+                    setupButton(document.getElementById('btnVoiceNote'));
+                    setupButton(document.getElementById('btnSearch'));
+
+                    console.log('✅ Quick action buttons ready (inline)');
+                })();
+                </script>
             </div>
         </div>
 
