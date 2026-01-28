@@ -101,7 +101,7 @@ $stats['shopping_lists'] = (int)$stmt->fetchColumn();
 
 // Recent activity (last 10)
 $stmt = $db->prepare("
-    SELECT al.action, al.entity_type, al.created_at, u.full_name, u.avatar_color, u.profile_picture, u.avatar_url
+    SELECT al.action, al.entity_type, al.created_at, al.user_id, u.full_name, u.avatar_color
     FROM audit_log al
     LEFT JOIN users u ON al.user_id = u.id
     WHERE al.family_id = ?
@@ -467,9 +467,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <div class="member-card glass-card <?php echo $member['status']; ?>" data-user-id="<?php echo $member['id']; ?>">
                         <div class="member-header">
                             <?php
-                            $avatarImage = $member['profile_picture'] ?? $member['avatar_url'] ?? null;
-                            if (!empty($avatarImage)): ?>
-                                <div class="member-avatar" style="background-image: url('<?php echo htmlspecialchars($avatarImage); ?>'); background-size: cover; background-position: center;"></div>
+                            $avatarPath = '/saves/' . $member['id'] . '/avatar/avatar.webp';
+                            $avatarExists = file_exists(__DIR__ . '/..' . $avatarPath);
+                            if ($avatarExists): ?>
+                                <div class="member-avatar" style="background-image: url('<?php echo htmlspecialchars($avatarPath); ?>'); background-size: cover; background-position: center;"></div>
                             <?php else: ?>
                                 <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
                                     <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
@@ -565,9 +566,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <?php foreach ($recentActivity as $activity): ?>
                         <div class="activity-item">
                             <?php
-                            $activityAvatar = $activity['profile_picture'] ?? $activity['avatar_url'] ?? null;
-                            if (!empty($activityAvatar)): ?>
-                                <div class="activity-avatar" style="background-image: url('<?php echo htmlspecialchars($activityAvatar); ?>'); background-size: cover; background-position: center;"></div>
+                            $activityAvatarPath = '/saves/' . $activity['user_id'] . '/avatar/avatar.webp';
+                            $activityAvatarExists = $activity['user_id'] && file_exists(__DIR__ . '/..' . $activityAvatarPath);
+                            if ($activityAvatarExists): ?>
+                                <div class="activity-avatar" style="background-image: url('<?php echo htmlspecialchars($activityAvatarPath); ?>'); background-size: cover; background-position: center;"></div>
                             <?php else: ?>
                                 <div class="activity-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#667eea'); ?>">
                                     <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
