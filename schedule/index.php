@@ -265,9 +265,9 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <button onclick="changeView('week')" class="filter-btn <?php echo $viewMode === 'week' ? 'active' : ''; ?>">
                     <span>🗓️</span> Week
                 </button>
-                <button onclick="changeView('timeline')" class="filter-btn <?php echo $viewMode === 'timeline' ? 'active' : ''; ?>">
+                <a href="/schedule/timeline/?date=<?php echo $selectedDate; ?>" class="filter-btn">
                     <span>⏱️</span> Timeline
-                </button>
+                </a>
             </div>
         </div>
 
