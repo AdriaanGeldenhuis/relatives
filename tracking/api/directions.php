@@ -88,18 +88,26 @@ if (!in_array($profile, ['driving', 'walking', 'cycling'])) {
 }
 
 // Initialize services
-$directions = new MapboxDirections($trackingCache);
+try {
+    $directions = new MapboxDirections($trackingCache);
 
-// Check if API is available
-if (!$directions->isAvailable()) {
-    jsonError('service_unavailable', 'Directions service not configured', 503);
-}
+    // Check if API is available
+    if (!$directions->isAvailable()) {
+        jsonError('service_unavailable', 'Directions service not configured. Please check MAPBOX_TOKEN.', 503);
+    }
 
-// Get route
-$route = $directions->getRoute($fromLat, $fromLng, $toLat, $toLng, $profile);
+    // Get route
+    $route = $directions->getRoute($fromLat, $fromLng, $toLat, $toLng, $profile);
 
-if (!$route) {
-    jsonError('route_failed', 'Could not calculate route', 500);
+    if (!$route) {
+        jsonError('route_failed', 'Could not calculate route. Mapbox API may have returned an error.', 500);
+    }
+} catch (Exception $e) {
+    error_log("Directions API error: " . $e->getMessage());
+    jsonError('server_error', 'Server error: ' . $e->getMessage(), 500);
+} catch (Error $e) {
+    error_log("Directions API fatal error: " . $e->getMessage());
+    jsonError('server_error', 'Server error: ' . $e->getMessage(), 500);
 }
 
 // Add destination name if we have it

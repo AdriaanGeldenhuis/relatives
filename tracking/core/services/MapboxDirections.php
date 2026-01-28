@@ -19,8 +19,9 @@ class MapboxDirections
     public function __construct(TrackingCache $cache)
     {
         $this->cache = $cache;
-        // Try both env variable names for flexibility
-        $this->apiKey = $_ENV['MAPBOX_API_KEY'] ?? $_ENV['MAPBOX_TOKEN'] ?? null;
+        // Try both env variable names for flexibility - check for non-empty values
+        $this->apiKey = !empty($_ENV['MAPBOX_API_KEY']) ? $_ENV['MAPBOX_API_KEY'] :
+                        (!empty($_ENV['MAPBOX_TOKEN']) ? $_ENV['MAPBOX_TOKEN'] : null);
     }
 
     /**
