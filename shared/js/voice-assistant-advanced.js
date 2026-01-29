@@ -1,8 +1,12 @@
 /**
  * ============================================
- * SUZI VOICE ASSISTANT v9.0
+ * SUZI VOICE ASSISTANT v9.1
  * Full conversational AI assistant
  * Can answer questions, tell stories, AND control the app
+ *
+ * v9.1 Changes:
+ * - Fixed loop issue: isProcessing stays true until speech completes
+ * - Fixed native TTS callback handling
  * ============================================
  */
 
@@ -14,7 +18,7 @@ class SuziVoice {
         }
         SuziVoice._instance = this;
 
-        console.log('🎤 Suzi Voice v9.0 - Starting...');
+        console.log('🎤 Suzi Voice v9.1 - Starting...');
 
         // State
         this.isOpen = false;
@@ -26,6 +30,7 @@ class SuziVoice {
         this.recognition = null;
         this.synthesis = window.speechSynthesis;
         this.currentUtterance = null;
+        this.pendingSpeechCallback = null;  // Store callback for native TTS
 
         // Conversation history
         this.conversation = [];
@@ -65,7 +70,7 @@ class SuziVoice {
             speechSynthesis.onvoiceschanged = () => this.synthesis.getVoices();
         }
 
-        console.log('✅ Suzi Voice v9.0 Ready!', this.isNative ? '(Native Mode)' : '(Web Mode)');
+        console.log('✅ Suzi Voice v9.1 Ready!', this.isNative ? '(Native Mode)' : '(Web Mode)');
     }
 
     cacheDom() {
@@ -149,7 +154,12 @@ class SuziVoice {
             },
             onTtsEnd: () => {
                 this.isSpeaking = false;
-                if (this.isOpen && !this.isProcessing) {
+                // Call the pending speech callback if one exists
+                if (this.pendingSpeechCallback) {
+                    const callback = this.pendingSpeechCallback;
+                    this.pendingSpeechCallback = null;
+                    callback();
+                } else if (this.isOpen && !this.isProcessing) {
                     this.updateUI('ready');
                 }
             },
@@ -378,10 +388,14 @@ class SuziVoice {
     }
 
     handleAIResponse(response, action) {
-        this.isProcessing = false;
+        // Keep isProcessing = true until speech completes to prevent race conditions
+        // This ensures we don't start listening again while the response is being spoken
 
         // Speak the response
         this.speak(response, () => {
+            // NOW set isProcessing to false - after speech is complete
+            this.isProcessing = false;
+
             // After speaking, execute action if any
             if (action) {
                 this.executeAction(action);
@@ -597,14 +611,19 @@ class SuziVoice {
 
         // Native TTS
         if (this.isNative && window.AndroidVoice?.speak) {
+            // Store callback so onTtsEnd can call it
+            this.pendingSpeechCallback = onComplete;
             window.AndroidVoice.speak(text);
 
-            // Fallback timer
-            const duration = Math.max(2000, text.split(' ').length * 400);
+            // Fallback timer in case onTtsEnd doesn't fire
+            const duration = Math.max(3000, text.split(' ').length * 500);
             setTimeout(() => {
-                if (this.isSpeaking) {
+                if (this.isSpeaking && this.pendingSpeechCallback) {
+                    console.log('TTS fallback timer triggered');
                     this.isSpeaking = false;
-                    if (onComplete) onComplete();
+                    const callback = this.pendingSpeechCallback;
+                    this.pendingSpeechCallback = null;
+                    if (callback) callback();
                 }
             }, duration);
             return;
@@ -666,6 +685,7 @@ class SuziVoice {
         }
         this.isSpeaking = false;
         this.currentUtterance = null;
+        this.pendingSpeechCallback = null;  // Clear pending callback when speech is stopped
     }
 
     // ==================== UI UPDATES ====================
