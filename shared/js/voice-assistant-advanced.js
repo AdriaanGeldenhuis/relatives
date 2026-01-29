@@ -1,12 +1,23 @@
 /**
  * ============================================
- * SUZI VOICE ASSISTANT v7.1 - CONVERSATIONAL
- * Typing animation + continuous conversation
+ * SUZI VOICE ASSISTANT v8.0 - STABLE
+ * Complete rewrite with proper state machine
+ * No loops, no feedback, reliable operation
  * ============================================
  */
 
 class AdvancedVoiceAssistant {
     static instance = null;
+
+    // State machine states
+    static STATES = {
+        IDLE: 'idle',           // Modal closed
+        READY: 'ready',         // Modal open, waiting for user to tap mic
+        LISTENING: 'listening', // Actively listening to user
+        PROCESSING: 'processing', // Processing command
+        SPEAKING: 'speaking',   // TTS speaking response
+        NAVIGATING: 'navigating' // About to navigate away
+    };
 
     static getInstance() {
         if (!AdvancedVoiceAssistant.instance) {
@@ -20,39 +31,40 @@ class AdvancedVoiceAssistant {
             return AdvancedVoiceAssistant.instance;
         }
 
-        console.log('🎤 Suzi Voice Assistant v7.0 Initializing...');
+        console.log('🎤 Suzi Voice Assistant v8.0 Initializing...');
 
         // Detect native vs web
         this.isNativeApp = !!(window.AndroidVoice && typeof window.AndroidVoice.startListening === 'function');
 
-        // Core state
+        // State machine
+        this.state = AdvancedVoiceAssistant.STATES.IDLE;
+
+        // Core components
         this.recognition = null;
         this.synthesis = window.speechSynthesis;
-        this.isListening = false;
-        this.isSpeaking = false;
-        this.recognitionActive = false;
-        this.processingCommand = false;
-        this.modalOpen = false;
         this.initialized = false;
 
-        // Timers
-        this.restartTimeout = null;
-        this.apiTimeout = null;
-        this.speakTimeout = null;
-        this.typingTimeout = null;
-        this.typingIntervals = [];
+        // Single timeout for all operations - prevents multiple competing timeouts
+        this.operationTimeout = null;
 
-        // Anti-duplicate
+        // Silence timeout - how long to wait for speech before going back to ready
+        this.silenceTimeout = null;
+        this.SILENCE_DURATION = 8000; // 8 seconds of silence before auto-stop
+
+        // Anti-duplicate protection
         this.lastTranscript = '';
         this.lastTranscriptTime = 0;
-        this.commandCooldown = 1500; // Reduced from 2000
+        this.commandCooldown = 2000;
 
         // Conversation history
         this.conversation = [];
-        this.maxConversationHistory = 3; // Reduced from 5
+        this.maxConversationHistory = 4;
 
         // DOM cache
         this.dom = {};
+
+        // Current utterance for cancellation
+        this.currentUtterance = null;
 
         // Local intent patterns (fast matching, no API needed)
         this.localIntents = this.buildLocalIntents();
@@ -63,48 +75,89 @@ class AdvancedVoiceAssistant {
         AdvancedVoiceAssistant.instance = this;
     }
 
-    /**
-     * Setup global SuziVoice hooks for native app communication
-     * Native app should call these when TTS finishes or STT has a result
-     */
+    // ==================== STATE MACHINE ====================
+
+    setState(newState) {
+        const oldState = this.state;
+        this.state = newState;
+        console.log(`🔄 State: ${oldState} → ${newState}`);
+        this.updateUIForState(newState);
+    }
+
+    updateUIForState(state) {
+        switch (state) {
+            case AdvancedVoiceAssistant.STATES.IDLE:
+                this.updateMicState(false);
+                break;
+
+            case AdvancedVoiceAssistant.STATES.READY:
+                this.updateMicState(false);
+                this.updateStatus('🎤', 'Tap mic to speak', 'I\'m ready to help');
+                this.updateTranscript('Tap the microphone to ask me anything');
+                this.showSuggestions(true);
+                break;
+
+            case AdvancedVoiceAssistant.STATES.LISTENING:
+                this.updateMicState(true);
+                this.updateStatus('🎤', 'Listening...', 'Speak now');
+                this.updateTranscript('Listening...');
+                this.showSuggestions(false);
+                break;
+
+            case AdvancedVoiceAssistant.STATES.PROCESSING:
+                this.updateMicState(false);
+                this.updateStatus('⚙️', 'Thinking...', 'Processing your request');
+                break;
+
+            case AdvancedVoiceAssistant.STATES.SPEAKING:
+                this.updateMicState(false);
+                this.updateStatus('🔊', 'Speaking...', '');
+                break;
+
+            case AdvancedVoiceAssistant.STATES.NAVIGATING:
+                this.updateMicState(false);
+                this.updateStatus('🧭', 'Opening...', '');
+                break;
+        }
+    }
+
+    canTransitionTo(newState) {
+        const { STATES } = AdvancedVoiceAssistant;
+        const validTransitions = {
+            [STATES.IDLE]: [STATES.READY],
+            [STATES.READY]: [STATES.LISTENING, STATES.SPEAKING, STATES.IDLE],
+            [STATES.LISTENING]: [STATES.PROCESSING, STATES.READY, STATES.IDLE, STATES.SPEAKING],
+            [STATES.PROCESSING]: [STATES.SPEAKING, STATES.READY, STATES.IDLE, STATES.NAVIGATING],
+            [STATES.SPEAKING]: [STATES.READY, STATES.IDLE, STATES.NAVIGATING],
+            [STATES.NAVIGATING]: [STATES.IDLE]
+        };
+        return validTransitions[this.state]?.includes(newState) ?? false;
+    }
+
+    // ==================== NATIVE HOOKS ====================
+
     setupNativeHooks() {
         window.SuziVoice = {
-            // Called when native STT has a transcript result
             onSttResult: (text) => {
-                const v = AdvancedVoiceAssistant.getInstance();
-                if (text && text.trim()) {
-                    v.handleTranscript(text.trim());
+                if (text && text.trim() && this.state === AdvancedVoiceAssistant.STATES.LISTENING) {
+                    this.handleTranscript(text.trim());
                 }
             },
-            // Called when native TTS finishes speaking
             onTtsEnd: () => {
-                const v = AdvancedVoiceAssistant.getInstance();
-                v.isSpeaking = false;
-                // Ask follow-up if modal still open and not processing
-                if (v.modalOpen && !v.processingCommand) {
-                    v.askFollowUp();
+                if (this.state === AdvancedVoiceAssistant.STATES.SPEAKING) {
+                    this.onSpeakComplete();
                 }
             },
-            // Called when native TTS starts speaking
             onTtsStart: () => {
-                const v = AdvancedVoiceAssistant.getInstance();
-                v.isSpeaking = true;
-                v.updateStatus('🔊', 'Speaking...', '');
+                this.setState(AdvancedVoiceAssistant.STATES.SPEAKING);
             },
-            // Called when native STT starts listening
             onSttStart: () => {
-                const v = AdvancedVoiceAssistant.getInstance();
-                v.isListening = true;
-                v.recognitionActive = true;
-                v.updateMicState(true);
-                v.updateStatus('🎤', 'Listening...', 'Speak now');
+                this.setState(AdvancedVoiceAssistant.STATES.LISTENING);
             },
-            // Called when native STT stops listening
             onSttStop: () => {
-                const v = AdvancedVoiceAssistant.getInstance();
-                v.isListening = false;
-                v.recognitionActive = false;
-                v.updateMicState(false);
+                if (this.state === AdvancedVoiceAssistant.STATES.LISTENING) {
+                    this.setState(AdvancedVoiceAssistant.STATES.READY);
+                }
             }
         };
     }
@@ -113,90 +166,154 @@ class AdvancedVoiceAssistant {
 
     buildLocalIntents() {
         return [
-            // SHOPPING - very common
+            // ========== SHOPPING ==========
             {
                 patterns: [
-                    // "add sugar" / "add sugar to my shopping list" / "add sugar to the list"
-                    /^add\s+(.+?)(?:\s+(?:to|on)\s+(?:my|the)?\s*(?:shopping\s*)?list)?\s*$/i,
-                    // "put sugar on my shopping list"
-                    /^put\s+(.+?)(?:\s+(?:to|on)\s+(?:my|the)?\s*(?:shopping\s*)?list)?\s*$/i,
-                    // "shopping add sugar"
-                    /^shopping\s+add\s+(.+?)\s*$/i,
-                    // "buy sugar"
-                    /^buy\s+(.+?)\s*$/i
+                    /^add\s+(.+?)(?:\s+(?:to|on)\s+(?:my|the)?\s*(?:shopping\s*)?(?:list)?)?$/i,
+                    /^put\s+(.+?)(?:\s+(?:to|on)\s+(?:my|the)?\s*(?:shopping\s*)?(?:list)?)?$/i,
+                    /^(?:i need|we need|get|buy)\s+(.+?)$/i,
+                    /^shopping\s+add\s+(.+?)$/i
                 ],
                 handler: (match) => {
                     let item = (match[1] || '').trim();
-
-                    // Extra safety: strip trailing "to my shopping list" if it sneaks in
                     item = item.replace(/\s+(?:to|on)\s+(?:my|the)\s+(?:shopping\s*)?list\s*$/i, '').trim();
-                    // Also strip just "to my list" or "on the list"
-                    item = item.replace(/\s+(?:to|on)\s+(?:my|the)\s+list\s*$/i, '').trim();
-
+                    item = item.replace(/\s+please\s*$/i, '').trim();
                     const category = this.guessCategory(item);
                     return {
                         intent: 'add_shopping_item',
                         slots: { item, category },
-                        response_text: `Added ${item} to your shopping list.`
+                        response_text: `Added ${item} to your shopping list.`,
+                        keepOpen: true
                     };
                 }
             },
             {
-                patterns: [/^(?:show|open|go to) (?:the )?shopping/i, /^shopping list/i],
+                patterns: [
+                    /^(?:show|open|go\s*to|view)\s*(?:my|the)?\s*shopping(?:\s*list)?$/i,
+                    /^shopping\s*list$/i,
+                    /^shopping$/i
+                ],
                 handler: () => ({
-                    intent: 'view_shopping',
-                    slots: {},
+                    intent: 'navigate',
+                    slots: { destination: 'shopping' },
                     response_text: 'Opening your shopping list!'
                 })
             },
 
-            // NAVIGATION - instant
+            // ========== NAVIGATION - Comprehensive ==========
             {
-                patterns: [/^(?:go to|open|show) (?:the )?home/i, /^home$/i],
+                patterns: [/^(?:go\s*to|open|show)\s*(?:the\s*)?home(?:\s*page)?$/i, /^home$/i, /^main\s*page$/i],
                 handler: () => ({ intent: 'navigate', slots: { destination: 'home' }, response_text: 'Going home!' })
             },
             {
-                patterns: [/^(?:go to|open|show) (?:the )?notes?/i, /^notes?$/i],
-                handler: () => ({ intent: 'navigate', slots: { destination: 'notes' }, response_text: 'Opening notes!' })
+                patterns: [
+                    /^(?:go\s*to|open|show)\s*(?:my|the)?\s*notes?$/i,
+                    /^notes?$/i,
+                    /^my\s*notes?$/i
+                ],
+                handler: () => ({ intent: 'navigate', slots: { destination: 'notes' }, response_text: 'Opening your notes!' })
             },
             {
-                patterns: [/^(?:go to|open|show) (?:the )?calendar/i, /^calendar$/i],
-                handler: () => ({ intent: 'navigate', slots: { destination: 'calendar' }, response_text: 'Opening calendar!' })
+                patterns: [
+                    /^(?:go\s*to|open|show)\s*(?:my|the)?\s*calendar$/i,
+                    /^calendar$/i,
+                    /^my\s*calendar$/i,
+                    /^events?$/i
+                ],
+                handler: () => ({ intent: 'navigate', slots: { destination: 'calendar' }, response_text: 'Opening your calendar!' })
             },
             {
-                patterns: [/^(?:go to|open|show) (?:the )?messages?/i, /^messages?$/i],
+                patterns: [
+                    /^(?:go\s*to|open|show)\s*(?:my|the)?\s*messages?$/i,
+                    /^messages?$/i,
+                    /^(?:family\s*)?chat$/i,
+                    /^inbox$/i
+                ],
                 handler: () => ({ intent: 'navigate', slots: { destination: 'messages' }, response_text: 'Opening messages!' })
             },
             {
-                patterns: [/^(?:go to|open|show) (?:the )?tracking/i, /^(?:where is everyone|family location)/i],
-                handler: () => ({ intent: 'navigate', slots: { destination: 'tracking' }, response_text: 'Opening tracking!' })
+                patterns: [
+                    /^(?:go\s*to|open|show)\s*(?:the\s*)?(?:family\s*)?(?:tracking|location|map)$/i,
+                    /^(?:where\s*is\s*)?(?:my\s*)?family$/i,
+                    /^where\s*is\s*everyone$/i,
+                    /^family\s*location$/i,
+                    /^tracking$/i,
+                    /^location$/i,
+                    /^map$/i
+                ],
+                handler: () => ({ intent: 'navigate', slots: { destination: 'tracking' }, response_text: 'Opening family tracking!' })
             },
             {
-                patterns: [/^(?:go to|open|show) (?:the )?weather/i],
+                patterns: [
+                    /^(?:go\s*to|open|show)\s*(?:the\s*)?weather$/i,
+                    /^weather\s*page$/i
+                ],
                 handler: () => ({ intent: 'navigate', slots: { destination: 'weather' }, response_text: 'Opening weather!' })
             },
             {
-                patterns: [/^(?:go to|open|show) (?:the )?schedule/i, /^schedule$/i],
-                handler: () => ({ intent: 'navigate', slots: { destination: 'schedule' }, response_text: 'Opening schedule!' })
+                patterns: [
+                    /^(?:go\s*to|open|show)\s*(?:my|the)?\s*(?:schedule|reminders?)$/i,
+                    /^schedule$/i,
+                    /^reminders?$/i,
+                    /^my\s*reminders?$/i
+                ],
+                handler: () => ({ intent: 'navigate', slots: { destination: 'schedule' }, response_text: 'Opening your schedule!' })
             },
             {
-                patterns: [/^(?:go to|open|show) (?:the )?notifications?/i],
+                patterns: [
+                    /^(?:go\s*to|open|show)\s*(?:my|the)?\s*notifications?$/i,
+                    /^notifications?$/i,
+                    /^alerts?$/i
+                ],
                 handler: () => ({ intent: 'navigate', slots: { destination: 'notifications' }, response_text: 'Opening notifications!' })
             },
-
-            // WEATHER - common, can handle locally
             {
-                patterns: [/^(?:what'?s? the )?weather(?: today)?$/i, /^how'?s? the weather/i, /^weather today/i],
-                handler: () => ({ intent: 'get_weather_today', slots: {}, response_text: 'Let me check the weather for you.' })
+                patterns: [
+                    /^(?:go\s*to|open|show)\s*(?:the\s*)?help$/i,
+                    /^help\s*(?:page|center)?$/i
+                ],
+                handler: () => ({ intent: 'navigate', slots: { destination: 'help' }, response_text: 'Opening help!' })
             },
             {
-                patterns: [/^weather tomorrow/i, /^tomorrow'?s? weather/i, /^what'?s? the weather tomorrow/i],
-                handler: () => ({ intent: 'get_weather_tomorrow', slots: {}, response_text: 'Checking tomorrow\'s forecast.' })
+                patterns: [
+                    /^(?:go\s*to|open|show)\s*(?:the\s*)?games?$/i,
+                    /^games?$/i,
+                    /^play\s*(?:a\s*)?game$/i
+                ],
+                handler: () => ({ intent: 'navigate', slots: { destination: 'games' }, response_text: 'Opening games!' })
             },
 
-            // TRACKING - find family
+            // ========== WEATHER ==========
             {
-                patterns: [/^(?:where'?s?|find|locate) (?:my )?(mom|dad|mum|mother|father|wife|husband|son|daughter|brother|sister|grandma|grandpa|grandmother|grandfather)/i],
+                patterns: [
+                    /^(?:what'?s?\s*)?(?:the\s*)?weather(?:\s*today)?$/i,
+                    /^how'?s?\s*(?:the\s*)?weather/i,
+                    /^is\s*it\s*(?:going\s*to\s*)?(?:rain|sunny|cold|hot)/i
+                ],
+                handler: () => ({
+                    intent: 'get_weather_today',
+                    slots: {},
+                    response_text: 'Let me check the weather for you.'
+                })
+            },
+            {
+                patterns: [
+                    /^weather\s*tomorrow$/i,
+                    /^tomorrow'?s?\s*weather$/i,
+                    /^what'?s?\s*(?:the\s*)?weather\s*tomorrow$/i
+                ],
+                handler: () => ({
+                    intent: 'get_weather_tomorrow',
+                    slots: {},
+                    response_text: 'Checking tomorrow\'s forecast.'
+                })
+            },
+
+            // ========== TRACKING - Find Family ==========
+            {
+                patterns: [
+                    /^(?:where'?s?|find|locate)\s+(?:my\s+)?(mom|dad|mum|mother|father|wife|husband|son|daughter|brother|sister|grandma|grandpa|grandmother|grandfather|partner|spouse)/i
+                ],
                 handler: (match) => ({
                     intent: 'find_member',
                     slots: { member_name: match[1] },
@@ -204,7 +321,7 @@ class AdvancedVoiceAssistant {
                 })
             },
             {
-                patterns: [/^(?:where'?s?|find|locate) (.+)/i],
+                patterns: [/^(?:where'?s?|find|locate)\s+(.+)/i],
                 handler: (match) => ({
                     intent: 'find_member',
                     slots: { member_name: match[1].trim() },
@@ -212,48 +329,32 @@ class AdvancedVoiceAssistant {
                 })
             },
 
-            // TIME - instant local response
+            // ========== TIME & DATE ==========
             {
-                patterns: [/^what time is it/i, /^what'?s? the time/i, /^time$/i],
+                patterns: [/^what\s*time\s*is\s*it$/i, /^what'?s?\s*the\s*time$/i, /^time$/i],
                 handler: () => {
                     const now = new Date();
                     const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-                    return { intent: 'smalltalk', slots: {}, response_text: `It's ${time}.` };
+                    return { intent: 'smalltalk', slots: {}, response_text: `It's ${time}.`, keepOpen: true };
                 }
             },
             {
-                patterns: [/^what'?s? (?:today'?s? )?date/i, /^what day is it/i],
+                patterns: [/^what'?s?\s*(?:today'?s?\s*)?date$/i, /^what\s*day\s*is\s*it$/i, /^what\s*is\s*today$/i],
                 handler: () => {
                     const now = new Date();
                     const date = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-                    return { intent: 'smalltalk', slots: {}, response_text: `Today is ${date}.` };
+                    return { intent: 'smalltalk', slots: {}, response_text: `Today is ${date}.`, keepOpen: true };
                 }
             },
 
-            // GREETINGS - instant
+            // ========== NOTES ==========
             {
-                patterns: [/^(?:hi|hello|hey)(?: suzi)?$/i, /^good (?:morning|afternoon|evening)/i],
-                handler: () => {
-                    const greetings = ['Hey there!', 'Hi! How can I help?', 'Hello! What can I do for you?'];
-                    return { intent: 'smalltalk', slots: {}, response_text: greetings[Math.floor(Math.random() * greetings.length)] };
-                }
-            },
-            {
-                patterns: [/^(?:thanks?|thank you)/i],
-                handler: () => ({ intent: 'smalltalk', slots: {}, response_text: 'You\'re welcome!' })
-            },
-            {
-                patterns: [/^(?:what can you do|help|commands)/i],
-                handler: () => ({
-                    intent: 'smalltalk',
-                    slots: {},
-                    response_text: 'I can help with shopping lists, notes, calendar, messages, weather, and finding family. Just ask!'
-                })
-            },
-
-            // CREATE NOTE - capture content
-            {
-                patterns: [/^(?:create|make|new|add) (?:a )?note(?::? (.+))?/i, /^note(?::? (.+))?/i],
+                patterns: [
+                    /^(?:create|make|new|add|take)\s*(?:a\s*)?note(?:\s*[:]\s*(.+))?$/i,
+                    /^note(?:\s*[:]\s*(.+))?$/i,
+                    /^write\s*(?:a\s*)?note(?:\s*[:]\s*(.+))?$/i,
+                    /^(?:remember|save)\s+(?:that\s+)?(.+)$/i
+                ],
                 handler: (match) => ({
                     intent: 'create_note',
                     slots: { content: match[1]?.trim() || '' },
@@ -261,29 +362,139 @@ class AdvancedVoiceAssistant {
                 })
             },
 
-            // MESSAGES
+            // ========== MESSAGES ==========
             {
-                patterns: [/^(?:send|tell) (?:a )?message(?::? (.+))?/i],
+                patterns: [
+                    /^(?:send|tell)\s*(?:a\s*)?message(?:\s*[:]\s*(.+))?$/i,
+                    /^message\s*(?:family|everyone)?(?:\s*[:]\s*(.+))?$/i,
+                    /^(?:text|message)\s+(.+)$/i
+                ],
                 handler: (match) => ({
                     intent: 'send_message',
                     slots: { content: match[1]?.trim() || '' },
                     response_text: match[1] ? 'Sending your message!' : 'What would you like to say?'
                 })
+            },
+
+            // ========== CALENDAR & EVENTS ==========
+            {
+                patterns: [
+                    /^(?:create|add|new|make)\s*(?:an?\s*)?(?:event|appointment)(?:\s*[:]\s*(.+))?$/i,
+                    /^(?:schedule|plan)\s*(?:an?\s*)?(?:event|meeting|appointment)?(?:\s*[:]\s*(.+))?$/i
+                ],
+                handler: (match) => ({
+                    intent: 'create_event',
+                    slots: { title: match[1]?.trim() || '' },
+                    response_text: match[1] ? 'Creating your event!' : 'Opening calendar!'
+                })
+            },
+            {
+                patterns: [
+                    /^what'?s?\s*(?:on\s*)?(?:my\s*)?(?:schedule|calendar|agenda)(?:\s*today)?$/i,
+                    /^(?:do\s*i\s*have\s*)?(?:any\s*)?(?:events?|appointments?)\s*today$/i
+                ],
+                handler: () => ({
+                    intent: 'navigate',
+                    slots: { destination: 'calendar' },
+                    response_text: 'Let me show you your calendar!'
+                })
+            },
+
+            // ========== REMINDERS ==========
+            {
+                patterns: [
+                    /^(?:remind\s*me|set\s*(?:a\s*)?reminder)\s*(?:to\s+)?(.+)$/i,
+                    /^(?:create|add|new)\s*(?:a\s*)?reminder(?:\s*[:]\s*(.+))?$/i
+                ],
+                handler: (match) => ({
+                    intent: 'create_schedule',
+                    slots: { title: match[1]?.trim() || '' },
+                    response_text: match[1] ? 'Creating your reminder!' : 'Opening reminders!'
+                })
+            },
+
+            // ========== GREETINGS ==========
+            {
+                patterns: [
+                    /^(?:hi|hello|hey)(?:\s+(?:suzi|there))?$/i,
+                    /^good\s+(?:morning|afternoon|evening|day)$/i,
+                    /^howdy$/i
+                ],
+                handler: () => {
+                    const greetings = [
+                        'Hey! How can I help you today?',
+                        'Hi there! What can I do for you?',
+                        'Hello! Ready to help!',
+                        'Hey! What do you need?'
+                    ];
+                    return {
+                        intent: 'smalltalk',
+                        slots: {},
+                        response_text: greetings[Math.floor(Math.random() * greetings.length)],
+                        keepOpen: true
+                    };
+                }
+            },
+            {
+                patterns: [/^(?:thanks?|thank\s*you)(?:\s+suzi)?$/i, /^cheers$/i],
+                handler: () => ({
+                    intent: 'smalltalk',
+                    slots: {},
+                    response_text: 'You\'re welcome!',
+                    keepOpen: true
+                })
+            },
+            {
+                patterns: [/^(?:what\s*can\s*you\s*do|help|commands?)$/i, /^what\s*are\s*(?:you|your)\s*(?:commands?|capabilities)/i],
+                handler: () => ({
+                    intent: 'smalltalk',
+                    slots: {},
+                    response_text: 'I can help with: shopping lists, notes, calendar, reminders, messages, weather, finding family, and navigating the app. Just ask!',
+                    keepOpen: true
+                })
+            },
+            {
+                patterns: [/^who\s*are\s*you$/i, /^what'?s?\s*your\s*name$/i],
+                handler: () => ({
+                    intent: 'smalltalk',
+                    slots: {},
+                    response_text: 'I\'m Suzi, your family assistant! I\'m here to help you manage your day.',
+                    keepOpen: true
+                })
+            },
+
+            // ========== JOKES ==========
+            {
+                patterns: [/^tell\s*(?:me\s*)?(?:a\s*)?joke$/i, /^make\s*me\s*laugh$/i],
+                handler: () => {
+                    const jokes = [
+                        'Why did the smartphone go to therapy? It had too many hang-ups!',
+                        'What do you call a fake noodle? An impasta!',
+                        'Why don\'t scientists trust atoms? Because they make up everything!',
+                        'What did the ocean say to the beach? Nothing, it just waved!'
+                    ];
+                    return {
+                        intent: 'smalltalk',
+                        slots: {},
+                        response_text: jokes[Math.floor(Math.random() * jokes.length)],
+                        keepOpen: true
+                    };
+                }
             }
         ];
     }
 
     guessCategory(item) {
         const categories = {
-            dairy: ['milk', 'cheese', 'yogurt', 'butter', 'cream', 'eggs', 'yoghurt'],
-            meat: ['chicken', 'beef', 'pork', 'lamb', 'fish', 'bacon', 'sausage', 'mince', 'steak', 'chops'],
-            produce: ['apple', 'banana', 'orange', 'tomato', 'potato', 'onion', 'carrot', 'lettuce', 'spinach', 'fruit', 'vegetable', 'avocado', 'lemon', 'garlic'],
-            bakery: ['bread', 'rolls', 'buns', 'cake', 'pastry', 'croissant', 'muffin'],
-            pantry: ['rice', 'pasta', 'flour', 'sugar', 'salt', 'oil', 'sauce', 'spice', 'cereal', 'coffee', 'tea'],
-            frozen: ['ice cream', 'frozen', 'pizza'],
-            snacks: ['chips', 'chocolate', 'candy', 'cookies', 'biscuits', 'nuts', 'crisps'],
-            beverages: ['juice', 'soda', 'water', 'wine', 'beer', 'coke', 'sprite', 'drink'],
-            household: ['soap', 'detergent', 'toilet paper', 'paper towel', 'cleaning', 'shampoo', 'toothpaste']
+            dairy: ['milk', 'cheese', 'yogurt', 'butter', 'cream', 'eggs', 'yoghurt', 'margarine'],
+            meat: ['chicken', 'beef', 'pork', 'lamb', 'fish', 'bacon', 'sausage', 'mince', 'steak', 'chops', 'turkey', 'ham'],
+            produce: ['apple', 'banana', 'orange', 'tomato', 'potato', 'onion', 'carrot', 'lettuce', 'spinach', 'fruit', 'vegetable', 'avocado', 'lemon', 'garlic', 'cucumber', 'pepper', 'mushroom', 'broccoli'],
+            bakery: ['bread', 'rolls', 'buns', 'cake', 'pastry', 'croissant', 'muffin', 'bagel', 'donut'],
+            pantry: ['rice', 'pasta', 'flour', 'sugar', 'salt', 'oil', 'sauce', 'spice', 'cereal', 'coffee', 'tea', 'honey', 'jam'],
+            frozen: ['ice cream', 'frozen', 'pizza', 'popsicle'],
+            snacks: ['chips', 'chocolate', 'candy', 'cookies', 'biscuits', 'nuts', 'crisps', 'popcorn', 'crackers'],
+            beverages: ['juice', 'soda', 'water', 'wine', 'beer', 'coke', 'sprite', 'drink', 'cola', 'lemonade'],
+            household: ['soap', 'detergent', 'toilet paper', 'paper towel', 'cleaning', 'shampoo', 'toothpaste', 'tissue', 'trash bags']
         };
 
         const lower = item.toLowerCase();
@@ -308,25 +519,27 @@ class AdvancedVoiceAssistant {
             }
         }
 
-        return null; // No local match, need API
+        return null;
     }
+
+    // ==================== INITIALIZATION ====================
 
     init() {
         if (this.initialized) return;
-        
+
         this.cacheDOMElements();
-        
+
         if (this.isNativeApp) {
             console.log('📱 NATIVE APP MODE');
         } else {
             console.log('🌐 WEB BROWSER MODE');
             this.setupRecognition();
         }
-        
+
         this.preloadVoices();
-        
+
         this.initialized = true;
-        console.log('✅ Suzi Voice Assistant v6.0 READY!');
+        console.log('✅ Suzi Voice Assistant v8.0 READY!');
     }
 
     cacheDOMElements() {
@@ -338,6 +551,7 @@ class AdvancedVoiceAssistant {
         this.dom.micBtn = document.getElementById('micBtn');
         this.dom.voiceStatus = document.getElementById('voiceStatus');
         this.dom.voiceSuggestions = document.getElementById('voiceSuggestions');
+        this.dom.modalMicBtn = document.getElementById('modalMicBtn');
     }
 
     setupRecognition() {
@@ -355,55 +569,57 @@ class AdvancedVoiceAssistant {
         this.recognition.maxAlternatives = 1;
 
         this.recognition.onstart = () => {
-            this.recognitionActive = true;
-            this.isListening = true;
-            this.updateMicState(true);
-            this.updateStatus('🎤', 'Listening...', 'Speak now');
+            console.log('🎤 Recognition started');
+            this.setState(AdvancedVoiceAssistant.STATES.LISTENING);
+            this.startSilenceTimer();
         };
 
         this.recognition.onresult = (event) => {
             const result = event.results[event.results.length - 1];
             const transcript = result[0].transcript.trim();
-            
+
+            // Reset silence timer on any result
+            this.resetSilenceTimer();
+
             // Show interim results
-            this.updateTranscript(transcript + (result.isFinal ? '' : '...'));
-            
-            if (result.isFinal && transcript) {
+            if (!result.isFinal) {
+                this.updateTranscript(transcript + '...');
+            } else if (transcript) {
                 this.handleTranscript(transcript);
             }
         };
 
         this.recognition.onerror = (event) => {
             console.log('🎤 Recognition error:', event.error);
-            this.recognitionActive = false;
-            this.isListening = false;
-            this.updateMicState(false);
+            this.clearSilenceTimer();
 
             if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
                 this.updateStatus('🚫', 'Microphone Blocked', 'Enable in browser settings');
+                this.setState(AdvancedVoiceAssistant.STATES.READY);
             } else if (event.error === 'no-speech') {
-                // Silent restart for no-speech
-                this.scheduleRestart(400); // Reduced from 800
-            } else if (event.error !== 'aborted') {
-                this.scheduleRestart(500); // Reduced from 1000
+                // No speech detected - go back to ready state (don't auto-restart!)
+                this.setState(AdvancedVoiceAssistant.STATES.READY);
+            } else if (event.error === 'aborted') {
+                // Intentionally aborted - do nothing
+            } else {
+                // Other errors - go back to ready
+                this.setState(AdvancedVoiceAssistant.STATES.READY);
             }
         };
 
         this.recognition.onend = () => {
-            this.recognitionActive = false;
-            this.isListening = false;
-            this.updateMicState(false);
+            console.log('🎤 Recognition ended');
+            this.clearSilenceTimer();
 
-            // Only restart if modal is open and we're not busy
-            if (this.modalOpen && !this.isSpeaking && !this.processingCommand) {
-                this.scheduleRestart(300); // Reduced from 600
+            // Only change state if still in listening state
+            if (this.state === AdvancedVoiceAssistant.STATES.LISTENING) {
+                this.setState(AdvancedVoiceAssistant.STATES.READY);
             }
         };
     }
 
     preloadVoices() {
         if (this.synthesis) {
-            // Chrome needs this to load voices
             this.synthesis.getVoices();
             if (typeof speechSynthesis !== 'undefined' && speechSynthesis.onvoiceschanged !== undefined) {
                 speechSynthesis.onvoiceschanged = () => this.synthesis.getVoices();
@@ -411,88 +627,81 @@ class AdvancedVoiceAssistant {
         }
     }
 
-    updateMicState(listening) {
-        if (this.dom.micBtn) {
-            this.dom.micBtn.classList.toggle('listening', listening);
-        }
-        if (this.dom.voiceStatus) {
-            this.dom.voiceStatus.classList.toggle('listening', listening);
-        }
-    }
+    // ==================== SILENCE TIMER ====================
 
-    // ==================== NATIVE BRIDGE ====================
-    
-    static onNativeListeningStart() {
-        const instance = AdvancedVoiceAssistant.getInstance();
-        instance.isListening = true;
-        instance.recognitionActive = true;
-        instance.updateMicState(true);
-        instance.updateStatus('🎤', 'Listening...', 'Speak now');
-        instance.updateTranscript('Listening...');
-    }
-
-    static onNativeListeningStop() {
-        const instance = AdvancedVoiceAssistant.getInstance();
-        instance.isListening = false;
-        instance.recognitionActive = false;
-        instance.updateMicState(false);
-        
-        if (instance.modalOpen && !instance.processingCommand && !instance.isSpeaking) {
-            instance.updateStatus('🎤', 'Ready', 'Tap mic to speak');
-        }
-    }
-
-    static onNativeTranscript(text) {
-        const instance = AdvancedVoiceAssistant.getInstance();
-        const transcript = (text || '').trim();
-        if (transcript) {
-            instance.handleTranscript(transcript);
-        }
-    }
-
-    static onNativeError(code, message) {
-        const instance = AdvancedVoiceAssistant.getInstance();
-        instance.isListening = false;
-        instance.recognitionActive = false;
-        instance.updateMicState(false);
-        
-        console.log('🎤 Native recognition issue:', code, message);
-        
-        if (code === 'not-allowed') {
-            instance.updateStatus('🚫', 'Microphone blocked', 'Enable in settings');
-            return;
-        }
-        
-        // Restart listening after error
-        setTimeout(() => {
-            if (instance.modalOpen && !instance.processingCommand && !instance.isSpeaking) {
-                instance.startListening();
+    startSilenceTimer() {
+        this.clearSilenceTimer();
+        this.silenceTimeout = setTimeout(() => {
+            if (this.state === AdvancedVoiceAssistant.STATES.LISTENING) {
+                console.log('⏱️ Silence timeout - stopping listening');
+                this.stopListening();
             }
-        }, 800);
+        }, this.SILENCE_DURATION);
     }
 
-    static onNativeSpeakStart() {
-        const instance = AdvancedVoiceAssistant.getInstance();
-        instance.isSpeaking = true;
-        instance.updateStatus('🔊', 'Speaking...', '');
+    resetSilenceTimer() {
+        if (this.state === AdvancedVoiceAssistant.STATES.LISTENING) {
+            this.startSilenceTimer();
+        }
     }
 
-    static onNativeSpeakDone() {
-        const instance = AdvancedVoiceAssistant.getInstance();
-        instance.isSpeaking = false;
-        
-        // Start listening after TTS completes
-        if (instance.modalOpen && !instance.processingCommand) {
-            setTimeout(() => {
-                if (instance.modalOpen && !instance.isSpeaking && !instance.processingCommand) {
-                    instance.startListening();
-                }
-            }, 500);
+    clearSilenceTimer() {
+        if (this.silenceTimeout) {
+            clearTimeout(this.silenceTimeout);
+            this.silenceTimeout = null;
         }
     }
 
     // ==================== LISTENING ====================
-    
+
+    startListening() {
+        const { STATES } = AdvancedVoiceAssistant;
+
+        // Can only start listening from READY state
+        if (this.state !== STATES.READY) {
+            console.log('⚠️ Cannot start listening from state:', this.state);
+            return;
+        }
+
+        // Clear any pending operations
+        this.clearAllTimeouts();
+
+        if (this.isNativeApp) {
+            this.startNativeListening();
+            return;
+        }
+
+        if (!this.recognition) {
+            this.updateStatus('❌', 'Not supported', 'Use Chrome, Edge, or Safari');
+            return;
+        }
+
+        try {
+            this.recognition.start();
+        } catch (error) {
+            if (error.name === 'InvalidStateError') {
+                console.log('🎤 Recognition already active');
+            } else {
+                console.error('🎤 Start failed:', error);
+            }
+        }
+    }
+
+    stopListening() {
+        this.clearSilenceTimer();
+
+        if (this.isNativeApp) {
+            this.stopNativeListening();
+            return;
+        }
+
+        if (this.recognition) {
+            try {
+                this.recognition.abort();
+            } catch (e) {}
+        }
+    }
+
     startNativeListening() {
         if (window.AndroidVoice && typeof window.AndroidVoice.startListening === 'function') {
             try {
@@ -509,112 +718,10 @@ class AdvancedVoiceAssistant {
                 window.AndroidVoice.stopListening();
             } catch (error) {}
         }
-        this.isListening = false;
-        this.recognitionActive = false;
-        this.updateMicState(false);
-    }
-
-    startListening() {
-        // For native: don't start if speaking (can't do both)
-        // For web: allow starting even while speaking (user can interrupt)
-        if (this.isNativeApp) {
-            if (this.recognitionActive || this.isListening || this.isSpeaking || this.processingCommand) {
-                return;
-            }
-            this.startNativeListening();
-            return;
-        }
-
-        // Web: allow listening while speaking for natural interruption
-        if (this.recognitionActive || this.isListening || this.processingCommand) {
-            return;
-        }
-
-        if (!this.recognition) {
-            this.updateStatus('❌', 'Not supported', 'Use Chrome, Edge, or Safari');
-            return;
-        }
-
-        this.clearAllTimeouts();
-
-        try {
-            this.recognition.start();
-            this.updateStatus('🎤', 'Listening...', 'Speak now');
-            this.updateTranscript('Listening...');
-        } catch (error) {
-            if (error.name === 'InvalidStateError') {
-                // Already running, ignore
-                console.log('🎤 Recognition already active');
-            } else {
-                console.error('🎤 Start failed:', error);
-                this.scheduleRestart(1000);
-            }
-        }
-    }
-
-    stopListening() {
-        this.clearAllTimeouts();
-        
-        if (this.isNativeApp) {
-            this.stopNativeListening();
-            return;
-        }
-
-        if (this.recognition) {
-            try {
-                this.recognition.abort();
-            } catch (e) {}
-        }
-
-        this.isListening = false;
-        this.recognitionActive = false;
-        this.updateMicState(false);
-    }
-
-    scheduleRestart(delay = 300) { // Reduced from 600
-        if (this.isNativeApp) return;
-
-        // Clear existing timeout
-        if (this.restartTimeout) {
-            clearTimeout(this.restartTimeout);
-            this.restartTimeout = null;
-        }
-
-        this.restartTimeout = setTimeout(() => {
-            this.restartTimeout = null;
-
-            // Double-check conditions before restarting
-            if (this.modalOpen &&
-                !this.isSpeaking &&
-                !this.processingCommand &&
-                !this.recognitionActive &&
-                !this.isListening) {
-                this.startListening();
-            }
-        }, delay);
-    }
-
-    clearAllTimeouts() {
-        if (this.restartTimeout) {
-            clearTimeout(this.restartTimeout);
-            this.restartTimeout = null;
-        }
-        if (this.apiTimeout) {
-            clearTimeout(this.apiTimeout);
-            this.apiTimeout = null;
-        }
-        if (this.speakTimeout) {
-            clearTimeout(this.speakTimeout);
-            this.speakTimeout = null;
-        }
-        if (this.typingTimeout) {
-            clearTimeout(this.typingTimeout);
-            this.typingTimeout = null;
-        }
     }
 
     // ==================== MODAL ====================
-    
+
     static openModal() {
         const instance = AdvancedVoiceAssistant.getInstance();
         instance.openModal();
@@ -629,60 +736,81 @@ class AdvancedVoiceAssistant {
         if (!this.initialized) {
             this.init();
         }
-        
+
         if (!this.dom.voiceModal) {
             this.cacheDOMElements();
         }
-        
+
         if (!this.dom.voiceModal) return;
 
-        this.modalOpen = true;
+        // Clear any previous state
+        this.clearAllTimeouts();
+        this.conversation = [];
+        this.lastTranscript = '';
+
+        // Show modal
         this.dom.voiceModal.classList.add('active');
         document.body.style.overflow = 'hidden';
 
-        // Reset state
-        this.processingCommand = false;
-        this.isSpeaking = false;
-        this.isListening = false;
-        this.recognitionActive = false;
-        this.lastTranscript = '';
-        
-        // Show initial state
-        this.updateStatus('🎤', 'Hi there!', 'How can I help?');
-        this.updateTranscript('Listening...');
-        this.showSuggestions(true);
+        // Set state to READY - user must tap mic to start listening
+        this.setState(AdvancedVoiceAssistant.STATES.READY);
 
-        // Start listening immediately - don't wait for greeting
-        if (this.isNativeApp) {
-            this.speak('How can I help?');
-        } else {
-            // Web: start listening RIGHT AWAY, speak greeting in background
-            // User can interrupt immediately
-            this.startListening();
-            this.speak('How can I help?');
-        }
+        // Play a short greeting (but don't auto-start listening after!)
+        this.speak('Hi! Tap the mic when you\'re ready to speak.', null, 1.1);
     }
 
     closeModal() {
-        // Stop everything first
+        // Stop everything
         this.stopListening();
         this.stopSpeaking();
-        this.stopTyping();
         this.clearAllTimeouts();
 
         if (this.dom.voiceModal) {
             this.dom.voiceModal.classList.remove('active');
         }
-        
+
         document.body.style.overflow = '';
-        this.modalOpen = false;
-        this.processingCommand = false;
-        this.isSpeaking = false;
-        this.isListening = false;
-        this.recognitionActive = false;
-        this.lastTranscript = '';
-        
-        this.updateMicState(false);
+        this.setState(AdvancedVoiceAssistant.STATES.IDLE);
+    }
+
+    toggleListening() {
+        const { STATES } = AdvancedVoiceAssistant;
+
+        if (this.state === STATES.LISTENING) {
+            this.stopListening();
+        } else if (this.state === STATES.READY) {
+            this.startListening();
+        } else if (this.state === STATES.SPEAKING) {
+            // Stop speaking and go to ready
+            this.stopSpeaking();
+            this.setState(STATES.READY);
+        }
+    }
+
+    // ==================== UI UPDATES ====================
+
+    updateMicState(listening) {
+        if (this.dom.micBtn) {
+            this.dom.micBtn.classList.toggle('listening', listening);
+        }
+        if (this.dom.voiceStatus) {
+            this.dom.voiceStatus.classList.toggle('listening', listening);
+        }
+        if (this.dom.modalMicBtn) {
+            this.dom.modalMicBtn.classList.toggle('listening', listening);
+        }
+    }
+
+    updateStatus(icon, text, subtext) {
+        if (this.dom.statusIcon) this.dom.statusIcon.textContent = icon;
+        if (this.dom.statusText) this.dom.statusText.textContent = text;
+        if (this.dom.statusSubtext) this.dom.statusSubtext.textContent = subtext || '';
+    }
+
+    updateTranscript(text) {
+        if (this.dom.voiceTranscript) {
+            this.dom.voiceTranscript.textContent = text || 'Tap the microphone to speak';
+        }
     }
 
     showSuggestions(show) {
@@ -692,75 +820,65 @@ class AdvancedVoiceAssistant {
     }
 
     // ==================== TRANSCRIPT HANDLING ====================
-    
-    handleTranscript(transcript) {
-        if (!transcript || !this.modalOpen) return;
 
-        // Stop listening while processing
+    handleTranscript(transcript) {
+        if (!transcript) return;
+
+        const { STATES } = AdvancedVoiceAssistant;
+
+        // Stop listening first
         this.stopListening();
 
-        // Stop words and closing phrases - these close the conversation
+        // Update display
+        this.updateTranscript(transcript);
+        this.showSuggestions(false);
+
+        // Check for closing phrases
         const closeWords = [
             'stop', 'bye', 'goodbye', 'cancel', 'exit', 'quit', 'close',
-            'nevermind', 'never mind', 'no', 'nope', 'nothing', 'no thanks',
-            "that's all", "that's it", "all done", "i'm good", "i'm done",
-            "no thank you", "nothing else", "that'll be all"
+            'nevermind', 'never mind', 'no thanks', "that's all", "that's it",
+            "all done", "i'm good", "i'm done", "no thank you"
         ];
         const lower = transcript.toLowerCase().trim();
 
-        // Check for closing phrases
-        const isClosingPhrase = closeWords.some(w =>
-            lower === w ||
-            lower === w + ' suzi' ||
-            lower === 'hey ' + w ||
-            lower.startsWith(w + ' ') ||
-            lower.endsWith(' ' + w)
-        );
-
-        if (isClosingPhrase) {
-            this.updateTranscript(transcript);
+        if (closeWords.some(w => lower === w || lower.startsWith(w + ' '))) {
             const farewells = ['Goodbye!', 'Bye for now!', 'Talk soon!', 'See you later!'];
             const farewell = farewells[Math.floor(Math.random() * farewells.length)];
-            this.speak(farewell, () => this.closeModal(), 1.3);
+            this.speak(farewell, () => this.closeModal(), 1.2);
             return;
         }
 
         // Check for duplicates
         const now = Date.now();
         if (transcript === this.lastTranscript && (now - this.lastTranscriptTime) < this.commandCooldown) {
-            this.scheduleRestart(500);
-            return;
-        }
-
-        // Don't process if already processing
-        if (this.processingCommand) {
+            this.setState(STATES.READY);
             return;
         }
 
         this.lastTranscript = transcript;
         this.lastTranscriptTime = now;
-        
-        this.updateTranscript(transcript);
-        this.showSuggestions(false);
+
+        // Process command
+        this.setState(STATES.PROCESSING);
         this.processVoiceCommand(transcript);
     }
 
     // ==================== COMMAND PROCESSING ====================
 
     async processVoiceCommand(command) {
-        if (this.processingCommand || !command || command.trim().length === 0) return;
+        if (!command || command.trim().length === 0) {
+            this.setState(AdvancedVoiceAssistant.STATES.READY);
+            return;
+        }
 
-        this.processingCommand = true;
-        this.stopListening();
-
-        // TRY LOCAL INTENT FIRST (instant, no API)
+        // Try local intent first
         const localResult = this.tryLocalIntent(command);
 
         if (localResult) {
-            console.log('⚡ Using local intent - skipping API');
+            console.log('⚡ Using local intent');
             this.updateStatus('✅', 'Got it!', '');
 
-            // Add to conversation history
+            // Add to conversation
             this.conversation.push({ role: 'user', content: command });
             this.conversation.push({ role: 'assistant', content: localResult.response_text });
 
@@ -771,11 +889,8 @@ class AdvancedVoiceAssistant {
         // No local match - use API
         this.updateStatus('⚙️', 'Thinking...', '');
 
-        // Reduced timeout: 8 seconds
         const controller = new AbortController();
-        this.apiTimeout = setTimeout(() => {
-            controller.abort();
-        }, 8000);
+        this.operationTimeout = setTimeout(() => controller.abort(), 10000);
 
         try {
             const response = await fetch('/api/voice-intent.php', {
@@ -784,29 +899,23 @@ class AdvancedVoiceAssistant {
                 body: JSON.stringify({
                     transcript: command,
                     page: window.location.pathname,
-                    conversation: this.conversation.slice(-2) // Reduced: only last 2 messages
+                    conversation: this.conversation.slice(-4)
                 }),
                 signal: controller.signal
             });
 
-            clearTimeout(this.apiTimeout);
-            this.apiTimeout = null;
+            this.clearOperationTimeout();
 
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
             const data = await response.json();
+            if (!data || !data.intent) throw new Error('Invalid response');
 
-            if (!data || !data.intent) {
-                throw new Error('Invalid response');
-            }
-
-            // Add to conversation history
+            // Add to conversation
             this.conversation.push({ role: 'user', content: command });
             this.conversation.push({ role: 'assistant', content: data.response_text });
 
-            // Keep only last N exchanges
+            // Keep history limited
             if (this.conversation.length > this.maxConversationHistory * 2) {
                 this.conversation = this.conversation.slice(-this.maxConversationHistory * 2);
             }
@@ -814,29 +923,35 @@ class AdvancedVoiceAssistant {
             await this.executeIntent(data);
 
         } catch (error) {
-            clearTimeout(this.apiTimeout);
-            this.apiTimeout = null;
-
+            this.clearOperationTimeout();
             console.error('Voice command error:', error);
 
-            let fallback = "Sorry, couldn't get that. Try again?";
-            if (error.name === 'AbortError') {
-                fallback = "Taking too long. Try again?";
-            }
+            let fallback = error.name === 'AbortError'
+                ? "Taking too long. Tap mic to try again."
+                : "Sorry, couldn't get that. Tap mic to try again.";
 
-            this.updateStatus('❓', 'Oops', fallback);
-
+            this.updateStatus('❓', 'Oops', '');
             this.speak(fallback, () => {
-                this.processingCommand = false;
-                this.scheduleRestart(400); // Reduced from 800
-            }, 1.15);
+                this.setState(AdvancedVoiceAssistant.STATES.READY);
+            }, 1.1);
         }
     }
 
     async executeIntent(intentData) {
-        const { intent, slots, response_text } = intentData;
+        const { intent, slots, response_text, keepOpen } = intentData;
+        const { STATES } = AdvancedVoiceAssistant;
 
-        // Update UI
+        // Determine if this will navigate away
+        const navigationIntents = [
+            'navigate', 'create_event', 'create_schedule', 'create_note',
+            'send_message', 'view_shopping', 'show_calendar', 'show_schedule',
+            'read_messages', 'show_location', 'find_member', 'check_notifications',
+            'get_weather_today', 'get_weather_tomorrow', 'get_weather_week'
+        ];
+
+        const willNavigate = navigationIntents.includes(intent);
+
+        // Update UI with appropriate icon
         const icons = {
             'add_shopping_item': '🛒',
             'create_note': '📝',
@@ -844,148 +959,72 @@ class AdvancedVoiceAssistant {
             'create_schedule': '⏰',
             'get_weather_today': '🌤️',
             'get_weather_tomorrow': '🌤️',
-            'get_weather_week': '🌤️',
             'send_message': '💬',
             'navigate': '🧭',
             'smalltalk': '💬',
+            'find_member': '📍',
             'error': '❌'
         };
-        
-        this.updateStatus(icons[intent] || '✅', 'Got it!', response_text.substring(0, 50) + (response_text.length > 50 ? '...' : ''));
 
-        // Determine if this intent navigates away
-        // NOTE: add_shopping_item is NOT a navigation intent - user stays on current page
-        const navigationIntents = [
-            'navigate',
-            'create_event',
-            'create_schedule',
-            'create_note',
-            'send_message',
-            'view_shopping',
-            'show_calendar',
-            'show_schedule',
-            'read_messages',
-            'show_location',
-            'find_member',
-            'check_notifications'
-        ];
-        
-        const willNavigate = navigationIntents.includes(intent);
+        this.updateStatus(icons[intent] || '✅', 'Got it!', '');
 
-        // Speak the response, then ask follow-up for non-navigation intents
+        // Speak response
         this.speak(response_text, () => {
-            this.processingCommand = false;
-
-            // For non-navigation intents, ask "anything else?" and keep listening
-            if (!willNavigate && this.modalOpen) {
-                this.askFollowUp();
+            if (willNavigate) {
+                // Already navigating
+            } else if (keepOpen) {
+                // Stay open and ready for more commands
+                this.setState(STATES.READY);
+            } else {
+                // Default: go back to ready
+                this.setState(STATES.READY);
             }
-        }, 1.1); // Slightly faster speech
+        }, 1.1);
 
         // Execute the action
         try {
             switch (intent) {
-                // ========== SHOPPING ==========
                 case 'add_shopping_item':
                     await this.addToShopping(slots.item, slots.quantity, slots.category);
                     break;
-                
+
                 case 'view_shopping':
                     this.navigate('/shopping/');
                     break;
-                
-                case 'clear_bought':
-                    await this.clearBoughtItems();
-                    break;
 
-                // ========== NOTES ==========
                 case 'create_note':
                     this.navigateToCreateNote(slots);
                     break;
-                
-                case 'search_notes':
-                    this.navigate('/notes/?search=' + encodeURIComponent(slots.query || ''));
-                    break;
 
-                // ========== CALENDAR ==========
                 case 'create_event':
                     this.navigateToCreateEvent(slots);
                     break;
-                
-                case 'show_calendar':
-                    const calendarDate = this.parseDate(slots.date || 'today');
-                    this.navigate('/calendar/?date=' + calendarDate);
-                    break;
-                
-                case 'next_event':
-                    await this.showNextEvent();
-                    break;
 
-                // ========== SCHEDULE ==========
                 case 'create_schedule':
                     this.navigateToCreateSchedule(slots);
                     break;
-                
-                case 'show_schedule':
-                    const scheduleDate = this.parseDate(slots.date || 'today');
-                    this.navigate('/schedule/?date=' + scheduleDate);
-                    break;
 
-                // ========== WEATHER ==========
                 case 'get_weather_today':
                 case 'get_weather_tomorrow':
                 case 'get_weather_week':
-                    await this.getWeather(intent);
+                    this.navigate('/weather/');
                     break;
 
-                // ========== MESSAGES ==========
                 case 'send_message':
                     await this.sendMessage(slots.content);
                     break;
-                
-                case 'read_messages':
-                    this.navigate('/messages/');
-                    break;
 
-                // ========== TRACKING ==========
-                case 'show_location':
-                    this.navigate('/tracking/');
-                    break;
-                
                 case 'find_member':
                     this.navigate('/tracking/?search=' + encodeURIComponent(slots.member_name || ''));
                     break;
 
-                // ========== NOTIFICATIONS ==========
-                case 'check_notifications':
-                    this.navigate('/notifications/');
-                    break;
-                
-                case 'mark_all_read':
-                    await this.markAllNotificationsRead();
-                    break;
-
-                // ========== NAVIGATION ==========
                 case 'navigate':
                     this.navigate(this.getNavigationPath(slots.destination));
                     break;
 
-                // ========== SMART FEATURES ==========
-                case 'get_stats':
-                    this.navigate('/home/#stats');
-                    break;
-                
-                case 'get_suggestions':
-                    await this.getAISuggestions();
-                    break;
-
-                // ========== SMALLTALK ==========
                 case 'smalltalk':
-                    // Just speak the response, no action needed
+                    // Just speak, no action
                     break;
-
-                default:
-                    console.log('Unknown intent:', intent);
             }
         } catch (error) {
             console.error('Intent execution error:', error);
@@ -1002,7 +1041,7 @@ class AdvancedVoiceAssistant {
 
         try {
             const listId = window.currentListId || await this.getDefaultShoppingList();
-            
+
             if (!listId) {
                 throw new Error('No shopping list found');
             }
@@ -1025,15 +1064,10 @@ class AdvancedVoiceAssistant {
             const data = await response.json();
             if (!data.success) throw new Error(data.error || 'Failed to add item');
 
-            // If we're already on the shopping page, reload to show new item
-            // But do NOT navigate away from other pages - let user continue conversation
+            // If on shopping page, reload to show new item
             if (window.location.pathname.includes('/shopping/')) {
-                this.speakTimeout = setTimeout(() => {
-                    location.reload();
-                }, 300);
+                setTimeout(() => location.reload(), 500);
             }
-            // DO NOT navigate away from current page
-            // executeIntent() will handle follow-up ("Anything else?")
 
         } catch (error) {
             console.error('Add to shopping failed:', error);
@@ -1043,29 +1077,20 @@ class AdvancedVoiceAssistant {
 
     async getDefaultShoppingList() {
         try {
-            // 1) Fetch lists WITH cookies (credentials: same-origin)
             const response = await fetch('/shopping/api/lists.php?action=get_all', {
                 credentials: 'same-origin'
             });
 
-            if (!response.ok) {
-                console.error('Failed to fetch shopping lists:', response.status);
-                return null;
-            }
+            if (!response.ok) return null;
 
             const data = await response.json().catch(() => null);
-            if (!data || !data.success) {
-                console.error('Invalid shopping lists response');
-                return null;
-            }
+            if (!data || !data.success) return null;
 
-            // If lists exist, return the first one
             if (data.lists && data.lists[0]) {
                 return data.lists[0].id;
             }
 
-            // 2) No lists exist - auto-create "Main List"
-            console.log('No shopping lists found, creating Main List...');
+            // Create default list
             const formData = new FormData();
             formData.append('action', 'create');
             formData.append('name', 'Main List');
@@ -1077,43 +1102,14 @@ class AdvancedVoiceAssistant {
                 credentials: 'same-origin'
             });
 
-            if (!createResponse.ok) {
-                console.error('Failed to create shopping list:', createResponse.status);
-                return null;
-            }
+            if (!createResponse.ok) return null;
 
             const createData = await createResponse.json().catch(() => null);
-            if (createData && createData.success && createData.list_id) {
-                return createData.list_id;
-            }
+            return createData?.success && createData?.list_id ? createData.list_id : null;
 
-            return null;
         } catch (error) {
             console.error('Failed to get/create shopping list:', error);
             return null;
-        }
-    }
-
-    async clearBoughtItems() {
-        try {
-            const listId = window.currentListId || await this.getDefaultShoppingList();
-            
-            const formData = new FormData();
-            formData.append('action', 'clear_bought');
-            formData.append('list_id', listId);
-
-            await fetch('/shopping/api/items.php', {
-                method: 'POST',
-                body: formData
-            });
-
-            this.speakTimeout = setTimeout(() => {
-                if (window.location.pathname.includes('/shopping/')) {
-                    location.reload();
-                }
-            }, 800);
-        } catch (error) {
-            console.error('Clear bought failed:', error);
         }
     }
 
@@ -1121,11 +1117,7 @@ class AdvancedVoiceAssistant {
         let url = '/notes/?new=1';
         if (slots.content) url += '&content=' + encodeURIComponent(slots.content);
         if (slots.title) url += '&title=' + encodeURIComponent(slots.title);
-
-        this.speakTimeout = setTimeout(() => {
-            this.closeModal();
-            window.location.href = url;
-        }, 600);
+        this.navigate(url);
     }
 
     navigateToCreateEvent(slots) {
@@ -1133,11 +1125,7 @@ class AdvancedVoiceAssistant {
         if (slots.title) url += '&content=' + encodeURIComponent(slots.title);
         if (slots.date) url += '&date=' + this.parseDate(slots.date);
         if (slots.time) url += '&time=' + slots.time;
-
-        this.speakTimeout = setTimeout(() => {
-            this.closeModal();
-            window.location.href = url;
-        }, 600);
+        this.navigate(url);
     }
 
     navigateToCreateSchedule(slots) {
@@ -1145,26 +1133,14 @@ class AdvancedVoiceAssistant {
         if (slots.title) url += '&content=' + encodeURIComponent(slots.title);
         if (slots.date) url += '&date=' + this.parseDate(slots.date);
         if (slots.time) url += '&time=' + slots.time;
-        if (slots.type) url += '&type=' + slots.type;
-
-        this.speakTimeout = setTimeout(() => {
-            this.closeModal();
-            window.location.href = url;
-        }, 600);
-    }
-
-    async getWeather(intent) {
-        // Weather details are handled by the API response_text
-        // Navigate to weather page after speaking
-        this.speakTimeout = setTimeout(() => {
-            if (!window.location.pathname.includes('/weather/')) {
-                this.navigate('/weather/');
-            }
-        }, 1000);
+        this.navigate(url);
     }
 
     async sendMessage(content) {
-        if (!content) return;
+        if (!content) {
+            this.navigate('/messages/');
+            return;
+        }
 
         try {
             const formData = new FormData();
@@ -1176,59 +1152,22 @@ class AdvancedVoiceAssistant {
                 body: formData
             });
 
-            this.speakTimeout = setTimeout(() => {
-                if (window.location.pathname.includes('/messages/')) {
-                    location.reload();
-                }
-            }, 600);
+            if (window.location.pathname.includes('/messages/')) {
+                setTimeout(() => location.reload(), 500);
+            }
         } catch (error) {
             console.error('Send message failed:', error);
         }
     }
 
-    async showNextEvent() {
-        this.speakTimeout = setTimeout(() => {
-            this.navigate('/calendar/');
-        }, 800);
-    }
-
-    async markAllNotificationsRead() {
-        try {
-            const formData = new FormData();
-            formData.append('action', 'mark_all_read');
-
-            await fetch('/notifications/api/', {
-                method: 'POST',
-                body: formData
-            });
-
-            this.speakTimeout = setTimeout(() => {
-                if (window.location.pathname.includes('/notifications/')) {
-                    location.reload();
-                } else {
-                    // Update badge if available
-                    if (window.HeaderMenu && typeof window.HeaderMenu.updateNotificationBadge === 'function') {
-                        window.HeaderMenu.updateNotificationBadge(0);
-                    }
-                }
-            }, 600);
-        } catch (error) {
-            console.error('Mark all read failed:', error);
-        }
-    }
-
-    async getAISuggestions() {
-        this.speakTimeout = setTimeout(() => {
-            this.navigate('/home/#suggestions');
-        }, 800);
-    }
-
     navigate(url) {
-        this.updateStatus('🧭', 'Navigating...', '');
-        this.speakTimeout = setTimeout(() => {
+        this.setState(AdvancedVoiceAssistant.STATES.NAVIGATING);
+        this.updateStatus('🧭', 'Opening...', '');
+
+        this.operationTimeout = setTimeout(() => {
             this.closeModal();
             window.location.href = url;
-        }, 600); // Reduced from 1500
+        }, 800);
     }
 
     getNavigationPath(destination) {
@@ -1242,76 +1181,68 @@ class AdvancedVoiceAssistant {
             messages: '/messages/',
             tracking: '/tracking/',
             notifications: '/notifications/',
-            help: '/help/'
+            help: '/help/',
+            games: '/games/'
         };
         return paths[destination] || '/home/';
     }
 
     parseDate(dateString) {
         if (!dateString) return new Date().toISOString().split('T')[0];
-        
+
         const today = new Date();
         const lower = dateString.toLowerCase().trim();
-        
+
         if (lower === 'today') {
             return today.toISOString().split('T')[0];
         }
-        
+
         if (lower === 'tomorrow') {
             const tomorrow = new Date(today);
             tomorrow.setDate(tomorrow.getDate() + 1);
             return tomorrow.toISOString().split('T')[0];
         }
-        
-        // If already in YYYY-MM-DD format
+
         if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
             return dateString;
         }
-        
-        // Try to parse as date
+
         try {
             const parsed = new Date(dateString);
             if (!isNaN(parsed.getTime())) {
                 return parsed.toISOString().split('T')[0];
             }
         } catch (e) {}
-        
+
         return today.toISOString().split('T')[0];
     }
 
     // ==================== TEXT-TO-SPEECH ====================
-    
+
     speak(text, onEndCallback = null, rate = 1.1) {
         if (!text) {
             if (onEndCallback) onEndCallback();
             return;
         }
 
-        // Start typing animation alongside speech
-        this.typeText(text);
+        this.setState(AdvancedVoiceAssistant.STATES.SPEAKING);
+        this.updateTranscript(text);
 
         // Native app TTS
         if (window.AndroidVoice && typeof window.AndroidVoice.speak === 'function') {
             try {
-                this.isSpeaking = true;
-                this.updateStatus('🔊', 'Speaking...', '');
                 window.AndroidVoice.speak(text);
 
-                // Fallback timer: assume TTS done after estimated time
-                // (in case native callback doesn't fire)
-                const estimatedDuration = Math.max(1200, text.split(' ').length * 350);
-                setTimeout(() => {
-                    if (this.isSpeaking) {
-                        console.log('🔊 Native TTS fallback timeout triggered');
-                        window.SuziVoice?.onTtsEnd?.();
-                    }
+                // Fallback timeout
+                const estimatedDuration = Math.max(1500, text.split(' ').length * 400);
+                this.operationTimeout = setTimeout(() => {
+                    this.onSpeakComplete();
                     if (onEndCallback) onEndCallback();
                 }, estimatedDuration);
 
                 return;
             } catch (error) {
                 console.error('❌ Native speak failed', error);
-                this.isSpeaking = false;
             }
         }
 
@@ -1321,17 +1252,11 @@ class AdvancedVoiceAssistant {
             return;
         }
 
-        // Stop any current speech
-        this.stopSpeaking();
-        
-        // Also stop listening to prevent echo
-        if (!this.isNativeApp && this.recognitionActive) {
-            try {
-                this.recognition.abort();
-            } catch (e) {}
-        }
+        // Cancel any current speech
+        this.synthesis.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
+        this.currentUtterance = utterance;
 
         // Get best voice
         const voices = this.synthesis.getVoices();
@@ -1346,151 +1271,74 @@ class AdvancedVoiceAssistant {
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
 
-        utterance.onstart = () => {
-            this.isSpeaking = true;
+        // Fallback timeout
+        const fallbackMs = (text.length * 70) + 2000;
+        const fallbackTimeout = setTimeout(() => {
+            console.log('🔊 Speech fallback timeout');
+            this.onSpeakComplete();
+            if (onEndCallback) onEndCallback();
+        }, fallbackMs);
+
+        utterance.onend = () => {
+            clearTimeout(fallbackTimeout);
+            this.onSpeakComplete();
+            if (onEndCallback) onEndCallback();
         };
 
         utterance.onerror = (event) => {
             if (event.error !== 'interrupted' && event.error !== 'canceled') {
                 console.error('Speech error:', event.error);
             }
-            this.isSpeaking = false;
-            if (onEndCallback) {
-                setTimeout(onEndCallback, 200);
-            }
-        };
-
-        // Fallback timeout in case onend doesn't fire (Chrome bug)
-        const fallbackTimeout = setTimeout(() => {
-            if (this.isSpeaking) {
-                console.log('🔊 Speech fallback timeout triggered');
-                this.isSpeaking = false;
-                if (onEndCallback) onEndCallback();
-            }
-        }, (text.length * 80) + 2000); // Reduced from (100 * len) + 3000
-
-        utterance.onend = () => {
             clearTimeout(fallbackTimeout);
-            this.isSpeaking = false;
-            if (onEndCallback) {
-                setTimeout(onEndCallback, 200);
-            }
+            this.onSpeakComplete();
+            if (onEndCallback) onEndCallback();
         };
 
         this.synthesis.speak(utterance);
+    }
+
+    onSpeakComplete() {
+        // Only transition if still in speaking state
+        if (this.state === AdvancedVoiceAssistant.STATES.SPEAKING) {
+            // Will be set by callback or default to READY
+        }
     }
 
     stopSpeaking() {
         if (this.synthesis) {
             this.synthesis.cancel();
         }
-        this.isSpeaking = false;
+        this.currentUtterance = null;
     }
 
-    // ==================== UI UPDATES ====================
-    
-    updateStatus(icon, text, subtext) {
-        if (this.dom.statusIcon) this.dom.statusIcon.textContent = icon;
-        if (this.dom.statusText) this.dom.statusText.textContent = text;
-        if (this.dom.statusSubtext) this.dom.statusSubtext.textContent = subtext || '';
-    }
+    // ==================== TIMEOUTS ====================
 
-    updateTranscript(text) {
-        if (this.dom.voiceTranscript) {
-            this.dom.voiceTranscript.textContent = text || 'Listening...';
+    clearOperationTimeout() {
+        if (this.operationTimeout) {
+            clearTimeout(this.operationTimeout);
+            this.operationTimeout = null;
         }
     }
 
-    /**
-     * Typing animation - displays words one by one
-     */
-    typeText(text, onComplete = null) {
-        if (!text || !this.dom.voiceTranscript) {
-            if (onComplete) onComplete();
-            return;
-        }
-
-        // Clear any existing typing animation
-        this.stopTyping();
-
-        const words = text.split(' ');
-        let currentIndex = 0;
-        this.dom.voiceTranscript.textContent = '';
-
-        // Calculate delay per word based on speech rate
-        // Average speaking rate is about 150 words per minute = 400ms per word
-        // We use slightly faster typing to finish before speech ends
-        const delayPerWord = Math.max(80, Math.min(200, (text.length * 60) / words.length));
-
-        const typeNextWord = () => {
-            if (currentIndex < words.length && this.modalOpen) {
-                this.dom.voiceTranscript.textContent = words.slice(0, currentIndex + 1).join(' ');
-                currentIndex++;
-                this.typingTimeout = setTimeout(typeNextWord, delayPerWord);
-            } else {
-                // Done typing
-                this.stopTyping();
-                if (onComplete) onComplete();
-            }
-        };
-
-        // Start typing
-        typeNextWord();
+    clearAllTimeouts() {
+        this.clearOperationTimeout();
+        this.clearSilenceTimer();
     }
 
-    stopTyping() {
-        if (this.typingTimeout) {
-            clearTimeout(this.typingTimeout);
-            this.typingTimeout = null;
-        }
-        // Clear any intervals
-        this.typingIntervals.forEach(id => clearInterval(id));
-        this.typingIntervals = [];
-    }
-
-    /**
-     * Ask follow-up question to continue the conversation
-     */
-    askFollowUp() {
-        if (!this.modalOpen) return;
-
-        // Small delay before asking follow-up
-        setTimeout(() => {
-            if (!this.modalOpen || this.processingCommand) return;
-
-            // Randomize follow-up phrases
-            const followUps = [
-                'Anything else?',
-                'What else can I help with?',
-                'Need anything else?',
-                'Is there more?'
-            ];
-            const followUp = followUps[Math.floor(Math.random() * followUps.length)];
-
-            this.updateStatus('🎤', 'Ready', followUp);
-
-            // Speak the follow-up and start listening
-            this.speak(followUp, () => {
-                if (this.modalOpen && !this.processingCommand) {
-                    // Start listening for the next command
-                    this.scheduleRestart(200);
-                }
-            }, 1.2);
-        }, 400);
-    }
+    // ==================== PUBLIC API ====================
 
     executeSuggestion(command) {
-        if (this.processingCommand) return;
-        
+        if (this.state !== AdvancedVoiceAssistant.STATES.READY) return;
+
         this.updateTranscript(command);
         this.showSuggestions(false);
+        this.setState(AdvancedVoiceAssistant.STATES.PROCESSING);
         this.processVoiceCommand(command);
     }
 }
 
 // ==================== AUTO-INITIALIZE ====================
 document.addEventListener('DOMContentLoaded', () => {
-    // Small delay to ensure all DOM is ready
     setTimeout(() => {
         const instance = AdvancedVoiceAssistant.getInstance();
         instance.init();
