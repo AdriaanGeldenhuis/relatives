@@ -9,7 +9,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Cache-Control: private, no-store, max-age=0');
+header('CDN-Cache-Control: no-store');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

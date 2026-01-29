@@ -106,7 +106,8 @@ class HT_Response {
     private static function send(array $response, int $status): never {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
-        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('Cache-Control: private, no-store, max-age=0');
+        header('CDN-Cache-Control: no-store');
         echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
         exit;
     }

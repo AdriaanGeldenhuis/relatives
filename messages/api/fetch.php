@@ -14,9 +14,8 @@ ob_start();
 
 // Set headers
 header('Content-Type: application/json');
-header('Cache-Control: no-cache, no-store, must-revalidate');
-header('Pragma: no-cache');
-header('Expires: 0');
+header('Cache-Control: private, no-store, max-age=0');
+header('CDN-Cache-Control: no-store');
 
 // Enable error logging
 error_reporting(E_ALL);
