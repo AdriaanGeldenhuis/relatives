@@ -121,27 +121,32 @@ class FirebaseMessaging {
         }
 
         try {
-            // Build FCM v1 message
+            // Include notification info in data payload for app to handle
+            // This ensures onMessageReceived() is always called
+            $dataPayload = array_merge($data, [
+                'title' => $notification['title'] ?? 'New Notification',
+                'body' => $notification['body'] ?? '',
+                'message' => $notification['body'] ?? '',
+                'icon' => $notification['icon'] ?? 'notification_icon',
+                'sound' => $notification['sound'] ?? 'default'
+            ]);
+
+            // Build FCM v1 message - DATA ONLY for Android to ensure onMessageReceived() is called
+            // This allows the app to handle navigation properly
             $message = [
                 'message' => [
                     'token' => $token,
-                    'notification' => [
-                        'title' => $notification['title'] ?? 'New Notification',
-                        'body' => $notification['body'] ?? ''
-                    ],
-                    'data' => array_map('strval', $data), // FCM requires string values
+                    'data' => array_map('strval', $dataPayload), // FCM requires string values
                     'android' => [
-                        'priority' => 'high',
-                        'notification' => [
-                            'sound' => $notification['sound'] ?? 'default',
-                            'click_action' => $notification['click_action'] ?? '/',
-                            'icon' => $notification['icon'] ?? 'notification_icon',
-                            'color' => '#667eea'
-                        ]
+                        'priority' => 'high'
                     ],
                     'apns' => [
                         'payload' => [
                             'aps' => [
+                                'alert' => [
+                                    'title' => $notification['title'] ?? 'New Notification',
+                                    'body' => $notification['body'] ?? ''
+                                ],
                                 'sound' => $notification['sound'] ?? 'default',
                                 'badge' => 1
                             ]
@@ -209,10 +214,18 @@ class FirebaseMessaging {
             return false;
         }
 
+        // Use data-only message for Android to ensure onMessageReceived() is called
+        $dataPayload = array_merge($data, [
+            'title' => $notification['title'] ?? 'New Notification',
+            'body' => $notification['body'] ?? '',
+            'message' => $notification['body'] ?? '',
+            'icon' => $notification['icon'] ?? 'notification_icon',
+            'sound' => $notification['sound'] ?? 'default'
+        ]);
+
         $payload = [
             'to' => $token,
-            'notification' => $notification,
-            'data' => $data,
+            'data' => $dataPayload,
             'priority' => 'high',
             'content_available' => true
         ];
