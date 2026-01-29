@@ -305,7 +305,7 @@ try {
                 'title' => $title,
                 'message' => $message,
                 'action_url' => '/weather/',
-                'priority' => NotificationManager::PRIORITY_LOW,
+                'priority' => NotificationManager::PRIORITY_NORMAL,
                 'icon' => $weatherIcon,
                 'vibrate' => 0,
                 'data' => [
@@ -317,8 +317,12 @@ try {
             ];
             
             $notifManager = NotificationManager::getInstance($db);
+
+            // Debug: Check if FCM is configured
+            echo "  Firebase configured: " . (class_exists('FirebaseMessaging') ? 'YES' : 'NO') . "\n";
+
             $notifId = $notifManager->create($notificationData);
-            
+
             if ($notifId) {
                 // Update last sent timestamp (handle missing column gracefully)
                 try {
@@ -335,7 +339,7 @@ try {
 
                 echo "  ✅ Sent weather notification (ID: $notifId)\n";
             } else {
-                echo "  ⚠️ Failed to create notification\n";
+                echo "  ⚠️ Failed to create notification (check error log for reason)\n";
             }
             
         } catch (Exception $e) {
