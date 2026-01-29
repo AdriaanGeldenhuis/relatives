@@ -40,19 +40,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $title = trim($_POST['title'] ?? '');
                 $body = trim($_POST['body'] ?? '');
                 $color = $_POST['color'] ?? '#ffeb3b';
-                
-                if ($type === 'text' && empty($body)) {
+
+                if ($type === 'text' && empty($body) && !isset($_FILES['image'])) {
                     throw new Exception('Note content is required');
                 }
-                
+
                 $stmt = $db->prepare("
-                    INSERT INTO notes (family_id, user_id, type, title, body, color, pinned, created_at) 
+                    INSERT INTO notes (family_id, user_id, type, title, body, color, pinned, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, 0, NOW())
                 ");
                 $stmt->execute([$user['family_id'], $user['id'], $type, $title, $body, $color]);
-                
+
                 $noteId = $db->lastInsertId();
-                
+
+                // Handle voice note audio upload
                 if ($type === 'voice' && isset($_FILES['audio']) && $_FILES['audio']['error'] === UPLOAD_ERR_OK) {
                     $uploadDir = __DIR__ . '/../uploads/voice/';
 
@@ -68,6 +69,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                         $stmt = $db->prepare("UPDATE notes SET audio_path = ? WHERE id = ?");
                         $stmt->execute([$audioPath, $noteId]);
+                    }
+                }
+
+                // Handle image upload - save as WebP to /saves/{user_id}/notes/
+                $imagePath = null;
+                if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+                    $file = $_FILES['image'];
+                    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                    $maxSize = 10 * 1024 * 1024; // 10MB
+
+                    $finfo = new finfo(FILEINFO_MIME_TYPE);
+                    $mimeType = $finfo->file($file['tmp_name']);
+
+                    if (in_array($mimeType, $allowedTypes) && $file['size'] <= $maxSize) {
+                        // Create user's notes directory: /saves/{user_id}/notes/
+                        $uploadDir = __DIR__ . '/../saves/' . $user['id'] . '/notes/';
+                        if (!is_dir($uploadDir)) {
+                            mkdir($uploadDir, 0755, true);
+                        }
+
+                        $filename = 'note_' . $noteId . '_' . time() . '.webp';
+                        $filepath = $uploadDir . $filename;
+
+                        // Load image based on type and convert to WebP
+                        $sourceImage = null;
+                        switch ($mimeType) {
+                            case 'image/jpeg':
+                                $sourceImage = imagecreatefromjpeg($file['tmp_name']);
+                                break;
+                            case 'image/png':
+                                $sourceImage = imagecreatefrompng($file['tmp_name']);
+                                break;
+                            case 'image/gif':
+                                $sourceImage = imagecreatefromgif($file['tmp_name']);
+                                break;
+                            case 'image/webp':
+                                $sourceImage = imagecreatefromwebp($file['tmp_name']);
+                                break;
+                        }
+
+                        if ($sourceImage) {
+                            // Preserve transparency
+                            imagepalettetotruecolor($sourceImage);
+                            imagealphablending($sourceImage, true);
+                            imagesavealpha($sourceImage, true);
+
+                            // Save as WebP with 85% quality
+                            if (imagewebp($sourceImage, $filepath, 85)) {
+                                $imagePath = '/saves/' . $user['id'] . '/notes/' . $filename;
+
+                                $stmt = $db->prepare("UPDATE notes SET image_path = ? WHERE id = ?");
+                                $stmt->execute([$imagePath, $noteId]);
+                            }
+                            imagedestroy($sourceImage);
+                        }
                     }
                 }
 
@@ -98,6 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'color' => $color,
                         'pinned' => 0,
                         'audio_path' => $audioPath,
+                        'image_path' => $imagePath,
                         'user_id' => $user['id'],
                         'user_name' => $user['full_name'],
                         'avatar_color' => $user['avatar_color'],
@@ -128,21 +185,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             
             case 'delete_note':
                 $noteId = (int)$_POST['note_id'];
-                
-                $stmt = $db->prepare("SELECT audio_path FROM notes WHERE id = ? AND family_id = ?");
+
+                $stmt = $db->prepare("SELECT audio_path, image_path FROM notes WHERE id = ? AND family_id = ?");
                 $stmt->execute([$noteId, $user['family_id']]);
                 $note = $stmt->fetch();
-                
+
+                // Delete audio file if exists
                 if ($note && $note['audio_path']) {
                     $audioFile = __DIR__ . '/..' . $note['audio_path'];
                     if (file_exists($audioFile)) {
                         unlink($audioFile);
                     }
                 }
-                
+
+                // Delete image file if exists
+                if ($note && $note['image_path']) {
+                    $imageFile = __DIR__ . '/..' . $note['image_path'];
+                    if (file_exists($imageFile)) {
+                        unlink($imageFile);
+                    }
+                }
+
                 $stmt = $db->prepare("DELETE FROM notes WHERE id = ? AND family_id = ?");
                 $stmt->execute([$noteId, $user['family_id']]);
-                
+
                 echo json_encode(['success' => true]);
                 exit;
             
@@ -169,7 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-// Get all notes
+// Get all notes (including image_path for photo notes)
 $stmt = $db->prepare("
     SELECT n.*, u.full_name, u.avatar_color
     FROM notes n
@@ -197,7 +263,7 @@ function timeAgo($timestamp) {
 }
 
 $pageTitle = 'Notes';
-$cacheVersion = '10.0.0';
+$cacheVersion = '10.1.0'; // Added photo upload with WebP conversion
 $pageCSS = [
     '/notes/css/notes.css?v=' . $cacheVersion,
     '/collage/css/collage.css?v=' . $cacheVersion
@@ -434,6 +500,12 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 </div>
                             <?php endif; ?>
 
+                            <?php if (!empty($note['image_path'])): ?>
+                                <div class="note-image" onclick="event.stopPropagation(); openImageFullscreen('<?php echo htmlspecialchars($note['image_path']); ?>')">
+                                    <img src="<?php echo htmlspecialchars($note['image_path']); ?>" alt="Note photo" loading="lazy">
+                                </div>
+                            <?php endif; ?>
+
                             <div class="note-footer">
                                 <div class="note-author">
                                     <div class="author-avatar-mini"
@@ -545,6 +617,12 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 </div>
                             <?php endif; ?>
 
+                            <?php if (!empty($note['image_path'])): ?>
+                                <div class="note-image" onclick="event.stopPropagation(); openImageFullscreen('<?php echo htmlspecialchars($note['image_path']); ?>')">
+                                    <img src="<?php echo htmlspecialchars($note['image_path']); ?>" alt="Note photo" loading="lazy">
+                                </div>
+                            <?php endif; ?>
+
                             <div class="note-footer">
                                 <div class="note-author">
                                     <div class="author-avatar-mini"
@@ -585,16 +663,29 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                 <div class="form-group">
                     <label>Content</label>
-                    <textarea id="noteBody" 
-                              class="form-control note-textarea" 
-                              placeholder="Write your note here..." 
-                              required 
+                    <textarea id="noteBody"
+                              class="form-control note-textarea"
+                              placeholder="Write your note here..."
                               rows="8"><?php echo htmlspecialchars($voicePrefillContent); ?></textarea>
                 </div>
 
                 <button type="button" id="btnAddCollage" class="btn btn-collage btn-add-collage">
                     <span>🖼️</span> Add a collage or photo
                 </button>
+
+                <div class="form-group">
+                    <label>Photo (optional)</label>
+                    <div class="photo-upload-area" id="notePhotoDropZone" onclick="document.getElementById('notePhotoInput').click()">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-text">Click or drag to add photo</div>
+                        <div class="upload-hint">JPG, PNG, GIF or WebP. Saved as WebP.</div>
+                    </div>
+                    <input type="file" id="notePhotoInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display: none;">
+                    <div class="photo-preview" id="notePhotoPreview" style="display: none;">
+                        <img src="" alt="Preview" id="notePhotoPreviewImg">
+                        <button type="button" onclick="removeNotePhoto()" class="photo-remove-btn">&times;</button>
+                    </div>
+                </div>
 
                 <div class="form-group">
                     <label>Color</label>

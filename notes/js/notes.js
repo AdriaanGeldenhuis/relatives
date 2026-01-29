@@ -17,6 +17,7 @@ let dataArray = null;
 let animationId = null;
 let recordedBlob = null;
 let currentShareNoteId = null;
+let selectedNoteImage = null; // For photo uploads
 
 // ============================================
 // INITIALIZATION
@@ -28,7 +29,129 @@ document.addEventListener('DOMContentLoaded', function() {
     updateStats();
     initQuickActionButtons();
     initCollageButton();
+    initPhotoUpload();
 });
+
+// ============================================
+// PHOTO UPLOAD FOR NOTES
+// ============================================
+
+function initPhotoUpload() {
+    const photoInput = document.getElementById('notePhotoInput');
+    const dropZone = document.getElementById('notePhotoDropZone');
+
+    if (photoInput) {
+        photoInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                handlePhotoSelect(this.files[0]);
+            }
+        });
+    }
+
+    if (dropZone) {
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                handlePhotoSelect(files[0]);
+            }
+        });
+    }
+}
+
+function handlePhotoSelect(file) {
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+        showToast('Please select a JPG, PNG, GIF or WebP image', 'error');
+        return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+        showToast('Image is too large. Maximum size is 10MB.', 'error');
+        return;
+    }
+
+    selectedNoteImage = file;
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const preview = document.getElementById('notePhotoPreview');
+        const previewImg = document.getElementById('notePhotoPreviewImg');
+        const dropZone = document.getElementById('notePhotoDropZone');
+
+        previewImg.src = e.target.result;
+        preview.style.display = 'block';
+        dropZone.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeNotePhoto() {
+    selectedNoteImage = null;
+
+    const preview = document.getElementById('notePhotoPreview');
+    const previewImg = document.getElementById('notePhotoPreviewImg');
+    const dropZone = document.getElementById('notePhotoDropZone');
+    const photoInput = document.getElementById('notePhotoInput');
+
+    previewImg.src = '';
+    preview.style.display = 'none';
+    dropZone.style.display = '';
+    photoInput.value = '';
+}
+
+function openImageFullscreen(imagePath) {
+    // Create fullscreen overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'image-fullscreen-overlay';
+    overlay.innerHTML = `
+        <button class="image-fullscreen-close" onclick="this.parentElement.remove()">&times;</button>
+        <img src="${escapeHtml(imagePath)}" alt="Full size image">
+    `;
+
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+
+    // Close on escape
+    const handleEscape = function(e) {
+        if (e.key === 'Escape') {
+            overlay.remove();
+            document.body.style.overflow = '';
+            document.removeEventListener('keydown', handleEscape);
+        }
+    };
+    document.addEventListener('keydown', handleEscape);
+
+    // Restore scroll when overlay is removed
+    const observer = new MutationObserver(function(mutations) {
+        if (!document.body.contains(overlay)) {
+            document.body.style.overflow = '';
+            observer.disconnect();
+        }
+    });
+    observer.observe(document.body, { childList: true });
+}
 
 // ============================================
 // QUICK ACTION BUTTONS - NATIVE APP FIX
@@ -209,6 +332,9 @@ function closeModal(modalId) {
         document.getElementById('noteBody').value = '';
         document.querySelector('input[name="noteColor"]:checked').checked = false;
         document.getElementById('color1').checked = true;
+
+        // Reset photo upload
+        removeNotePhoto();
     } else if (modalId === 'createVoiceNoteModal') {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
             mediaRecorder.stop();
@@ -251,25 +377,31 @@ document.addEventListener('keydown', function(e) {
 
 async function createNote(event, type) {
     event.preventDefault();
-    
+
     const formData = new FormData();
     formData.append('action', 'create_note');
     formData.append('type', type);
-    
+
     if (type === 'text') {
         const title = document.getElementById('noteTitle').value.trim();
         const body = document.getElementById('noteBody').value.trim();
         const color = document.querySelector('input[name="noteColor"]:checked').value;
-        
-        if (!body) {
-            showToast('Please enter note content', 'error');
+
+        // Allow notes with just an image (no body text required)
+        if (!body && !selectedNoteImage) {
+            showToast('Please enter note content or add a photo', 'error');
             return;
         }
-        
+
         formData.append('title', title);
         formData.append('body', body);
         formData.append('color', color);
-        
+
+        // Add image if selected
+        if (selectedNoteImage) {
+            formData.append('image', selectedNoteImage);
+        }
+
     } else if (type === 'voice') {
         if (!recordedBlob) {
             showToast('Please record audio first', 'error');
@@ -1175,6 +1307,13 @@ function addNoteToDOM(note) {
         `;
     }
 
+    // Add image if present
+    const imageHtml = note.image_path ? `
+        <div class="note-image" onclick="event.stopPropagation(); openImageFullscreen('${escapeHtml(note.image_path)}')">
+            <img src="${escapeHtml(note.image_path)}" alt="Note photo" loading="lazy">
+        </div>
+    ` : '';
+
     const editBtn = note.type === 'text' ? `
         <button onclick="event.stopPropagation(); editNote(${note.id})" class="note-action" title="Edit">✏️</button>
     ` : '';
@@ -1191,6 +1330,7 @@ function addNoteToDOM(note) {
         </div>
         ${titleHtml}
         ${contentHtml}
+        ${imageHtml}
         <div class="note-footer">
             <div class="note-author">
                 <div class="author-avatar-mini" style="background: ${escapeHtml(note.avatar_color)}">
