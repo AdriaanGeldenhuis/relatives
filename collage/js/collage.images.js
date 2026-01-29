@@ -27,13 +27,33 @@ const CollageImages = (() => {
     function handleFileSelect(e) {
         const files = Array.from(e.target.files);
         files.forEach((file, index) => {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                addImageToCanvas(event.target.result, index);
-            };
-            reader.readAsDataURL(file);
+            uploadPhoto(file, index);
         });
         fileInput.value = '';
+    }
+
+    async function uploadPhoto(file, index) {
+        const formData = new FormData();
+        formData.append('photo', file);
+
+        try {
+            const response = await fetch('/notes/api/upload-photo.php', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                addImageToCanvas(data.url, index);
+            } else {
+                console.error('Upload failed:', data.error);
+                alert('Failed to upload photo: ' + (data.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Failed to upload photo. Please try again.');
+        }
     }
 
     function addImageToCanvas(src, index) {
