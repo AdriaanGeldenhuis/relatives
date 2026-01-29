@@ -103,5 +103,3 @@ const CollageInit = (() => {
 
     return { init, destroy };
 })();
-
-document.addEventListener('DOMContentLoaded', CollageInit.init);

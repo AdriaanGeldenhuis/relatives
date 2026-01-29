@@ -198,8 +198,22 @@ function timeAgo($timestamp) {
 
 $pageTitle = 'Notes';
 $cacheVersion = '10.0.0';
-$pageCSS = ['/notes/css/notes.css?v=' . $cacheVersion];
-$pageJS = ['/notes/js/notes.js?v=' . $cacheVersion];
+$pageCSS = [
+    '/notes/css/notes.css?v=' . $cacheVersion,
+    '/collage/css/collage.css?v=' . $cacheVersion
+];
+$pageJS = [
+    '/notes/js/notes.js?v=' . $cacheVersion,
+    '/collage/js/collage.state.js?v=' . $cacheVersion,
+    '/collage/js/collage.images.js?v=' . $cacheVersion,
+    '/collage/js/collage.drag.js?v=' . $cacheVersion,
+    '/collage/js/collage.resize.js?v=' . $cacheVersion,
+    '/collage/js/collage.rotate.js?v=' . $cacheVersion,
+    '/collage/js/collage.layouts.js?v=' . $cacheVersion,
+    '/collage/js/collage.background.js?v=' . $cacheVersion,
+    '/collage/js/collage.cleanup.js?v=' . $cacheVersion,
+    '/collage/js/collage.init.js?v=' . $cacheVersion
+];
 $shoppingCount = 0;
 
 require_once __DIR__ . '/../shared/components/header.php';
@@ -234,6 +248,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <span class="qa-icon">🎤</span>
                         <span>Voice Note</span>
                     </button>
+                    <button id="btnCollage" class="quick-action-btn" data-action="collage">
+                        <span class="qa-icon">🖼️</span>
+                        <span>Collage</span>
+                    </button>
                     <button id="btnSearch" class="quick-action-btn" data-action="search">
                         <span class="qa-icon">🔍</span>
                         <span>Search</span>
@@ -254,6 +272,9 @@ require_once __DIR__ . '/../shared/components/header.php';
                         } else if (action === 'voice') {
                             document.getElementById('createVoiceNoteModal').classList.add('active');
                             if (typeof resetVoiceRecorder === 'function') resetVoiceRecorder();
+                        } else if (action === 'collage') {
+                            document.getElementById('collageModal').classList.add('active');
+                            if (typeof CollageInit !== 'undefined') CollageInit.init();
                         } else if (action === 'search') {
                             document.getElementById('searchInput').focus();
                         }
@@ -290,6 +311,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                     setupButton(document.getElementById('btnNewNote'));
                     setupButton(document.getElementById('btnVoiceNote'));
+                    setupButton(document.getElementById('btnCollage'));
                     setupButton(document.getElementById('btnSearch'));
 
                     console.log('✅ Quick action buttons ready (inline)');
@@ -772,6 +794,28 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <span class="share-icon">📧</span>
                     <span>Email</span>
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Collage Builder Modal -->
+<div id="collageModal" class="modal">
+    <div class="modal-content modal-fullscreen">
+        <div class="modal-header">
+            <h2>🖼️ Create Collage</h2>
+            <button onclick="closeModal('collageModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body collage-modal-body">
+            <div class="collage-toolbar">
+                <button id="btnChooseImages">Choose images</button>
+                <button id="btnChooseLayout">Choose layout</button>
+                <button id="btnChooseBackground">Choose background</button>
+                <button id="btnDone">Done</button>
+                <button id="btnDelete">Delete</button>
+            </div>
+            <div id="collageCanvasWrapper">
+                <div id="collageCanvas"></div>
             </div>
         </div>
     </div>

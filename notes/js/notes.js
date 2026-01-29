@@ -182,7 +182,7 @@ function showCreateNoteModal(type) {
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     modal.classList.remove('active');
-    
+
     // Reset forms
     if (modalId === 'createTextNoteModal') {
         document.getElementById('noteTitle').value = '';
@@ -198,6 +198,13 @@ function closeModal(modalId) {
         document.getElementById('editNoteId').value = '';
         document.getElementById('editNoteTitle').value = '';
         document.getElementById('editNoteBody').value = '';
+    } else if (modalId === 'collageModal') {
+        if (typeof CollageState !== 'undefined') {
+            CollageState.clearAll();
+        }
+        if (typeof CollageImages !== 'undefined') {
+            CollageImages.clearAllImages();
+        }
     }
 }
 
