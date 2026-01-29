@@ -3,6 +3,16 @@
  * Scoped to work within the notes modal system
  */
 
+/* Collage button in modal-actions */
+.btn-collage {
+    background: linear-gradient(135deg, #667eea, #764ba2) !important;
+    color: #fff !important;
+    border: none !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
 /* Fullscreen modal variant */
 .modal-content.modal-fullscreen {
     width: 95%;

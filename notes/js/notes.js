@@ -179,6 +179,13 @@ function showCreateNoteModal(type) {
     }
 }
 
+function openCollageModal() {
+    document.getElementById('collageModal').classList.add('active');
+    if (typeof CollageInit !== 'undefined') {
+        CollageInit.init();
+    }
+}
+
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     modal.classList.remove('active');

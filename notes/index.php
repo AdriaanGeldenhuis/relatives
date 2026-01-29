@@ -248,10 +248,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <span class="qa-icon">🎤</span>
                         <span>Voice Note</span>
                     </button>
-                    <button id="btnCollage" class="quick-action-btn" data-action="collage">
-                        <span class="qa-icon">🖼️</span>
-                        <span>Collage</span>
-                    </button>
                     <button id="btnSearch" class="quick-action-btn" data-action="search">
                         <span class="qa-icon">🔍</span>
                         <span>Search</span>
@@ -272,9 +268,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                         } else if (action === 'voice') {
                             document.getElementById('createVoiceNoteModal').classList.add('active');
                             if (typeof resetVoiceRecorder === 'function') resetVoiceRecorder();
-                        } else if (action === 'collage') {
-                            document.getElementById('collageModal').classList.add('active');
-                            if (typeof CollageInit !== 'undefined') CollageInit.init();
                         } else if (action === 'search') {
                             document.getElementById('searchInput').focus();
                         }
@@ -311,7 +304,6 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                     setupButton(document.getElementById('btnNewNote'));
                     setupButton(document.getElementById('btnVoiceNote'));
-                    setupButton(document.getElementById('btnCollage'));
                     setupButton(document.getElementById('btnSearch'));
 
                     console.log('✅ Quick action buttons ready (inline)');
@@ -631,6 +623,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary">Create Note</button>
+                    <button type="button" onclick="closeModal('createTextNoteModal'); openCollageModal();" class="btn btn-collage">
+                        <span>🖼️</span> Collage
+                    </button>
                     <button type="button" onclick="closeModal('createTextNoteModal')" class="btn btn-secondary">Cancel</button>
                 </div>
             </form>
