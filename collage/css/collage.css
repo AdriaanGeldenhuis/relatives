@@ -16,19 +16,22 @@
 /* Add collage button between content and color */
 .btn-add-collage {
     width: 100%;
-    padding: 12px 16px;
+    padding: 14px 16px;
     margin: 8px 0 16px 0;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
+    background: linear-gradient(135deg, #667eea, #764ba2) !important;
+    color: #fff !important;
+    border: none !important;
 }
 
 .btn-add-collage:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
 }
 
 /* Fullscreen modal variant */
