@@ -328,6 +328,38 @@ fun WebViewScreen(initialUrl: String, onPageTrackingCheck: (String) -> Unit) {
             }
             
             webChromeClient = object : WebChromeClient() {
+                // Handle microphone permission requests from web content
+                override fun onPermissionRequest(request: PermissionRequest?) {
+                    request?.let { req ->
+                        val requestedResources = req.resources
+                        val grantedResources = mutableListOf<String>()
+
+                        for (resource in requestedResources) {
+                            when (resource) {
+                                PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
+                                    // Check if app has RECORD_AUDIO permission
+                                    if (ContextCompat.checkSelfPermission(
+                                            context,
+                                            Manifest.permission.RECORD_AUDIO
+                                        ) == PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        grantedResources.add(resource)
+                                    }
+                                }
+                                PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
+                                    // Future: handle camera if needed
+                                }
+                            }
+                        }
+
+                        if (grantedResources.isNotEmpty()) {
+                            req.grant(grantedResources.toTypedArray())
+                        } else {
+                            req.deny()
+                        }
+                    }
+                }
+
                 // Handle file upload requests (attachments)
                 override fun onShowFileChooser(
                     webView: WebView?,
