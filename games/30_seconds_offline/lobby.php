@@ -17,6 +17,7 @@ if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
 
 // Load bootstrap
 require_once __DIR__ . '/../../core/bootstrap.php';
+$cacheVersion = '1.0.0';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -29,7 +30,7 @@ require_once __DIR__ . '/../../core/bootstrap.php';
     <title>Game Setup - 30 Seconds Party</title>
 
     <link rel="manifest" href="/games/30_seconds_offline/manifest.json">
-    <link rel="stylesheet" href="/games/30_seconds_offline/assets/css/offline.css">
+    <link rel="stylesheet" href="/games/30_seconds_offline/assets/css/offline.css?v=<?php echo $cacheVersion; ?>">
 
     <style>
         .lobby-header {
@@ -194,9 +195,9 @@ require_once __DIR__ . '/../../core/bootstrap.php';
     </div>
 
     <!-- Scripts -->
-    <script src="/games/30_seconds_offline/assets/js/state.js"></script>
-    <script src="/games/30_seconds_offline/assets/js/ui.js"></script>
-    <script src="/games/30_seconds_offline/assets/js/app.js"></script>
+    <script src="/games/30_seconds_offline/assets/js/state.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="/games/30_seconds_offline/assets/js/ui.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="/games/30_seconds_offline/assets/js/app.js?v=<?php echo $cacheVersion; ?>"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {

@@ -6,6 +6,7 @@
 
 session_start();
 // No auth required for spectator view
+$cacheVersion = '1.0.0';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -18,7 +19,7 @@ session_start();
     <title>Spectator View - 30 Seconds Party</title>
 
     <link rel="manifest" href="/games/30_seconds_offline/manifest.json">
-    <link rel="stylesheet" href="/games/30_seconds_offline/assets/css/offline.css">
+    <link rel="stylesheet" href="/games/30_seconds_offline/assets/css/offline.css?v=<?php echo $cacheVersion; ?>">
 
     <style>
         .viewer-header {
@@ -106,9 +107,9 @@ session_start();
     </div>
 
     <!-- Scripts -->
-    <script src="/games/30_seconds_offline/assets/js/state.js"></script>
-    <script src="/games/30_seconds_offline/assets/js/ui.js"></script>
-    <script src="/games/30_seconds_offline/assets/js/app.js"></script>
+    <script src="/games/30_seconds_offline/assets/js/state.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="/games/30_seconds_offline/assets/js/ui.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="/games/30_seconds_offline/assets/js/app.js?v=<?php echo $cacheVersion; ?>"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {

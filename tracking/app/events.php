@@ -36,6 +36,7 @@ try {
 }
 
 $pageTitle = 'Tracking Events';
+$cacheVersion = '1.0.0';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -43,7 +44,7 @@ $pageTitle = 'Tracking Events';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($pageTitle) ?> - Relatives</title>
-    <link rel="stylesheet" href="assets/css/tracking.css">
+    <link rel="stylesheet" href="assets/css/tracking.css?v=<?php echo $cacheVersion; ?>">
 </head>
 <body class="events-page">
     <!-- Top Bar -->
@@ -88,8 +89,8 @@ $pageTitle = 'Tracking Events';
 
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="assets/js/format.js"></script>
-    <script src="assets/js/api.js"></script>
+    <script src="assets/js/format.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="assets/js/api.js?v=<?php echo $cacheVersion; ?>"></script>
     <script>
         let currentFilter = 'all';
         let offset = 0;

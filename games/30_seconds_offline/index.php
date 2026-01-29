@@ -34,6 +34,7 @@ try {
 }
 
 $displayName = htmlspecialchars($user['full_name'] ?? 'Player');
+$cacheVersion = '1.0.0';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -47,7 +48,7 @@ $displayName = htmlspecialchars($user['full_name'] ?? 'Player');
     <title>30 Seconds Party - Offline Mode</title>
 
     <link rel="manifest" href="/games/30_seconds_offline/manifest.json">
-    <link rel="stylesheet" href="/games/30_seconds_offline/assets/css/offline.css">
+    <link rel="stylesheet" href="/games/30_seconds_offline/assets/css/offline.css?v=<?php echo $cacheVersion; ?>">
 
     <style>
         .hero {
@@ -229,9 +230,9 @@ $displayName = htmlspecialchars($user['full_name'] ?? 'Player');
     </div>
 
     <!-- Scripts -->
-    <script src="/games/30_seconds_offline/assets/js/state.js"></script>
-    <script src="/games/30_seconds_offline/assets/js/ui.js"></script>
-    <script src="/games/30_seconds_offline/assets/js/app.js"></script>
+    <script src="/games/30_seconds_offline/assets/js/state.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="/games/30_seconds_offline/assets/js/ui.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="/games/30_seconds_offline/assets/js/app.js?v=<?php echo $cacheVersion; ?>"></script>
 
     <script>
         // Register service worker
