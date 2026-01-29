@@ -263,7 +263,7 @@ function timeAgo($timestamp) {
 }
 
 $pageTitle = 'Notes';
-$cacheVersion = '10.1.0'; // Added photo upload with WebP conversion
+$cacheVersion = '10.1.1'; // Fixed null user_name in addNoteToDOM
 $pageCSS = [
     '/notes/css/notes.css?v=' . $cacheVersion,
     '/collage/css/collage.css?v=' . $cacheVersion
