@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initNoteAnimations();
     updateStats();
     initQuickActionButtons();
+    initCollageButton();
 });
 
 // ============================================
@@ -113,6 +114,18 @@ function initRecordingButtons() {
     }
 
     console.log('✅ Recording buttons initialized for native app compatibility');
+}
+
+// Initialize collage button with native app support
+function initCollageButton() {
+    const collageBtn = document.getElementById('btnAddCollage');
+    if (collageBtn) {
+        addTouchAndClickHandler(collageBtn, function() {
+            closeModal('createTextNoteModal');
+            openCollageModal();
+        });
+        console.log('✅ Collage button initialized for native app compatibility');
+    }
 }
 
 // Helper function to add both touch and click handlers

@@ -6,6 +6,32 @@ const CollageInit = (() => {
     let canvas = null;
     let isInitialized = false;
 
+    function addTouchHandler(element, handler) {
+        let touchHandled = false;
+
+        element.addEventListener('touchstart', () => {
+            element.style.opacity = '0.7';
+        }, { passive: true });
+
+        element.addEventListener('touchend', (e) => {
+            element.style.opacity = '';
+            e.preventDefault();
+            touchHandled = true;
+            handler(e);
+            setTimeout(() => { touchHandled = false; }, 300);
+        }, { passive: false });
+
+        element.addEventListener('touchcancel', () => {
+            element.style.opacity = '';
+        }, { passive: true });
+
+        element.addEventListener('click', (e) => {
+            if (!touchHandled) {
+                handler(e);
+            }
+        });
+    }
+
     function bindToolbarEvents() {
         const btnChooseImages = document.getElementById('btnChooseImages');
         const btnChooseLayout = document.getElementById('btnChooseLayout');
@@ -14,31 +40,31 @@ const CollageInit = (() => {
         const btnDelete = document.getElementById('btnDelete');
 
         if (btnChooseImages) {
-            btnChooseImages.addEventListener('click', () => {
+            addTouchHandler(btnChooseImages, () => {
                 CollageImages.openFilePicker();
             });
         }
 
         if (btnChooseLayout) {
-            btnChooseLayout.addEventListener('click', (e) => {
-                CollageLayouts.openLayoutMenu(e.currentTarget);
+            addTouchHandler(btnChooseLayout, (e) => {
+                CollageLayouts.openLayoutMenu(e.currentTarget || btnChooseLayout);
             });
         }
 
         if (btnChooseBackground) {
-            btnChooseBackground.addEventListener('click', () => {
+            addTouchHandler(btnChooseBackground, () => {
                 CollageBackground.openColorPicker();
             });
         }
 
         if (btnDone) {
-            btnDone.addEventListener('click', () => {
+            addTouchHandler(btnDone, () => {
                 CollageCleanup.done();
             });
         }
 
         if (btnDelete) {
-            btnDelete.addEventListener('click', () => {
+            addTouchHandler(btnDelete, () => {
                 CollageCleanup.deleteSelected();
             });
         }
