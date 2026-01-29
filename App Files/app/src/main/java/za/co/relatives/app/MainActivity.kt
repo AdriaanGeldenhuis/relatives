@@ -55,10 +55,14 @@ class MainActivity : ComponentActivity() {
 
     private var permissionsGranted by mutableStateOf(false)
     private var showBackgroundRationale by mutableStateOf(false)
-    
+
     // State for Subscription Banner
     private var showTrialBanner by mutableStateOf(false)
     private var trialEndDate by mutableStateOf("")
+
+    // WebView reference for navigation from notifications
+    private var webViewRef: WebView? = null
+    private var pendingUrl by mutableStateOf<String?>(null)
 
     private val permissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -122,7 +126,12 @@ class MainActivity : ComponentActivity() {
                                 // Main Web Content
                                 Box(modifier = Modifier.weight(1f)) {
                                     WebViewScreen(
-                                        initialUrl = initialUrl,
+                                        initialUrl = pendingUrl ?: initialUrl,
+                                        onWebViewCreated = { webView ->
+                                            webViewRef = webView
+                                            // Clear pending URL after WebView is ready
+                                            pendingUrl = null
+                                        },
                                         onPageTrackingCheck = { url ->
                                             if (url.contains("/tracking/")) {
                                                 startTrackingService()
@@ -155,6 +164,18 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkSubscription()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Handle notification click when app is already open
+        intent.getStringExtra("open_url")?.let { url ->
+            if (webViewRef != null) {
+                webViewRef?.loadUrl(url)
+            } else {
+                pendingUrl = url
+            }
+        }
     }
 
     private fun checkSubscription() {
@@ -273,9 +294,13 @@ fun BackgroundPermissionRationale(onContinue: () -> Unit) {
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun WebViewScreen(initialUrl: String, onPageTrackingCheck: (String) -> Unit) {
+fun WebViewScreen(
+    initialUrl: String,
+    onWebViewCreated: (WebView) -> Unit = {},
+    onPageTrackingCheck: (String) -> Unit
+) {
     val context = LocalContext.current
-    
+
     // State to hold the callback for file uploads
     var uploadMessageCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
 
@@ -388,6 +413,9 @@ fun WebViewScreen(initialUrl: String, onPageTrackingCheck: (String) -> Unit) {
             }
             
             loadUrl(initialUrl)
+
+            // Notify parent that WebView is ready
+            onWebViewCreated(this)
         }
     }, update = {})
 }

@@ -122,20 +122,32 @@ try {
         try {
             echo "Processing user {$user['user_id']}: {$user['full_name']}\n";
             
-            // Get user's location (use last known location or default)
+            // Get user's location - first try tracking_current (most recent)
             $stmt = $db->prepare("
-                SELECT latitude, longitude 
-                FROM tracking_locations 
-                WHERE user_id = ? 
-                ORDER BY created_at DESC 
+                SELECT lat, lng
+                FROM tracking_current
+                WHERE user_id = ?
                 LIMIT 1
             ");
             $stmt->execute([$user['user_id']]);
             $location = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
+            // Fallback to tracking_locations if no current location
+            if (!$location) {
+                $stmt = $db->prepare("
+                    SELECT lat, lng
+                    FROM tracking_locations
+                    WHERE user_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                ");
+                $stmt->execute([$user['user_id']]);
+                $location = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
+
             // Default to Johannesburg if no location
-            $lat = $location['latitude'] ?? -26.2041;
-            $lon = $location['longitude'] ?? 28.0473;
+            $lat = $location['lat'] ?? -26.2041;
+            $lon = $location['lng'] ?? 28.0473;
             
             // Fetch weather data
             $apiKey = '563504b6b46d0e6bcf9a49e1cb6bc4f3';
