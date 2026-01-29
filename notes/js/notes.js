@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initNoteAnimations();
     updateStats();
     initQuickActionButtons();
+    initCollageButton();
 });
 
 // ============================================
@@ -115,6 +116,18 @@ function initRecordingButtons() {
     console.log('✅ Recording buttons initialized for native app compatibility');
 }
 
+// Initialize collage button with native app support
+function initCollageButton() {
+    const collageBtn = document.getElementById('btnAddCollage');
+    if (collageBtn) {
+        addTouchAndClickHandler(collageBtn, function() {
+            closeModal('createTextNoteModal');
+            openCollageModal();
+        });
+        console.log('✅ Collage button initialized for native app compatibility');
+    }
+}
+
 // Helper function to add both touch and click handlers
 function addTouchAndClickHandler(element, handler) {
     let touchHandled = false;
@@ -179,10 +192,17 @@ function showCreateNoteModal(type) {
     }
 }
 
+function openCollageModal() {
+    document.getElementById('collageModal').classList.add('active');
+    if (typeof CollageInit !== 'undefined') {
+        CollageInit.init();
+    }
+}
+
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     modal.classList.remove('active');
-    
+
     // Reset forms
     if (modalId === 'createTextNoteModal') {
         document.getElementById('noteTitle').value = '';
@@ -198,6 +218,13 @@ function closeModal(modalId) {
         document.getElementById('editNoteId').value = '';
         document.getElementById('editNoteTitle').value = '';
         document.getElementById('editNoteBody').value = '';
+    } else if (modalId === 'collageModal') {
+        if (typeof CollageState !== 'undefined') {
+            CollageState.clearAll();
+        }
+        if (typeof CollageImages !== 'undefined') {
+            CollageImages.clearAllImages();
+        }
     }
 }
 

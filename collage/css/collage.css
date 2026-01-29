@@ -1,0 +1,335 @@
+/**
+ * Collage Builder Styles
+ * Scoped to work within the notes modal system
+ */
+
+/* Collage button in modal */
+.btn-collage {
+    background: linear-gradient(135deg, #667eea, #764ba2) !important;
+    color: #fff !important;
+    border: none !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Add collage button between content and color */
+.btn-add-collage {
+    width: 100%;
+    padding: 14px 16px;
+    margin: 8px 0 16px 0;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: linear-gradient(135deg, #667eea, #764ba2) !important;
+    color: #fff !important;
+    border: none !important;
+}
+
+.btn-add-collage:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+/* Fullscreen modal variant */
+.modal-content.modal-fullscreen {
+    width: 95%;
+    max-width: 1200px;
+    height: 90vh;
+    max-height: 90vh;
+}
+
+/* Collage modal body */
+.collage-modal-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    padding: 0;
+    overflow: hidden;
+}
+
+/* Toolbar */
+.collage-toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-wrap: wrap;
+}
+
+.collage-toolbar button {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.collage-toolbar button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.collage-toolbar button:active {
+    transform: translateY(0);
+}
+
+#btnDelete {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+#btnDelete:hover {
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+}
+
+#btnDone {
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+}
+
+#btnDone:hover {
+    box-shadow: 0 4px 12px rgba(46, 204, 113, 0.4);
+}
+
+/* Canvas Wrapper */
+#collageCanvasWrapper {
+    flex: 1;
+    padding: 16px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+/* Canvas */
+#collageCanvas {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #e8f4f8;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+#collageCanvas.locked {
+    pointer-events: none;
+}
+
+/* Collage Item */
+.collage-item {
+    position: absolute;
+    background: #fff;
+    border: 3px solid #fff;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    cursor: move;
+    user-select: none;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+}
+
+.collage-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+}
+
+.collage-item.selected {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.4), 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.collage-item.dragging {
+    opacity: 0.9;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Resize Handles */
+.resize-handle {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: #667eea;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.resize-nw {
+    top: -7px;
+    left: -7px;
+    cursor: nw-resize;
+}
+
+.resize-ne {
+    top: -7px;
+    right: -7px;
+    cursor: ne-resize;
+}
+
+.resize-sw {
+    bottom: -7px;
+    left: -7px;
+    cursor: sw-resize;
+}
+
+.resize-se {
+    bottom: -7px;
+    right: -7px;
+    cursor: se-resize;
+}
+
+/* Rotate Handle */
+.rotate-handle {
+    position: absolute;
+    top: -32px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 18px;
+    height: 18px;
+    background: #667eea;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    cursor: grab;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.rotate-handle::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 14px;
+    background: #667eea;
+}
+
+.rotate-handle:active {
+    cursor: grabbing;
+}
+
+/* Layout Menu */
+.layout-menu {
+    position: fixed;
+    background: rgba(30, 30, 50, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    padding: 8px;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 2000;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.layout-menu.visible {
+    display: flex;
+}
+
+.layout-option {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s;
+}
+
+.layout-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Color Picker (hidden input) */
+.collage-color-picker {
+    position: fixed;
+    top: -100px;
+    left: -100px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Mobile Adjustments */
+@media (max-width: 600px) {
+    .modal-content.modal-fullscreen {
+        width: 100%;
+        height: 100%;
+        max-height: 100%;
+        border-radius: 0;
+    }
+
+    .collage-toolbar {
+        padding: 10px;
+        gap: 6px;
+    }
+
+    .collage-toolbar button {
+        padding: 8px 12px;
+        font-size: 12px;
+        flex: 1;
+        min-width: auto;
+    }
+
+    #collageCanvasWrapper {
+        padding: 8px;
+    }
+
+    .resize-handle {
+        width: 18px;
+        height: 18px;
+    }
+
+    .resize-nw { top: -9px; left: -9px; }
+    .resize-ne { top: -9px; right: -9px; }
+    .resize-sw { bottom: -9px; left: -9px; }
+    .resize-se { bottom: -9px; right: -9px; }
+
+    .rotate-handle {
+        width: 22px;
+        height: 22px;
+        top: -38px;
+    }
+}
+
+/* Touch-friendly targets */
+@media (pointer: coarse) {
+    .resize-handle {
+        width: 22px;
+        height: 22px;
+    }
+
+    .resize-nw { top: -11px; left: -11px; }
+    .resize-ne { top: -11px; right: -11px; }
+    .resize-sw { bottom: -11px; left: -11px; }
+    .resize-se { bottom: -11px; right: -11px; }
+
+    .rotate-handle {
+        width: 26px;
+        height: 26px;
+        top: -42px;
+    }
+
+    .collage-item {
+        min-width: 60px;
+        min-height: 60px;
+    }
+}
