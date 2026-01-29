@@ -19,7 +19,6 @@ const CollageImages = (() => {
         fileInput.type = 'file';
         fileInput.multiple = true;
         fileInput.accept = 'image/*';
-        fileInput.setAttribute('capture', 'environment');
         fileInput.style.cssText = 'position:absolute;top:-9999px;left:-9999px;opacity:0;';
         document.body.appendChild(fileInput);
         fileInput.addEventListener('change', handleFileSelect);
