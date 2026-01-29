@@ -1,0 +1,292 @@
+/**
+ * Collage Builder Styles
+ */
+
+/* Modal Structure */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-body {
+    background: #fff;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 900px;
+    height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+/* Toolbar */
+.collage-toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #e0e0e0;
+    flex-wrap: wrap;
+}
+
+.collage-toolbar button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    background: #4a90d9;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.collage-toolbar button:hover {
+    background: #3a7bc8;
+}
+
+.collage-toolbar button:active {
+    background: #2d6cb5;
+}
+
+#btnDelete {
+    background: #d94a4a;
+}
+
+#btnDelete:hover {
+    background: #c83a3a;
+}
+
+#btnDone {
+    background: #4ad94a;
+}
+
+#btnDone:hover {
+    background: #3ac83a;
+}
+
+/* Canvas Wrapper */
+#collageCanvasWrapper {
+    flex: 1;
+    padding: 16px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Canvas */
+#collageCanvas {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #e8f4f8;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#collageCanvas.locked {
+    pointer-events: none;
+}
+
+/* Collage Item */
+.collage-item {
+    position: absolute;
+    background: #fff;
+    border: 3px solid #fff;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    cursor: move;
+    user-select: none;
+    overflow: hidden;
+}
+
+.collage-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+}
+
+.collage-item.selected {
+    border-color: #4a90d9;
+    box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.collage-item.dragging {
+    opacity: 0.9;
+    z-index: 100;
+}
+
+/* Resize Handles */
+.resize-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #4a90d9;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    z-index: 10;
+}
+
+.resize-nw {
+    top: -6px;
+    left: -6px;
+    cursor: nw-resize;
+}
+
+.resize-ne {
+    top: -6px;
+    right: -6px;
+    cursor: ne-resize;
+}
+
+.resize-sw {
+    bottom: -6px;
+    left: -6px;
+    cursor: sw-resize;
+}
+
+.resize-se {
+    bottom: -6px;
+    right: -6px;
+    cursor: se-resize;
+}
+
+/* Rotate Handle */
+.rotate-handle {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 16px;
+    height: 16px;
+    background: #4a90d9;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    cursor: grab;
+    z-index: 10;
+}
+
+.rotate-handle::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 14px;
+    background: #4a90d9;
+}
+
+.rotate-handle:active {
+    cursor: grabbing;
+}
+
+/* Layout Menu */
+.layout-menu {
+    position: fixed;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    padding: 8px;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 2000;
+}
+
+.layout-menu.visible {
+    display: flex;
+}
+
+.layout-option {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: #333;
+    font-size: 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s;
+}
+
+.layout-option:hover {
+    background: #f0f0f0;
+}
+
+/* Color Picker (hidden input) */
+.collage-color-picker {
+    position: fixed;
+    top: -100px;
+    left: -100px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Mobile Adjustments */
+@media (max-width: 600px) {
+    .modal-body {
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+    }
+
+    .collage-toolbar {
+        padding: 8px 12px;
+    }
+
+    .collage-toolbar button {
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+
+    #collageCanvasWrapper {
+        padding: 8px;
+    }
+
+    .resize-handle {
+        width: 16px;
+        height: 16px;
+    }
+
+    .resize-nw { top: -8px; left: -8px; }
+    .resize-ne { top: -8px; right: -8px; }
+    .resize-sw { bottom: -8px; left: -8px; }
+    .resize-se { bottom: -8px; right: -8px; }
+
+    .rotate-handle {
+        width: 20px;
+        height: 20px;
+        top: -35px;
+    }
+}
+
+/* Touch-friendly targets */
+@media (pointer: coarse) {
+    .resize-handle {
+        width: 20px;
+        height: 20px;
+    }
+
+    .resize-nw { top: -10px; left: -10px; }
+    .resize-ne { top: -10px; right: -10px; }
+    .resize-sw { bottom: -10px; left: -10px; }
+    .resize-se { bottom: -10px; right: -10px; }
+
+    .rotate-handle {
+        width: 24px;
+        height: 24px;
+        top: -40px;
+    }
+}
