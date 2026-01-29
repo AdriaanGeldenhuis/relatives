@@ -55,14 +55,16 @@ class NotificationManager {
             
             // Check if enabled
             if (!$this->isNotificationEnabled($data['user_id'], $data['type'])) {
+                error_log("NotificationManager: Notification blocked - {$data['type']} disabled for user {$data['user_id']}");
                 return false;
             }
-            
-            // Check quiet hours (unless urgent)
+
+            // Check quiet hours (unless urgent or high priority)
             if ($this->isQuietHours($data['user_id'])) {
                 $priority = $data['priority'] ?? self::PRIORITY_NORMAL;
-                if ($priority !== self::PRIORITY_URGENT) {
-                    // Skip non-urgent during quiet hours
+                if ($priority !== self::PRIORITY_URGENT && $priority !== self::PRIORITY_HIGH) {
+                    // Skip low/normal priority during quiet hours
+                    error_log("NotificationManager: Notification blocked - quiet hours active for user {$data['user_id']}");
                     return false;
                 }
             }
@@ -253,10 +255,13 @@ class NotificationManager {
             $start = DateTime::createFromFormat('H:i:s', $prefs['quiet_hours_start']);
             $end = DateTime::createFromFormat('H:i:s', $prefs['quiet_hours_end']);
             
+            // End time is exclusive - if quiet hours end at 07:00, 07:00 is NOT in quiet hours
             if ($start > $end) {
-                return $now >= $start || $now <= $end;
+                // Overnight quiet hours (e.g., 22:00 - 07:00)
+                return $now >= $start || $now < $end;
             } else {
-                return $now >= $start && $now <= $end;
+                // Same-day quiet hours (e.g., 13:00 - 15:00)
+                return $now >= $start && $now < $end;
             }
         } catch (Exception $e) {
             return false;
