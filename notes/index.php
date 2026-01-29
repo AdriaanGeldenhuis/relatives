@@ -592,6 +592,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                               rows="8"><?php echo htmlspecialchars($voicePrefillContent); ?></textarea>
                 </div>
 
+                <button type="button" onclick="closeModal('createTextNoteModal'); openCollageModal();" class="btn btn-collage btn-add-collage">
+                    <span>🖼️</span> Add a collage or photo
+                </button>
+
                 <div class="form-group">
                     <label>Color</label>
                     <div class="color-picker">
@@ -623,9 +627,6 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary">Create Note</button>
-                    <button type="button" onclick="closeModal('createTextNoteModal'); openCollageModal();" class="btn btn-collage">
-                        <span>🖼️</span> Collage
-                    </button>
                     <button type="button" onclick="closeModal('createTextNoteModal')" class="btn btn-secondary">Cancel</button>
                 </div>
             </form>
