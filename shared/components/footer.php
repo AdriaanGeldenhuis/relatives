@@ -349,6 +349,23 @@
                 animation-delay: 0.75s;
             }
 
+            .modal-mic-btn.thinking {
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                border-color: #667eea;
+                box-shadow: 0 0 40px rgba(102, 126, 234, 0.6);
+                animation: thinkingPulse 1s ease-in-out infinite;
+            }
+
+            .modal-mic-btn.speaking {
+                background: linear-gradient(135deg, #f093fb, #f5576c);
+                border-color: #f093fb;
+                box-shadow: 0 0 40px rgba(240, 147, 251, 0.6);
+            }
+
+            .modal-mic-btn.speaking .mic-ring {
+                animation: speakingRing 0.8s ease-in-out infinite;
+            }
+
             @keyframes micRingPulse {
                 0% {
                     transform: scale(1);
@@ -357,6 +374,28 @@
                 100% {
                     transform: scale(1.8);
                     opacity: 0;
+                }
+            }
+
+            @keyframes thinkingPulse {
+                0%, 100% {
+                    transform: scale(1);
+                    opacity: 1;
+                }
+                50% {
+                    transform: scale(1.05);
+                    opacity: 0.8;
+                }
+            }
+
+            @keyframes speakingRing {
+                0%, 100% {
+                    transform: scale(1);
+                    opacity: 0.3;
+                }
+                50% {
+                    transform: scale(1.2);
+                    opacity: 0.6;
                 }
             }
             
@@ -560,19 +599,19 @@
             </div>
 
             <div class="voice-suggestions" id="voiceSuggestions">
-                <div class="suggestion-title">Try saying:</div>
+                <div class="suggestion-title">Try asking me:</div>
                 <div class="suggestion-items">
-                    <button onclick="AdvancedVoiceAssistant.getInstance().executeSuggestion('Add milk to shopping')" class="suggestion-btn">
-                        🛒 "Add milk to shopping"
+                    <button onclick="SuziVoice.getInstance().executeSuggestion('Tell me a bedtime story')" class="suggestion-btn">
+                        📖 "Tell me a bedtime story"
                     </button>
-                    <button onclick="AdvancedVoiceAssistant.getInstance().executeSuggestion('Open messages')" class="suggestion-btn">
-                        💬 "Open messages"
+                    <button onclick="SuziVoice.getInstance().executeSuggestion('Who was Nelson Mandela')" class="suggestion-btn">
+                        🧠 "Who was Nelson Mandela?"
                     </button>
-                    <button onclick="AdvancedVoiceAssistant.getInstance().executeSuggestion('Where is my family')" class="suggestion-btn">
-                        📍 "Where is my family?"
+                    <button onclick="SuziVoice.getInstance().executeSuggestion('Add bread and milk to shopping')" class="suggestion-btn">
+                        🛒 "Add bread and milk to shopping"
                     </button>
-                    <button onclick="AdvancedVoiceAssistant.getInstance().executeSuggestion('Create a note')" class="suggestion-btn">
-                        📝 "Create a note"
+                    <button onclick="SuziVoice.getInstance().executeSuggestion('Tell me a joke')" class="suggestion-btn">
+                        😄 "Tell me a joke"
                     </button>
                 </div>
             </div>
