@@ -292,12 +292,116 @@
             
             .voice-status {
                 text-align: center;
-                margin-bottom: 40px;
+                margin-bottom: 20px;
+            }
+
+            /* Modal Mic Button - Large tappable button */
+            .modal-mic-btn {
+                width: 100px;
+                height: 100px;
+                border-radius: 50%;
+                background: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1));
+                border: 3px solid rgba(255,255,255,0.5);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 25px;
+                position: relative;
+                transition: all 0.3s ease;
+            }
+
+            .modal-mic-btn:hover {
+                transform: scale(1.05);
+                background: linear-gradient(135deg, rgba(255,255,255,0.4), rgba(255,255,255,0.2));
+            }
+
+            .modal-mic-btn:active {
+                transform: scale(0.95);
+            }
+
+            .modal-mic-btn .mic-icon {
+                font-size: 48px;
+                z-index: 2;
+            }
+
+            .modal-mic-btn .mic-ring {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                border-radius: 50%;
+                border: 2px solid rgba(255,255,255,0.3);
+                opacity: 0;
+                animation: none;
+            }
+
+            .modal-mic-btn.listening {
+                background: linear-gradient(135deg, #43e97b, #38f9d7);
+                border-color: #43e97b;
+                box-shadow: 0 0 40px rgba(67, 233, 123, 0.6);
+            }
+
+            .modal-mic-btn.listening .mic-ring {
+                animation: micRingPulse 1.5s ease-out infinite;
+            }
+
+            .modal-mic-btn.listening .mic-ring-2 {
+                animation-delay: 0.75s;
+            }
+
+            .modal-mic-btn.thinking {
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                border-color: #667eea;
+                box-shadow: 0 0 40px rgba(102, 126, 234, 0.6);
+                animation: thinkingPulse 1s ease-in-out infinite;
+            }
+
+            .modal-mic-btn.speaking {
+                background: linear-gradient(135deg, #f093fb, #f5576c);
+                border-color: #f093fb;
+                box-shadow: 0 0 40px rgba(240, 147, 251, 0.6);
+            }
+
+            .modal-mic-btn.speaking .mic-ring {
+                animation: speakingRing 0.8s ease-in-out infinite;
+            }
+
+            @keyframes micRingPulse {
+                0% {
+                    transform: scale(1);
+                    opacity: 0.8;
+                }
+                100% {
+                    transform: scale(1.8);
+                    opacity: 0;
+                }
+            }
+
+            @keyframes thinkingPulse {
+                0%, 100% {
+                    transform: scale(1);
+                    opacity: 1;
+                }
+                50% {
+                    transform: scale(1.05);
+                    opacity: 0.8;
+                }
+            }
+
+            @keyframes speakingRing {
+                0%, 100% {
+                    transform: scale(1);
+                    opacity: 0.3;
+                }
+                50% {
+                    transform: scale(1.2);
+                    opacity: 0.6;
+                }
             }
             
             .status-icon {
-                font-size: 72px;
-                margin-bottom: 20px;
+                font-size: 48px;
+                margin-bottom: 10px;
                 animation: statusIconFloat 3s ease-in-out infinite;
             }
             
@@ -476,31 +580,38 @@
     <div class="voice-modal" id="voiceModal">
         <div class="voice-modal-content">
             <button class="close-voice-modal" onclick="AdvancedVoiceAssistant.closeModal()" aria-label="Close">✕</button>
-            
+
             <div class="voice-status" id="voiceStatus">
                 <div class="status-icon" id="statusIcon">🎤</div>
-                <div class="status-text" id="statusText">Ask me anything</div>
-                <div class="status-subtext" id="statusSubtext">Powered by Alex AI</div>
+                <div class="status-text" id="statusText">Tap mic to speak</div>
+                <div class="status-subtext" id="statusSubtext">I'm ready to help</div>
             </div>
 
+            <!-- Large tappable mic button -->
+            <button class="modal-mic-btn" id="modalMicBtn" onclick="AdvancedVoiceAssistant.getInstance().toggleListening()" aria-label="Start listening">
+                <span class="mic-icon">🎤</span>
+                <span class="mic-ring"></span>
+                <span class="mic-ring mic-ring-2"></span>
+            </button>
+
             <div class="voice-transcript" id="voiceTranscript">
-                Listening...
+                Tap the microphone to ask me anything
             </div>
 
             <div class="voice-suggestions" id="voiceSuggestions">
-                <div class="suggestion-title">Try saying:</div>
+                <div class="suggestion-title">Try asking me:</div>
                 <div class="suggestion-items">
-                    <button onclick="AdvancedVoiceAssistant.getInstance().executeSuggestion('Add milk to shopping')" class="suggestion-btn">
-                        🛒 "Add milk to shopping"
+                    <button onclick="SuziVoice.getInstance().executeSuggestion('Tell me a bedtime story')" class="suggestion-btn">
+                        📖 "Tell me a bedtime story"
                     </button>
-                    <button onclick="AdvancedVoiceAssistant.getInstance().executeSuggestion('What is the weather today')" class="suggestion-btn">
-                        🌤️ "What's the weather today?"
+                    <button onclick="SuziVoice.getInstance().executeSuggestion('Who was Nelson Mandela')" class="suggestion-btn">
+                        🧠 "Who was Nelson Mandela?"
                     </button>
-                    <button onclick="AdvancedVoiceAssistant.getInstance().executeSuggestion('Create a reminder for tomorrow at 3pm')" class="suggestion-btn">
-                        ⏰ "Remind me tomorrow at 3pm"
+                    <button onclick="SuziVoice.getInstance().executeSuggestion('Add bread and milk to shopping')" class="suggestion-btn">
+                        🛒 "Add bread and milk to shopping"
                     </button>
-                    <button onclick="AdvancedVoiceAssistant.getInstance().executeSuggestion('Take a note: buy birthday cake')" class="suggestion-btn">
-                        📝 "Take a note: buy birthday cake"
+                    <button onclick="SuziVoice.getInstance().executeSuggestion('Tell me a joke')" class="suggestion-btn">
+                        😄 "Tell me a joke"
                     </button>
                 </div>
             </div>
