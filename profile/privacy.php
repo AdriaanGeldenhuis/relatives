@@ -249,6 +249,68 @@ require_once __DIR__ . '/../shared/components/header.php';
             <button type="submit" class="btn btn-primary btn-block">Save Privacy Settings</button>
         </form>
 
+        <!-- Device Permissions -->
+        <div class="settings-section" style="margin-top: 20px;">
+            <div class="settings-section-title">
+                <span class="icon">Device Permissions</span>
+            </div>
+
+            <div class="permission-row" id="microphonePermissionRow">
+                <div class="permission-info">
+                    <div class="permission-icon">🎤</div>
+                    <div class="permission-details">
+                        <div class="permission-label">Microphone Access</div>
+                        <div class="permission-description">Required for voice notes</div>
+                        <div class="permission-status" id="microphoneStatus">
+                            <span class="status-indicator status-unknown"></span>
+                            <span class="status-text">Checking...</span>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-permission" id="btnRequestMicrophone" onclick="requestMicrophonePermission()">
+                    <span class="btn-text">Allow</span>
+                </button>
+            </div>
+
+            <div class="permission-row" id="notificationPermissionRow">
+                <div class="permission-info">
+                    <div class="permission-icon">🔔</div>
+                    <div class="permission-details">
+                        <div class="permission-label">Notification Access</div>
+                        <div class="permission-description">Required for alerts and reminders</div>
+                        <div class="permission-status" id="notificationStatus">
+                            <span class="status-indicator status-unknown"></span>
+                            <span class="status-text">Checking...</span>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-permission" id="btnRequestNotification" onclick="requestNotificationPermission()">
+                    <span class="btn-text">Allow</span>
+                </button>
+            </div>
+
+            <div class="permission-row" id="locationPermissionRow">
+                <div class="permission-info">
+                    <div class="permission-icon">📍</div>
+                    <div class="permission-details">
+                        <div class="permission-label">Location Access</div>
+                        <div class="permission-description">Required for family tracking</div>
+                        <div class="permission-status" id="locationStatus">
+                            <span class="status-indicator status-unknown"></span>
+                            <span class="status-text">Checking...</span>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-permission" id="btnRequestLocation" onclick="requestLocationPermission()">
+                    <span class="btn-text">Allow</span>
+                </button>
+            </div>
+
+            <div class="permission-note">
+                <strong>Note:</strong> Permissions are managed by your browser or device. If a permission is blocked, you may need to update it in your browser settings.
+            </div>
+        </div>
+
         <!-- Active Sessions -->
         <div class="settings-section" style="margin-top: 20px;">
             <div class="settings-section-title">
@@ -320,5 +382,333 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     </div>
 </main>
+
+<script>
+// ============================================
+// DEVICE PERMISSIONS MANAGEMENT
+// ============================================
+
+// Check all permissions on page load
+document.addEventListener('DOMContentLoaded', function() {
+    checkAllPermissions();
+});
+
+async function checkAllPermissions() {
+    await checkMicrophonePermission();
+    await checkNotificationPermission();
+    await checkLocationPermission();
+}
+
+// ============================================
+// MICROPHONE PERMISSION
+// ============================================
+
+async function checkMicrophonePermission() {
+    const statusEl = document.getElementById('microphoneStatus');
+    const btnEl = document.getElementById('btnRequestMicrophone');
+
+    try {
+        // Check if Permissions API is supported
+        if (navigator.permissions && navigator.permissions.query) {
+            const result = await navigator.permissions.query({ name: 'microphone' });
+            updatePermissionUI('microphone', result.state, statusEl, btnEl);
+
+            // Listen for permission changes
+            result.addEventListener('change', function() {
+                updatePermissionUI('microphone', this.state, statusEl, btnEl);
+            });
+        } else {
+            // Fallback: try to enumerate devices
+            if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const hasMic = devices.some(d => d.kind === 'audioinput' && d.label);
+                updatePermissionUI('microphone', hasMic ? 'granted' : 'prompt', statusEl, btnEl);
+            } else {
+                updatePermissionUI('microphone', 'unknown', statusEl, btnEl);
+            }
+        }
+    } catch (e) {
+        console.log('Microphone permission check error:', e);
+        updatePermissionUI('microphone', 'unknown', statusEl, btnEl);
+    }
+}
+
+async function requestMicrophonePermission() {
+    const statusEl = document.getElementById('microphoneStatus');
+    const btnEl = document.getElementById('btnRequestMicrophone');
+
+    btnEl.disabled = true;
+    btnEl.querySelector('.btn-text').textContent = 'Requesting...';
+
+    try {
+        // Check for native Android app
+        if (window.Android && typeof window.Android.requestMicrophonePermission === 'function') {
+            window.Android.requestMicrophonePermission();
+            // Native callback will handle the result
+            return;
+        }
+
+        // Web API request
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Permission granted - stop the stream immediately
+        stream.getTracks().forEach(track => track.stop());
+
+        updatePermissionUI('microphone', 'granted', statusEl, btnEl);
+        showToast('Microphone access granted!', 'success');
+
+    } catch (error) {
+        console.error('Microphone permission error:', error);
+
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            updatePermissionUI('microphone', 'denied', statusEl, btnEl);
+            showToast('Microphone permission denied. Please allow in browser settings.', 'error');
+        } else if (error.name === 'NotFoundError') {
+            updatePermissionUI('microphone', 'unavailable', statusEl, btnEl);
+            showToast('No microphone found on this device.', 'error');
+        } else {
+            updatePermissionUI('microphone', 'denied', statusEl, btnEl);
+            showToast('Could not access microphone: ' + error.message, 'error');
+        }
+    }
+
+    btnEl.disabled = false;
+}
+
+// Native app callback for microphone permission
+window.onMicrophonePermissionResult = function(granted) {
+    const statusEl = document.getElementById('microphoneStatus');
+    const btnEl = document.getElementById('btnRequestMicrophone');
+
+    updatePermissionUI('microphone', granted ? 'granted' : 'denied', statusEl, btnEl);
+    showToast(granted ? 'Microphone access granted!' : 'Microphone permission denied.', granted ? 'success' : 'error');
+
+    btnEl.disabled = false;
+};
+
+// ============================================
+// NOTIFICATION PERMISSION
+// ============================================
+
+async function checkNotificationPermission() {
+    const statusEl = document.getElementById('notificationStatus');
+    const btnEl = document.getElementById('btnRequestNotification');
+
+    if (!('Notification' in window)) {
+        updatePermissionUI('notification', 'unavailable', statusEl, btnEl);
+        return;
+    }
+
+    updatePermissionUI('notification', Notification.permission, statusEl, btnEl);
+}
+
+async function requestNotificationPermission() {
+    const statusEl = document.getElementById('notificationStatus');
+    const btnEl = document.getElementById('btnRequestNotification');
+
+    if (!('Notification' in window)) {
+        showToast('Notifications not supported on this device.', 'error');
+        return;
+    }
+
+    btnEl.disabled = true;
+    btnEl.querySelector('.btn-text').textContent = 'Requesting...';
+
+    try {
+        const permission = await Notification.requestPermission();
+        updatePermissionUI('notification', permission, statusEl, btnEl);
+
+        if (permission === 'granted') {
+            showToast('Notification access granted!', 'success');
+        } else {
+            showToast('Notification permission denied.', 'error');
+        }
+    } catch (error) {
+        console.error('Notification permission error:', error);
+        showToast('Could not request notification permission.', 'error');
+    }
+
+    btnEl.disabled = false;
+}
+
+// ============================================
+// LOCATION PERMISSION
+// ============================================
+
+async function checkLocationPermission() {
+    const statusEl = document.getElementById('locationStatus');
+    const btnEl = document.getElementById('btnRequestLocation');
+
+    try {
+        if (navigator.permissions && navigator.permissions.query) {
+            const result = await navigator.permissions.query({ name: 'geolocation' });
+            updatePermissionUI('location', result.state, statusEl, btnEl);
+
+            result.addEventListener('change', function() {
+                updatePermissionUI('location', this.state, statusEl, btnEl);
+            });
+        } else {
+            updatePermissionUI('location', 'unknown', statusEl, btnEl);
+        }
+    } catch (e) {
+        console.log('Location permission check error:', e);
+        updatePermissionUI('location', 'unknown', statusEl, btnEl);
+    }
+}
+
+async function requestLocationPermission() {
+    const statusEl = document.getElementById('locationStatus');
+    const btnEl = document.getElementById('btnRequestLocation');
+
+    btnEl.disabled = true;
+    btnEl.querySelector('.btn-text').textContent = 'Requesting...';
+
+    try {
+        await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+                () => resolve(),
+                (error) => reject(error),
+                { timeout: 10000 }
+            );
+        });
+
+        updatePermissionUI('location', 'granted', statusEl, btnEl);
+        showToast('Location access granted!', 'success');
+
+    } catch (error) {
+        console.error('Location permission error:', error);
+
+        if (error.code === 1) { // PERMISSION_DENIED
+            updatePermissionUI('location', 'denied', statusEl, btnEl);
+            showToast('Location permission denied. Please allow in browser settings.', 'error');
+        } else {
+            updatePermissionUI('location', 'denied', statusEl, btnEl);
+            showToast('Could not access location: ' + error.message, 'error');
+        }
+    }
+
+    btnEl.disabled = false;
+}
+
+// ============================================
+// UI HELPERS
+// ============================================
+
+function updatePermissionUI(type, state, statusEl, btnEl) {
+    const indicator = statusEl.querySelector('.status-indicator');
+    const text = statusEl.querySelector('.status-text');
+    const btnText = btnEl.querySelector('.btn-text');
+
+    // Remove all status classes
+    indicator.className = 'status-indicator';
+
+    switch (state) {
+        case 'granted':
+            indicator.classList.add('status-granted');
+            text.textContent = 'Allowed';
+            btnEl.style.display = 'none';
+            break;
+        case 'denied':
+            indicator.classList.add('status-denied');
+            text.textContent = 'Blocked';
+            btnText.textContent = 'Open Settings';
+            btnEl.style.display = 'flex';
+            btnEl.onclick = () => openPermissionSettings(type);
+            break;
+        case 'prompt':
+            indicator.classList.add('status-prompt');
+            text.textContent = 'Not set';
+            btnText.textContent = 'Allow';
+            btnEl.style.display = 'flex';
+            break;
+        case 'unavailable':
+            indicator.classList.add('status-unavailable');
+            text.textContent = 'Not available';
+            btnEl.style.display = 'none';
+            break;
+        default:
+            indicator.classList.add('status-unknown');
+            text.textContent = 'Unknown';
+            btnText.textContent = 'Allow';
+            btnEl.style.display = 'flex';
+    }
+}
+
+function openPermissionSettings(type) {
+    // Different guidance based on platform
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isChrome = /Chrome/i.test(navigator.userAgent);
+    const isFirefox = /Firefox/i.test(navigator.userAgent);
+    const isSafari = /Safari/i.test(navigator.userAgent) && !isChrome;
+
+    let message = '';
+
+    if (isAndroid) {
+        message = `To enable ${type} access:\n\n1. Tap the lock icon in your browser's address bar\n2. Tap "Permissions" or "Site settings"\n3. Find "${type}" and change it to "Allow"`;
+    } else if (isIOS) {
+        message = `To enable ${type} access:\n\n1. Open Settings app\n2. Scroll down and tap Safari (or your browser)\n3. Tap "Settings for Websites"\n4. Find "${type}" and allow access`;
+    } else if (isChrome) {
+        message = `To enable ${type} access:\n\n1. Click the lock icon in the address bar\n2. Click "Site settings"\n3. Find "${type}" and change it to "Allow"\n4. Refresh this page`;
+    } else if (isFirefox) {
+        message = `To enable ${type} access:\n\n1. Click the lock icon in the address bar\n2. Click "Connection secure" > "More information"\n3. Go to "Permissions" tab\n4. Find "${type}" and allow it`;
+    } else if (isSafari) {
+        message = `To enable ${type} access:\n\n1. Go to Safari > Settings > Websites\n2. Find "${type}" in the left sidebar\n3. Find this website and change to "Allow"`;
+    } else {
+        message = `To enable ${type} access, please check your browser settings and allow this website to access your ${type}.`;
+    }
+
+    alert(message);
+}
+
+function showToast(message, type = 'info') {
+    // Check if there's a global showToast function
+    if (typeof window.showToast === 'function' && window.showToast !== showToast) {
+        window.showToast(message, type);
+        return;
+    }
+
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: ${type === 'success' ? '#43e97b' : type === 'error' ? '#ff6b6b' : '#667eea'};
+        color: white;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 14px;
+        z-index: 10000;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        animation: toastIn 0.3s ease;
+    `;
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'toastOut 0.3s ease forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Add toast animation styles
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes toastIn {
+        from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+        to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    @keyframes toastOut {
+        from { opacity: 1; transform: translateX(-50%) translateY(0); }
+        to { opacity: 0; transform: translateX(-50%) translateY(20px); }
+    }
+`;
+document.head.appendChild(style);
+</script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

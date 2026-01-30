@@ -72,9 +72,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     }
                 }
 
-                // Handle image upload - save as WebP to /saves/{user_id}/notes/
-                $imagePath = null;
-                if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+                // Handle multiple image uploads - save as WebP to /saves/{user_id}/notes/
+                $imagePaths = [];
+                if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
+                    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                    $maxSize = 10 * 1024 * 1024; // 10MB
+                    $maxImages = 7;
+
+                    // Create user's notes directory: /saves/{user_id}/notes/
+                    $uploadDir = __DIR__ . '/../saves/' . $user['id'] . '/notes/';
+                    if (!is_dir($uploadDir)) {
+                        mkdir($uploadDir, 0755, true);
+                    }
+
+                    $finfo = new finfo(FILEINFO_MIME_TYPE);
+                    $imageCount = min(count($_FILES['images']['name']), $maxImages);
+
+                    for ($i = 0; $i < $imageCount; $i++) {
+                        if ($_FILES['images']['error'][$i] !== UPLOAD_ERR_OK) continue;
+
+                        $tmpName = $_FILES['images']['tmp_name'][$i];
+                        $fileSize = $_FILES['images']['size'][$i];
+                        $mimeType = $finfo->file($tmpName);
+
+                        if (!in_array($mimeType, $allowedTypes) || $fileSize > $maxSize) continue;
+
+                        $filename = 'note_' . $noteId . '_' . time() . '_' . $i . '.webp';
+                        $filepath = $uploadDir . $filename;
+
+                        // Load image based on type and convert to WebP
+                        $sourceImage = null;
+                        switch ($mimeType) {
+                            case 'image/jpeg':
+                                $sourceImage = imagecreatefromjpeg($tmpName);
+                                break;
+                            case 'image/png':
+                                $sourceImage = imagecreatefrompng($tmpName);
+                                break;
+                            case 'image/gif':
+                                $sourceImage = imagecreatefromgif($tmpName);
+                                break;
+                            case 'image/webp':
+                                $sourceImage = imagecreatefromwebp($tmpName);
+                                break;
+                        }
+
+                        if ($sourceImage) {
+                            // Preserve transparency
+                            imagepalettetotruecolor($sourceImage);
+                            imagealphablending($sourceImage, true);
+                            imagesavealpha($sourceImage, true);
+
+                            // Save as WebP with 85% quality
+                            if (imagewebp($sourceImage, $filepath, 85)) {
+                                $imagePaths[] = '/saves/' . $user['id'] . '/notes/' . $filename;
+                            }
+                            imagedestroy($sourceImage);
+                        }
+                    }
+
+                    // Store as JSON if we have images
+                    if (!empty($imagePaths)) {
+                        $imagePathJson = json_encode($imagePaths);
+                        $stmt = $db->prepare("UPDATE notes SET image_path = ? WHERE id = ?");
+                        $stmt->execute([$imagePathJson, $noteId]);
+                    }
+                }
+                // Legacy support: single image upload
+                elseif (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
                     $file = $_FILES['image'];
                     $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
                     $maxSize = 10 * 1024 * 1024; // 10MB
@@ -83,7 +148,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $mimeType = $finfo->file($file['tmp_name']);
 
                     if (in_array($mimeType, $allowedTypes) && $file['size'] <= $maxSize) {
-                        // Create user's notes directory: /saves/{user_id}/notes/
                         $uploadDir = __DIR__ . '/../saves/' . $user['id'] . '/notes/';
                         if (!is_dir($uploadDir)) {
                             mkdir($uploadDir, 0755, true);
@@ -92,7 +156,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         $filename = 'note_' . $noteId . '_' . time() . '.webp';
                         $filepath = $uploadDir . $filename;
 
-                        // Load image based on type and convert to WebP
                         $sourceImage = null;
                         switch ($mimeType) {
                             case 'image/jpeg':
@@ -110,17 +173,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         }
 
                         if ($sourceImage) {
-                            // Preserve transparency
                             imagepalettetotruecolor($sourceImage);
                             imagealphablending($sourceImage, true);
                             imagesavealpha($sourceImage, true);
 
-                            // Save as WebP with 85% quality
                             if (imagewebp($sourceImage, $filepath, 85)) {
-                                $imagePath = '/saves/' . $user['id'] . '/notes/' . $filename;
-
+                                $imagePaths[] = '/saves/' . $user['id'] . '/notes/' . $filename;
                                 $stmt = $db->prepare("UPDATE notes SET image_path = ? WHERE id = ?");
-                                $stmt->execute([$imagePath, $noteId]);
+                                $stmt->execute([json_encode($imagePaths), $noteId]);
                             }
                             imagedestroy($sourceImage);
                         }
@@ -154,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'color' => $color,
                         'pinned' => 0,
                         'audio_path' => $audioPath,
-                        'image_path' => $imagePath,
+                        'image_path' => !empty($imagePaths) ? json_encode($imagePaths) : null,
                         'user_id' => $user['id'],
                         'user_name' => $user['full_name'],
                         'avatar_color' => $user['avatar_color'],
@@ -198,11 +258,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     }
                 }
 
-                // Delete image file if exists
+                // Delete image files if exist (supports both JSON array and single path)
                 if ($note && $note['image_path']) {
-                    $imageFile = __DIR__ . '/..' . $note['image_path'];
-                    if (file_exists($imageFile)) {
-                        unlink($imageFile);
+                    $imagePaths = json_decode($note['image_path'], true);
+                    if (is_array($imagePaths)) {
+                        foreach ($imagePaths as $imgPath) {
+                            $imageFile = __DIR__ . '/..' . $imgPath;
+                            if (file_exists($imageFile)) {
+                                unlink($imageFile);
+                            }
+                        }
+                    } else {
+                        // Legacy: single image path
+                        $imageFile = __DIR__ . '/..' . $note['image_path'];
+                        if (file_exists($imageFile)) {
+                            unlink($imageFile);
+                        }
                     }
                 }
 
@@ -253,17 +324,31 @@ function timeAgo($timestamp) {
     $time = strtotime($timestamp);
     $now = time();
     $diff = $now - $time;
-    
+
     if ($diff < 60) return 'Just now';
     if ($diff < 3600) return floor($diff / 60) . ' min ago';
     if ($diff < 86400) return floor($diff / 3600) . ' hours ago';
     if ($diff < 604800) return floor($diff / 86400) . ' days ago';
-    
+
     return date('M j, Y', $time);
 }
 
+// Helper function to parse image paths (supports JSON array or legacy single path)
+function getImagePaths($imagePath) {
+    if (empty($imagePath)) return [];
+
+    // Try to decode as JSON array
+    $decoded = json_decode($imagePath, true);
+    if (is_array($decoded)) {
+        return $decoded;
+    }
+
+    // Legacy: single path string
+    return [$imagePath];
+}
+
 $pageTitle = 'Notes';
-$cacheVersion = '10.1.1'; // Fixed null user_name in addNoteToDOM
+$cacheVersion = '10.2.0'; // Multi-photo notes with carousel (up to 7 photos)
 $pageCSS = [
     '/notes/css/notes.css?v=' . $cacheVersion,
     '/collage/css/collage.css?v=' . $cacheVersion
@@ -500,9 +585,16 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 </div>
                             <?php endif; ?>
 
-                            <?php if (!empty($note['image_path'])): ?>
-                                <div class="note-image" onclick="event.stopPropagation(); openImageFullscreen('<?php echo htmlspecialchars($note['image_path']); ?>')">
-                                    <img src="<?php echo htmlspecialchars($note['image_path']); ?>" alt="Note photo" loading="lazy">
+                            <?php
+                            $notePaths = getImagePaths($note['image_path']);
+                            if (!empty($notePaths)):
+                                $imageCount = count($notePaths);
+                            ?>
+                                <div class="note-images-carousel" onclick="event.stopPropagation(); openImageCarousel(<?php echo htmlspecialchars(json_encode($notePaths)); ?>, 0)" data-images='<?php echo htmlspecialchars(json_encode($notePaths)); ?>'>
+                                    <img src="<?php echo htmlspecialchars($notePaths[0]); ?>" alt="Note photo" loading="lazy">
+                                    <?php if ($imageCount > 1): ?>
+                                        <div class="carousel-indicator"><?php echo $imageCount; ?> photos</div>
+                                    <?php endif; ?>
                                 </div>
                             <?php endif; ?>
 
@@ -617,9 +709,16 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 </div>
                             <?php endif; ?>
 
-                            <?php if (!empty($note['image_path'])): ?>
-                                <div class="note-image" onclick="event.stopPropagation(); openImageFullscreen('<?php echo htmlspecialchars($note['image_path']); ?>')">
-                                    <img src="<?php echo htmlspecialchars($note['image_path']); ?>" alt="Note photo" loading="lazy">
+                            <?php
+                            $notePaths = getImagePaths($note['image_path']);
+                            if (!empty($notePaths)):
+                                $imageCount = count($notePaths);
+                            ?>
+                                <div class="note-images-carousel" onclick="event.stopPropagation(); openImageCarousel(<?php echo htmlspecialchars(json_encode($notePaths)); ?>, 0)" data-images='<?php echo htmlspecialchars(json_encode($notePaths)); ?>'>
+                                    <img src="<?php echo htmlspecialchars($notePaths[0]); ?>" alt="Note photo" loading="lazy">
+                                    <?php if ($imageCount > 1): ?>
+                                        <div class="carousel-indicator"><?php echo $imageCount; ?> photos</div>
+                                    <?php endif; ?>
                                 </div>
                             <?php endif; ?>
 
@@ -670,16 +769,16 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
 
                 <div class="form-group">
-                    <label>Photo (optional)</label>
+                    <label>Photos (optional, up to 7)</label>
                     <div class="photo-upload-area" id="notePhotoDropZone" onclick="document.getElementById('notePhotoInput').click()">
                         <div class="upload-icon">📷</div>
-                        <div class="upload-text">Click or drag to add photo</div>
-                        <div class="upload-hint">JPG, PNG, GIF or WebP. Saved as WebP.</div>
+                        <div class="upload-text">Click or drag to add photos</div>
+                        <div class="upload-hint">JPG, PNG, GIF or WebP. Up to 7 photos.</div>
                     </div>
-                    <input type="file" id="notePhotoInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display: none;">
-                    <div class="photo-preview" id="notePhotoPreview" style="display: none;">
-                        <img src="" alt="Preview" id="notePhotoPreviewImg">
-                        <button type="button" onclick="removeNotePhoto()" class="photo-remove-btn">&times;</button>
+                    <input type="file" id="notePhotoInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display: none;">
+                    <div class="photo-previews-container" id="notePhotoPreviewsContainer" style="display: none;">
+                        <div class="photo-previews-grid" id="notePhotoPreviewsGrid"></div>
+                        <div class="photo-count-indicator"><span id="photoCountText">0</span>/7 photos</div>
                     </div>
                 </div>
 

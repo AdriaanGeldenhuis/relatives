@@ -423,6 +423,171 @@
     color: rgba(255, 255, 255, 0.4);
 }
 
+/* ============================================
+   DEVICE PERMISSIONS UI
+   ============================================ */
+
+.permission-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    transition: all 0.3s ease;
+}
+
+.permission-row:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.permission-row:last-of-type {
+    margin-bottom: 16px;
+}
+
+.permission-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1;
+}
+
+.permission-icon {
+    font-size: 28px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+.permission-details {
+    flex: 1;
+}
+
+.permission-label {
+    font-weight: 600;
+    font-size: 15px;
+    color: white;
+    margin-bottom: 2px;
+}
+
+.permission-description {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 6px;
+}
+
+.permission-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-indicator.status-granted {
+    background: #43e97b;
+    box-shadow: 0 0 8px rgba(67, 233, 123, 0.5);
+}
+
+.status-indicator.status-denied {
+    background: #ff6b6b;
+    box-shadow: 0 0 8px rgba(255, 107, 107, 0.5);
+}
+
+.status-indicator.status-prompt {
+    background: #ffc107;
+    box-shadow: 0 0 8px rgba(255, 193, 7, 0.5);
+}
+
+.status-indicator.status-unknown {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.status-indicator.status-unavailable {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.status-text {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 500;
+}
+
+.btn-permission {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-permission:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+}
+
+.btn-permission:active {
+    transform: translateY(0);
+}
+
+.btn-permission:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.permission-note {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 12px 14px;
+    line-height: 1.5;
+}
+
+.permission-note strong {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* Mobile permission adjustments */
+@media (max-width: 480px) {
+    .permission-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .permission-info {
+        width: 100%;
+    }
+
+    .btn-permission {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
 /* Member Since */
 .member-since {
     text-align: center;

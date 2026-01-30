@@ -203,3 +203,38 @@
         </div>
     </div>
 </div>
+
+<script>
+// Dropdown menu toggle on click
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.ht-menu-trigger').forEach(function(trigger) {
+        trigger.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const menu = this.closest('.ht-trip-actions-menu') || this.closest('.ht-actions-menu');
+            const dropdown = menu.querySelector('.ht-menu-dropdown');
+            const isActive = menu.classList.contains('active');
+
+            // Close all other dropdowns
+            document.querySelectorAll('.ht-trip-actions-menu.active, .ht-actions-menu.active').forEach(function(m) {
+                m.classList.remove('active');
+            });
+
+            // Toggle this dropdown
+            if (!isActive) {
+                // Position dropdown at the button location
+                const rect = this.getBoundingClientRect();
+                dropdown.style.top = rect.top + 'px';
+                dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+                menu.classList.add('active');
+            }
+        });
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function() {
+        document.querySelectorAll('.ht-trip-actions-menu.active, .ht-actions-menu.active').forEach(function(m) {
+            m.classList.remove('active');
+        });
+    });
+});
+</script>
