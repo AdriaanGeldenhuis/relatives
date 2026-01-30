@@ -115,11 +115,37 @@ try {
         $tripId, $newVersion, substr($instruction, 0, 50), HT_Auth::userId()
     ));
 
+    // Auto-sync to Google Calendar if connected
+    $calendarSync = null;
+    $userId = HT_Auth::userId();
+
+    if (HT_GoogleCalendar::isConnected($userId)) {
+        try {
+            $events = HT_GoogleCalendar::insertTripEvents($userId, $trip, $refinedPlan);
+            $calendarSync = [
+                'success' => true,
+                'events_created' => count($events),
+                'message' => count($events) . ' events updated in Google Calendar'
+            ];
+            error_log(sprintf(
+                'Auto calendar sync (refine): Trip=%d, Events=%d, User=%d',
+                $tripId, count($events), $userId
+            ));
+        } catch (Exception $e) {
+            $calendarSync = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+            error_log('Auto calendar sync (refine) failed: ' . $e->getMessage());
+        }
+    }
+
     HT_Response::ok([
         'trip_id' => $tripId,
         'version' => $newVersion,
         'plan' => $refinedPlan,
-        'instruction' => $instruction
+        'instruction' => $instruction,
+        'calendar_sync' => $calendarSync
     ]);
 
 } catch (Exception $e) {
