@@ -427,7 +427,7 @@ $games = [
 
 $pageTitle = 'Games';
 $activePage = 'games';
-$cacheVersion = '1.0.0';
+$cacheVersion = '1.1.0';
 $pageCSS = [];
 
 require_once __DIR__ . '/../shared/components/header.php';
