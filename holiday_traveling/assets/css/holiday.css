@@ -248,6 +248,7 @@
     padding: 16px;
     backdrop-filter: blur(20px);
     transition: var(--ht-transition);
+    overflow: visible;
 }
 
 .ht-trip-card:hover {
@@ -843,6 +844,7 @@
     position: absolute;
     top: 100%;
     right: 0;
+    margin-top: 8px;
     background: rgba(30, 30, 50, 0.98);
     border: 1px solid var(--ht-glass-border);
     border-radius: var(--ht-radius-md);
