@@ -1055,24 +1055,6 @@
     margin-bottom: 20px;
 }
 
-.ht-trip-header-top {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    margin-bottom: 8px;
-}
-
-.ht-trip-header-top > .ht-back-link {
-    flex: 0 1 auto;
-    margin-bottom: 0;
-}
-
-.ht-trip-header-top > .ht-trip-actions-menu {
-    flex: 0 0 auto;
-    position: static !important;
-}
-
 .ht-trip-header-main {
     display: flex;
     flex-direction: column;
@@ -1141,48 +1123,6 @@
 /* ============================================
    TABS
    ============================================ */
-.ht-tabs-nav {
-    display: flex;
-    overflow-x: auto;
-    gap: 4px;
-    padding-bottom: 8px;
-    margin-bottom: 16px;
-    border-bottom: 1px solid var(--ht-glass-border);
-    -webkit-overflow-scrolling: touch;
-}
-
-.ht-tabs-nav::-webkit-scrollbar {
-    display: none;
-}
-
-.ht-tab-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: 10px 14px;
-    background: transparent;
-    border: none;
-    border-radius: var(--ht-radius-sm);
-    color: var(--ht-text-muted);
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: var(--ht-transition);
-    white-space: nowrap;
-    min-width: 60px;
-}
-
-.ht-tab-btn:hover {
-    background: var(--ht-glass-light);
-    color: var(--ht-text-secondary);
-}
-
-.ht-tab-btn.active {
-    background: var(--ht-glass-medium);
-    color: var(--ht-text-primary);
-}
-
 .ht-tab-icon {
     font-size: 20px;
 }
