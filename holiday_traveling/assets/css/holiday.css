@@ -1053,24 +1053,25 @@
    ============================================ */
 .ht-trip-header {
     margin-bottom: 20px;
-    position: relative;
 }
 
 .ht-trip-header-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-bottom: 8px;
+    gap: 16px;
 }
 
 .ht-trip-header-top .ht-back-link {
-    margin-bottom: 16px;
+    margin-bottom: 0;
+    flex: 0 0 auto;
 }
 
 .ht-trip-header-top .ht-trip-actions-menu {
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 100;
+    flex: 0 0 auto;
+    display: inline-flex;
 }
 
 .ht-trip-header-main {
