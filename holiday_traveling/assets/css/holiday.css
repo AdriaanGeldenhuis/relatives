@@ -841,7 +841,7 @@
 
 .ht-menu-dropdown {
     position: absolute;
-    top: 0;
+    top: 100%;
     right: 0;
     background: rgba(30, 30, 50, 0.98);
     border: 1px solid var(--ht-glass-border);
