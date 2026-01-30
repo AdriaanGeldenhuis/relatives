@@ -105,9 +105,6 @@ $statusDisplay = $tripStatus ?? 'upcoming';
                 </option>
                 <?php endforeach; ?>
             </select>
-            <button id="versionHistoryBtn" class="ht-btn ht-btn-outline ht-btn-xs" title="View version history">
-                📜 History
-            </button>
             <?php if ($canEdit): ?>
             <button id="restoreVersionBtn" class="ht-btn ht-btn-outline ht-btn-xs" style="display: none;">
                 Restore This Version
@@ -675,22 +672,6 @@ $statusDisplay = $tripStatus ?? 'upcoming';
     </div>
 </div>
 
-<!-- Version History Modal -->
-<div id="versionHistoryModal" class="ht-modal" style="display: none;">
-    <div class="ht-modal-backdrop"></div>
-    <div class="ht-modal-content ht-modal-lg">
-        <div class="ht-modal-header">
-            <h3 class="ht-modal-title">📜 Plan Version History</h3>
-            <button class="ht-modal-close" data-action="cancel">&times;</button>
-        </div>
-        <div class="ht-modal-body" id="versionHistoryContent">
-            <p class="ht-loading">Loading version history...</p>
-        </div>
-        <div class="ht-modal-actions">
-            <button class="ht-btn ht-btn-primary" data-action="cancel">Close</button>
-        </div>
-    </div>
-</div>
 
 <script>
     // Pass trip data to JS

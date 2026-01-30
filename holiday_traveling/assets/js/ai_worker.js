@@ -249,18 +249,6 @@
             });
         }
 
-        // Version History Button
-        const versionHistoryBtn = document.getElementById('versionHistoryBtn');
-        if (versionHistoryBtn) {
-            versionHistoryBtn.addEventListener('click', async function() {
-                try {
-                    const response = await HT.API.get(`trips_version_history.php?trip_id=${HT.tripId}`);
-                    displayVersionHistory(response.data);
-                } catch (error) {
-                    HT.Toast.error(error.message || 'Failed to load version history');
-                }
-            });
-        }
     }
 
     /**
@@ -299,61 +287,6 @@
         content.innerHTML = html;
         modal.style.display = 'flex';
     }
-
-    /**
-     * Display version history in modal
-     */
-    function displayVersionHistory(data) {
-        const modal = document.getElementById('versionHistoryModal');
-        const content = document.getElementById('versionHistoryContent');
-
-        if (!modal || !content) return;
-
-        let html = `<h3>Plan Version History (${data.total_versions} versions)</h3>`;
-        html += '<div class="ht-version-list">';
-
-        data.versions.forEach(v => {
-            const activeClass = v.is_active ? 'ht-version-active' : '';
-            const activeBadge = v.is_active ? '<span class="ht-badge ht-badge-success">Active</span>' : '';
-
-            html += `
-                <div class="ht-version-item ${activeClass}" data-version="${v.version}">
-                    <div class="ht-version-header">
-                        <span class="ht-version-number">v${v.version}</span>
-                        ${activeBadge}
-                        <span class="ht-version-date">${escapeHtml(v.created_at_formatted)}</span>
-                    </div>
-                    <div class="ht-version-summary">${escapeHtml(v.summary || 'No summary')}</div>
-                    <div class="ht-version-meta">
-                        <span class="ht-version-created-by">${v.created_by === 'ai' ? '🤖 AI' : '👤 User'}</span>
-                        ${v.instruction ? `<span class="ht-version-instruction">"${escapeHtml(v.instruction.substring(0, 50))}${v.instruction.length > 50 ? '...' : ''}"</span>` : ''}
-                    </div>
-                    ${!v.is_active ? `<button class="ht-btn ht-btn-sm ht-btn-outline" onclick="HT.restoreVersion(${v.version})">Restore</button>` : ''}
-                </div>
-            `;
-        });
-
-        html += '</div>';
-        content.innerHTML = html;
-        modal.style.display = 'flex';
-    }
-
-    // Expose restore function globally
-    HT.restoreVersion = async function(versionNumber) {
-        if (!confirm('Restore this plan version? A new version will be created from the selected one.')) {
-            return;
-        }
-        try {
-            await HT.API.post('trips_restore_version.php', {
-                trip_id: HT.tripId,
-                version_number: versionNumber
-            });
-            HT.Toast.success('Plan version restored');
-            window.location.reload();
-        } catch (error) {
-            HT.Toast.error(error.message || 'Failed to restore version');
-        }
-    };
 
     /**
      * Initialize modals
@@ -408,7 +341,6 @@
 
         // Initialize close buttons for info modals
         initCloseableModal('safetyBriefModal');
-        initCloseableModal('versionHistoryModal');
     }
 
     /**
