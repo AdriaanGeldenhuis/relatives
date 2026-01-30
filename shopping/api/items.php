@@ -11,7 +11,8 @@ require_once __DIR__ . '/../../core/NotificationTriggers.php';
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Credentials: true');
-header('Cache-Control: no-cache, must-revalidate');
+header('Cache-Control: private, no-store, max-age=0');
+header('CDN-Cache-Control: no-store');
 
 error_reporting(E_ALL);
 ini_set('display_errors', 0);

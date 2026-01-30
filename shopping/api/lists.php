@@ -9,7 +9,8 @@ require_once __DIR__ . '/../../core/bootstrap.php';
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Credentials: true');
-header('Cache-Control: no-cache, must-revalidate');
+header('Cache-Control: private, no-store, max-age=0');
+header('CDN-Cache-Control: no-store');
 
 // Auth check - use same pattern as items.php
 if (!isset($_SESSION['user_id'])) {

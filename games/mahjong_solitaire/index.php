@@ -42,7 +42,7 @@ $cacheVersion = '1.0.0';
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/game.css">
+    <link rel="stylesheet" href="assets/css/game.css?v=<?php echo $cacheVersion; ?>">
 </head>
 <body>
     <!-- Menu Screen -->
@@ -249,9 +249,9 @@ $cacheVersion = '1.0.0';
         </div>
     </div>
 
-    <script src="assets/js/layouts.js"></script>
-    <script src="assets/js/audio.js"></script>
-    <script src="assets/js/renderer.js"></script>
-    <script src="assets/js/game.js"></script>
+    <script src="assets/js/layouts.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="assets/js/audio.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="assets/js/renderer.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="assets/js/game.js?v=<?php echo $cacheVersion; ?>"></script>
 </body>
 </html>

@@ -10,7 +10,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-cache, max-age=30');
+header('Cache-Control: public, max-age=30, s-maxage=60, stale-while-revalidate=120');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);

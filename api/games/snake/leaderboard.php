@@ -11,7 +11,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Set JSON response headers
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: max-age=30'); // Cache for 30 seconds
+header('Cache-Control: public, max-age=30, s-maxage=60, stale-while-revalidate=120');
 
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {

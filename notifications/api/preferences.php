@@ -6,7 +6,8 @@
 
 session_start();
 header('Content-Type: application/json');
-header('Cache-Control: no-cache, must-revalidate');
+header('Cache-Control: private, no-store, max-age=0');
+header('CDN-Cache-Control: no-store');
 
 if (!isset($_SESSION['user_id'])) {
     http_response_code(401);

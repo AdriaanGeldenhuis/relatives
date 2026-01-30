@@ -271,18 +271,18 @@ require_once __DIR__ . '/../../shared/components/header.php';
 </script>
 
 <!-- Tracking JS -->
-<script src="/tracking/app/assets/js/format.js"></script>
-<script src="/tracking/app/assets/js/api.js"></script>
-<script src="/tracking/app/assets/js/state.js"></script>
-<script src="/tracking/app/assets/js/native-bridge.js"></script>
-<script src="/tracking/app/assets/js/map.js"></script>
-<script src="/tracking/app/assets/js/family-panel.js"></script>
-<script src="/tracking/app/assets/js/ui-controls.js"></script>
-<script src="/tracking/app/assets/js/follow.js"></script>
-<script src="/tracking/app/assets/js/directions.js"></script>
-<script src="/tracking/app/assets/js/polling.js"></script>
-<script src="/tracking/app/assets/js/browser-tracking.js"></script>
-<script src="/tracking/app/assets/js/bootstrap.js"></script>
+<script src="/tracking/app/assets/js/format.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/api.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/state.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/native-bridge.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/map.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/family-panel.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/ui-controls.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/follow.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/directions.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/polling.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/browser-tracking.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="/tracking/app/assets/js/bootstrap.js?v=<?php echo $cacheVersion; ?>"></script>
 
 <!-- Service Worker Registration -->
 <script>
