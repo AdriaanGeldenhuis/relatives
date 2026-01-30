@@ -76,15 +76,16 @@ try {
         'joined_at' => date('Y-m-d H:i:s')
     ]);
 
-    // Create holiday event in internal calendar
+    // Create main holiday event in internal calendar with standardized notes format
     try {
+        $mainEventNotes = HT_InternalCalendar::buildTripNotes($tripId, HT_InternalCalendar::TRIP_TYPE_MAIN);
         HT_DB::insert('events', [
             'family_id' => $familyId,
             'user_id' => $userId,
             'created_by' => $userId,
             'title' => '🏖️ Holiday - ' . $data['destination'],
             'description' => $data['title'],
-            'notes' => "Trip ID: {$tripId}",
+            'notes' => $mainEventNotes,
             'location' => $data['destination'],
             'starts_at' => $data['start_date'] . ' 00:00:00',
             'ends_at' => $data['end_date'] . ' 23:59:59',
@@ -141,6 +142,22 @@ try {
             ], 'id = ?', [$tripId]);
 
             $planVersion = 1;
+
+            // Sync itinerary activities + sleepovers to internal calendar
+            try {
+                // Fetch the full trip row to ensure consistent data structure
+                $tripRow = HT_DB::fetchOne("SELECT * FROM ht_trips WHERE id = ?", [$tripId]);
+                if ($tripRow) {
+                    $calendarEvents = HT_InternalCalendar::insertTripEvents($userId, $familyId, $tripRow, $plan);
+                    error_log(sprintf(
+                        'Calendar sync on trip create: Trip=%d, Events=%d, User=%d',
+                        $tripId, count($calendarEvents), $userId
+                    ));
+                }
+            } catch (Exception $e) {
+                error_log('Calendar sync failed during trip creation: ' . $e->getMessage());
+                // Don't fail trip creation if calendar sync fails
+            }
         } catch (Exception $e) {
             // Log error but don't fail the trip creation
             error_log('AI plan generation failed: ' . $e->getMessage());

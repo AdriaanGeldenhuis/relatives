@@ -35,14 +35,27 @@ try {
         HT_Response::error('You do not have permission to delete this trip', 403);
     }
 
-    // Get trip info before deleting (for logging)
+    // Get trip info before deleting (for logging and calendar cleanup)
     $trip = HT_DB::fetchOne(
-        "SELECT title, destination FROM ht_trips WHERE id = ?",
+        "SELECT id, family_id, title, destination FROM ht_trips WHERE id = ?",
         [$tripId]
     );
 
     if (!$trip) {
         HT_Response::error('Trip not found', 404);
+    }
+
+    // Delete all calendar events for this trip (main holiday + activities + sleepovers)
+    $deletedEvents = 0;
+    try {
+        $deletedEvents = HT_InternalCalendar::deleteTripEvents((int) $trip['family_id'], $tripId);
+        error_log(sprintf(
+            'Calendar events deleted: Trip=%d, Events=%d, User=%d',
+            $tripId, $deletedEvents, HT_Auth::userId()
+        ));
+    } catch (Exception $e) {
+        error_log('Calendar cleanup failed during trip deletion: ' . $e->getMessage());
+        // Continue with trip deletion even if calendar cleanup fails
     }
 
     // Delete trip (cascades to related tables)
