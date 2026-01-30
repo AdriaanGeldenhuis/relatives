@@ -212,7 +212,14 @@ $statusDisplay = $tripStatus ?? 'upcoming';
 
             <!-- Itinerary -->
             <div class="ht-itinerary">
-                <h3 class="ht-section-title-sm">Daily Itinerary</h3>
+                <div class="ht-itinerary-header">
+                    <h3 class="ht-section-title-sm">Daily Itinerary</h3>
+                    <?php if (!empty($activePlan['itinerary'])): ?>
+                    <button id="syncCalendarBtn" class="ht-btn ht-btn-outline ht-btn-sm">
+                        📅 Sync to Calendar
+                    </button>
+                    <?php endif; ?>
+                </div>
                 <?php if (!empty($activePlan['itinerary'])): ?>
                 <div class="ht-days-list">
                     <?php foreach ($activePlan['itinerary'] as $day): ?>
@@ -573,5 +580,44 @@ $statusDisplay = $tripStatus ?? 'upcoming';
                 m.classList.remove('active');
             });
         });
+
+        // Sync to Calendar button
+        var syncBtn = document.getElementById('syncCalendarBtn');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', function() {
+                var btn = this;
+                var originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Syncing...';
+
+                fetch('/holiday_traveling/api/calendar_sync.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': window.HT?.csrfToken || ''
+                    },
+                    body: JSON.stringify({ trip_id: window.HT.tripId })
+                })
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data.success || data.events_created) {
+                        btn.innerHTML = '✅ ' + (data.message || 'Synced!');
+                        setTimeout(function() {
+                            btn.innerHTML = originalText;
+                            btn.disabled = false;
+                        }, 3000);
+                    } else {
+                        alert('Sync failed: ' + (data.error || 'Unknown error'));
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                    }
+                })
+                .catch(function(err) {
+                    alert('Sync error: ' + err.message);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                });
+            });
+        }
     });
 </script>

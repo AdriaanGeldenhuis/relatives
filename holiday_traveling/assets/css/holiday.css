@@ -1323,6 +1323,17 @@
     margin-bottom: 24px;
 }
 
+.ht-itinerary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.ht-itinerary-header .ht-section-title-sm {
+    margin-bottom: 0;
+}
+
 .ht-days-list {
     display: flex;
     flex-direction: column;
