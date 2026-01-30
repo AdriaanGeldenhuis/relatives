@@ -726,44 +726,6 @@ require_once __DIR__ . '/../shared/components/header.php';
         margin-bottom: 12px;
     }
 
-    .cta-section {
-        text-align: center;
-        padding: 40px 20px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 20px;
-        margin-bottom: 30px;
-    }
-
-    .cta-section h3 {
-        font-size: 1.5rem;
-        margin-bottom: 8px;
-    }
-
-    .cta-section p {
-        color: rgba(255, 255, 255, 0.7);
-        margin-bottom: 20px;
-    }
-
-    .cta-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 14px 32px;
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        color: #fff;
-        font-weight: 700;
-        font-size: 1rem;
-        border-radius: 12px;
-        text-decoration: none;
-        transition: all 0.3s;
-    }
-
-    .cta-btn:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
-    }
-
     /* Global Leaderboard Styles */
     .global-leaderboard-section {
         background: rgba(255, 255, 255, 0.06);
@@ -1071,13 +1033,42 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
         </section>
 
-        <!-- Customization -->
-        <section class="cta-section" style="margin-bottom:24px;">
-            <h3>🎨 Customize Your Games</h3>
-            <p>Change themes, unlock Casual mode, and personalize your experience.</p>
-            <a href="/games/snake/#customize" class="cta-btn" style="background:linear-gradient(135deg,#4caf50,#388e3c);">
-                <span>🎨</span> Open Customization
-            </a>
+        <!-- Global Family Leaderboard -->
+        <section class="global-leaderboard-section" id="globalLeaderboard">
+            <div class="global-leaderboard-header">
+                <h2><span>🌍</span> Global Family Rankings</h2>
+                <div class="game-switcher">
+                    <button class="game-switch-btn active" data-game="all">
+                        <span class="game-icon">🏆</span>
+                        <span class="btn-text">All Games</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="snake">
+                        <span class="game-icon">🐍</span>
+                        <span class="btn-text">Snake</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="neon">
+                        <span class="game-icon">💠</span>
+                        <span class="btn-text">Neon</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="flash">
+                        <span class="game-icon">⚡</span>
+                        <span class="btn-text">Flash</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="blockforge">
+                        <span class="game-icon">🧱</span>
+                        <span class="btn-text">BlockForge</span>
+                    </button>
+                </div>
+            </div>
+
+            <ul class="global-leaderboard-list" id="globalLeaderboardList">
+                <!-- Populated by JavaScript -->
+            </ul>
+
+            <div class="empty-global-leaderboard" id="emptyGlobalLeaderboard" style="display: none;">
+                <div class="empty-global-leaderboard-icon">🏆</div>
+                <p>No scores yet for this game! Be the first family to compete.</p>
+            </div>
         </section>
 
         <!-- Family Leaderboard -->
@@ -1118,44 +1109,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <p>No scores yet! Be the first to play and claim the top spot.</p>
                 </div>
             <?php endif; ?>
-        </section>
-
-        <!-- Global Family Leaderboard -->
-        <section class="global-leaderboard-section" id="globalLeaderboard">
-            <div class="global-leaderboard-header">
-                <h2><span>🌍</span> Global Family Rankings</h2>
-                <div class="game-switcher">
-                    <button class="game-switch-btn active" data-game="all">
-                        <span class="game-icon">🏆</span>
-                        <span class="btn-text">All Games</span>
-                    </button>
-                    <button class="game-switch-btn" data-game="snake">
-                        <span class="game-icon">🐍</span>
-                        <span class="btn-text">Snake</span>
-                    </button>
-                    <button class="game-switch-btn" data-game="neon">
-                        <span class="game-icon">💠</span>
-                        <span class="btn-text">Neon</span>
-                    </button>
-                    <button class="game-switch-btn" data-game="flash">
-                        <span class="game-icon">⚡</span>
-                        <span class="btn-text">Flash</span>
-                    </button>
-                    <button class="game-switch-btn" data-game="blockforge">
-                        <span class="game-icon">🧱</span>
-                        <span class="btn-text">BlockForge</span>
-                    </button>
-                </div>
-            </div>
-
-            <ul class="global-leaderboard-list" id="globalLeaderboardList">
-                <!-- Populated by JavaScript -->
-            </ul>
-
-            <div class="empty-global-leaderboard" id="emptyGlobalLeaderboard" style="display: none;">
-                <div class="empty-global-leaderboard-icon">🏆</div>
-                <p>No scores yet for this game! Be the first family to compete.</p>
-            </div>
         </section>
 
     </div>
