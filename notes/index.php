@@ -895,7 +895,10 @@ require_once __DIR__ . '/../shared/components/header.php';
         </div>
         <div class="modal-body collage-modal-body">
             <div class="collage-toolbar">
-                <button id="btnChooseImages">Choose images</button>
+                <div class="photo-upload-area" id="btnChooseImages" style="display:inline-flex;padding:8px 16px;min-height:auto;">
+                    <div class="upload-icon" style="font-size:1rem;margin:0 8px 0 0;">📷</div>
+                    <div class="upload-text" style="font-size:0.85rem;">Choose images</div>
+                </div>
                 <button id="btnChooseLayout">Choose layout</button>
                 <button id="btnChooseBackground">Choose background</button>
                 <button id="btnDone">Done</button>
