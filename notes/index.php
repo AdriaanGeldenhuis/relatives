@@ -669,10 +669,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                               rows="8"><?php echo htmlspecialchars($voicePrefillContent); ?></textarea>
                 </div>
 
-                <button type="button" id="btnAddCollage" class="btn btn-collage btn-add-collage">
-                    <span>🖼️</span> Add a collage or photo
-                </button>
-
                 <div class="form-group">
                     <label>Photo (optional)</label>
                     <div class="photo-upload-area" id="notePhotoDropZone" onclick="document.getElementById('notePhotoInput').click()">
