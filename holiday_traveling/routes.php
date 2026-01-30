@@ -31,6 +31,7 @@ require_once __DIR__ . '/lib/rate_limit.php';
 require_once __DIR__ . '/lib/ai.php';
 require_once __DIR__ . '/lib/ics.php';
 require_once __DIR__ . '/lib/calendar_google.php';
+require_once __DIR__ . '/lib/calendar_internal.php';
 
 /**
  * Helper function to load a view with layout

@@ -115,28 +115,50 @@ try {
         $tripId, $newVersion, substr($instruction, 0, 50), HT_Auth::userId()
     ));
 
-    // Auto-sync to Google Calendar if connected
-    $calendarSync = null;
     $userId = HT_Auth::userId();
+    $familyId = (int) $trip['family_id'];
 
+    // Auto-sync to Internal Calendar (app calendar)
+    $internalCalendarSync = null;
+    try {
+        $internalEvents = HT_InternalCalendar::insertTripEvents($userId, $familyId, $trip, $refinedPlan);
+        $internalCalendarSync = [
+            'success' => true,
+            'events_created' => count($internalEvents),
+            'message' => count($internalEvents) . ' events updated in calendar'
+        ];
+        error_log(sprintf(
+            'Internal calendar sync (refine): Trip=%d, Events=%d, User=%d',
+            $tripId, count($internalEvents), $userId
+        ));
+    } catch (Exception $e) {
+        $internalCalendarSync = [
+            'success' => false,
+            'error' => $e->getMessage()
+        ];
+        error_log('Internal calendar sync (refine) failed: ' . $e->getMessage());
+    }
+
+    // Auto-sync to Google Calendar if connected
+    $googleCalendarSync = null;
     if (HT_GoogleCalendar::isConnected($userId)) {
         try {
-            $events = HT_GoogleCalendar::insertTripEvents($userId, $trip, $refinedPlan);
-            $calendarSync = [
+            $googleEvents = HT_GoogleCalendar::insertTripEvents($userId, $trip, $refinedPlan);
+            $googleCalendarSync = [
                 'success' => true,
-                'events_created' => count($events),
-                'message' => count($events) . ' events updated in Google Calendar'
+                'events_created' => count($googleEvents),
+                'message' => count($googleEvents) . ' events updated in Google Calendar'
             ];
             error_log(sprintf(
-                'Auto calendar sync (refine): Trip=%d, Events=%d, User=%d',
-                $tripId, count($events), $userId
+                'Google calendar sync (refine): Trip=%d, Events=%d, User=%d',
+                $tripId, count($googleEvents), $userId
             ));
         } catch (Exception $e) {
-            $calendarSync = [
+            $googleCalendarSync = [
                 'success' => false,
                 'error' => $e->getMessage()
             ];
-            error_log('Auto calendar sync (refine) failed: ' . $e->getMessage());
+            error_log('Google calendar sync (refine) failed: ' . $e->getMessage());
         }
     }
 
@@ -145,7 +167,8 @@ try {
         'version' => $newVersion,
         'plan' => $refinedPlan,
         'instruction' => $instruction,
-        'calendar_sync' => $calendarSync
+        'calendar_sync' => $internalCalendarSync,
+        'google_calendar_sync' => $googleCalendarSync
     ]);
 
 } catch (Exception $e) {
