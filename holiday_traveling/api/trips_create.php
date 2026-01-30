@@ -76,6 +76,30 @@ try {
         'joined_at' => date('Y-m-d H:i:s')
     ]);
 
+    // Create holiday event in internal calendar
+    try {
+        HT_DB::insert('events', [
+            'family_id' => $familyId,
+            'user_id' => $userId,
+            'created_by' => $userId,
+            'title' => '🏖️ Holiday - ' . $data['destination'],
+            'description' => $data['title'],
+            'notes' => "Trip ID: {$tripId}",
+            'location' => $data['destination'],
+            'starts_at' => $data['start_date'] . ' 00:00:00',
+            'ends_at' => $data['end_date'] . ' 23:59:59',
+            'timezone' => 'Africa/Johannesburg',
+            'all_day' => 1,
+            'kind' => 'event',
+            'color' => '#f39c12',
+            'status' => 'pending',
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s')
+        ]);
+    } catch (Exception $e) {
+        error_log('Holiday calendar event creation failed: ' . $e->getMessage());
+    }
+
     // Generate AI plan if requested
     $planVersion = null;
     if (!empty($input['generate_plan'])) {

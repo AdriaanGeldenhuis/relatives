@@ -20,31 +20,15 @@ class HT_InternalCalendar {
      * @return array Created events info
      */
     public static function insertTripEvents(int $userId, int $familyId, array $trip, array $plan): array {
-        // First, delete any existing events for this trip to avoid duplicates
-        self::deleteTripEvents($familyId, $trip['id']);
+        // Delete existing activity events for this trip (keeps the main "Holiday" event)
+        self::deleteActivityEvents($familyId, $trip['id']);
 
         $createdEvents = [];
         $destination = $trip['destination'];
         $tripId = $trip['id'];
 
-        // Create main trip event (all-day spanning event)
-        $mainEventId = self::createEvent([
-            'family_id' => $familyId,
-            'user_id' => $userId,
-            'title' => '✈️ ' . $destination,
-            'description' => $trip['title'] ?? 'Holiday Trip',
-            'notes' => "Trip ID: {$tripId}",
-            'location' => $destination,
-            'starts_at' => $trip['start_date'] . ' 00:00:00',
-            'ends_at' => $trip['end_date'] . ' 23:59:59',
-            'all_day' => 1,
-            'kind' => 'event',
-            'color' => self::TRAVEL_COLOR
-        ]);
-
-        if ($mainEventId) {
-            $createdEvents[] = ['id' => $mainEventId, 'type' => 'main_trip'];
-        }
+        // Note: Main "Holiday" event is created when trip is first created in trips_create.php
+        // Here we only create the individual activity events from the AI plan
 
         // Create individual activity events from itinerary
         foreach ($plan['itinerary'] ?? [] as $day) {
@@ -136,10 +120,22 @@ class HT_InternalCalendar {
     }
 
     /**
-     * Delete all events for a trip (used before re-syncing)
+     * Delete activity events for a trip (keeps the main "Holiday" event)
+     * Activity events have "Day X Morning/Afternoon/Evening" in their notes
+     */
+    public static function deleteActivityEvents(int $familyId, int $tripId): int {
+        // Only delete activity events (those with "Day" in notes), not the main holiday event
+        $stmt = HT_DB::execute(
+            "DELETE FROM events WHERE family_id = ? AND notes LIKE ? AND notes LIKE ?",
+            [$familyId, "%Trip ID: {$tripId}%", "%Day %"]
+        );
+        return $stmt->rowCount();
+    }
+
+    /**
+     * Delete all events for a trip including the main holiday event
      */
     public static function deleteTripEvents(int $familyId, int $tripId): int {
-        // Use HT_DB::execute for raw queries
         $stmt = HT_DB::execute(
             "DELETE FROM events WHERE family_id = ? AND notes LIKE ?",
             [$familyId, "%Trip ID: {$tripId}%"]
