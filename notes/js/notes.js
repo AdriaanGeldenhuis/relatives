@@ -17,7 +17,8 @@ let dataArray = null;
 let animationId = null;
 let recordedBlob = null;
 let currentShareNoteId = null;
-let selectedNoteImage = null; // For photo uploads
+let selectedNoteImages = []; // For multiple photo uploads (up to 7)
+const MAX_PHOTOS = 7;
 
 // ============================================
 // INITIALIZATION
@@ -41,8 +42,8 @@ function initPhotoUpload() {
 
     if (photoInput) {
         photoInput.addEventListener('change', function() {
-            if (this.files && this.files[0]) {
-                handlePhotoSelect(this.files[0]);
+            if (this.files && this.files.length > 0) {
+                handlePhotosSelect(Array.from(this.files));
             }
         });
     }
@@ -62,56 +63,121 @@ function initPhotoUpload() {
             e.preventDefault();
             this.classList.remove('dragover');
 
-            const files = e.dataTransfer.files;
-            if (files.length > 0 && files[0].type.startsWith('image/')) {
-                handlePhotoSelect(files[0]);
+            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+            if (files.length > 0) {
+                handlePhotosSelect(files);
             }
         });
     }
 }
 
-function handlePhotoSelect(file) {
-    // Validate file type
+function handlePhotosSelect(files) {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-        showToast('Please select a JPG, PNG, GIF or WebP image', 'error');
+    const maxSize = 10 * 1024 * 1024; // 10MB
+
+    // Filter valid files
+    const validFiles = files.filter(file => {
+        if (!allowedTypes.includes(file.type)) {
+            return false;
+        }
+        if (file.size > maxSize) {
+            showToast(`${file.name} is too large (max 10MB)`, 'error');
+            return false;
+        }
+        return true;
+    });
+
+    // Check if adding would exceed max
+    const remainingSlots = MAX_PHOTOS - selectedNoteImages.length;
+    if (remainingSlots <= 0) {
+        showToast(`Maximum ${MAX_PHOTOS} photos allowed`, 'warning');
         return;
     }
 
-    // Validate file size (10MB max)
-    if (file.size > 10 * 1024 * 1024) {
-        showToast('Image is too large. Maximum size is 10MB.', 'error');
-        return;
+    const filesToAdd = validFiles.slice(0, remainingSlots);
+    if (filesToAdd.length < validFiles.length) {
+        showToast(`Only ${filesToAdd.length} photos added (max ${MAX_PHOTOS})`, 'warning');
     }
 
-    selectedNoteImage = file;
-
-    // Show preview
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const preview = document.getElementById('notePhotoPreview');
-        const previewImg = document.getElementById('notePhotoPreviewImg');
-        const dropZone = document.getElementById('notePhotoDropZone');
-
-        previewImg.src = e.target.result;
-        preview.style.display = 'block';
-        dropZone.style.display = 'none';
-    };
-    reader.readAsDataURL(file);
+    // Add files to selection
+    selectedNoteImages = [...selectedNoteImages, ...filesToAdd];
+    updatePhotoPreviewsUI();
 }
 
-function removeNotePhoto() {
-    selectedNoteImage = null;
-
-    const preview = document.getElementById('notePhotoPreview');
-    const previewImg = document.getElementById('notePhotoPreviewImg');
+function updatePhotoPreviewsUI() {
+    const container = document.getElementById('notePhotoPreviewsContainer');
+    const grid = document.getElementById('notePhotoPreviewsGrid');
     const dropZone = document.getElementById('notePhotoDropZone');
-    const photoInput = document.getElementById('notePhotoInput');
+    const countText = document.getElementById('photoCountText');
 
-    previewImg.src = '';
-    preview.style.display = 'none';
-    dropZone.style.display = '';
-    photoInput.value = '';
+    if (selectedNoteImages.length === 0) {
+        container.style.display = 'none';
+        dropZone.style.display = '';
+        return;
+    }
+
+    // Show container, hide dropzone if max reached
+    container.style.display = 'block';
+    dropZone.style.display = selectedNoteImages.length >= MAX_PHOTOS ? 'none' : '';
+    countText.textContent = selectedNoteImages.length;
+
+    // Clear and rebuild preview grid
+    grid.innerHTML = '';
+
+    selectedNoteImages.forEach((file, index) => {
+        const previewItem = document.createElement('div');
+        previewItem.className = 'photo-preview-item';
+
+        const img = document.createElement('img');
+        img.alt = `Preview ${index + 1}`;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'photo-preview-remove';
+        removeBtn.innerHTML = '&times;';
+        removeBtn.onclick = function() {
+            removeNotePhoto(index);
+        };
+
+        previewItem.appendChild(img);
+        previewItem.appendChild(removeBtn);
+        grid.appendChild(previewItem);
+    });
+
+    // Add "add more" button if not at max
+    if (selectedNoteImages.length < MAX_PHOTOS) {
+        const addMoreBtn = document.createElement('div');
+        addMoreBtn.className = 'photo-preview-add-more';
+        addMoreBtn.innerHTML = '<span>+</span>';
+        addMoreBtn.onclick = function() {
+            document.getElementById('notePhotoInput').click();
+        };
+        grid.appendChild(addMoreBtn);
+    }
+}
+
+function removeNotePhoto(index) {
+    if (typeof index === 'number') {
+        // Remove specific photo
+        selectedNoteImages.splice(index, 1);
+    } else {
+        // Clear all photos
+        selectedNoteImages = [];
+    }
+    updatePhotoPreviewsUI();
+    document.getElementById('notePhotoInput').value = '';
+}
+
+function clearAllNotePhotos() {
+    selectedNoteImages = [];
+    updatePhotoPreviewsUI();
+    document.getElementById('notePhotoInput').value = '';
 }
 
 function openImageFullscreen(imagePath) {
@@ -150,6 +216,158 @@ function openImageFullscreen(imagePath) {
         }
     });
     observer.observe(document.body, { childList: true });
+}
+
+// Image carousel for multiple photos
+function openImageCarousel(images, startIndex = 0) {
+    if (!images || images.length === 0) return;
+
+    // Handle JSON string input
+    if (typeof images === 'string') {
+        try {
+            images = JSON.parse(images);
+        } catch (e) {
+            images = [images];
+        }
+    }
+
+    // Single image - use simple fullscreen
+    if (images.length === 1) {
+        openImageFullscreen(images[0]);
+        return;
+    }
+
+    let currentIndex = startIndex;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'image-carousel-overlay';
+    overlay.innerHTML = `
+        <button class="carousel-close-btn" onclick="this.parentElement.remove()">&times;</button>
+        <button class="carousel-nav-btn carousel-prev" aria-label="Previous">‹</button>
+        <div class="carousel-image-container">
+            <img src="${escapeHtml(images[currentIndex])}" alt="Photo ${currentIndex + 1}">
+        </div>
+        <button class="carousel-nav-btn carousel-next" aria-label="Next">›</button>
+        <div class="carousel-counter">${currentIndex + 1} / ${images.length}</div>
+        <div class="carousel-dots">
+            ${images.map((_, i) => `<span class="carousel-dot${i === currentIndex ? ' active' : ''}" data-index="${i}"></span>`).join('')}
+        </div>
+    `;
+
+    const imgEl = overlay.querySelector('.carousel-image-container img');
+    const counterEl = overlay.querySelector('.carousel-counter');
+    const dotsEl = overlay.querySelectorAll('.carousel-dot');
+    const prevBtn = overlay.querySelector('.carousel-prev');
+    const nextBtn = overlay.querySelector('.carousel-next');
+
+    function updateImage(newIndex) {
+        currentIndex = newIndex;
+        imgEl.src = images[currentIndex];
+        counterEl.textContent = `${currentIndex + 1} / ${images.length}`;
+
+        dotsEl.forEach((dot, i) => {
+            dot.classList.toggle('active', i === currentIndex);
+        });
+    }
+
+    function goNext() {
+        updateImage((currentIndex + 1) % images.length);
+    }
+
+    function goPrev() {
+        updateImage((currentIndex - 1 + images.length) % images.length);
+    }
+
+    prevBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        goPrev();
+    });
+
+    nextBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        goNext();
+    });
+
+    // Dot navigation
+    dotsEl.forEach(dot => {
+        dot.addEventListener('click', function(e) {
+            e.stopPropagation();
+            updateImage(parseInt(this.dataset.index));
+        });
+    });
+
+    // Close on backdrop click
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay || e.target.classList.contains('carousel-image-container')) {
+            overlay.remove();
+            document.body.style.overflow = '';
+        }
+    });
+
+    // Swipe support for mobile
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    overlay.addEventListener('touchstart', function(e) {
+        touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+
+    overlay.addEventListener('touchend', function(e) {
+        touchEndX = e.changedTouches[0].screenX;
+        const diff = touchStartX - touchEndX;
+        if (Math.abs(diff) > 50) {
+            if (diff > 0) {
+                goNext();
+            } else {
+                goPrev();
+            }
+        }
+    }, { passive: true });
+
+    // Keyboard navigation
+    const handleKeydown = function(e) {
+        if (e.key === 'Escape') {
+            overlay.remove();
+            document.body.style.overflow = '';
+            document.removeEventListener('keydown', handleKeydown);
+        } else if (e.key === 'ArrowLeft') {
+            goPrev();
+        } else if (e.key === 'ArrowRight') {
+            goNext();
+        }
+    };
+    document.addEventListener('keydown', handleKeydown);
+
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+
+    // Cleanup when removed
+    const observer = new MutationObserver(function() {
+        if (!document.body.contains(overlay)) {
+            document.body.style.overflow = '';
+            document.removeEventListener('keydown', handleKeydown);
+            observer.disconnect();
+        }
+    });
+    observer.observe(document.body, { childList: true });
+}
+
+// Helper to parse image paths (JSON array or single path)
+function parseImagePaths(imagePath) {
+    if (!imagePath) return [];
+
+    if (typeof imagePath === 'string') {
+        try {
+            const parsed = JSON.parse(imagePath);
+            if (Array.isArray(parsed)) return parsed;
+        } catch (e) {
+            // Not JSON, treat as single path
+        }
+        return [imagePath];
+    }
+
+    if (Array.isArray(imagePath)) return imagePath;
+    return [];
 }
 
 // ============================================
@@ -320,8 +538,8 @@ function closeModal(modalId) {
         document.querySelector('input[name="noteColor"]:checked').checked = false;
         document.getElementById('color1').checked = true;
 
-        // Reset photo upload
-        removeNotePhoto();
+        // Reset photo uploads
+        clearAllNotePhotos();
     } else if (modalId === 'createVoiceNoteModal') {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
             mediaRecorder.stop();
@@ -374,8 +592,8 @@ async function createNote(event, type) {
         const body = document.getElementById('noteBody').value.trim();
         const color = document.querySelector('input[name="noteColor"]:checked').value;
 
-        // Allow notes with just an image (no body text required)
-        if (!body && !selectedNoteImage) {
+        // Allow notes with just images (no body text required)
+        if (!body && selectedNoteImages.length === 0) {
             showToast('Please enter note content or add a photo', 'error');
             return;
         }
@@ -384,10 +602,10 @@ async function createNote(event, type) {
         formData.append('body', body);
         formData.append('color', color);
 
-        // Add image if selected
-        if (selectedNoteImage) {
-            formData.append('image', selectedNoteImage);
-        }
+        // Add images if selected (use images[] for multiple)
+        selectedNoteImages.forEach((file, index) => {
+            formData.append('images[]', file);
+        });
 
     } else if (type === 'voice') {
         if (!recordedBlob) {
@@ -1153,6 +1371,15 @@ function openFullscreenNote(noteId) {
     const audioSrc = audioEl?.querySelector('source')?.src || audioEl?.src || '';
     const noteColor = noteCard.style.background;
 
+    // Get images from carousel if present
+    const carouselEl = noteCard.querySelector('.note-images-carousel');
+    let imagePaths = [];
+    if (carouselEl && carouselEl.dataset.images) {
+        try {
+            imagePaths = JSON.parse(carouselEl.dataset.images);
+        } catch (e) {}
+    }
+
     let contentHtml = '';
 
     if (noteType === 'voice') {
@@ -1164,9 +1391,22 @@ function openFullscreenNote(noteId) {
             </div>
         `;
     } else {
+        // Build images carousel for fullscreen view
+        let imagesHtml = '';
+        if (imagePaths.length > 0) {
+            const imagesJson = JSON.stringify(imagePaths).replace(/"/g, '&quot;');
+            imagesHtml = `
+                <div class="fullscreen-note-images" onclick="openImageCarousel(${imagesJson}, 0)">
+                    <img src="${escapeHtml(imagePaths[0])}" alt="Note photo">
+                    ${imagePaths.length > 1 ? `<div class="fullscreen-images-indicator">${imagePaths.length} photos - tap to view</div>` : ''}
+                </div>
+            `;
+        }
+
         contentHtml = `
             ${title ? `<div class="fullscreen-note-title">${escapeHtml(title)}</div>` : ''}
             <div class="fullscreen-note-body">${body}</div>
+            ${imagesHtml}
         `;
     }
 
@@ -1294,12 +1534,19 @@ function addNoteToDOM(note) {
         `;
     }
 
-    // Add image if present
-    const imageHtml = note.image_path ? `
-        <div class="note-image" onclick="event.stopPropagation(); openImageFullscreen('${escapeHtml(note.image_path)}')">
-            <img src="${escapeHtml(note.image_path)}" alt="Note photo" loading="lazy">
-        </div>
-    ` : '';
+    // Add images if present (supports multiple images)
+    let imageHtml = '';
+    const imagePaths = parseImagePaths(note.image_path);
+    if (imagePaths.length > 0) {
+        const imageCount = imagePaths.length;
+        const imagesJson = escapeHtml(JSON.stringify(imagePaths));
+        imageHtml = `
+            <div class="note-images-carousel" onclick="event.stopPropagation(); openImageCarousel(${imagesJson}, 0)" data-images='${imagesJson}'>
+                <img src="${escapeHtml(imagePaths[0])}" alt="Note photo" loading="lazy">
+                ${imageCount > 1 ? `<div class="carousel-indicator">${imageCount} photos</div>` : ''}
+            </div>
+        `;
+    }
 
     const editBtn = note.type === 'text' ? `
         <button onclick="event.stopPropagation(); editNote(${note.id})" class="note-action" title="Edit">✏️</button>
