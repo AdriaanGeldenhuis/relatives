@@ -1056,20 +1056,21 @@
 }
 
 .ht-trip-header-top {
-    position: relative;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
     margin-bottom: 8px;
-    padding-right: 60px;
 }
 
 .ht-trip-header-top > .ht-back-link {
-    display: inline-flex;
+    flex: 0 1 auto;
     margin-bottom: 0;
 }
 
 .ht-trip-header-top > .ht-trip-actions-menu {
-    position: absolute;
-    right: 0;
-    top: 0;
+    flex: 0 0 auto;
+    position: static !important;
 }
 
 .ht-trip-header-main {
