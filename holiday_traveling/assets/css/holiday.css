@@ -835,6 +835,10 @@
     position: relative;
 }
 
+.ht-trip-actions-menu {
+    position: relative;
+}
+
 .ht-menu-dropdown {
     position: absolute;
     top: 100%;
@@ -844,12 +848,13 @@
     border-radius: var(--ht-radius-md);
     padding: 8px;
     min-width: 140px;
-    z-index: 100;
+    z-index: 1000;
     opacity: 0;
     visibility: hidden;
     transform: translateY(-10px);
     transition: var(--ht-transition);
     backdrop-filter: blur(20px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .ht-actions-menu:hover .ht-menu-dropdown,
