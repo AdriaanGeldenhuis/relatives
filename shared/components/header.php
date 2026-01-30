@@ -17,10 +17,10 @@ if (empty($activePage) || $activePage === 'index.php') {
     $activePage = 'home';
 }
 
-$appVersion = '10.2.0';
+$appVersion = '11.0.0';
 // Use static cache version - bump this when deploying CSS/JS changes
 // DO NOT use time() as it defeats browser caching!
-$cacheVersion = '10.2.0';
+$cacheVersion = '11.0.0';
 $buildTime = $cacheVersion;
 
 // Get unread notification count

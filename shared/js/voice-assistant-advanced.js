@@ -1,228 +1,227 @@
 /**
- * SUZI VOICE ASSISTANT v11 - Complete Fresh Rebuild
+ * SUZI VOICE v11 - Fresh Rebuild
  */
 
-var SuziVoice = (function() {
+(function() {
+    'use strict';
 
     // State
-    var isOpen = false;
-    var isListening = false;
-    var isSpeaking = false;
-    var isProcessing = false;
-    var conversation = [];
+    var state = {
+        open: false,
+        listening: false,
+        speaking: false,
+        processing: false
+    };
 
-    // Speech APIs
+    var conversation = [];
     var recognition = null;
     var synth = window.speechSynthesis;
-    var voices = [];
+    var timers = {};
 
-    // Timers
-    var silenceTimer = null;
-    var speakTimer = null;
+    // DOM refs
+    var dom = {};
 
-    // DOM elements
-    var modal, statusIcon, statusText, statusSubtext, transcript, micBtn, suggestions;
-
-    // Load voices
-    function loadVoices() {
-        voices = synth.getVoices();
-        console.log('[Suzi] Loaded', voices.length, 'voices');
+    function getDOM() {
+        dom.modal = document.getElementById('voiceModal');
+        dom.icon = document.getElementById('statusIcon');
+        dom.text = document.getElementById('statusText');
+        dom.subtext = document.getElementById('statusSubtext');
+        dom.transcript = document.getElementById('voiceTranscript');
+        dom.mic = document.getElementById('modalMicBtn');
+        dom.suggestions = document.getElementById('voiceSuggestions');
     }
 
-    if (synth) {
-        loadVoices();
-        if (synth.onvoiceschanged !== undefined) {
-            synth.onvoiceschanged = loadVoices;
+    // UI Update
+    function ui(mode, msg) {
+        getDOM();
+        if (!dom.modal) return;
+
+        var modes = {
+            ready:      { icon: '🎤', text: 'Tap to speak', sub: 'Ask me anything' },
+            listening:  { icon: '🎤', text: 'Listening...', sub: 'Speak now' },
+            thinking:   { icon: '🧠', text: 'Thinking...', sub: '' },
+            speaking:   { icon: '🔊', text: 'Speaking...', sub: '' },
+            nav:        { icon: '🧭', text: 'Opening...', sub: '' },
+            error:      { icon: '🚫', text: msg || 'Error', sub: '' }
+        };
+
+        var m = modes[mode] || modes.ready;
+        if (dom.icon) dom.icon.textContent = m.icon;
+        if (dom.text) dom.text.textContent = m.text;
+        if (dom.subtext) dom.subtext.textContent = m.sub;
+
+        if (dom.mic) {
+            dom.mic.className = 'modal-mic-btn';
+            if (mode === 'listening') dom.mic.classList.add('listening');
+            if (mode === 'speaking') dom.mic.classList.add('speaking');
+            if (mode === 'thinking') dom.mic.classList.add('thinking');
+        }
+
+        if (dom.suggestions) {
+            dom.suggestions.style.display = (mode === 'ready' && conversation.length === 0) ? 'block' : 'none';
         }
     }
 
-    // Get DOM elements
-    function getDom() {
-        modal = document.getElementById('voiceModal');
-        statusIcon = document.getElementById('statusIcon');
-        statusText = document.getElementById('statusText');
-        statusSubtext = document.getElementById('statusSubtext');
-        transcript = document.getElementById('voiceTranscript');
-        micBtn = document.getElementById('modalMicBtn');
-        suggestions = document.getElementById('voiceSuggestions');
+    function showText(t) {
+        getDOM();
+        if (dom.transcript) dom.transcript.textContent = t;
     }
 
-    // Setup speech recognition
-    function setupRecognition() {
-        var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            console.log('[Suzi] No speech recognition support');
-            return;
+    // Clear all timers
+    function clearTimers() {
+        for (var k in timers) {
+            clearTimeout(timers[k]);
+            delete timers[k];
         }
+    }
 
-        recognition = new SpeechRecognition();
+    // SPEECH RECOGNITION
+    function initRecognition() {
+        var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) return console.log('[Suzi] No speech recognition');
+
+        recognition = new SR();
         recognition.lang = 'en-US';
         recognition.continuous = false;
         recognition.interimResults = true;
 
         recognition.onstart = function() {
-            console.log('[Suzi] Listening...');
-            isListening = true;
-            setUI('listening');
+            console.log('[Suzi] Listening started');
+            state.listening = true;
+            ui('listening');
 
-            // Auto-stop after 3 seconds of silence
-            silenceTimer = setTimeout(function() {
-                if (isListening) {
-                    console.log('[Suzi] Silence timeout');
-                    stopListening();
-                }
-            }, 3000);
+            timers.silence = setTimeout(function() {
+                if (state.listening) stopListen();
+            }, 4000);
         };
 
         recognition.onresult = function(e) {
-            clearTimeout(silenceTimer);
-            var result = e.results[e.results.length - 1];
-            var text = result[0].transcript;
+            clearTimeout(timers.silence);
 
-            if (transcript) transcript.textContent = text;
+            var r = e.results[e.results.length - 1];
+            var txt = r[0].transcript;
+            showText(txt);
 
-            if (result.isFinal && text.trim()) {
-                console.log('[Suzi] Got:', text);
-                processInput(text.trim());
+            if (r.isFinal && txt.trim()) {
+                console.log('[Suzi] Heard:', txt);
+                process(txt.trim());
             } else {
-                // Reset silence timer on interim results
-                silenceTimer = setTimeout(function() {
-                    if (isListening) stopListening();
-                }, 3000);
+                timers.silence = setTimeout(function() {
+                    if (state.listening) stopListen();
+                }, 4000);
             }
         };
 
         recognition.onerror = function(e) {
-            console.log('[Suzi] Error:', e.error);
-            isListening = false;
-            clearTimeout(silenceTimer);
+            console.log('[Suzi] Rec error:', e.error);
+            state.listening = false;
+            clearTimers();
             if (e.error === 'not-allowed') {
-                setUI('error', 'Microphone blocked');
-            } else {
-                setUI('ready');
+                ui('error', 'Mic blocked');
+            } else if (state.open) {
+                ui('ready');
             }
         };
 
         recognition.onend = function() {
-            console.log('[Suzi] Recognition ended');
-            isListening = false;
-            clearTimeout(silenceTimer);
-            if (isOpen && !isProcessing && !isSpeaking) {
-                setUI('ready');
+            console.log('[Suzi] Rec ended');
+            state.listening = false;
+            if (state.open && !state.processing && !state.speaking) {
+                ui('ready');
             }
         };
-
-        console.log('[Suzi] Speech recognition ready');
     }
 
-    // Speak text
-    function speak(text, callback) {
-        if (!text) {
-            if (callback) callback();
-            return;
-        }
-
-        console.log('[Suzi] Speaking:', text.substring(0, 50) + '...');
-
-        isSpeaking = true;
-        setUI('speaking');
-        if (transcript) transcript.textContent = text;
-
-        // Cancel any ongoing speech
-        if (synth) synth.cancel();
-
-        // Create utterance
-        var utterance = new SpeechSynthesisUtterance(text);
-
-        // Try to find an English voice
-        if (voices.length === 0) voices = synth.getVoices();
-        for (var i = 0; i < voices.length; i++) {
-            if (voices[i].lang.indexOf('en') === 0) {
-                utterance.voice = voices[i];
-                break;
-            }
-        }
-
-        utterance.rate = 1;
-        utterance.pitch = 1;
-        utterance.volume = 1;
-
-        // Fallback timer in case onend doesn't fire
-        var fallbackMs = Math.max(3000, text.length * 80);
-        speakTimer = setTimeout(function() {
-            console.log('[Suzi] Speech fallback timer');
-            isSpeaking = false;
-            if (callback) callback();
-        }, fallbackMs);
-
-        utterance.onend = function() {
-            console.log('[Suzi] Speech ended');
-            clearTimeout(speakTimer);
-            isSpeaking = false;
-            if (callback) callback();
-        };
-
-        utterance.onerror = function(e) {
-            console.log('[Suzi] Speech error:', e);
-            clearTimeout(speakTimer);
-            isSpeaking = false;
-            if (callback) callback();
-        };
-
-        // Chrome bug workaround - need small delay
-        setTimeout(function() {
-            synth.speak(utterance);
-        }, 100);
-    }
-
-    // Stop speaking
-    function stopSpeaking() {
-        clearTimeout(speakTimer);
-        if (synth) synth.cancel();
-        isSpeaking = false;
-    }
-
-    // Start listening
-    function startListening() {
-        if (isListening || isProcessing || isSpeaking) return;
-
-        stopSpeaking();
+    function startListen() {
+        if (state.listening || state.processing || state.speaking) return;
+        stopSpeak();
 
         if (recognition) {
-            try {
-                recognition.start();
-            } catch (e) {
-                console.log('[Suzi] Start error:', e);
-            }
+            try { recognition.start(); }
+            catch(e) { console.log('[Suzi] Start err:', e); }
         }
     }
 
-    // Stop listening
-    function stopListening() {
-        clearTimeout(silenceTimer);
-        isListening = false;
+    function stopListen() {
+        clearTimeout(timers.silence);
+        state.listening = false;
         if (recognition) {
             try { recognition.abort(); } catch(e) {}
         }
     }
 
-    // Process user input
-    function processInput(text) {
-        stopListening();
-
-        // Check for close commands
-        var lower = text.toLowerCase();
-        if (lower === 'bye' || lower === 'goodbye' || lower === 'close' || lower === 'stop') {
-            speak('Goodbye!', function() {
-                setTimeout(close, 500);
-            });
+    // TEXT TO SPEECH
+    function speak(text, done) {
+        if (!text || !synth) {
+            if (done) done();
             return;
         }
 
-        // Send to AI
-        isProcessing = true;
-        setUI('thinking');
+        console.log('[Suzi] Speak:', text.substring(0, 40));
+        state.speaking = true;
+        ui('speaking');
+        showText(text);
 
+        synth.cancel();
+
+        var utter = new SpeechSynthesisUtterance(text);
+        var voices = synth.getVoices();
+
+        // Find English voice
+        for (var i = 0; i < voices.length; i++) {
+            if (voices[i].lang.indexOf('en') === 0) {
+                utter.voice = voices[i];
+                break;
+            }
+        }
+
+        utter.rate = 1;
+        utter.pitch = 1;
+
+        // Fallback timer
+        var ms = Math.max(2000, text.length * 70);
+        timers.speak = setTimeout(function() {
+            console.log('[Suzi] Speak timeout');
+            state.speaking = false;
+            if (done) done();
+        }, ms);
+
+        utter.onend = function() {
+            console.log('[Suzi] Speak done');
+            clearTimeout(timers.speak);
+            state.speaking = false;
+            if (done) done();
+        };
+
+        utter.onerror = function() {
+            console.log('[Suzi] Speak error');
+            clearTimeout(timers.speak);
+            state.speaking = false;
+            if (done) done();
+        };
+
+        // Chrome needs delay
+        setTimeout(function() { synth.speak(utter); }, 50);
+    }
+
+    function stopSpeak() {
+        clearTimeout(timers.speak);
+        if (synth) synth.cancel();
+        state.speaking = false;
+    }
+
+    // PROCESS INPUT
+    function process(text) {
+        stopListen();
+
+        var low = text.toLowerCase();
+        if (low === 'bye' || low === 'goodbye' || low === 'close' || low === 'stop' || low === 'cancel') {
+            speak('Bye!', function() { close(); });
+            return;
+        }
+
+        state.processing = true;
+        ui('thinking');
         conversation.push({ role: 'user', content: text });
 
         fetch('/api/voice-chat.php', {
@@ -236,171 +235,128 @@ var SuziVoice = (function() {
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
+            state.processing = false;
             if (data.success && data.response) {
                 conversation.push({ role: 'assistant', content: data.response });
                 speak(data.response, function() {
-                    isProcessing = false;
                     if (data.action) {
                         doAction(data.action);
                     } else {
-                        setUI('ready');
+                        ui('ready');
                     }
                 });
             } else {
-                throw new Error('No response');
+                speak('Sorry, try again.', function() { ui('ready'); });
             }
         })
         .catch(function(e) {
-            console.error('[Suzi] API error:', e);
-            isProcessing = false;
-            speak('Sorry, please try again.', function() {
-                setUI('ready');
-            });
+            console.error('[Suzi] API err:', e);
+            state.processing = false;
+            speak('Sorry, try again.', function() { ui('ready'); });
         });
     }
 
-    // Execute action
+    // ACTIONS
     function doAction(action) {
-        var type = action.type;
-        var data = action.data || {};
-
-        if (type === 'navigate') {
+        if (action.type === 'navigate') {
             var paths = {
                 home: '/home/', shopping: '/shopping/', notes: '/notes/',
                 calendar: '/calendar/', schedule: '/schedule/', messages: '/messages/',
-                tracking: '/tracking/', notifications: '/notifications/', games: '/games/'
+                tracking: '/tracking/', games: '/games/', weather: '/weather/'
             };
-            setUI('navigating');
+            ui('nav');
             setTimeout(function() {
                 close();
-                window.location.href = paths[data.to] || '/home/';
-            }, 800);
+                window.location.href = paths[action.data.to] || '/home/';
+            }, 500);
         } else {
-            setUI('ready');
+            ui('ready');
         }
     }
 
-    // Set UI state
-    function setUI(state, msg) {
-        getDom();
-        if (!modal) return;
-
-        var states = {
-            ready: ['🎤', 'Tap mic to speak', 'Ask me anything'],
-            listening: ['🎤', 'Listening...', 'Speak now'],
-            thinking: ['🧠', 'Thinking...', 'Processing'],
-            speaking: ['🔊', 'Speaking...', ''],
-            navigating: ['🧭', 'Opening...', ''],
-            error: ['🚫', msg || 'Error', 'Please try again']
-        };
-
-        var s = states[state] || states.ready;
-        if (statusIcon) statusIcon.textContent = s[0];
-        if (statusText) statusText.textContent = s[1];
-        if (statusSubtext) statusSubtext.textContent = s[2];
-
-        if (micBtn) {
-            micBtn.className = 'modal-mic-btn';
-            if (state === 'listening') micBtn.className += ' listening';
-            if (state === 'speaking') micBtn.className += ' speaking';
-            if (state === 'thinking') micBtn.className += ' thinking';
-        }
-
-        if (suggestions) {
-            suggestions.style.display = (state === 'ready' && conversation.length === 0) ? 'block' : 'none';
-        }
-    }
-
-    // Open modal
+    // MODAL
     function open() {
-        console.log('[Suzi] Opening');
-        getDom();
-        if (!modal) {
-            console.error('[Suzi] Modal not found!');
-            return;
-        }
+        console.log('[Suzi] Open');
+        getDOM();
+        if (!dom.modal) return console.error('[Suzi] No modal!');
 
-        // Reset
-        isOpen = true;
-        isListening = false;
-        isSpeaking = false;
-        isProcessing = false;
+        state.open = true;
+        state.listening = false;
+        state.speaking = false;
+        state.processing = false;
         conversation = [];
-        stopSpeaking();
-        stopListening();
+        clearTimers();
+        stopSpeak();
 
-        modal.classList.add('active');
+        dom.modal.classList.add('active');
         document.body.style.overflow = 'hidden';
 
-        setUI('ready');
-        if (transcript) transcript.textContent = 'Tap the mic and ask me anything!';
-
-        // Say hello after short delay
-        setTimeout(function() {
-            speak("Hi! I'm Suzi. What can I help you with?", function() {
-                setUI('ready');
-            });
-        }, 500);
+        ui('ready');
+        showText("Hi! I'm Suzi. Tap the mic and ask me anything!");
     }
 
-    // Close modal
     function close() {
-        console.log('[Suzi] Closing');
-        stopListening();
-        stopSpeaking();
+        console.log('[Suzi] Close');
+        stopListen();
+        stopSpeak();
+        clearTimers();
 
-        isOpen = false;
-        isListening = false;
-        isSpeaking = false;
-        isProcessing = false;
+        state.open = false;
+        state.listening = false;
+        state.speaking = false;
+        state.processing = false;
 
-        getDom();
-        if (modal) modal.classList.remove('active');
+        getDOM();
+        if (dom.modal) dom.modal.classList.remove('active');
         document.body.style.overflow = '';
     }
 
-    // Toggle listening
-    function toggleListening() {
-        console.log('[Suzi] Toggle listening');
-        if (isSpeaking) {
-            stopSpeaking();
-            setUI('ready');
-        } else if (isListening) {
-            stopListening();
-            setUI('ready');
-        } else if (!isProcessing) {
-            startListening();
+    function toggle() {
+        if (state.speaking) {
+            stopSpeak();
+            ui('ready');
+        } else if (state.listening) {
+            stopListen();
+            ui('ready');
+        } else if (!state.processing) {
+            startListen();
         }
     }
 
-    // Execute suggestion
-    function executeSuggestion(text) {
-        if (isProcessing || isSpeaking) return;
-        processInput(text);
+    function suggest(text) {
+        if (!state.processing && !state.speaking) {
+            process(text);
+        }
     }
 
-    // Initialize
-    console.log('[Suzi] v11 Loading...');
-    setupRecognition();
-    console.log('[Suzi] v11 Ready!');
+    // INIT
+    console.log('[Suzi] v11 init...');
+    initRecognition();
 
-    // Public API
-    return {
+    // Preload voices
+    if (synth) {
+        synth.getVoices();
+        if (synth.onvoiceschanged !== undefined) {
+            synth.onvoiceschanged = function() { synth.getVoices(); };
+        }
+    }
+
+    console.log('[Suzi] v11 ready!');
+
+    // PUBLIC API
+    window.SuziVoice = {
         open: open,
         close: close,
-        toggle: function() { isOpen ? close() : open(); },
-        toggleListening: toggleListening,
-        executeSuggestion: executeSuggestion,
-        getInstance: function() { return SuziVoice; }
+        toggle: function() { state.open ? close() : open(); },
+        toggleListening: toggle,
+        executeSuggestion: suggest
+    };
+
+    // Backwards compat
+    window.AdvancedVoiceAssistant = {
+        openModal: open,
+        closeModal: close,
+        getInstance: function() { return window.SuziVoice; }
     };
 
 })();
-
-// Backwards compatibility
-var AdvancedVoiceAssistant = {
-    getInstance: function() { return SuziVoice; },
-    openModal: function() { SuziVoice.open(); },
-    closeModal: function() { SuziVoice.close(); }
-};
-
-console.log('[Suzi] API ready on window.SuziVoice');
