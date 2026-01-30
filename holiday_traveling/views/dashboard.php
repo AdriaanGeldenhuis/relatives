@@ -211,6 +211,7 @@ document.addEventListener('DOMContentLoaded', function() {
         trigger.addEventListener('click', function(e) {
             e.stopPropagation();
             const menu = this.closest('.ht-trip-actions-menu') || this.closest('.ht-actions-menu');
+            const dropdown = menu.querySelector('.ht-menu-dropdown');
             const isActive = menu.classList.contains('active');
 
             // Close all other dropdowns
@@ -220,6 +221,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Toggle this dropdown
             if (!isActive) {
+                // Position dropdown at the button location
+                const rect = this.getBoundingClientRect();
+                dropdown.style.top = rect.top + 'px';
+                dropdown.style.right = (window.innerWidth - rect.right) + 'px';
                 menu.classList.add('active');
             }
         });

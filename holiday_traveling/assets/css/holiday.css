@@ -841,15 +841,13 @@
 }
 
 .ht-menu-dropdown {
-    position: absolute;
-    top: 0;
-    right: 0;
+    position: fixed;
     background: rgba(30, 30, 50, 0.98);
     border: 1px solid var(--ht-glass-border);
     border-radius: var(--ht-radius-md);
     padding: 8px;
     min-width: 140px;
-    z-index: 1000;
+    z-index: 9999;
     opacity: 0;
     visibility: hidden;
     transform: scale(0.9);
