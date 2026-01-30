@@ -1053,17 +1053,24 @@
    ============================================ */
 .ht-trip-header {
     margin-bottom: 20px;
+    position: relative;
 }
 
 .ht-trip-header-top {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
+    align-items: flex-start;
 }
 
 .ht-trip-header-top .ht-back-link {
-    margin-bottom: 0;
+    margin-bottom: 16px;
+}
+
+.ht-trip-header-top .ht-trip-actions-menu {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 100;
 }
 
 .ht-trip-header-main {
