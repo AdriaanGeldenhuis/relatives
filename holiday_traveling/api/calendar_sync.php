@@ -57,18 +57,38 @@ try {
     $userId = HT_Auth::userId();
     $familyId = (int) $trip['family_id'];
 
+    // Log plan structure for debugging
+    $itineraryDays = count($plan['itinerary']);
+    $totalActivities = 0;
+    foreach ($plan['itinerary'] as $day) {
+        $totalActivities += count($day['morning'] ?? []);
+        $totalActivities += count($day['afternoon'] ?? []);
+        $totalActivities += count($day['evening'] ?? []);
+    }
+    error_log(sprintf(
+        'Calendar sync starting: Trip=%d, Days=%d, Activities=%d, StartDate=%s',
+        $tripId, $itineraryDays, $totalActivities, $trip['start_date']
+    ));
+
     // Sync to internal calendar
     $events = HT_InternalCalendar::insertTripEvents($userId, $familyId, $trip, $plan);
 
     error_log(sprintf(
-        'Calendar sync: Trip=%d, Events=%d, User=%d',
+        'Calendar sync complete: Trip=%d, Events created=%d, User=%d',
         $tripId, count($events), $userId
     ));
 
     HT_Response::ok([
         'success' => true,
         'events_created' => count($events),
-        'message' => count($events) . ' activities synced to calendar'
+        'message' => count($events) . ' activities synced to calendar',
+        'debug' => [
+            'trip_id' => $tripId,
+            'start_date' => $trip['start_date'],
+            'itinerary_days' => $itineraryDays,
+            'total_activities' => $totalActivities,
+            'events' => $events
+        ]
     ]);
 
 } catch (Exception $e) {

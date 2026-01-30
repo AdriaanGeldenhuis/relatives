@@ -600,8 +600,16 @@ $statusDisplay = $tripStatus ?? 'upcoming';
                 })
                 .then(function(response) { return response.json(); })
                 .then(function(data) {
+                    console.log('Calendar sync response:', data);
                     if (data.success || data.events_created) {
-                        btn.innerHTML = '✅ ' + (data.message || 'Synced!');
+                        var msg = data.message || 'Synced!';
+                        if (data.events_created === 0) {
+                            msg = 'No activities to sync. Generate a plan with activities first.';
+                        }
+                        btn.innerHTML = '✅ ' + msg;
+                        if (data.events_created > 0) {
+                            alert('Success! ' + data.events_created + ' activities synced to calendar. Go to Calendar to see them.');
+                        }
                         setTimeout(function() {
                             btn.innerHTML = originalText;
                             btn.disabled = false;
