@@ -38,7 +38,7 @@ try {
     }
 
     // Check permissions
-    if (!HT_Auth::canViewTrip($tripId)) {
+    if (!HT_Auth::canAccessTrip($tripId)) {
         echo json_encode(['success' => false, 'error' => 'You do not have permission to access this trip']);
         exit;
     }
