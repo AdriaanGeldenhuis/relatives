@@ -221,10 +221,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Toggle this dropdown
             if (!isActive) {
-                // Position dropdown at the button location
-                const rect = this.getBoundingClientRect();
-                dropdown.style.top = rect.top + 'px';
-                dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+                // Position dropdown on the left side of the trip card
+                const card = this.closest('.ht-trip-card');
+                const cardRect = card.getBoundingClientRect();
+                const buttonRect = this.getBoundingClientRect();
+                dropdown.style.top = buttonRect.top + 'px';
+                dropdown.style.left = (cardRect.left - dropdown.offsetWidth - 8) + 'px';
+                dropdown.style.right = 'auto';
                 menu.classList.add('active');
             }
         });
