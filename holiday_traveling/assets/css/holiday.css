@@ -1056,22 +1056,20 @@
 }
 
 .ht-trip-header-top {
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: space-between !important;
-    align-items: center !important;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
     margin-bottom: 8px;
-    gap: 16px;
 }
 
-.ht-trip-header-top .ht-back-link {
+.ht-trip-header-top > .ht-back-link {
     margin-bottom: 0;
-    flex: 0 0 auto;
 }
 
-.ht-trip-header-top .ht-trip-actions-menu {
-    flex: 0 0 auto;
-    display: inline-flex;
+.ht-trip-header-top > .ht-trip-actions-menu {
+    margin-left: auto;
 }
 
 .ht-trip-header-main {
