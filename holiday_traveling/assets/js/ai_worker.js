@@ -197,37 +197,6 @@
             });
         }
 
-        // Refine Plan Button
-        const refineBtn = document.getElementById('refinePlanBtn');
-        if (refineBtn) {
-            refineBtn.addEventListener('click', function() {
-                openModal('refinePlanModal');
-            });
-        }
-
-        // Late Mode Button
-        const lateModeBtn = document.getElementById('lateModeBtn');
-        if (lateModeBtn) {
-            lateModeBtn.addEventListener('click', function() {
-                openModal('lateModeModal');
-            });
-        }
-
-        // Packing List Button
-        const packingBtn = document.getElementById('packingListBtn');
-        if (packingBtn) {
-            packingBtn.addEventListener('click', async function() {
-                try {
-                    const response = await HT.AIWorker.generatePackingList(HT.tripId);
-                    // Could open a modal with packing list or redirect
-                    HT.Toast.success('Packing list generated!');
-                    window.location.reload();
-                } catch (error) {
-                    // Error already shown
-                }
-            });
-        }
-
         // Google Calendar Button
         const googleCalBtn = document.getElementById('googleCalendarBtn');
         if (googleCalBtn) {
@@ -236,111 +205,13 @@
             });
         }
 
-        // Safety Brief Button
-        const safetyBtn = document.getElementById('safetyBriefBtn');
-        if (safetyBtn) {
-            safetyBtn.addEventListener('click', async function() {
-                try {
-                    const response = await HT.AIWorker.getSafetyBrief(HT.tripId);
-                    displaySafetyBrief(response.data);
-                } catch (error) {
-                    // Error already shown
-                }
-            });
-        }
-
-    }
-
-    /**
-     * Display safety brief in modal
-     */
-    function displaySafetyBrief(data) {
-        const modal = document.getElementById('safetyBriefModal');
-        const content = document.getElementById('safetyBriefContent');
-
-        if (!modal || !content) return;
-
-        const brief = data.safety_brief;
-        let html = `<h3>Safety Tips for ${escapeHtml(data.destination)}</h3>`;
-
-        if (brief.tips && brief.tips.length > 0) {
-            html += '<ul class="ht-safety-tips">';
-            brief.tips.forEach(tip => {
-                html += `<li>${escapeHtml(tip)}</li>`;
-            });
-            html += '</ul>';
-        }
-
-        if (brief.emergency_contacts && brief.emergency_contacts.length > 0) {
-            html += '<h4>Emergency Contacts</h4>';
-            html += '<ul class="ht-emergency-contacts">';
-            brief.emergency_contacts.forEach(contact => {
-                html += `<li>${escapeHtml(contact)}</li>`;
-            });
-            html += '</ul>';
-        }
-
-        if (!brief.generated) {
-            html += '<p class="ht-note"><small>Basic safety information. AI-generated content unavailable.</small></p>';
-        }
-
-        content.innerHTML = html;
-        modal.style.display = 'flex';
     }
 
     /**
      * Initialize modals
      */
     function initModals() {
-        // Refine Plan Modal
-        initModal('refinePlanModal', async (modal) => {
-            const instruction = document.getElementById('refineInstruction')?.value?.trim();
-            if (!instruction) {
-                HT.Toast.error('Please enter refinement instructions');
-                return false;
-            }
-
-            try {
-                await HT.AIWorker.refinePlan(HT.tripId, instruction);
-                HT.Toast.success('Plan refined successfully!');
-                window.location.reload();
-            } catch (error) {
-                return false;
-            }
-        });
-
-        // Late Mode Modal
-        initModal('lateModeModal', async (modal) => {
-            const lateMinutes = modal.querySelector('.ht-chip-group[data-name="late_minutes"] .ht-chip-selected')?.dataset.value || '30';
-            const energy = modal.querySelector('.ht-chip-group[data-name="energy"] .ht-chip-selected')?.dataset.value || 'ok';
-            const keepDinner = modal.querySelector('.ht-chip-group[data-name="keep_dinner"] .ht-chip-selected')?.dataset.value === 'yes';
-
-            try {
-                await HT.AIWorker.lateMode(HT.tripId, {
-                    lateMinutes: parseInt(lateMinutes),
-                    energy: energy,
-                    keepDinner: keepDinner
-                });
-                HT.Toast.success('Schedule adjusted!');
-                window.location.reload();
-            } catch (error) {
-                return false;
-            }
-        });
-
-        // Initialize chip groups in modals
-        document.querySelectorAll('.ht-modal .ht-chip-group').forEach(group => {
-            const chips = group.querySelectorAll('.ht-chip');
-            chips.forEach(chip => {
-                chip.addEventListener('click', function() {
-                    chips.forEach(c => c.classList.remove('ht-chip-selected'));
-                    this.classList.add('ht-chip-selected');
-                });
-            });
-        });
-
-        // Initialize close buttons for info modals
-        initCloseableModal('safetyBriefModal');
+        // No modals to initialize
     }
 
     /**

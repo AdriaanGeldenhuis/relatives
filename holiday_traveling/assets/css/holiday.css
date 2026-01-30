@@ -1183,20 +1183,6 @@
 }
 
 /* ============================================
-   PLAN ACTIONS
-   ============================================ */
-.ht-plan-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 20px;
-    padding: 12px;
-    background: var(--ht-glass-light);
-    border-radius: var(--ht-radius-md);
-    align-items: center;
-}
-
-/* ============================================
    REALITY CHECK SCORES
    ============================================ */
 .ht-reality-check {

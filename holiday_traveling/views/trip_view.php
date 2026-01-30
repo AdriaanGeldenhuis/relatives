@@ -166,30 +166,6 @@ $statusDisplay = $tripStatus ?? 'upcoming';
                 <?php endif; ?>
             </div>
             <?php else: ?>
-            <!-- Plan Actions -->
-            <?php if ($canEdit): ?>
-            <div class="ht-plan-actions">
-                <button id="refinePlanBtn" class="ht-btn ht-btn-secondary ht-btn-sm">
-                    <span class="ht-btn-icon">✏️</span>
-                    Refine Plan
-                </button>
-                <button id="lateModeBtn" class="ht-btn ht-btn-outline ht-btn-sm">
-                    <span class="ht-btn-icon">⏰</span>
-                    Late Mode
-                </button>
-                <button id="packingListBtn" class="ht-btn ht-btn-outline ht-btn-sm">
-                    <span class="ht-btn-icon">🎒</span>
-                    Packing List
-                </button>
-                <button id="safetyBriefBtn" class="ht-btn ht-btn-outline ht-btn-sm">
-                    <span class="ht-btn-icon">🛡️</span>
-                    Safety Info
-                </button>
-                <span class="ht-ai-remaining-inline">
-                    <?php echo $aiRemaining; ?> AI left
-                </span>
-            </div>
-            <?php endif; ?>
 
             <!-- Reality Check Scores -->
             <?php if (isset($activePlan['reality_check'])): ?>
@@ -595,56 +571,6 @@ $statusDisplay = $tripStatus ?? 'upcoming';
     </div>
 </div>
 
-<!-- Refine Plan Modal -->
-<div id="refinePlanModal" class="ht-modal" style="display: none;">
-    <div class="ht-modal-backdrop"></div>
-    <div class="ht-modal-content">
-        <h3 class="ht-modal-title">Refine Your Plan</h3>
-        <p class="ht-modal-text">Tell the AI how you'd like to adjust your plan:</p>
-        <textarea id="refineInstruction" class="ht-textarea" rows="4" placeholder="e.g., Make it more relaxed, add more food options, reduce costs, swap Day 2 and Day 3..."></textarea>
-        <div class="ht-modal-actions">
-            <button class="ht-btn ht-btn-outline" data-action="cancel">Cancel</button>
-            <button class="ht-btn ht-btn-primary" data-action="confirm">Refine Plan</button>
-        </div>
-    </div>
-</div>
-
-<!-- Late Mode Modal -->
-<div id="lateModeModal" class="ht-modal" style="display: none;">
-    <div class="ht-modal-backdrop"></div>
-    <div class="ht-modal-content">
-        <h3 class="ht-modal-title">⏰ Running Late?</h3>
-        <p class="ht-modal-text">Let AI adjust today's schedule:</p>
-        <div class="ht-form-group">
-            <label class="ht-label">How late are you?</label>
-            <div class="ht-chip-group" data-name="late_minutes">
-                <button type="button" class="ht-chip" data-value="15">15 min</button>
-                <button type="button" class="ht-chip ht-chip-selected" data-value="30">30 min</button>
-                <button type="button" class="ht-chip" data-value="60">1 hour</button>
-                <button type="button" class="ht-chip" data-value="120">2 hours</button>
-            </div>
-        </div>
-        <div class="ht-form-group">
-            <label class="ht-label">Energy level?</label>
-            <div class="ht-chip-group" data-name="energy">
-                <button type="button" class="ht-chip" data-value="tired">😴 Tired</button>
-                <button type="button" class="ht-chip ht-chip-selected" data-value="ok">😊 OK</button>
-                <button type="button" class="ht-chip" data-value="keen">🔥 Keen</button>
-            </div>
-        </div>
-        <div class="ht-form-group">
-            <label class="ht-label">Keep dinner plans?</label>
-            <div class="ht-chip-group" data-name="keep_dinner">
-                <button type="button" class="ht-chip ht-chip-selected" data-value="yes">Yes</button>
-                <button type="button" class="ht-chip" data-value="no">No, flexible</button>
-            </div>
-        </div>
-        <div class="ht-modal-actions">
-            <button class="ht-btn ht-btn-outline" data-action="cancel">Cancel</button>
-            <button class="ht-btn ht-btn-primary" data-action="confirm">Adjust Schedule</button>
-        </div>
-    </div>
-</div>
 
 <!-- AI Loading Overlay -->
 <div id="aiLoadingOverlay" class="ht-ai-loading" style="display: none;">
@@ -655,22 +581,6 @@ $statusDisplay = $tripStatus ?? 'upcoming';
     </div>
 </div>
 
-<!-- Safety Brief Modal -->
-<div id="safetyBriefModal" class="ht-modal" style="display: none;">
-    <div class="ht-modal-backdrop"></div>
-    <div class="ht-modal-content ht-modal-lg">
-        <div class="ht-modal-header">
-            <h3 class="ht-modal-title">🛡️ Safety Information</h3>
-            <button class="ht-modal-close" data-action="cancel">&times;</button>
-        </div>
-        <div class="ht-modal-body" id="safetyBriefContent">
-            <p class="ht-loading">Loading safety information...</p>
-        </div>
-        <div class="ht-modal-actions">
-            <button class="ht-btn ht-btn-primary" data-action="cancel">Close</button>
-        </div>
-    </div>
-</div>
 
 
 <script>
