@@ -5,9 +5,16 @@
  *
  * Syncs an existing trip's plan to the internal calendar
  */
-declare(strict_types=1);
+
+// Catch all errors and convert to JSON response
+set_error_handler(function($severity, $message, $file, $line) {
+    throw new ErrorException($message, 0, $severity, $file, $line);
+});
 
 require_once __DIR__ . '/../routes.php';
+
+// Set JSON header early
+header('Content-Type: application/json');
 
 // Require authentication
 HT_Auth::requireLogin();
@@ -17,7 +24,8 @@ HT_CSRF::verifyOrDie();
 
 // Only accept POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    HT_Response::error('Method not allowed', 405);
+    echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+    exit;
 }
 
 try {
@@ -25,19 +33,25 @@ try {
     $tripId = (int) ($input['trip_id'] ?? 0);
 
     if (!$tripId) {
-        HT_Response::error('Trip ID is required', 400);
+        echo json_encode(['success' => false, 'error' => 'Trip ID is required']);
+        exit;
     }
 
     // Check permissions
     if (!HT_Auth::canViewTrip($tripId)) {
-        HT_Response::error('You do not have permission to access this trip', 403);
+        echo json_encode(['success' => false, 'error' => 'You do not have permission to access this trip']);
+        exit;
     }
 
     // Fetch trip data
     $trip = HT_DB::fetchOne("SELECT * FROM ht_trips WHERE id = ?", [$tripId]);
     if (!$trip) {
-        HT_Response::error('Trip not found', 404);
+        echo json_encode(['success' => false, 'error' => 'Trip not found']);
+        exit;
     }
+
+    // Ensure trip ID is integer
+    $trip['id'] = (int) $trip['id'];
 
     // Fetch the active plan
     $planRecord = HT_DB::fetchOne(
@@ -46,18 +60,20 @@ try {
     );
 
     if (!$planRecord) {
-        HT_Response::error('No active plan found for this trip. Generate a plan first.', 400);
+        echo json_encode(['success' => false, 'error' => 'No active plan found for this trip. Generate a plan first.']);
+        exit;
     }
 
     $plan = json_decode($planRecord['plan_json'], true);
     if (!$plan || empty($plan['itinerary'])) {
-        HT_Response::error('Plan has no itinerary to sync', 400);
+        echo json_encode(['success' => false, 'error' => 'Plan has no itinerary to sync']);
+        exit;
     }
 
     $userId = HT_Auth::userId();
     $familyId = (int) $trip['family_id'];
 
-    // Log plan structure for debugging
+    // Count activities
     $itineraryDays = count($plan['itinerary']);
     $totalActivities = 0;
     foreach ($plan['itinerary'] as $day) {
@@ -65,6 +81,7 @@ try {
         $totalActivities += count($day['afternoon'] ?? []);
         $totalActivities += count($day['evening'] ?? []);
     }
+
     error_log(sprintf(
         'Calendar sync starting: Trip=%d, Days=%d, Activities=%d, StartDate=%s',
         $tripId, $itineraryDays, $totalActivities, $trip['start_date']
@@ -93,7 +110,7 @@ try {
         $message .= ' (' . $dateList[0] . ' to ' . end($dateList) . ')';
     }
 
-    HT_Response::ok([
+    echo json_encode([
         'success' => true,
         'events_created' => count($events),
         'message' => $message,
@@ -102,12 +119,16 @@ try {
             'trip_id' => $tripId,
             'start_date' => $trip['start_date'],
             'itinerary_days' => $itineraryDays,
-            'total_activities' => $totalActivities,
-            'events' => $events
+            'total_activities' => $totalActivities
         ]
     ]);
 
-} catch (Exception $e) {
-    error_log('Calendar sync error: ' . $e->getMessage());
-    HT_Response::error($e->getMessage(), 500);
+} catch (Throwable $e) {
+    error_log('Calendar sync error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    echo json_encode([
+        'success' => false,
+        'error' => $e->getMessage(),
+        'file' => basename($e->getFile()),
+        'line' => $e->getLine()
+    ]);
 }
