@@ -628,8 +628,8 @@ $statusDisplay = $tripStatus ?? 'upcoming';
                 if (!isActive) {
                     const buttonRect = this.getBoundingClientRect();
                     dropdown.style.top = buttonRect.bottom + 8 + 'px';
-                    dropdown.style.right = (window.innerWidth - buttonRect.right) + 'px';
-                    dropdown.style.left = 'auto';
+                    dropdown.style.left = buttonRect.left + 'px';
+                    dropdown.style.right = 'auto';
                     menu.classList.add('active');
                 }
             });

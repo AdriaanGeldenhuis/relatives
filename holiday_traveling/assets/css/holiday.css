@@ -866,7 +866,7 @@
     opacity: 0;
     visibility: hidden;
     transform: scale(0.95) translateY(-8px);
-    transform-origin: top right;
+    transform-origin: top left;
     transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
     backdrop-filter: blur(24px);
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
