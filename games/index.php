@@ -1293,12 +1293,13 @@ require_once __DIR__ . '/../shared/components/header.php';
             const isCurrentUser = parseInt(entry.user_id) === currentUserId;
             const avatarColor = entry.avatar_color || '#667eea';
             const initial = (entry.full_name || '?').charAt(0).toUpperCase();
+            const avatarUrl = `/saves/${entry.user_id}/avatar/avatar.webp`;
 
             return `
                 <li class="leaderboard-item ${isCurrentUser ? 'current-user' : ''}">
                     <span class="leaderboard-rank ${getRankClass(index)}">${index + 1}</span>
                     <div class="leaderboard-avatar" style="background: ${avatarColor}">
-                        ${initial}
+                        <img src="${avatarUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.style.display='none';this.parentNode.innerHTML='${initial}';">
                     </div>
                     <div class="leaderboard-info">
                         <div class="leaderboard-name">${escapeHtml(entry.full_name)}</div>
