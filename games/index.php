@@ -121,9 +121,17 @@ try {
     // Flash tables may not exist yet
 }
 
-// Get family leaderboard (top 5)
-$familyLeaderboard = [];
+// Get family leaderboard for each game (top 5 per game)
+$familyLeaderboard = [
+    'all' => [],
+    'snake' => [],
+    'neon' => [],
+    'flash' => [],
+    'blockforge' => []
+];
+
 try {
+    // Snake family leaderboard
     $stmt = $db->prepare("
         SELECT u.id as user_id, u.full_name, u.avatar_color, MAX(s.score) as best_score
         FROM snake_scores s
@@ -134,10 +142,87 @@ try {
         LIMIT 5
     ");
     $stmt->execute([$user['family_id']]);
-    $familyLeaderboard = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $familyLeaderboard['snake'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
-    error_log('Family leaderboard error: ' . $e->getMessage());
+    error_log('Family snake leaderboard error: ' . $e->getMessage());
 }
+
+try {
+    // Neon family leaderboard
+    $stmt = $db->prepare("
+        SELECT u.id as user_id, u.full_name, u.avatar_color, MAX(n.score) as best_score
+        FROM neon_scores n
+        JOIN users u ON n.user_id = u.id
+        WHERE n.family_id = ? AND n.flagged = 0
+        GROUP BY n.user_id, u.id, u.full_name, u.avatar_color
+        ORDER BY best_score DESC
+        LIMIT 5
+    ");
+    $stmt->execute([$user['family_id']]);
+    $familyLeaderboard['neon'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log('Family neon leaderboard error: ' . $e->getMessage());
+}
+
+try {
+    // Flash family leaderboard
+    $stmt = $db->prepare("
+        SELECT u.id as user_id, u.full_name, u.avatar_color, MAX(fa.score) as best_score
+        FROM flash_attempts fa
+        JOIN users u ON fa.user_id = u.id
+        WHERE fa.family_id = ?
+        GROUP BY fa.user_id, u.id, u.full_name, u.avatar_color
+        ORDER BY best_score DESC
+        LIMIT 5
+    ");
+    $stmt->execute([$user['family_id']]);
+    $familyLeaderboard['flash'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log('Family flash leaderboard error: ' . $e->getMessage());
+}
+
+try {
+    // BlockForge family leaderboard
+    $stmt = $db->prepare("
+        SELECT u.id as user_id, u.full_name, u.avatar_color, MAX(b.score) as best_score
+        FROM blockforge_scores b
+        JOIN users u ON b.user_id = u.id
+        WHERE b.family_id = ? AND b.flagged = 0
+        GROUP BY b.user_id, u.id, u.full_name, u.avatar_color
+        ORDER BY best_score DESC
+        LIMIT 5
+    ");
+    $stmt->execute([$user['family_id']]);
+    $familyLeaderboard['blockforge'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log('Family blockforge leaderboard error: ' . $e->getMessage());
+}
+
+// Calculate combined "All Games" family leaderboard
+try {
+    $userTotals = [];
+    foreach (['snake', 'neon', 'flash', 'blockforge'] as $game) {
+        foreach ($familyLeaderboard[$game] as $entry) {
+            $uid = $entry['user_id'];
+            if (!isset($userTotals[$uid])) {
+                $userTotals[$uid] = [
+                    'user_id' => $uid,
+                    'full_name' => $entry['full_name'],
+                    'avatar_color' => $entry['avatar_color'],
+                    'best_score' => 0
+                ];
+            }
+            $userTotals[$uid]['best_score'] += (int)$entry['best_score'];
+        }
+    }
+    usort($userTotals, fn($a, $b) => $b['best_score'] - $a['best_score']);
+    $familyLeaderboard['all'] = array_slice($userTotals, 0, 5);
+} catch (Exception $e) {
+    error_log('Family combined leaderboard error: ' . $e->getMessage());
+}
+
+// Encode for JavaScript
+$familyLeaderboardJson = json_encode($familyLeaderboard);
 
 // Get Global Family Leaderboard (all families combined scores)
 $globalFamilyLeaderboard = [
@@ -657,6 +742,14 @@ require_once __DIR__ . '/../shared/components/header.php';
         border-bottom: none;
     }
 
+    .leaderboard-item.current-user {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15));
+        border-radius: 12px;
+        padding: 12px;
+        margin: -12px;
+        margin-bottom: 0;
+    }
+
     .leaderboard-rank {
         width: 32px;
         height: 32px;
@@ -1079,43 +1172,41 @@ require_once __DIR__ . '/../shared/components/header.php';
         </section>
 
         <!-- Family Leaderboard -->
-        <section class="leaderboard-section">
-            <div class="section-header">
+        <section class="leaderboard-section" id="familyLeaderboard">
+            <div class="global-leaderboard-header">
                 <h2><span>👨‍👩‍👧‍👦</span> Family Leaderboard</h2>
+                <div class="game-switcher" id="familyGameSwitcher">
+                    <button class="game-switch-btn active" data-game="all">
+                        <span class="game-icon">🏆</span>
+                        <span class="btn-text">All Games</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="snake">
+                        <span class="game-icon">🐍</span>
+                        <span class="btn-text">Snake</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="neon">
+                        <span class="game-icon">💠</span>
+                        <span class="btn-text">Neon</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="flash">
+                        <span class="game-icon">⚡</span>
+                        <span class="btn-text">Flash</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="blockforge">
+                        <span class="game-icon">🧱</span>
+                        <span class="btn-text">BlockForge</span>
+                    </button>
+                </div>
             </div>
 
-            <?php if (!empty($familyLeaderboard)): ?>
-                <ul class="leaderboard-list">
-                    <?php foreach ($familyLeaderboard as $index => $entry): ?>
-                        <li class="leaderboard-item">
-                            <span class="leaderboard-rank <?php
-                                echo $index === 0 ? 'gold' : ($index === 1 ? 'silver' : ($index === 2 ? 'bronze' : 'default'));
-                            ?>">
-                                <?php echo $index + 1; ?>
-                            </span>
-                            <div class="leaderboard-avatar" style="background: <?php echo htmlspecialchars($entry['avatar_color'] ?? '#667eea'); ?>">
-                                <?php
-                                $avatarPath = __DIR__ . "/../saves/{$entry['user_id']}/avatar/avatar.webp";
-                                if (file_exists($avatarPath)):
-                                ?>
-                                    <img src="/saves/<?php echo $entry['user_id']; ?>/avatar/avatar.webp?v=<?php echo filemtime($avatarPath); ?>" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
-                                <?php else: ?>
-                                    <?php echo strtoupper(substr($entry['full_name'] ?? '?', 0, 1)); ?>
-                                <?php endif; ?>
-                            </div>
-                            <div class="leaderboard-info">
-                                <div class="leaderboard-name"><?php echo htmlspecialchars($entry['full_name']); ?></div>
-                            </div>
-                            <div class="leaderboard-score"><?php echo number_format((int)$entry['best_score']); ?></div>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
-            <?php else: ?>
-                <div class="empty-leaderboard">
-                    <div class="empty-leaderboard-icon">🏆</div>
-                    <p>No scores yet! Be the first to play and claim the top spot.</p>
-                </div>
-            <?php endif; ?>
+            <ul class="leaderboard-list" id="familyLeaderboardList">
+                <!-- Populated by JavaScript -->
+            </ul>
+
+            <div class="empty-leaderboard" id="emptyFamilyLeaderboard" style="display: none;">
+                <div class="empty-leaderboard-icon">🏆</div>
+                <p>No scores yet! Be the first to play and claim the top spot.</p>
+            </div>
         </section>
 
     </div>
@@ -1123,16 +1214,10 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <script>
 (function() {
-    const leaderboardData = <?php echo $globalLeaderboardJson; ?>;
+    const globalLeaderboardData = <?php echo $globalLeaderboardJson; ?>;
+    const familyLeaderboardData = <?php echo $familyLeaderboardJson; ?>;
     const currentFamilyId = <?php echo (int)$user['family_id']; ?>;
-
-    const gameNames = {
-        all: 'All Games',
-        snake: 'Snake Classic',
-        neon: 'Neon Nibbler',
-        flash: 'Flash Challenge',
-        blockforge: 'BlockForge'
-    };
+    const currentUserId = <?php echo (int)$user['id']; ?>;
 
     function getRankClass(index) {
         if (index === 0) return 'gold';
@@ -1145,10 +1230,17 @@ require_once __DIR__ . '/../shared/components/header.php';
         return new Intl.NumberFormat().format(num);
     }
 
-    function renderLeaderboard(game) {
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Global Family Rankings
+    function renderGlobalLeaderboard(game) {
         const list = document.getElementById('globalLeaderboardList');
         const empty = document.getElementById('emptyGlobalLeaderboard');
-        const data = leaderboardData[game] || [];
+        const data = globalLeaderboardData[game] || [];
 
         if (data.length === 0) {
             list.style.display = 'none';
@@ -1182,27 +1274,62 @@ require_once __DIR__ . '/../shared/components/header.php';
         }).join('');
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    // Family Leaderboard (members within family)
+    function renderFamilyLeaderboard(game) {
+        const list = document.getElementById('familyLeaderboardList');
+        const empty = document.getElementById('emptyFamilyLeaderboard');
+        const data = familyLeaderboardData[game] || [];
+
+        if (data.length === 0) {
+            list.style.display = 'none';
+            empty.style.display = 'block';
+            return;
+        }
+
+        list.style.display = 'block';
+        empty.style.display = 'none';
+
+        list.innerHTML = data.map((entry, index) => {
+            const isCurrentUser = parseInt(entry.user_id) === currentUserId;
+            const avatarColor = entry.avatar_color || '#667eea';
+            const initial = (entry.full_name || '?').charAt(0).toUpperCase();
+
+            return `
+                <li class="leaderboard-item ${isCurrentUser ? 'current-user' : ''}">
+                    <span class="leaderboard-rank ${getRankClass(index)}">${index + 1}</span>
+                    <div class="leaderboard-avatar" style="background: ${avatarColor}">
+                        ${initial}
+                    </div>
+                    <div class="leaderboard-info">
+                        <div class="leaderboard-name">${escapeHtml(entry.full_name)}</div>
+                    </div>
+                    <div class="leaderboard-score">${formatNumber(parseInt(entry.best_score))}</div>
+                </li>
+            `;
+        }).join('');
     }
 
-    // Initialize game switcher
-    document.querySelectorAll('.game-switch-btn').forEach(btn => {
+    // Initialize global leaderboard game switcher
+    document.querySelectorAll('#globalLeaderboard .game-switch-btn').forEach(btn => {
         btn.addEventListener('click', function() {
-            // Update active state
-            document.querySelectorAll('.game-switch-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#globalLeaderboard .game-switch-btn').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
+            renderGlobalLeaderboard(this.dataset.game);
+        });
+    });
 
-            // Render new leaderboard
-            const game = this.dataset.game;
-            renderLeaderboard(game);
+    // Initialize family leaderboard game switcher
+    document.querySelectorAll('#familyGameSwitcher .game-switch-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('#familyGameSwitcher .game-switch-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            renderFamilyLeaderboard(this.dataset.game);
         });
     });
 
     // Initial render
-    renderLeaderboard('all');
+    renderGlobalLeaderboard('all');
+    renderFamilyLeaderboard('all');
 })();
 </script>
 
