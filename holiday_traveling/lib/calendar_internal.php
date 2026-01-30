@@ -26,22 +26,27 @@ class HT_InternalCalendar {
         $createdEvents = [];
         $destination = $trip['destination'];
         $tripId = $trip['id'];
+        $startDate = new DateTime($trip['start_date']);
 
         // Note: Main "Holiday" event is created when trip is first created in trips_create.php
         // Here we only create the individual activity events from the AI plan
 
         // Create individual activity events from itinerary
-        foreach ($plan['itinerary'] ?? [] as $day) {
-            $date = $day['date'] ?? null;
-            if (!$date) continue;
+        foreach ($plan['itinerary'] ?? [] as $index => $day) {
+            // Get day number (1-based) - use from AI or calculate from index
+            $dayNum = $day['day'] ?? ($index + 1);
 
-            $dayNum = $day['day'] ?? '';
+            // Calculate the date for this day based on trip start date
+            // Day 1 = start_date, Day 2 = start_date + 1, etc.
+            $dayDate = clone $startDate;
+            $dayDate->modify('+' . ($dayNum - 1) . ' days');
+            $date = $dayDate->format('Y-m-d');
 
             // Morning activities (9:00 - 12:00)
             $morningStart = 9;
-            foreach ($day['morning'] ?? [] as $index => $activity) {
+            foreach ($day['morning'] ?? [] as $actIndex => $activity) {
                 $activityName = self::getActivityName($activity);
-                $startHour = $morningStart + $index;
+                $startHour = $morningStart + $actIndex;
                 if ($startHour >= 12) break; // Don't overflow into afternoon
 
                 $eventId = self::createEvent([
@@ -59,15 +64,15 @@ class HT_InternalCalendar {
                 ]);
 
                 if ($eventId) {
-                    $createdEvents[] = ['id' => $eventId, 'type' => 'morning', 'day' => $dayNum];
+                    $createdEvents[] = ['id' => $eventId, 'type' => 'morning', 'day' => $dayNum, 'date' => $date];
                 }
             }
 
             // Afternoon activities (14:00 - 17:00)
             $afternoonStart = 14;
-            foreach ($day['afternoon'] ?? [] as $index => $activity) {
+            foreach ($day['afternoon'] ?? [] as $actIndex => $activity) {
                 $activityName = self::getActivityName($activity);
-                $startHour = $afternoonStart + $index;
+                $startHour = $afternoonStart + $actIndex;
                 if ($startHour >= 17) break;
 
                 $eventId = self::createEvent([
@@ -85,15 +90,15 @@ class HT_InternalCalendar {
                 ]);
 
                 if ($eventId) {
-                    $createdEvents[] = ['id' => $eventId, 'type' => 'afternoon', 'day' => $dayNum];
+                    $createdEvents[] = ['id' => $eventId, 'type' => 'afternoon', 'day' => $dayNum, 'date' => $date];
                 }
             }
 
             // Evening activities (18:00 - 21:00)
             $eveningStart = 18;
-            foreach ($day['evening'] ?? [] as $index => $activity) {
+            foreach ($day['evening'] ?? [] as $actIndex => $activity) {
                 $activityName = self::getActivityName($activity);
-                $startHour = $eveningStart + $index;
+                $startHour = $eveningStart + $actIndex;
                 if ($startHour >= 21) break;
 
                 $eventId = self::createEvent([
@@ -111,7 +116,7 @@ class HT_InternalCalendar {
                 ]);
 
                 if ($eventId) {
-                    $createdEvents[] = ['id' => $eventId, 'type' => 'evening', 'day' => $dayNum];
+                    $createdEvents[] = ['id' => $eventId, 'type' => 'evening', 'day' => $dayNum, 'date' => $date];
                 }
             }
         }
