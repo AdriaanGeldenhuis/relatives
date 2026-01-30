@@ -59,7 +59,18 @@ $statusDisplay = $tripStatus ?? 'upcoming';
 
     <!-- Trip Header -->
     <div class="ht-trip-header">
-        <a href="/holiday_traveling/" class="ht-back-link">← Back to Trips</a>
+        <div class="ht-trip-header-top">
+            <a href="/holiday_traveling/" class="ht-back-link">← Back to Trips</a>
+            <div class="ht-trip-actions-menu">
+                <button class="ht-menu-trigger" aria-label="Trip actions">⋮</button>
+                <div class="ht-menu-dropdown">
+                    <a href="/holiday_traveling/trip_edit.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Edit</a>
+                    <a href="/holiday_traveling/trip_share.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Share</a>
+                    <a href="/holiday_traveling/trip_duplicate.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Duplicate</a>
+                    <button class="ht-menu-item ht-menu-item-danger" data-action="delete" data-trip-id="<?php echo $trip['id']; ?>">Delete</button>
+                </div>
+            </div>
+        </div>
 
         <div class="ht-trip-header-main">
             <div class="ht-trip-header-info">
@@ -141,10 +152,6 @@ $statusDisplay = $tripStatus ?? 'upcoming';
                 <span class="ht-tab-icon">🧾</span>
                 <span class="ht-tab-label">Expenses</span>
             </button>
-            <button class="ht-tab-btn" data-tab="calendar">
-                <span class="ht-tab-icon">📆</span>
-                <span class="ht-tab-label">Calendar</span>
-            </button>
         </div>
 
         <!-- Tab Content: Plan -->
@@ -205,7 +212,14 @@ $statusDisplay = $tripStatus ?? 'upcoming';
 
             <!-- Itinerary -->
             <div class="ht-itinerary">
-                <h3 class="ht-section-title-sm">Daily Itinerary</h3>
+                <div class="ht-itinerary-header">
+                    <h3 class="ht-section-title-sm">Daily Itinerary</h3>
+                    <?php if (!empty($activePlan['itinerary'])): ?>
+                    <button id="syncCalendarBtn" class="ht-btn ht-btn-outline ht-btn-sm">
+                        📅 Sync to Calendar
+                    </button>
+                    <?php endif; ?>
+                </div>
                 <?php if (!empty($activePlan['itinerary'])): ?>
                 <div class="ht-days-list">
                     <?php foreach ($activePlan['itinerary'] as $day): ?>
@@ -504,70 +518,6 @@ $statusDisplay = $tripStatus ?? 'upcoming';
                 <p class="ht-loading">Loading expenses...</p>
             </div>
         </div>
-
-        <!-- Tab Content: Calendar -->
-        <div class="ht-tab-content" data-tab="calendar">
-            <?php if (!$activePlan): ?>
-            <div class="ht-empty-tab">
-                <div class="ht-empty-tab-icon">📆</div>
-                <h3>No Plan to Export</h3>
-                <p>Generate a travel plan first to export it to your calendar</p>
-            </div>
-            <?php else: ?>
-            <div class="ht-calendar-export">
-                <h3 class="ht-section-title-sm">Export to Calendar</h3>
-                <p class="ht-calendar-description">
-                    Add your trip itinerary to your calendar app.
-                </p>
-
-                <!-- ICS Download -->
-                <div class="ht-calendar-section">
-                    <h4 class="ht-calendar-section-title">
-                        <span class="ht-calendar-icon">📥</span>
-                        Download ICS File
-                    </h4>
-                    <p class="ht-calendar-section-desc">
-                        Works with Apple Calendar, Outlook, and most calendar apps.
-                    </p>
-                    <a href="/holiday_traveling/api/calendar_export_ics.php?id=<?php echo $trip['id']; ?>" class="ht-btn ht-btn-secondary">
-                        <span class="ht-btn-icon">📥</span>
-                        Download .ics File
-                    </a>
-                </div>
-
-                <!-- Google Calendar -->
-                <div class="ht-calendar-section">
-                    <h4 class="ht-calendar-section-title">
-                        <span class="ht-calendar-icon">📅</span>
-                        Google Calendar
-                    </h4>
-                    <div id="googleCalendarStatus">
-                        <p class="ht-loading">Checking connection...</p>
-                    </div>
-                </div>
-
-                <!-- Success/Error Messages -->
-                <?php if (isset($_GET['google_sync'])): ?>
-                <div class="ht-calendar-message ht-calendar-message-<?php echo $_GET['google_sync'] === 'success' ? 'success' : 'error'; ?>">
-                    <?php if ($_GET['google_sync'] === 'success'): ?>
-                        <span class="ht-message-icon">✅</span>
-                        <?php echo (int)($_GET['events'] ?? 0); ?> events added to Google Calendar!
-                    <?php else: ?>
-                        <span class="ht-message-icon">❌</span>
-                        Failed to sync with Google Calendar. Please try again.
-                    <?php endif; ?>
-                </div>
-                <?php endif; ?>
-
-                <?php if (isset($_GET['error']) && $_GET['error'] === 'google_not_configured'): ?>
-                <div class="ht-calendar-message ht-calendar-message-warning">
-                    <span class="ht-message-icon">⚠️</span>
-                    Google Calendar integration is not configured. Use ICS download instead.
-                </div>
-                <?php endif; ?>
-            </div>
-            <?php endif; ?>
-        </div>
     </div>
 </div>
 
@@ -598,4 +548,89 @@ $statusDisplay = $tripStatus ?? 'upcoming';
     ]); ?>;
     window.HT.canEdit = <?php echo $canEdit ? 'true' : 'false'; ?>;
     window.HT.hasPlan = <?php echo $activePlan ? 'true' : 'false'; ?>;
+
+    // Dropdown menu toggle
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.ht-menu-trigger').forEach(function(trigger) {
+            trigger.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const menu = this.closest('.ht-trip-actions-menu') || this.closest('.ht-actions-menu');
+                const dropdown = menu.querySelector('.ht-menu-dropdown');
+                const isActive = menu.classList.contains('active');
+
+                // Close all other dropdowns
+                document.querySelectorAll('.ht-trip-actions-menu.active, .ht-actions-menu.active').forEach(function(m) {
+                    m.classList.remove('active');
+                });
+
+                // Toggle this dropdown
+                if (!isActive) {
+                    const buttonRect = this.getBoundingClientRect();
+                    dropdown.style.top = buttonRect.bottom + 8 + 'px';
+                    dropdown.style.left = buttonRect.left + 'px';
+                    dropdown.style.right = 'auto';
+                    menu.classList.add('active');
+                }
+            });
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function() {
+            document.querySelectorAll('.ht-trip-actions-menu.active, .ht-actions-menu.active').forEach(function(m) {
+                m.classList.remove('active');
+            });
+        });
+
+        // Sync to Calendar button
+        var syncBtn = document.getElementById('syncCalendarBtn');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', function() {
+                var btn = this;
+                var originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Syncing...';
+
+                fetch('/holiday_traveling/api/calendar_sync.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': window.HT?.csrfToken || ''
+                    },
+                    body: JSON.stringify({ trip_id: window.HT.tripId })
+                })
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    console.log('Calendar sync response:', data);
+                    if (data.success || data.events_created) {
+                        var msg = data.message || 'Synced!';
+                        if (data.events_created === 0) {
+                            msg = 'No activities to sync. Generate a plan with activities first.';
+                        }
+                        btn.innerHTML = '✅ ' + msg;
+                        if (data.events_created > 0) {
+                            var alertMsg = 'Success! ' + data.events_created + ' activities synced to calendar.';
+                            if (data.dates && data.dates.length > 0) {
+                                alertMsg += '\n\nDates: ' + data.dates.join(', ');
+                            }
+                            alertMsg += '\n\nGo to Calendar to see them.';
+                            alert(alertMsg);
+                        }
+                        setTimeout(function() {
+                            btn.innerHTML = originalText;
+                            btn.disabled = false;
+                        }, 3000);
+                    } else {
+                        alert('Sync failed: ' + (data.error || 'Unknown error'));
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                    }
+                })
+                .catch(function(err) {
+                    alert('Sync error: ' + err.message);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                });
+            });
+        }
+    });
 </script>

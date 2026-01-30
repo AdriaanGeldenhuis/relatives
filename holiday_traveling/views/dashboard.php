@@ -94,15 +94,6 @@
                         <h3><?php echo htmlspecialchars($trip['destination']); ?></h3>
                         <?php echo ht_status_badge($trip['status']); ?>
                     </div>
-                    <div class="ht-trip-actions-menu">
-                        <button class="ht-menu-trigger" aria-label="Trip actions">⋮</button>
-                        <div class="ht-menu-dropdown">
-                            <a href="/holiday_traveling/trip_view.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">View</a>
-                            <a href="/holiday_traveling/trip_edit.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Edit</a>
-                            <a href="/holiday_traveling/trip_share.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Share</a>
-                            <button class="ht-menu-item ht-menu-item-danger" data-action="delete" data-trip-id="<?php echo $trip['id']; ?>">Delete</button>
-                        </div>
-                    </div>
                 </div>
                 <p class="ht-trip-title"><?php echo htmlspecialchars($trip['title']); ?></p>
                 <div class="ht-trip-meta">
@@ -221,10 +212,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Toggle this dropdown
             if (!isActive) {
-                // Position dropdown at the button location
-                const rect = this.getBoundingClientRect();
-                dropdown.style.top = rect.top + 'px';
-                dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+                // Position dropdown on the left side of the trip card
+                const card = this.closest('.ht-trip-card');
+                const cardRect = card.getBoundingClientRect();
+                const buttonRect = this.getBoundingClientRect();
+                dropdown.style.top = buttonRect.top + 'px';
+                dropdown.style.left = (cardRect.left - dropdown.offsetWidth - 8) + 'px';
+                dropdown.style.right = 'auto';
                 menu.classList.add('active');
             }
         });

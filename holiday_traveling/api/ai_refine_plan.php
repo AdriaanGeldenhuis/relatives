@@ -115,11 +115,60 @@ try {
         $tripId, $newVersion, substr($instruction, 0, 50), HT_Auth::userId()
     ));
 
+    $userId = HT_Auth::userId();
+    $familyId = (int) $trip['family_id'];
+
+    // Auto-sync to Internal Calendar (app calendar)
+    $internalCalendarSync = null;
+    try {
+        $internalEvents = HT_InternalCalendar::insertTripEvents($userId, $familyId, $trip, $refinedPlan);
+        $internalCalendarSync = [
+            'success' => true,
+            'events_created' => count($internalEvents),
+            'message' => count($internalEvents) . ' events updated in calendar'
+        ];
+        error_log(sprintf(
+            'Internal calendar sync (refine): Trip=%d, Events=%d, User=%d',
+            $tripId, count($internalEvents), $userId
+        ));
+    } catch (Exception $e) {
+        $internalCalendarSync = [
+            'success' => false,
+            'error' => $e->getMessage()
+        ];
+        error_log('Internal calendar sync (refine) failed: ' . $e->getMessage());
+    }
+
+    // Auto-sync to Google Calendar if connected
+    $googleCalendarSync = null;
+    if (HT_GoogleCalendar::isConnected($userId)) {
+        try {
+            $googleEvents = HT_GoogleCalendar::insertTripEvents($userId, $trip, $refinedPlan);
+            $googleCalendarSync = [
+                'success' => true,
+                'events_created' => count($googleEvents),
+                'message' => count($googleEvents) . ' events updated in Google Calendar'
+            ];
+            error_log(sprintf(
+                'Google calendar sync (refine): Trip=%d, Events=%d, User=%d',
+                $tripId, count($googleEvents), $userId
+            ));
+        } catch (Exception $e) {
+            $googleCalendarSync = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+            error_log('Google calendar sync (refine) failed: ' . $e->getMessage());
+        }
+    }
+
     HT_Response::ok([
         'trip_id' => $tripId,
         'version' => $newVersion,
         'plan' => $refinedPlan,
-        'instruction' => $instruction
+        'instruction' => $instruction,
+        'calendar_sync' => $internalCalendarSync,
+        'google_calendar_sync' => $googleCalendarSync
     ]);
 
 } catch (Exception $e) {

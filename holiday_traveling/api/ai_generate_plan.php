@@ -104,11 +104,60 @@ try {
         $tripId, $newVersion, HT_Auth::userId()
     ));
 
+    $userId = HT_Auth::userId();
+    $familyId = (int) $trip['family_id'];
+
+    // Auto-sync to Internal Calendar (app calendar)
+    $internalCalendarSync = null;
+    try {
+        $internalEvents = HT_InternalCalendar::insertTripEvents($userId, $familyId, $trip, $plan);
+        $internalCalendarSync = [
+            'success' => true,
+            'events_created' => count($internalEvents),
+            'message' => count($internalEvents) . ' events added to calendar'
+        ];
+        error_log(sprintf(
+            'Internal calendar sync: Trip=%d, Events=%d, User=%d',
+            $tripId, count($internalEvents), $userId
+        ));
+    } catch (Exception $e) {
+        $internalCalendarSync = [
+            'success' => false,
+            'error' => $e->getMessage()
+        ];
+        error_log('Internal calendar sync failed: ' . $e->getMessage());
+    }
+
+    // Auto-sync to Google Calendar if connected
+    $googleCalendarSync = null;
+    if (HT_GoogleCalendar::isConnected($userId)) {
+        try {
+            $googleEvents = HT_GoogleCalendar::insertTripEvents($userId, $trip, $plan);
+            $googleCalendarSync = [
+                'success' => true,
+                'events_created' => count($googleEvents),
+                'message' => count($googleEvents) . ' events added to Google Calendar'
+            ];
+            error_log(sprintf(
+                'Google calendar sync: Trip=%d, Events=%d, User=%d',
+                $tripId, count($googleEvents), $userId
+            ));
+        } catch (Exception $e) {
+            $googleCalendarSync = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+            error_log('Google calendar sync failed: ' . $e->getMessage());
+        }
+    }
+
     HT_Response::ok([
         'trip_id' => $tripId,
         'version' => $newVersion,
         'plan' => $plan,
-        'summary' => generatePlanSummary($plan, $trip)
+        'summary' => generatePlanSummary($plan, $trip),
+        'calendar_sync' => $internalCalendarSync,
+        'google_calendar_sync' => $googleCalendarSync
     ]);
 
 } catch (Exception $e) {
