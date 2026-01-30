@@ -1055,6 +1055,17 @@
     margin-bottom: 20px;
 }
 
+.ht-trip-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.ht-trip-header-top .ht-back-link {
+    margin-bottom: 0;
+}
+
 .ht-trip-header-main {
     display: flex;
     flex-direction: column;

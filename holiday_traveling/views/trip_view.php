@@ -59,7 +59,18 @@ $statusDisplay = $tripStatus ?? 'upcoming';
 
     <!-- Trip Header -->
     <div class="ht-trip-header">
-        <a href="/holiday_traveling/" class="ht-back-link">← Back to Trips</a>
+        <div class="ht-trip-header-top">
+            <a href="/holiday_traveling/" class="ht-back-link">← Back to Trips</a>
+            <div class="ht-trip-actions-menu">
+                <button class="ht-menu-trigger" aria-label="Trip actions">⋮</button>
+                <div class="ht-menu-dropdown">
+                    <a href="/holiday_traveling/trip_edit.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Edit</a>
+                    <a href="/holiday_traveling/trip_share.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Share</a>
+                    <a href="/holiday_traveling/trip_duplicate.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Duplicate</a>
+                    <button class="ht-menu-item ht-menu-item-danger" data-action="delete" data-trip-id="<?php echo $trip['id']; ?>">Delete</button>
+                </div>
+            </div>
+        </div>
 
         <div class="ht-trip-header-main">
             <div class="ht-trip-header-info">
@@ -598,4 +609,37 @@ $statusDisplay = $tripStatus ?? 'upcoming';
     ]); ?>;
     window.HT.canEdit = <?php echo $canEdit ? 'true' : 'false'; ?>;
     window.HT.hasPlan = <?php echo $activePlan ? 'true' : 'false'; ?>;
+
+    // Dropdown menu toggle
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.ht-menu-trigger').forEach(function(trigger) {
+            trigger.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const menu = this.closest('.ht-trip-actions-menu') || this.closest('.ht-actions-menu');
+                const dropdown = menu.querySelector('.ht-menu-dropdown');
+                const isActive = menu.classList.contains('active');
+
+                // Close all other dropdowns
+                document.querySelectorAll('.ht-trip-actions-menu.active, .ht-actions-menu.active').forEach(function(m) {
+                    m.classList.remove('active');
+                });
+
+                // Toggle this dropdown
+                if (!isActive) {
+                    const buttonRect = this.getBoundingClientRect();
+                    dropdown.style.top = buttonRect.bottom + 8 + 'px';
+                    dropdown.style.right = (window.innerWidth - buttonRect.right) + 'px';
+                    dropdown.style.left = 'auto';
+                    menu.classList.add('active');
+                }
+            });
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function() {
+            document.querySelectorAll('.ht-trip-actions-menu.active, .ht-actions-menu.active').forEach(function(m) {
+                m.classList.remove('active');
+            });
+        });
+    });
 </script>
