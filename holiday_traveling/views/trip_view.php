@@ -608,7 +608,12 @@ $statusDisplay = $tripStatus ?? 'upcoming';
                         }
                         btn.innerHTML = '✅ ' + msg;
                         if (data.events_created > 0) {
-                            alert('Success! ' + data.events_created + ' activities synced to calendar. Go to Calendar to see them.');
+                            var alertMsg = 'Success! ' + data.events_created + ' activities synced to calendar.';
+                            if (data.dates && data.dates.length > 0) {
+                                alertMsg += '\n\nDates: ' + data.dates.join(', ');
+                            }
+                            alertMsg += '\n\nGo to Calendar to see them.';
+                            alert(alertMsg);
                         }
                         setTimeout(function() {
                             btn.innerHTML = originalText;

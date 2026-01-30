@@ -78,10 +78,26 @@ try {
         $tripId, count($events), $userId
     ));
 
+    // Get unique dates from events
+    $dates = [];
+    foreach ($events as $event) {
+        if (!empty($event['date'])) {
+            $dates[$event['date']] = true;
+        }
+    }
+    $dateList = array_keys($dates);
+    sort($dateList);
+
+    $message = count($events) . ' activities synced to calendar';
+    if (!empty($dateList)) {
+        $message .= ' (' . $dateList[0] . ' to ' . end($dateList) . ')';
+    }
+
     HT_Response::ok([
         'success' => true,
         'events_created' => count($events),
-        'message' => count($events) . ' activities synced to calendar',
+        'message' => $message,
+        'dates' => $dateList,
         'debug' => [
             'trip_id' => $tripId,
             'start_date' => $trip['start_date'],
