@@ -859,8 +859,8 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
-.ht-actions-menu:hover .ht-menu-dropdown,
-.ht-trip-actions-menu:hover .ht-menu-dropdown {
+.ht-actions-menu.active .ht-menu-dropdown,
+.ht-trip-actions-menu.active .ht-menu-dropdown {
     opacity: 1;
     visibility: visible;
     transform: scale(1);
