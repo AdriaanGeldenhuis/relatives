@@ -39,8 +39,7 @@ class HT_InternalCalendar {
             'ends_at' => $trip['end_date'] . ' 23:59:59',
             'all_day' => 1,
             'kind' => 'event',
-            'color' => self::TRAVEL_COLOR,
-            'trip_reference' => $tripId
+            'color' => self::TRAVEL_COLOR
         ]);
 
         if ($mainEventId) {
@@ -66,14 +65,13 @@ class HT_InternalCalendar {
                     'user_id' => $userId,
                     'title' => "🌅 " . $activityName,
                     'description' => self::getActivityDescription($activity),
-                    'notes' => "Day {$dayNum} Morning - Trip: {$destination}",
+                    'notes' => "Day {$dayNum} Morning - Trip ID: {$tripId}",
                     'location' => $destination,
                     'starts_at' => "{$date} " . sprintf('%02d', $startHour) . ":00:00",
                     'ends_at' => "{$date} " . sprintf('%02d', $startHour + 1) . ":00:00",
                     'all_day' => 0,
                     'kind' => 'event',
-                    'color' => self::TRAVEL_COLOR,
-                    'trip_reference' => $tripId
+                    'color' => self::TRAVEL_COLOR
                 ]);
 
                 if ($eventId) {
@@ -93,14 +91,13 @@ class HT_InternalCalendar {
                     'user_id' => $userId,
                     'title' => "☀️ " . $activityName,
                     'description' => self::getActivityDescription($activity),
-                    'notes' => "Day {$dayNum} Afternoon - Trip: {$destination}",
+                    'notes' => "Day {$dayNum} Afternoon - Trip ID: {$tripId}",
                     'location' => $destination,
                     'starts_at' => "{$date} " . sprintf('%02d', $startHour) . ":00:00",
                     'ends_at' => "{$date} " . sprintf('%02d', $startHour + 1) . ":00:00",
                     'all_day' => 0,
                     'kind' => 'event',
-                    'color' => self::TRAVEL_COLOR,
-                    'trip_reference' => $tripId
+                    'color' => self::TRAVEL_COLOR
                 ]);
 
                 if ($eventId) {
@@ -120,14 +117,13 @@ class HT_InternalCalendar {
                     'user_id' => $userId,
                     'title' => "🌙 " . $activityName,
                     'description' => self::getActivityDescription($activity),
-                    'notes' => "Day {$dayNum} Evening - Trip: {$destination}",
+                    'notes' => "Day {$dayNum} Evening - Trip ID: {$tripId}",
                     'location' => $destination,
                     'starts_at' => "{$date} " . sprintf('%02d', $startHour) . ":00:00",
                     'ends_at' => "{$date} " . sprintf('%02d', $startHour + 1) . ":00:00",
                     'all_day' => 0,
                     'kind' => 'event',
-                    'color' => self::TRAVEL_COLOR,
-                    'trip_reference' => $tripId
+                    'color' => self::TRAVEL_COLOR
                 ]);
 
                 if ($eventId) {
@@ -143,9 +139,11 @@ class HT_InternalCalendar {
      * Delete all events for a trip (used before re-syncing)
      */
     public static function deleteTripEvents(int $familyId, int $tripId): int {
-        $sql = "DELETE FROM events WHERE family_id = ? AND notes LIKE ?";
-        $stmt = HT_DB::prepare($sql);
-        $stmt->execute([$familyId, "%Trip ID: {$tripId}%"]);
+        // Use HT_DB::execute for raw queries
+        $stmt = HT_DB::execute(
+            "DELETE FROM events WHERE family_id = ? AND notes LIKE ?",
+            [$familyId, "%Trip ID: {$tripId}%"]
+        );
         return $stmt->rowCount();
     }
 
@@ -154,37 +152,27 @@ class HT_InternalCalendar {
      */
     private static function createEvent(array $data): ?int {
         try {
-            $sql = "INSERT INTO events (
-                family_id, user_id, created_by,
-                title, description, notes, location,
-                starts_at, ends_at, timezone, all_day,
-                kind, color, status,
-                created_at, updated_at
-            ) VALUES (
-                ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, 'Africa/Johannesburg', ?,
-                ?, ?, 'pending',
-                NOW(), NOW()
-            )";
-
-            $stmt = HT_DB::prepare($sql);
-            $stmt->execute([
-                $data['family_id'],
-                $data['user_id'],
-                $data['user_id'],
-                $data['title'],
-                $data['description'] ?? null,
-                $data['notes'] ?? null,
-                $data['location'] ?? null,
-                $data['starts_at'],
-                $data['ends_at'],
-                $data['all_day'] ?? 0,
-                $data['kind'] ?? 'event',
-                $data['color'] ?? '#3498db'
+            // Use HT_DB::insert which handles the insert and returns the ID
+            $eventId = HT_DB::insert('events', [
+                'family_id' => $data['family_id'],
+                'user_id' => $data['user_id'],
+                'created_by' => $data['user_id'],
+                'title' => $data['title'],
+                'description' => $data['description'] ?? null,
+                'notes' => $data['notes'] ?? null,
+                'location' => $data['location'] ?? null,
+                'starts_at' => $data['starts_at'],
+                'ends_at' => $data['ends_at'],
+                'timezone' => 'Africa/Johannesburg',
+                'all_day' => $data['all_day'] ?? 0,
+                'kind' => $data['kind'] ?? 'event',
+                'color' => $data['color'] ?? '#3498db',
+                'status' => 'pending',
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
             ]);
 
-            return (int) HT_DB::lastInsertId();
+            return $eventId > 0 ? $eventId : null;
         } catch (Exception $e) {
             error_log('HT_InternalCalendar::createEvent error: ' . $e->getMessage());
             return null;
