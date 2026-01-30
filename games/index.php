@@ -738,9 +738,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     .global-leaderboard-header {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
+        flex-direction: column;
         gap: 16px;
         margin-bottom: 20px;
     }
@@ -759,39 +757,46 @@ require_once __DIR__ . '/../shared/components/header.php';
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 8px;
+        border-radius: 16px;
     }
 
     .game-switch-btn {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        padding: 8px 14px;
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        color: rgba(255, 255, 255, 0.7);
-        font-size: 0.8rem;
+        gap: 8px;
+        padding: 10px 16px;
+        background: transparent;
+        border: none;
+        border-radius: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.85rem;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.3s;
+        transition: all 0.2s;
     }
 
     .game-switch-btn:hover {
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.08);
         color: #fff;
     }
 
     .game-switch-btn.active {
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        border-color: transparent;
+        background: #4a4a6a;
         color: #fff;
     }
 
     .game-switch-btn .game-icon {
-        font-size: 1rem;
-        margin-bottom: 0;
+        font-size: 1.1rem;
     }
+
+    /* Colored icons for game buttons */
+    .game-switch-btn[data-game="all"] .game-icon { color: #f5a623; }
+    .game-switch-btn[data-game="snake"] .game-icon { color: #4ecca3; }
+    .game-switch-btn[data-game="neon"] .game-icon { color: #00f5ff; }
+    .game-switch-btn[data-game="flash"] .game-icon { color: #f5a623; }
+    .game-switch-btn[data-game="blockforge"] .game-icon { color: #e879f9; }
 
     .global-leaderboard-list {
         list-style: none;
@@ -905,20 +910,22 @@ require_once __DIR__ . '/../shared/components/header.php';
     @media (max-width: 600px) {
         .global-leaderboard-header {
             flex-direction: column;
-            align-items: flex-start;
+            align-items: stretch;
         }
 
         .game-switcher {
             width: 100%;
             overflow-x: auto;
-            padding-bottom: 4px;
+            padding: 6px;
             -webkit-overflow-scrolling: touch;
+            flex-wrap: nowrap;
         }
 
         .game-switch-btn {
-            padding: 6px 10px;
+            padding: 8px 12px;
             font-size: 0.75rem;
             white-space: nowrap;
+            flex-shrink: 0;
         }
 
         .game-switch-btn .btn-text {
