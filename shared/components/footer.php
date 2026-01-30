@@ -524,7 +524,7 @@
         <div class="menu-backdrop" id="menuBackdrop" onclick="closePlusMenu()"></div>
         
         <div class="footer-container">
-            <button class="footer-btn mic-btn" id="micBtn" onclick="AdvancedVoiceAssistant.openModal()" aria-label="Voice Assistant">
+            <button class="footer-btn mic-btn" id="micBtn" onclick="SuziVoice.open()" aria-label="Voice Assistant">
                 🎤
             </button>
 
@@ -579,7 +579,7 @@
 
     <div class="voice-modal" id="voiceModal">
         <div class="voice-modal-content">
-            <button class="close-voice-modal" onclick="AdvancedVoiceAssistant.closeModal()" aria-label="Close">✕</button>
+            <button class="close-voice-modal" onclick="SuziVoice.close()" aria-label="Close">✕</button>
 
             <div class="voice-status" id="voiceStatus">
                 <div class="status-icon" id="statusIcon">🎤</div>
@@ -588,7 +588,7 @@
             </div>
 
             <!-- Large tappable mic button -->
-            <button class="modal-mic-btn" id="modalMicBtn" onclick="AdvancedVoiceAssistant.getInstance().toggleListening()" aria-label="Start listening">
+            <button class="modal-mic-btn" id="modalMicBtn" onclick="SuziVoice.toggleListening()" aria-label="Start listening">
                 <span class="mic-icon">🎤</span>
                 <span class="mic-ring"></span>
                 <span class="mic-ring mic-ring-2"></span>
@@ -657,7 +657,7 @@
                 closePlusMenu();
                 const voiceModal = document.getElementById('voiceModal');
                 if (voiceModal && voiceModal.classList.contains('active')) {
-                    AdvancedVoiceAssistant.closeModal();
+                    SuziVoice.close();
                 }
             }
         });

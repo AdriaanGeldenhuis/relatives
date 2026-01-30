@@ -1,349 +1,338 @@
 /**
  * ============================================
- * SUZI VOICE ASSISTANT v9.1
- * Full conversational AI assistant
- * Can answer questions, tell stories, AND control the app
- *
- * v9.1 Changes:
- * - Fixed loop issue: isProcessing stays true until speech completes
- * - Fixed native TTS callback handling
+ * SUZI VOICE ASSISTANT v10.0
+ * Complete rewrite using IIFE pattern
+ * Clean state management, better callbacks
  * ============================================
  */
 
-class SuziVoice {
-    constructor() {
-        // Singleton
-        if (SuziVoice._instance) {
-            return SuziVoice._instance;
-        }
-        SuziVoice._instance = this;
+(function() {
+    'use strict';
 
-        console.log('🎤 Suzi Voice v9.1 - Starting...');
+    // ==================== CONFIGURATION ====================
+    const CONFIG = {
+        SILENCE_TIMEOUT: 3000,      // 3 seconds of silence to auto-stop
+        MAX_LISTEN_TIME: 30000,     // Max 30 seconds listening
+        API_TIMEOUT: 20000,         // 20 second API timeout
+        TTS_FALLBACK_MS_PER_CHAR: 80,  // Fallback timing for TTS
+        MAX_CONVERSATION_HISTORY: 10
+    };
 
-        // State
-        this.isOpen = false;
-        this.isListening = false;
-        this.isSpeaking = false;
-        this.isProcessing = false;
+    // ==================== STATE ====================
+    let state = {
+        isOpen: false,
+        isListening: false,
+        isSpeaking: false,
+        isProcessing: false
+    };
 
-        // Speech APIs
-        this.recognition = null;
-        this.synthesis = window.speechSynthesis;
-        this.currentUtterance = null;
-        this.pendingSpeechCallback = null;  // Store callback for native TTS
+    // ==================== INTERNALS ====================
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let synthesis = window.speechSynthesis;
+    let currentUtterance = null;
+    let conversation = [];
+    let silenceTimer = null;
+    let autoStopTimer = null;
+    let ttsFallbackTimer = null;
+    let dom = null;
 
-        // Conversation history
-        this.conversation = [];
-        this.maxHistory = 10;
+    // Native app detection
+    const isNative = !!(window.AndroidVoice && typeof window.AndroidVoice.startListening === 'function');
 
-        // Timeouts
-        this.silenceTimer = null;
-        this.SILENCE_TIMEOUT = 10000; // 10 seconds
-
-        // Native app detection
-        this.isNative = !!(window.AndroidVoice && typeof window.AndroidVoice.startListening === 'function');
-
-        // DOM elements (cached on first use)
-        this.dom = null;
-
-        // Initialize
-        this.init();
-    }
-
-    static getInstance() {
-        if (!SuziVoice._instance) {
-            new SuziVoice();
-        }
-        return SuziVoice._instance;
-    }
-
-    init() {
-        // Setup speech recognition
-        this.setupRecognition();
-
-        // Setup native hooks
-        this.setupNativeHooks();
-
-        // Preload voices
-        if (this.synthesis) {
-            this.synthesis.getVoices();
-            speechSynthesis.onvoiceschanged = () => this.synthesis.getVoices();
-        }
-
-        console.log('✅ Suzi Voice v9.1 Ready!', this.isNative ? '(Native Mode)' : '(Web Mode)');
-    }
-
-    cacheDom() {
-        if (this.dom) return;
-
-        this.dom = {
+    // ==================== DOM CACHING ====================
+    function cacheDom() {
+        if (dom) return dom;
+        dom = {
             modal: document.getElementById('voiceModal'),
             statusIcon: document.getElementById('statusIcon'),
             statusText: document.getElementById('statusText'),
             statusSubtext: document.getElementById('statusSubtext'),
             transcript: document.getElementById('voiceTranscript'),
             micBtn: document.getElementById('modalMicBtn'),
-            suggestions: document.getElementById('voiceSuggestions'),
-            conversationArea: document.getElementById('conversationArea')
+            suggestions: document.getElementById('voiceSuggestions')
         };
+        return dom;
     }
 
-    setupRecognition() {
-        if (this.isNative) return;
-
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            console.warn('Speech Recognition not supported');
-            return;
+    // ==================== TIMER MANAGEMENT ====================
+    function clearAllTimers() {
+        if (silenceTimer) {
+            clearTimeout(silenceTimer);
+            silenceTimer = null;
         }
+        if (autoStopTimer) {
+            clearTimeout(autoStopTimer);
+            autoStopTimer = null;
+        }
+        if (ttsFallbackTimer) {
+            clearTimeout(ttsFallbackTimer);
+            ttsFallbackTimer = null;
+        }
+    }
 
-        this.recognition = new SpeechRecognition();
-        this.recognition.lang = navigator.language || 'en-US';
-        this.recognition.continuous = false;
-        this.recognition.interimResults = true;
-        this.recognition.maxAlternatives = 1;
+    function startSilenceTimer() {
+        if (silenceTimer) clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+            if (state.isListening) {
+                console.log('[Suzi] Silence timeout - stopping');
+                stopListening();
+            }
+        }, CONFIG.SILENCE_TIMEOUT);
+    }
 
-        this.recognition.onstart = () => {
-            console.log('🎤 Listening...');
-            this.isListening = true;
-            this.updateUI('listening');
-            this.startSilenceTimer();
+    function resetSilenceTimer() {
+        if (state.isListening) {
+            startSilenceTimer();
+        }
+    }
+
+    // ==================== SPEECH RECOGNITION ====================
+    function initRecognition() {
+        if (isNative || !SpeechRecognition) return;
+
+        recognition = new SpeechRecognition();
+        recognition.lang = navigator.language || 'en-US';
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => {
+            console.log('[Suzi] Listening started');
+            state.isListening = true;
+            updateUI('listening');
+            startSilenceTimer();
+
+            // Auto-stop timer
+            autoStopTimer = setTimeout(() => {
+                if (state.isListening) {
+                    console.log('[Suzi] Max listen time reached');
+                    stopListening();
+                }
+            }, CONFIG.MAX_LISTEN_TIME);
         };
 
-        this.recognition.onresult = (event) => {
+        recognition.onresult = (event) => {
             const result = event.results[event.results.length - 1];
             const text = result[0].transcript.trim();
 
-            this.resetSilenceTimer();
-            this.showTranscript(text + (result.isFinal ? '' : '...'));
+            resetSilenceTimer();
 
-            if (result.isFinal && text) {
-                this.handleInput(text);
+            if (result.isFinal) {
+                showTranscript(text);
+                if (text) {
+                    handleInput(text);
+                }
+            } else {
+                showTranscript(text + '...');
             }
         };
 
-        this.recognition.onerror = (event) => {
-            console.log('🎤 Error:', event.error);
-            this.isListening = false;
-            this.clearSilenceTimer();
+        recognition.onerror = (event) => {
+            console.log('[Suzi] Recognition error:', event.error);
+            state.isListening = false;
+            clearAllTimers();
 
             if (event.error === 'not-allowed') {
-                this.showStatus('🚫', 'Microphone blocked', 'Enable in browser settings');
-            } else if (event.error !== 'aborted') {
-                this.updateUI('ready');
+                showStatus('🚫', 'Microphone blocked', 'Enable in browser settings');
+            } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
+                updateUI('ready');
             }
         };
 
-        this.recognition.onend = () => {
-            console.log('🎤 Recognition ended');
-            this.isListening = false;
-            this.clearSilenceTimer();
+        recognition.onend = () => {
+            console.log('[Suzi] Recognition ended');
+            state.isListening = false;
+            clearAllTimers();
 
-            if (this.isOpen && !this.isProcessing && !this.isSpeaking) {
-                this.updateUI('ready');
-            }
-        };
-    }
-
-    setupNativeHooks() {
-        window.SuziVoice = {
-            onSttResult: (text) => {
-                if (text && text.trim()) {
-                    this.handleInput(text.trim());
-                }
-            },
-            onTtsEnd: () => {
-                this.isSpeaking = false;
-                // Call the pending speech callback if one exists
-                if (this.pendingSpeechCallback) {
-                    const callback = this.pendingSpeechCallback;
-                    this.pendingSpeechCallback = null;
-                    callback();
-                } else if (this.isOpen && !this.isProcessing) {
-                    this.updateUI('ready');
-                }
-            },
-            onTtsStart: () => {
-                this.isSpeaking = true;
-                this.updateUI('speaking');
-            },
-            onSttStart: () => {
-                this.isListening = true;
-                this.updateUI('listening');
-            },
-            onSttStop: () => {
-                this.isListening = false;
-                if (this.isOpen && !this.isProcessing) {
-                    this.updateUI('ready');
-                }
+            if (state.isOpen && !state.isProcessing && !state.isSpeaking) {
+                updateUI('ready');
             }
         };
     }
 
-    // ==================== MODAL CONTROL ====================
-
-    open() {
-        this.cacheDom();
-        if (!this.dom.modal) return;
-
-        this.isOpen = true;
-        this.conversation = [];
-
-        this.dom.modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-
-        this.updateUI('ready');
-        this.showTranscript('Tap the mic and ask me anything!');
-
-        // Short greeting
-        setTimeout(() => {
-            this.speak("Hi! I'm Suzi. What can I help you with?");
-        }, 300);
-    }
-
-    close() {
-        this.stopListening();
-        this.stopSpeaking();
-        this.clearSilenceTimer();
-
-        if (this.dom?.modal) {
-            this.dom.modal.classList.remove('active');
+    function startListening() {
+        // Guard: don't start if already busy
+        if (state.isListening || state.isProcessing || state.isSpeaking) {
+            console.log('[Suzi] Cannot start listening - busy');
+            return;
         }
 
-        document.body.style.overflow = '';
-        this.isOpen = false;
-        this.isListening = false;
-        this.isSpeaking = false;
-        this.isProcessing = false;
-    }
+        // Stop any speaking first
+        stopSpeaking();
 
-    toggle() {
-        if (this.isOpen) {
-            this.close();
-        } else {
-            this.open();
-        }
-    }
-
-    // ==================== LISTENING CONTROL ====================
-
-    startListening() {
-        if (this.isListening || this.isProcessing) return;
-
-        // Stop any ongoing speech first
-        this.stopSpeaking();
-
-        if (this.isNative) {
-            if (window.AndroidVoice?.startListening) {
-                window.AndroidVoice.startListening();
-            }
-        } else if (this.recognition) {
+        if (isNative && window.AndroidVoice?.startListening) {
+            window.AndroidVoice.startListening();
+        } else if (recognition) {
             try {
-                this.recognition.start();
+                recognition.start();
             } catch (e) {
                 if (e.name !== 'InvalidStateError') {
-                    console.error('Start listening error:', e);
+                    console.error('[Suzi] Start error:', e);
                 }
             }
         }
     }
 
-    stopListening() {
-        this.clearSilenceTimer();
+    function stopListening() {
+        clearAllTimers();
+        state.isListening = false;
 
-        if (this.isNative) {
-            if (window.AndroidVoice?.stopListening) {
-                window.AndroidVoice.stopListening();
-            }
-        } else if (this.recognition) {
+        if (isNative && window.AndroidVoice?.stopListening) {
+            window.AndroidVoice.stopListening();
+        } else if (recognition) {
             try {
-                this.recognition.abort();
-            } catch (e) {}
-        }
-
-        this.isListening = false;
-    }
-
-    toggleListening() {
-        if (this.isSpeaking) {
-            this.stopSpeaking();
-            this.updateUI('ready');
-        } else if (this.isListening) {
-            this.stopListening();
-            this.updateUI('ready');
-        } else if (!this.isProcessing) {
-            this.startListening();
-        }
-    }
-
-    // ==================== SILENCE TIMER ====================
-
-    startSilenceTimer() {
-        this.clearSilenceTimer();
-        this.silenceTimer = setTimeout(() => {
-            if (this.isListening) {
-                console.log('Silence timeout');
-                this.stopListening();
-                this.updateUI('ready');
+                recognition.abort();
+            } catch (e) {
+                // Ignore
             }
-        }, this.SILENCE_TIMEOUT);
-    }
-
-    resetSilenceTimer() {
-        if (this.isListening) {
-            this.startSilenceTimer();
         }
     }
 
-    clearSilenceTimer() {
-        if (this.silenceTimer) {
-            clearTimeout(this.silenceTimer);
-            this.silenceTimer = null;
+    // ==================== SPEECH SYNTHESIS ====================
+    function speak(text, onComplete) {
+        if (!text) {
+            if (onComplete) onComplete();
+            return;
         }
+
+        state.isSpeaking = true;
+        updateUI('speaking');
+        showTranscript(text);
+
+        // Native TTS
+        if (isNative && window.AndroidVoice?.speak) {
+            // Store callback for native
+            window._suziTtsCallback = () => {
+                state.isSpeaking = false;
+                window._suziTtsCallback = null;
+                if (onComplete) onComplete();
+            };
+
+            window.AndroidVoice.speak(text);
+
+            // Fallback timer
+            const duration = Math.max(3000, text.split(' ').length * 500);
+            ttsFallbackTimer = setTimeout(() => {
+                if (state.isSpeaking) {
+                    console.log('[Suzi] TTS fallback triggered');
+                    state.isSpeaking = false;
+                    if (window._suziTtsCallback) {
+                        const cb = window._suziTtsCallback;
+                        window._suziTtsCallback = null;
+                        cb();
+                    }
+                }
+            }, duration);
+            return;
+        }
+
+        // Web TTS
+        if (!synthesis) {
+            state.isSpeaking = false;
+            if (onComplete) onComplete();
+            return;
+        }
+
+        synthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        currentUtterance = utterance;
+
+        // Get a good voice
+        const voices = synthesis.getVoices();
+        const voice = voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
+            || voices.find(v => v.lang.startsWith('en') && !v.name.toLowerCase().includes('male'))
+            || voices.find(v => v.lang.startsWith('en'));
+
+        if (voice) utterance.voice = voice;
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+
+        // Fallback timer
+        const fallbackTime = (text.length * CONFIG.TTS_FALLBACK_MS_PER_CHAR) + 2000;
+        ttsFallbackTimer = setTimeout(() => {
+            if (state.isSpeaking) {
+                console.log('[Suzi] Web TTS fallback triggered');
+                state.isSpeaking = false;
+                if (onComplete) onComplete();
+            }
+        }, fallbackTime);
+
+        utterance.onend = () => {
+            if (ttsFallbackTimer) clearTimeout(ttsFallbackTimer);
+            state.isSpeaking = false;
+            currentUtterance = null;
+            if (onComplete) onComplete();
+        };
+
+        utterance.onerror = (e) => {
+            if (ttsFallbackTimer) clearTimeout(ttsFallbackTimer);
+            state.isSpeaking = false;
+            currentUtterance = null;
+            if (e.error !== 'interrupted' && e.error !== 'canceled') {
+                console.error('[Suzi] TTS error:', e.error);
+            }
+            if (onComplete) onComplete();
+        };
+
+        synthesis.speak(utterance);
+    }
+
+    function stopSpeaking() {
+        if (ttsFallbackTimer) {
+            clearTimeout(ttsFallbackTimer);
+            ttsFallbackTimer = null;
+        }
+
+        if (synthesis) {
+            synthesis.cancel();
+        }
+
+        state.isSpeaking = false;
+        currentUtterance = null;
+        window._suziTtsCallback = null;
     }
 
     // ==================== INPUT HANDLING ====================
+    function handleInput(text) {
+        if (!text || state.isProcessing) return;
 
-    handleInput(text) {
-        if (!text || this.isProcessing) return;
+        console.log('[Suzi] Input:', text);
+        stopListening();
 
-        console.log('📝 Input:', text);
-
-        this.stopListening();
-        this.showTranscript(text);
-
-        // Check for close commands
-        const lowerText = text.toLowerCase().trim();
+        // Check close commands
+        const lower = text.toLowerCase().trim();
         const closeCommands = ['bye', 'goodbye', 'stop', 'close', 'exit', 'cancel', 'never mind', 'nevermind'];
-        if (closeCommands.some(cmd => lowerText === cmd || lowerText.startsWith(cmd + ' '))) {
+        if (closeCommands.some(cmd => lower === cmd || lower.startsWith(cmd + ' '))) {
             const goodbyes = ['Goodbye!', 'Bye! Talk soon!', 'See you later!', 'Take care!'];
-            this.speak(goodbyes[Math.floor(Math.random() * goodbyes.length)], () => {
-                setTimeout(() => this.close(), 500);
+            speak(goodbyes[Math.floor(Math.random() * goodbyes.length)], () => {
+                setTimeout(() => closeModal(), 500);
             });
             return;
         }
 
         // Process with AI
-        this.processWithAI(text);
+        processWithAI(text);
     }
 
-    async processWithAI(text) {
-        this.isProcessing = true;
-        this.updateUI('thinking');
+    async function processWithAI(text) {
+        state.isProcessing = true;
+        updateUI('thinking');
 
-        // Add to conversation history
-        this.conversation.push({ role: 'user', content: text });
+        conversation.push({ role: 'user', content: text });
 
         try {
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 20000);
+            const timeout = setTimeout(() => controller.abort(), CONFIG.API_TIMEOUT);
 
             const response = await fetch('/api/voice-chat.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     transcript: text,
-                    conversation: this.conversation.slice(-this.maxHistory)
+                    conversation: conversation.slice(-CONFIG.MAX_CONVERSATION_HISTORY)
                 }),
                 signal: controller.signal,
                 credentials: 'same-origin'
@@ -361,93 +350,73 @@ class SuziVoice {
                 throw new Error(data.response || 'Request failed');
             }
 
-            // Add AI response to history
-            this.conversation.push({ role: 'assistant', content: data.response });
+            conversation.push({ role: 'assistant', content: data.response });
 
             // Trim history
-            if (this.conversation.length > this.maxHistory * 2) {
-                this.conversation = this.conversation.slice(-this.maxHistory * 2);
+            if (conversation.length > CONFIG.MAX_CONVERSATION_HISTORY * 2) {
+                conversation = conversation.slice(-CONFIG.MAX_CONVERSATION_HISTORY * 2);
             }
 
-            // Handle response
-            this.handleAIResponse(data.response, data.action);
+            // Speak response, THEN set processing to false
+            speak(data.response, () => {
+                state.isProcessing = false;
+
+                if (data.action) {
+                    executeAction(data.action);
+                } else {
+                    updateUI('ready');
+                }
+            });
 
         } catch (error) {
-            console.error('AI Error:', error);
+            console.error('[Suzi] AI error:', error);
 
             let message = 'Sorry, I had trouble processing that. Please try again.';
             if (error.name === 'AbortError') {
                 message = 'That took too long. Please try again.';
             }
 
-            this.isProcessing = false;
-            this.speak(message, () => {
-                this.updateUI('ready');
+            state.isProcessing = false;
+            speak(message, () => {
+                updateUI('ready');
             });
         }
     }
 
-    handleAIResponse(response, action) {
-        // Keep isProcessing = true until speech completes to prevent race conditions
-        // This ensures we don't start listening again while the response is being spoken
-
-        // Speak the response
-        this.speak(response, () => {
-            // NOW set isProcessing to false - after speech is complete
-            this.isProcessing = false;
-
-            // After speaking, execute action if any
-            if (action) {
-                this.executeAction(action);
-            } else {
-                this.updateUI('ready');
-            }
-        });
-    }
-
     // ==================== ACTION EXECUTION ====================
-
-    executeAction(action) {
-        console.log('🎯 Action:', action);
-
+    function executeAction(action) {
+        console.log('[Suzi] Action:', action);
         const { type, data } = action;
 
         switch (type) {
             case 'navigate':
-                this.navigate(data.to);
+                navigate(data.to);
                 break;
-
             case 'add_shopping':
-                this.addToShopping(data.item, data.category);
+                addToShopping(data.item, data.category);
                 break;
-
             case 'create_note':
-                this.createNote(data.content);
+                createNote(data.content);
                 break;
-
             case 'create_event':
-                this.createEvent(data);
+                createEvent(data);
                 break;
-
             case 'create_reminder':
-                this.createReminder(data);
+                createReminder(data);
                 break;
-
             case 'send_message':
-                this.sendMessage(data.content);
+                sendMessage(data.content);
                 break;
-
             case 'find_member':
-                this.findMember(data.name);
+                findMember(data.name);
                 break;
-
             default:
-                console.log('Unknown action:', type);
-                this.updateUI('ready');
+                console.log('[Suzi] Unknown action:', type);
+                updateUI('ready');
         }
     }
 
-    navigate(destination) {
+    function navigate(destination) {
         const paths = {
             home: '/home/',
             shopping: '/shopping/',
@@ -462,19 +431,15 @@ class SuziVoice {
             help: '/help/'
         };
 
-        const path = paths[destination] || '/home/';
-
-        this.updateUI('navigating');
-
+        updateUI('navigating');
         setTimeout(() => {
-            this.close();
-            window.location.href = path;
+            closeModal();
+            window.location.href = paths[destination] || '/home/';
         }, 800);
     }
 
-    async addToShopping(item, category = 'other') {
+    async function addToShopping(item, category = 'other') {
         try {
-            // Get or create shopping list
             let listId = window.currentListId;
 
             if (!listId) {
@@ -486,7 +451,6 @@ class SuziVoice {
                 if (listData.success && listData.lists?.[0]) {
                     listId = listData.lists[0].id;
                 } else {
-                    // Create default list
                     const formData = new FormData();
                     formData.append('action', 'create');
                     formData.append('name', 'Main List');
@@ -502,7 +466,6 @@ class SuziVoice {
                 }
             }
 
-            // Add item
             const formData = new FormData();
             formData.append('action', 'add');
             formData.append('list_id', listId);
@@ -515,56 +478,50 @@ class SuziVoice {
                 credentials: 'same-origin'
             });
 
-            // Reload if on shopping page
             if (window.location.pathname.includes('/shopping/')) {
                 setTimeout(() => location.reload(), 500);
             }
-
         } catch (error) {
-            console.error('Add to shopping failed:', error);
+            console.error('[Suzi] Add to shopping failed:', error);
         }
 
-        this.updateUI('ready');
+        updateUI('ready');
     }
 
-    createNote(content) {
+    function createNote(content) {
         let url = '/notes/?new=1';
-        if (content) {
-            url += '&content=' + encodeURIComponent(content);
-        }
+        if (content) url += '&content=' + encodeURIComponent(content);
         setTimeout(() => {
-            this.close();
+            closeModal();
             window.location.href = url;
         }, 800);
     }
 
-    createEvent(data) {
+    function createEvent(data) {
         let url = '/calendar/?new=1';
         if (data.title) url += '&content=' + encodeURIComponent(data.title);
         if (data.date) url += '&date=' + data.date;
         if (data.time) url += '&time=' + data.time;
-
         setTimeout(() => {
-            this.close();
+            closeModal();
             window.location.href = url;
         }, 800);
     }
 
-    createReminder(data) {
+    function createReminder(data) {
         let url = '/schedule/?new=1';
         if (data.title) url += '&content=' + encodeURIComponent(data.title);
         if (data.date) url += '&date=' + data.date;
         if (data.time) url += '&time=' + data.time;
-
         setTimeout(() => {
-            this.close();
+            closeModal();
             window.location.href = url;
         }, 800);
     }
 
-    async sendMessage(content) {
+    async function sendMessage(content) {
         if (!content) {
-            this.navigate('messages');
+            navigate('messages');
             return;
         }
 
@@ -583,130 +540,34 @@ class SuziVoice {
                 setTimeout(() => location.reload(), 500);
             }
         } catch (error) {
-            console.error('Send message failed:', error);
+            console.error('[Suzi] Send message failed:', error);
         }
 
-        this.updateUI('ready');
+        updateUI('ready');
     }
 
-    findMember(name) {
+    function findMember(name) {
         const url = '/tracking/?search=' + encodeURIComponent(name);
         setTimeout(() => {
-            this.close();
+            closeModal();
             window.location.href = url;
         }, 800);
     }
 
-    // ==================== SPEECH SYNTHESIS ====================
+    // ==================== UI MANAGEMENT ====================
+    function updateUI(uiState) {
+        cacheDom();
+        if (!dom) return;
 
-    speak(text, onComplete = null) {
-        if (!text) {
-            if (onComplete) onComplete();
-            return;
+        // Update mic button classes
+        if (dom.micBtn) {
+            dom.micBtn.classList.remove('listening', 'speaking', 'thinking');
+            if (uiState === 'listening') dom.micBtn.classList.add('listening');
+            else if (uiState === 'speaking') dom.micBtn.classList.add('speaking');
+            else if (uiState === 'thinking') dom.micBtn.classList.add('thinking');
         }
 
-        this.isSpeaking = true;
-        this.updateUI('speaking');
-        this.showTranscript(text);
-
-        // Native TTS
-        if (this.isNative && window.AndroidVoice?.speak) {
-            // Store callback so onTtsEnd can call it
-            this.pendingSpeechCallback = onComplete;
-            window.AndroidVoice.speak(text);
-
-            // Fallback timer in case onTtsEnd doesn't fire
-            const duration = Math.max(3000, text.split(' ').length * 500);
-            setTimeout(() => {
-                if (this.isSpeaking && this.pendingSpeechCallback) {
-                    console.log('TTS fallback timer triggered');
-                    this.isSpeaking = false;
-                    const callback = this.pendingSpeechCallback;
-                    this.pendingSpeechCallback = null;
-                    if (callback) callback();
-                }
-            }, duration);
-            return;
-        }
-
-        // Web TTS
-        if (!this.synthesis) {
-            this.isSpeaking = false;
-            if (onComplete) onComplete();
-            return;
-        }
-
-        this.synthesis.cancel();
-
-        const utterance = new SpeechSynthesisUtterance(text);
-        this.currentUtterance = utterance;
-
-        // Get a good voice
-        const voices = this.synthesis.getVoices();
-        const voice = voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
-            || voices.find(v => v.lang.startsWith('en') && !v.name.toLowerCase().includes('male'))
-            || voices.find(v => v.lang.startsWith('en'));
-
-        if (voice) utterance.voice = voice;
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-
-        // Fallback timeout
-        const fallbackTime = (text.length * 80) + 2000;
-        const fallbackTimer = setTimeout(() => {
-            if (this.isSpeaking) {
-                this.isSpeaking = false;
-                if (onComplete) onComplete();
-            }
-        }, fallbackTime);
-
-        utterance.onend = () => {
-            clearTimeout(fallbackTimer);
-            this.isSpeaking = false;
-            if (onComplete) onComplete();
-        };
-
-        utterance.onerror = (e) => {
-            clearTimeout(fallbackTimer);
-            this.isSpeaking = false;
-            if (e.error !== 'interrupted' && e.error !== 'canceled') {
-                console.error('TTS Error:', e.error);
-            }
-            if (onComplete) onComplete();
-        };
-
-        this.synthesis.speak(utterance);
-    }
-
-    stopSpeaking() {
-        if (this.synthesis) {
-            this.synthesis.cancel();
-        }
-        this.isSpeaking = false;
-        this.currentUtterance = null;
-        this.pendingSpeechCallback = null;  // Clear pending callback when speech is stopped
-    }
-
-    // ==================== UI UPDATES ====================
-
-    updateUI(state) {
-        this.cacheDom();
-        if (!this.dom) return;
-
-        // Update mic button
-        if (this.dom.micBtn) {
-            this.dom.micBtn.classList.remove('listening', 'speaking', 'thinking');
-            if (state === 'listening') {
-                this.dom.micBtn.classList.add('listening');
-            } else if (state === 'speaking') {
-                this.dom.micBtn.classList.add('speaking');
-            } else if (state === 'thinking') {
-                this.dom.micBtn.classList.add('thinking');
-            }
-        }
-
-        // Update status
+        // Status text
         const states = {
             ready: { icon: '🎤', text: 'Tap mic to speak', sub: 'Ask me anything' },
             listening: { icon: '🎤', text: 'Listening...', sub: 'Speak now' },
@@ -715,62 +576,170 @@ class SuziVoice {
             navigating: { icon: '🧭', text: 'Opening...', sub: '' }
         };
 
-        const s = states[state] || states.ready;
-        this.showStatus(s.icon, s.text, s.sub);
+        const s = states[uiState] || states.ready;
+        showStatus(s.icon, s.text, s.sub);
 
-        // Show/hide suggestions
-        if (this.dom.suggestions) {
-            this.dom.suggestions.style.display = (state === 'ready' && this.conversation.length === 0) ? 'block' : 'none';
+        // Show suggestions only when ready and no conversation yet
+        if (dom.suggestions) {
+            dom.suggestions.style.display = (uiState === 'ready' && conversation.length === 0) ? 'block' : 'none';
         }
     }
 
-    showStatus(icon, text, subtext) {
-        this.cacheDom();
-        if (this.dom.statusIcon) this.dom.statusIcon.textContent = icon;
-        if (this.dom.statusText) this.dom.statusText.textContent = text;
-        if (this.dom.statusSubtext) this.dom.statusSubtext.textContent = subtext || '';
+    function showStatus(icon, text, subtext) {
+        cacheDom();
+        if (dom.statusIcon) dom.statusIcon.textContent = icon;
+        if (dom.statusText) dom.statusText.textContent = text;
+        if (dom.statusSubtext) dom.statusSubtext.textContent = subtext || '';
     }
 
-    showTranscript(text) {
-        this.cacheDom();
-        if (this.dom.transcript) {
-            this.dom.transcript.textContent = text;
+    function showTranscript(text) {
+        cacheDom();
+        if (dom.transcript) {
+            dom.transcript.textContent = text;
         }
+    }
+
+    // ==================== MODAL CONTROL ====================
+    function openModal() {
+        cacheDom();
+        if (!dom.modal) return;
+
+        // Reset state
+        state.isOpen = true;
+        state.isListening = false;
+        state.isSpeaking = false;
+        state.isProcessing = false;
+        conversation = [];
+        clearAllTimers();
+
+        dom.modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        updateUI('ready');
+        showTranscript('Tap the mic and ask me anything!');
+
+        // Greeting
+        setTimeout(() => {
+            speak("Hi! I'm Suzi. What can I help you with?");
+        }, 300);
+    }
+
+    function closeModal() {
+        stopListening();
+        stopSpeaking();
+        clearAllTimers();
+
+        // Reset all state
+        state.isOpen = false;
+        state.isListening = false;
+        state.isSpeaking = false;
+        state.isProcessing = false;
+
+        cacheDom();
+        if (dom.modal) {
+            dom.modal.classList.remove('active');
+        }
+        document.body.style.overflow = '';
+    }
+
+    function toggleListening() {
+        if (state.isSpeaking) {
+            stopSpeaking();
+            updateUI('ready');
+        } else if (state.isListening) {
+            stopListening();
+            updateUI('ready');
+        } else if (!state.isProcessing) {
+            startListening();
+        }
+    }
+
+    function executeSuggestion(text) {
+        if (state.isProcessing || state.isSpeaking) return;
+        handleInput(text);
+    }
+
+    // ==================== NATIVE APP HOOKS ====================
+    function setupNativeHooks() {
+        window.SuziVoice = {
+            onSttResult: (text) => {
+                if (text && text.trim()) {
+                    state.isListening = false;
+                    handleInput(text.trim());
+                }
+            },
+            onTtsEnd: () => {
+                state.isSpeaking = false;
+                if (ttsFallbackTimer) clearTimeout(ttsFallbackTimer);
+                if (window._suziTtsCallback) {
+                    const cb = window._suziTtsCallback;
+                    window._suziTtsCallback = null;
+                    cb();
+                } else if (state.isOpen && !state.isProcessing) {
+                    updateUI('ready');
+                }
+            },
+            onTtsStart: () => {
+                state.isSpeaking = true;
+                updateUI('speaking');
+            },
+            onSttStart: () => {
+                state.isListening = true;
+                updateUI('listening');
+            },
+            onSttStop: () => {
+                state.isListening = false;
+                if (state.isOpen && !state.isProcessing) {
+                    updateUI('ready');
+                }
+            }
+        };
+    }
+
+    // ==================== INITIALIZATION ====================
+    function init() {
+        console.log('[Suzi] Voice v10.0 - Initializing...');
+        initRecognition();
+        setupNativeHooks();
+
+        // Preload voices
+        if (synthesis) {
+            synthesis.getVoices();
+            if (speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = () => synthesis.getVoices();
+            }
+        }
+
+        console.log('[Suzi] Voice v10.0 Ready!', isNative ? '(Native Mode)' : '(Web Mode)');
     }
 
     // ==================== PUBLIC API ====================
+    window.SuziVoice = {
+        open: openModal,
+        close: closeModal,
+        toggle: () => state.isOpen ? closeModal() : openModal(),
+        toggleListening: toggleListening,
+        executeSuggestion: executeSuggestion,
+        getInstance: () => window.SuziVoice,
+        // State getters
+        isOpen: () => state.isOpen,
+        isListening: () => state.isListening,
+        isSpeaking: () => state.isSpeaking,
+        isProcessing: () => state.isProcessing
+    };
 
-    executeSuggestion(text) {
-        if (this.isProcessing || this.isSpeaking) return;
-        this.handleInput(text);
+    // Backwards compatibility
+    window.AdvancedVoiceAssistant = {
+        getInstance: () => window.SuziVoice,
+        openModal: openModal,
+        closeModal: closeModal
+    };
+
+    // Auto-initialize on DOM ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        setTimeout(init, 100);
     }
-}
 
-// ==================== STATIC METHODS FOR HTML ONCLICK ====================
-
-// For backwards compatibility
-class AdvancedVoiceAssistant {
-    static getInstance() {
-        return SuziVoice.getInstance();
-    }
-
-    static openModal() {
-        SuziVoice.getInstance().open();
-    }
-
-    static closeModal() {
-        SuziVoice.getInstance().close();
-    }
-}
-
-// ==================== AUTO-INITIALIZE ====================
-
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        SuziVoice.getInstance();
-    }, 100);
-});
-
-// Expose globally
-window.SuziVoice = SuziVoice;
-window.AdvancedVoiceAssistant = AdvancedVoiceAssistant;
+})();
