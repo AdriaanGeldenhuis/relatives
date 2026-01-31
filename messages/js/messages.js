@@ -405,25 +405,73 @@ async function loadNewMessages() {
 }
 
 // ============================================
+// DATE SEPARATOR
+// ============================================
+let lastDisplayedDate = null;
+
+function formatDateSeparator(date) {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const msgDate = new Date(date);
+
+    // Reset time parts for comparison
+    const todayStr = today.toDateString();
+    const yesterdayStr = yesterday.toDateString();
+    const msgDateStr = msgDate.toDateString();
+
+    if (msgDateStr === todayStr) {
+        return 'Today';
+    } else if (msgDateStr === yesterdayStr) {
+        return 'Yesterday';
+    } else {
+        return msgDate.toLocaleDateString([], {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long'
+        });
+    }
+}
+
+function createDateSeparator(dateText) {
+    const div = document.createElement('div');
+    div.className = 'date-separator';
+    div.innerHTML = `<span>${dateText}</span>`;
+    return div;
+}
+
+// ============================================
 // DISPLAY MESSAGES
 // ============================================
 function displayMessages(messages, clearFirst = false) {
     const container = document.getElementById('messagesList');
-    
+
     if (clearFirst) {
         container.innerHTML = '';
+        lastDisplayedDate = null;
     }
-    
+
     const shouldScroll = isScrolledToBottom();
-    
+
     messages.forEach(msg => {
         const existing = container.querySelector(`[data-message-id="${msg.id}"]`);
         if (existing) return;
-        
+
+        // Check if we need a date separator
+        const msgDate = new Date(msg.created_at);
+        const msgDateStr = msgDate.toDateString();
+
+        if (lastDisplayedDate !== msgDateStr) {
+            const dateSeparator = createDateSeparator(formatDateSeparator(msg.created_at));
+            container.appendChild(dateSeparator);
+            lastDisplayedDate = msgDateStr;
+        }
+
         const messageEl = createMessageElement(msg);
         container.appendChild(messageEl);
     });
-    
+
     if (shouldScroll) {
         scrollToBottom();
     }
