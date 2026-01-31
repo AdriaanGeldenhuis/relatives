@@ -96,14 +96,15 @@ body {
     display: none !important;
 }
 
-/* Hide customization buttons in non-casual themes */
-[data-theme="neon"] #customize-start-btn,
-[data-theme="neon"] #customize-gameover-btn,
-[data-theme="realistic"] #customize-start-btn,
-[data-theme="realistic"] #customize-gameover-btn,
-[data-theme="classic"] #customize-start-btn,
-[data-theme="classic"] #customize-gameover-btn {
+/* Customization buttons - only visible in casual theme */
+#customize-start-btn,
+#customize-gameover-btn {
     display: none !important;
+}
+
+[data-theme="casual"] #customize-start-btn,
+[data-theme="casual"] #customize-gameover-btn {
+    display: block !important;
 }
 
 /* Animated background - Neon only */

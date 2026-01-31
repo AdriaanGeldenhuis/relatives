@@ -29,7 +29,7 @@ $familyId = $_SESSION['family_id'] ?? null;
     <meta name="theme-color" content="#1a1a2e">
     <title>Snake Classic</title>
     <link rel="manifest" href="/games/snake/manifest.json">
-    <link rel="stylesheet" href="/games/snake/assets/css/snake.css?v=3.0">
+    <link rel="stylesheet" href="/games/snake/assets/css/snake.css?v=3.1">
 </head>
 <body>
     <div id="app">
@@ -87,7 +87,7 @@ $familyId = $_SESSION['family_id'] ?? null;
                     <h2 id="start-screen-title">Neon Retro</h2>
                     <p>Swipe or use D-pad to control</p>
                     <button id="start-btn" class="game-btn primary">Start Game</button>
-                    <button id="customize-start-btn" class="game-btn secondary hidden">Customization</button>
+                    <button id="customize-start-btn" class="game-btn secondary">Customization</button>
                 </div>
             </div>
 
@@ -105,7 +105,7 @@ $familyId = $_SESSION['family_id'] ?? null;
                     <p class="final-score">Score: <span id="final-score-value">0</span></p>
                     <p id="score-status" class="score-status">Saving...</p>
                     <button id="playagain-btn" class="game-btn primary">Play Again</button>
-                    <button id="customize-gameover-btn" class="game-btn secondary hidden">Customization</button>
+                    <button id="customize-gameover-btn" class="game-btn secondary">Customization</button>
                     <button id="leaderboard-btn" class="game-btn secondary">Leaderboards</button>
                 </div>
             </div>
