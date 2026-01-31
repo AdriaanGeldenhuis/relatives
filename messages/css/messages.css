@@ -518,8 +518,11 @@ html, body {
 }
 
 .message-time {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     color: rgba(255, 255, 255, 0.5);
+    display: block;
+    text-align: right;
+    margin-top: 4px;
 }
 
 .message-bubble {

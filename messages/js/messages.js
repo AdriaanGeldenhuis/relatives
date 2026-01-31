@@ -517,11 +517,8 @@ function createMessageElement(msg) {
     `;
     
     const msgDate = new Date(msg.created_at);
-    const time = msgDate.toLocaleDateString([], {
-        month: 'short',
-        day: 'numeric'
-    }) + ' ' + msgDate.toLocaleTimeString([], {
-        hour: '2-digit',
+    const time = msgDate.toLocaleTimeString([], {
+        hour: 'numeric',
         minute: '2-digit'
     });
     
@@ -533,7 +530,6 @@ function createMessageElement(msg) {
             ${!isOwn ? `
                 <div class="message-header">
                     <span class="message-author">${escapeHtml(msg.full_name)}</span>
-                    <span class="message-time">${time}</span>
                 </div>
             ` : ''}
             <div class="message-bubble">
@@ -542,8 +538,8 @@ function createMessageElement(msg) {
                 ${mediaHtml}
                 ${reactionsHtml}
                 ${actions}
+                <span class="message-time">${time}</span>
             </div>
-            ${isOwn ? `<div class="message-time" style="text-align: right; margin-top: 5px;">${time}</div>` : ''}
         </div>
         ${isOwn ? avatar : ''}
     `;
