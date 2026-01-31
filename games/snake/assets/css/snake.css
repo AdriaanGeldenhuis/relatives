@@ -91,6 +91,11 @@ body {
     transition: background 0.5s ease;
 }
 
+/* Utility Classes */
+.hidden {
+    display: none !important;
+}
+
 /* Animated background - Neon only */
 [data-theme="neon"] body::before {
     content: '';
