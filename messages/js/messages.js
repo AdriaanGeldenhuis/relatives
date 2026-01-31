@@ -413,6 +413,8 @@ function formatDateSeparator(date) {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
 
     const msgDate = new Date(date);
 
@@ -425,9 +427,14 @@ function formatDateSeparator(date) {
         return 'Today';
     } else if (msgDateStr === yesterdayStr) {
         return 'Yesterday';
-    } else {
+    } else if (msgDate > weekAgo) {
+        // Within last week - show just the day name
         return msgDate.toLocaleDateString([], {
-            weekday: 'long',
+            weekday: 'long'
+        });
+    } else {
+        // Older than a week - show full date
+        return msgDate.toLocaleDateString([], {
             day: 'numeric',
             month: 'long'
         });
