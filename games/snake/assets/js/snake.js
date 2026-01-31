@@ -495,20 +495,6 @@ const SnakeGame = (function() {
             btn.classList.toggle('active', btn.dataset.theme === themeName);
         });
 
-        // Show/hide customization buttons based on theme
-        const customizeStartBtn = document.getElementById("customize-start-btn");
-        if (customizeStartBtn) {
-            customizeStartBtn.classList.toggle("hidden", themeName !== "casual");
-        }
-        const customizeGameoverBtn = document.getElementById("customize-gameover-btn");
-        if (customizeGameoverBtn) {
-            customizeGameoverBtn.classList.toggle("hidden", themeName !== "casual");
-        }
-        const closeCustomizationBtn = document.getElementById("close-customization-btn");
-        if (closeCustomizationBtn) {
-            closeCustomizationBtn.classList.toggle("hidden", themeName !== "casual");
-        }
-
         // Redraw canvas with new theme
         draw();
     }
