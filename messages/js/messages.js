@@ -405,25 +405,80 @@ async function loadNewMessages() {
 }
 
 // ============================================
+// DATE SEPARATOR
+// ============================================
+let lastDisplayedDate = null;
+
+function formatDateSeparator(date) {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const msgDate = new Date(date);
+
+    // Reset time parts for comparison
+    const todayStr = today.toDateString();
+    const yesterdayStr = yesterday.toDateString();
+    const msgDateStr = msgDate.toDateString();
+
+    if (msgDateStr === todayStr) {
+        return 'Today';
+    } else if (msgDateStr === yesterdayStr) {
+        return 'Yesterday';
+    } else if (msgDate > weekAgo) {
+        // Within last week - show just the day name
+        return msgDate.toLocaleDateString([], {
+            weekday: 'long'
+        });
+    } else {
+        // Older than a week - show full date
+        return msgDate.toLocaleDateString([], {
+            day: 'numeric',
+            month: 'long'
+        });
+    }
+}
+
+function createDateSeparator(dateText) {
+    const div = document.createElement('div');
+    div.className = 'date-separator';
+    div.innerHTML = `<span>${dateText}</span>`;
+    return div;
+}
+
+// ============================================
 // DISPLAY MESSAGES
 // ============================================
 function displayMessages(messages, clearFirst = false) {
     const container = document.getElementById('messagesList');
-    
+
     if (clearFirst) {
         container.innerHTML = '';
+        lastDisplayedDate = null;
     }
-    
+
     const shouldScroll = isScrolledToBottom();
-    
+
     messages.forEach(msg => {
         const existing = container.querySelector(`[data-message-id="${msg.id}"]`);
         if (existing) return;
-        
+
+        // Check if we need a date separator
+        const msgDate = new Date(msg.created_at);
+        const msgDateStr = msgDate.toDateString();
+
+        if (lastDisplayedDate !== msgDateStr) {
+            const dateSeparator = createDateSeparator(formatDateSeparator(msg.created_at));
+            container.appendChild(dateSeparator);
+            lastDisplayedDate = msgDateStr;
+        }
+
         const messageEl = createMessageElement(msg);
         container.appendChild(messageEl);
     });
-    
+
     if (shouldScroll) {
         scrollToBottom();
     }
@@ -517,11 +572,8 @@ function createMessageElement(msg) {
     `;
     
     const msgDate = new Date(msg.created_at);
-    const time = msgDate.toLocaleDateString([], {
-        month: 'short',
-        day: 'numeric'
-    }) + ' ' + msgDate.toLocaleTimeString([], {
-        hour: '2-digit',
+    const time = msgDate.toLocaleTimeString([], {
+        hour: 'numeric',
         minute: '2-digit'
     });
     
@@ -533,7 +585,6 @@ function createMessageElement(msg) {
             ${!isOwn ? `
                 <div class="message-header">
                     <span class="message-author">${escapeHtml(msg.full_name)}</span>
-                    <span class="message-time">${time}</span>
                 </div>
             ` : ''}
             <div class="message-bubble">
@@ -542,8 +593,8 @@ function createMessageElement(msg) {
                 ${mediaHtml}
                 ${reactionsHtml}
                 ${actions}
+                <span class="message-time">${time}</span>
             </div>
-            ${isOwn ? `<div class="message-time" style="text-align: right; margin-top: 5px;">${time}</div>` : ''}
         </div>
         ${isOwn ? avatar : ''}
     `;

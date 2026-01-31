@@ -518,8 +518,29 @@ html, body {
 }
 
 .message-time {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     color: rgba(255, 255, 255, 0.5);
+    display: block;
+    text-align: right;
+    margin-top: 4px;
+}
+
+/* Date Separator */
+.date-separator {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: var(--space-md) 0;
+    margin: var(--space-sm) 0;
+}
+
+.date-separator span {
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.8);
+    padding: 6px 16px;
+    border-radius: var(--radius-full);
+    font-size: 0.8rem;
+    font-weight: 600;
 }
 
 .message-bubble {

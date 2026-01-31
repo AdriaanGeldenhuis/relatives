@@ -91,6 +91,21 @@ body {
     transition: background 0.5s ease;
 }
 
+/* Utility Classes */
+.hidden {
+    display: none !important;
+}
+
+/* Hide customization buttons in non-casual themes */
+[data-theme="neon"] #customize-start-btn,
+[data-theme="neon"] #customize-gameover-btn,
+[data-theme="realistic"] #customize-start-btn,
+[data-theme="realistic"] #customize-gameover-btn,
+[data-theme="classic"] #customize-start-btn,
+[data-theme="classic"] #customize-gameover-btn {
+    display: none !important;
+}
+
 /* Animated background - Neon only */
 [data-theme="neon"] body::before {
     content: '';
