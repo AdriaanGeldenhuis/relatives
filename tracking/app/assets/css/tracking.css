@@ -167,6 +167,10 @@ body.geofences-page {
     animation: pulse 2s infinite;
 }
 
+.session-text {
+    color: white;
+}
+
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
