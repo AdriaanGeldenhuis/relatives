@@ -435,57 +435,27 @@ window.TrackingMap = {
 
     /**
      * Get user's current location
-     * Uses browser geolocation with retry logic for timeouts
      */
     getCurrentLocation() {
-        const self = this;
-        const MAX_RETRIES = 2;
-        const TIMEOUT_MS = 20000; // 20 seconds per attempt
-        const isNativeApp = window.NativeBridge?.isNativeApp;
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject(new Error('Geolocation not supported'));
+                return;
+            }
 
-        function attemptLocation(retryCount) {
-            return new Promise((resolve, reject) => {
-                if (!navigator.geolocation) {
-                    reject(new Error('Geolocation not supported'));
-                    return;
+            navigator.geolocation.getCurrentPosition(
+                pos => resolve({
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy
+                }),
+                err => reject(err),
+                {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 60000
                 }
-
-                // HTTPS check - skip for native apps (WebViews handle security differently)
-                if (!isNativeApp &&
-                    window.location.protocol !== 'https:' &&
-                    window.location.hostname !== 'localhost') {
-                    reject({ code: 0, message: 'HTTPS required for geolocation' });
-                    return;
-                }
-
-                navigator.geolocation.getCurrentPosition(
-                    pos => resolve({
-                        lat: pos.coords.latitude,
-                        lng: pos.coords.longitude,
-                        accuracy: pos.coords.accuracy
-                    }),
-                    err => {
-                        // Only retry on timeout errors (code 3), not permission denied (code 1)
-                        if (err.code === 3 && retryCount < MAX_RETRIES) {
-                            console.warn(`Geolocation timeout, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
-                            // Retry with lower accuracy on subsequent attempts for faster response
-                            attemptLocation(retryCount + 1)
-                                .then(resolve)
-                                .catch(reject);
-                        } else {
-                            reject(err);
-                        }
-                    },
-                    {
-                        // Use lower accuracy on retries for faster response
-                        enableHighAccuracy: retryCount === 0,
-                        timeout: TIMEOUT_MS,
-                        maximumAge: 60000      // Accept cached position up to 1 minute old
-                    }
-                );
-            });
-        }
-
-        return attemptLocation(0);
+            );
+        });
     }
 };
