@@ -37,7 +37,7 @@ try {
 
 $pageTitle = 'Tracking Settings';
 $canEdit = in_array($user['role'], ['owner', 'admin']);
-$cacheVersion = '1.0.0';
+$cacheVersion = '12.3.6';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -65,7 +65,7 @@ $cacheVersion = '1.0.0';
             <h2>Tracking Mode</h2>
             <div class="setting-row">
                 <div>
-                    <div class="setting-label">Mode</div>
+                    <h3 class="setting-label">Mode</h3>
                     <div class="setting-description">How tracking is triggered</div>
                 </div>
                 <select id="setting-mode" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
@@ -80,7 +80,7 @@ $cacheVersion = '1.0.0';
             <h2>Live Session Settings</h2>
             <div class="setting-row">
                 <div>
-                    <div class="setting-label">Session Timeout</div>
+                    <h3 class="setting-label">Session Timeout</h3>
                     <div class="setting-description">How long session stays active without keepalive</div>
                 </div>
                 <select id="setting-session-ttl" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
@@ -97,7 +97,7 @@ $cacheVersion = '1.0.0';
             <h2>Motion-based Settings</h2>
             <div class="setting-row">
                 <div>
-                    <div class="setting-label">Moving Interval</div>
+                    <h3 class="setting-label">Moving Interval</h3>
                     <div class="setting-description">Upload frequency when moving</div>
                 </div>
                 <select id="setting-moving-interval" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
@@ -109,7 +109,7 @@ $cacheVersion = '1.0.0';
             </div>
             <div class="setting-row">
                 <div>
-                    <div class="setting-label">Idle Interval</div>
+                    <h3 class="setting-label">Idle Interval</h3>
                     <div class="setting-description">Heartbeat frequency when stationary</div>
                 </div>
                 <select id="setting-idle-interval" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
@@ -121,7 +121,7 @@ $cacheVersion = '1.0.0';
             </div>
             <div class="setting-row">
                 <div>
-                    <div class="setting-label">Speed Threshold</div>
+                    <h3 class="setting-label">Speed Threshold</h3>
                     <div class="setting-description">Speed to consider as "moving"</div>
                 </div>
                 <select id="setting-speed-threshold" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
@@ -138,7 +138,7 @@ $cacheVersion = '1.0.0';
             <h2>Quality Settings</h2>
             <div class="setting-row">
                 <div>
-                    <div class="setting-label">Minimum Accuracy</div>
+                    <h3 class="setting-label">Minimum Accuracy</h3>
                     <div class="setting-description">Reject locations worse than this</div>
                 </div>
                 <select id="setting-min-accuracy" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
@@ -150,7 +150,7 @@ $cacheVersion = '1.0.0';
             </div>
             <div class="setting-row">
                 <div>
-                    <div class="setting-label">Dedupe Radius</div>
+                    <h3 class="setting-label">Dedupe Radius</h3>
                     <div class="setting-description">Skip points closer than this</div>
                 </div>
                 <input type="number" id="setting-dedupe-radius" class="setting-input"
@@ -163,7 +163,7 @@ $cacheVersion = '1.0.0';
             <h2>Display Settings</h2>
             <div class="setting-row">
                 <div>
-                    <div class="setting-label">Units</div>
+                    <h3 class="setting-label">Units</h3>
                 </div>
                 <select id="setting-units" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
                     <option value="metric">Metric (km)</option>
@@ -177,7 +177,7 @@ $cacheVersion = '1.0.0';
             <h2>Data Retention</h2>
             <div class="setting-row">
                 <div>
-                    <div class="setting-label">History Retention</div>
+                    <h3 class="setting-label">History Retention</h3>
                     <div class="setting-description">How long to keep location history</div>
                 </div>
                 <select id="setting-history-retention" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
