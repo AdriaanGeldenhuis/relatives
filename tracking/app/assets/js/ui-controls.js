@@ -186,7 +186,31 @@ window.UIControls = {
         if (!userId) return;
 
         try {
-            const myLoc = await TrackingMap.getCurrentLocation();
+            let myLoc;
+
+            // In native app, try to use the current user's tracked location first
+            if (NativeBridge.isNativeApp) {
+                const myUserId = window.TRACKING_CONFIG.userId;
+                const myMember = TrackingState.getMember(myUserId);
+                if (myMember && myMember.lat && myMember.lng) {
+                    myLoc = { lat: myMember.lat, lng: myMember.lng };
+                    console.log('[Directions] Using tracked location from state');
+                }
+            }
+
+            // Fall back to browser geolocation if we don't have tracked location
+            if (!myLoc) {
+                try {
+                    myLoc = await TrackingMap.getCurrentLocation();
+                } catch (geoErr) {
+                    // If geolocation fails in native app, give helpful error
+                    if (NativeBridge.isNativeApp) {
+                        Toast.show('Location not available. Make sure location tracking is enabled.', 'error');
+                        return;
+                    }
+                    throw geoErr;
+                }
+            }
 
             const response = await TrackingAPI.getDirections(
                 { lat: myLoc.lat, lng: myLoc.lng },
