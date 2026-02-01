@@ -22,30 +22,21 @@ window.UIControls = {
             } catch (err) {
                 console.error('Geolocation error:', err);
 
-                // Provide specific error messages based on error code and platform
+                // Provide specific error messages based on error code
                 let message = 'Could not get your location';
-                const isNativeApp = window.NativeBridge?.isNativeApp;
 
                 if (err.code === 1) {
                     // PERMISSION_DENIED
-                    if (isNativeApp) {
-                        message = 'Location permission denied. Please enable location access in your device settings for this app.';
-                    } else {
-                        message = 'Location permission denied. Please enable location access in your browser settings.';
-                    }
+                    message = 'Location permission denied. Please enable location access in your browser settings.';
                 } else if (err.code === 2) {
                     // POSITION_UNAVAILABLE
                     message = 'Location unavailable. Please check if GPS/Location is enabled on your device.';
                 } else if (err.code === 3) {
                     // TIMEOUT
-                    if (isNativeApp) {
-                        message = 'Location request timed out. Please ensure GPS is enabled and try again.';
-                    } else {
-                        message = 'Location request timed out. Please try again or check your connection.';
-                    }
-                } else if (!navigator.geolocation && !isNativeApp) {
+                    message = 'Location request timed out. Please try again.';
+                } else if (!navigator.geolocation) {
                     message = 'Geolocation is not supported by your browser.';
-                } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && !isNativeApp) {
+                } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
                     message = 'Location requires HTTPS. Please use a secure connection.';
                 }
 
