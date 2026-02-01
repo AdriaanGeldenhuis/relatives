@@ -69,6 +69,9 @@ unset($member);
 $pageTitle = 'Family Tracking';
 $pageCSS = ['/tracking/app/assets/css/tracking.css'];
 
+// Override cache version for tracking app (force JS reload after updates)
+$cacheVersion = '12.1.0';
+
 // Include global header
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
