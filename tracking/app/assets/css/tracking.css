@@ -1070,6 +1070,11 @@ body.geofences-page {
     gap: 8px;
 }
 
+.icon-btn {
+    color: white !important;
+    text-decoration: none;
+}
+
 /* ===========================================
    Settings Page
    =========================================== */
