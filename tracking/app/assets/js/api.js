@@ -152,23 +152,127 @@ window.TrackingAPI = {
         });
     },
 
-    // Directions endpoint
+    // Directions - calls Mapbox API directly from browser (uses public token)
     async getDirections(from, to, profile = 'driving') {
-        const params = new URLSearchParams({
-            from_lat: from.lat,
-            from_lng: from.lng,
-            profile
-        });
+        // Determine destination coordinates
+        let toLat, toLng, destinationName;
 
         if (to.userId) {
-            params.append('to_user_id', to.userId);
+            // Get member location from state
+            const member = TrackingState.getMember(to.userId);
+            if (!member) {
+                throw {
+                    status: 404,
+                    error: 'user_not_found',
+                    message: 'User location not available'
+                };
+            }
+            toLat = member.lat;
+            toLng = member.lng;
+            destinationName = member.name;
         } else if (to.placeId) {
-            params.append('to_place_id', to.placeId);
+            // For places, we'd need to fetch from API first
+            // For now, require lat/lng directly
+            throw {
+                status: 400,
+                error: 'not_implemented',
+                message: 'Place directions not yet supported. Use lat/lng.'
+            };
         } else {
-            params.append('to_lat', to.lat);
-            params.append('to_lng', to.lng);
+            toLat = to.lat;
+            toLng = to.lng;
+            destinationName = to.name || null;
         }
 
-        return this.request('directions.php?' + params.toString());
+        // Call Mapbox Directions API directly (works with public token)
+        const token = window.TRACKING_CONFIG.mapboxToken;
+        if (!token) {
+            throw {
+                status: 503,
+                error: 'service_unavailable',
+                message: 'Mapbox token not configured'
+            };
+        }
+
+        const coordinates = `${from.lng},${from.lat};${toLng},${toLat}`;
+        const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordinates}?access_token=${token}&geometries=geojson&overview=full`;
+
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw {
+                    status: response.status,
+                    error: 'mapbox_error',
+                    message: data.message || 'Mapbox API error'
+                };
+            }
+
+            if (!data.routes || !data.routes[0]) {
+                throw {
+                    status: 404,
+                    error: 'no_route',
+                    message: 'No route found between locations'
+                };
+            }
+
+            const route = data.routes[0];
+
+            // Format result to match expected structure
+            const result = {
+                success: true,
+                data: {
+                    profile: profile,
+                    from: { lat: from.lat, lng: from.lng },
+                    to: { lat: toLat, lng: toLng },
+                    distance_m: Math.round(route.distance),
+                    duration_s: Math.round(route.duration),
+                    distance_text: this.formatDistance(route.distance),
+                    duration_text: this.formatDuration(route.duration),
+                    geometry: route.geometry,
+                    destination_name: destinationName,
+                    to_user_id: to.userId || null
+                }
+            };
+
+            return result;
+        } catch (err) {
+            if (err.status) throw err;
+            throw {
+                status: 0,
+                error: 'network_error',
+                message: 'Could not connect to Mapbox. Check your internet connection.'
+            };
+        }
+    },
+
+    // Helper: Format distance for display
+    formatDistance(meters) {
+        if (meters < 1000) {
+            return Math.round(meters) + ' m';
+        }
+        const km = meters / 1000;
+        if (km < 10) {
+            return km.toFixed(1) + ' km';
+        }
+        return Math.round(km) + ' km';
+    },
+
+    // Helper: Format duration for display
+    formatDuration(seconds) {
+        if (seconds < 60) {
+            return 'Less than 1 min';
+        }
+        const minutes = Math.round(seconds / 60);
+        if (minutes < 60) {
+            return minutes + ' min';
+        }
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        if (mins === 0) {
+            return hours + ' hr';
+        }
+        return hours + ' hr ' + mins + ' min';
     }
 };
