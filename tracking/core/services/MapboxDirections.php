@@ -9,6 +9,7 @@ class MapboxDirections
 {
     private TrackingCache $cache;
     private ?string $apiKey;
+    private ?string $lastError = null;
 
     const API_URL = 'https://api.mapbox.com/directions/v5/mapbox';
 
@@ -22,6 +23,14 @@ class MapboxDirections
         // Try both env variable names for flexibility - check for non-empty values
         $this->apiKey = !empty($_ENV['MAPBOX_API_KEY']) ? $_ENV['MAPBOX_API_KEY'] :
                         (!empty($_ENV['MAPBOX_TOKEN']) ? $_ENV['MAPBOX_TOKEN'] : null);
+    }
+
+    /**
+     * Get last error message.
+     */
+    public function getLastError(): ?string
+    {
+        return $this->lastError;
     }
 
     /**
@@ -41,8 +50,11 @@ class MapboxDirections
         float $toLng,
         string $profile = self::PROFILE_DRIVING
     ): ?array {
+        $this->lastError = null;
+
         // Check API key
         if (!$this->apiKey) {
+            $this->lastError = 'API key not configured';
             return null;
         }
 
@@ -73,12 +85,21 @@ class MapboxDirections
         $response = $this->fetch($fullUrl);
 
         if (!$response) {
+            // lastError was set by fetch()
             return null;
         }
 
         $data = json_decode($response, true);
 
         if (!isset($data['routes'][0])) {
+            // Check if Mapbox returned an error message
+            if (isset($data['message'])) {
+                $this->lastError = 'Mapbox API: ' . $data['message'];
+            } elseif (isset($data['code'])) {
+                $this->lastError = 'Mapbox API error code: ' . $data['code'];
+            } else {
+                $this->lastError = 'No route found between locations';
+            }
             return null;
         }
 
@@ -202,8 +223,21 @@ class MapboxDirections
 
         curl_close($ch);
 
-        if ($error || $httpCode !== 200) {
-            error_log("MapboxDirections: API error - HTTP {$httpCode}, Error: {$error}");
+        if ($error) {
+            $this->lastError = "Network error: {$error}";
+            error_log("MapboxDirections: cURL error - {$error}");
+            return null;
+        }
+
+        if ($httpCode !== 200) {
+            // Try to get error from response body
+            $data = json_decode($response, true);
+            if (isset($data['message'])) {
+                $this->lastError = "Mapbox API (HTTP {$httpCode}): {$data['message']}";
+            } else {
+                $this->lastError = "Mapbox API returned HTTP {$httpCode}";
+            }
+            error_log("MapboxDirections: API error - HTTP {$httpCode}");
             return null;
         }
 
