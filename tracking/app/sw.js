@@ -7,7 +7,7 @@
  * - Background sync for location uploads (when supported)
  */
 
-const CACHE_NAME = 'tracking-v1';
+const CACHE_NAME = 'tracking-v2';
 const OFFLINE_URL = '/tracking/app/offline.html';
 
 // Assets to cache on install
