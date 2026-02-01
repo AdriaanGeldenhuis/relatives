@@ -36,7 +36,7 @@ try {
 }
 
 $pageTitle = 'Tracking Events';
-$cacheVersion = '1.0.1';
+$cacheVersion = '1.0.2';
 ?>
 <!DOCTYPE html>
 <html lang="en">

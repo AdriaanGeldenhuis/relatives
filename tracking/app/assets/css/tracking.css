@@ -1070,9 +1070,17 @@ body.geofences-page {
     gap: 8px;
 }
 
-.icon-btn {
+.icon-btn,
+.icon-btn:link,
+.icon-btn:visited,
+.icon-btn:hover,
+.icon-btn:active {
     color: white !important;
     text-decoration: none;
+}
+
+.icon-btn svg {
+    stroke: white !important;
 }
 
 /* ===========================================
