@@ -1272,7 +1272,7 @@ h3.setting-label {
 .event-title {
     font-size: 14px;
     font-weight: 500;
-    color: white;
+    color: white !important;
 }
 
 .event-meta {
