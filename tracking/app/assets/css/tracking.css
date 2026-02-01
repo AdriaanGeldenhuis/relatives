@@ -130,9 +130,9 @@ body.geofences-page {
     animation: none;
 }
 
-/* Active state - Dark with green dot */
+/* Active state - Light green tint with green dot */
 .session-indicator.session-active {
-    background: rgba(26, 32, 44, 0.95);
+    background: rgba(72, 187, 120, 0.9);
     cursor: default;
 }
 
