@@ -26,6 +26,12 @@ window.Polling = {
                 this.start();
             }
         });
+
+        // Add click handler for wake button
+        const indicator = document.getElementById('session-indicator');
+        if (indicator) {
+            indicator.addEventListener('click', () => this.handleWakeClick());
+        }
     },
 
     start() {
@@ -175,11 +181,61 @@ window.Polling = {
 
     updateSessionIndicator(session) {
         const indicator = document.getElementById('session-indicator');
+        const text = indicator.querySelector('.session-text');
+
+        // Remove all state classes
+        indicator.classList.remove('session-sleeping', 'session-active', 'session-waking', 'hidden');
 
         if (session && session.active) {
-            indicator.classList.remove('hidden');
+            // Active session - green indicator
+            indicator.classList.add('session-active');
+            text.textContent = 'Live session active';
+            indicator.title = 'Tracking session is active';
         } else {
-            indicator.classList.add('hidden');
+            // No session - show wake button
+            indicator.classList.add('session-sleeping');
+            text.textContent = 'Wake Devices';
+            indicator.title = 'Click to wake tracking devices';
+        }
+    },
+
+    async handleWakeClick() {
+        const indicator = document.getElementById('session-indicator');
+
+        // Only act if in sleeping state
+        if (!indicator.classList.contains('session-sleeping')) {
+            return;
+        }
+
+        // Show waking state
+        indicator.classList.remove('session-sleeping');
+        indicator.classList.add('session-waking');
+        indicator.querySelector('.session-text').textContent = 'Waking...';
+
+        try {
+            // Send keepalive to wake devices
+            await this.sendKeepalive();
+
+            // Start polling if not already running
+            if (!this.isRunning) {
+                this.start();
+            }
+
+            // Show success toast
+            if (window.Toast) {
+                Toast.show('Devices are now tracking', 'success');
+            }
+        } catch (err) {
+            console.error('Failed to wake devices:', err);
+
+            // Revert to sleeping state
+            indicator.classList.remove('session-waking');
+            indicator.classList.add('session-sleeping');
+            indicator.querySelector('.session-text').textContent = 'Wake Devices';
+
+            if (window.Toast) {
+                Toast.show('Could not wake devices. Try again.', 'error');
+            }
         }
     }
 };
