@@ -1070,6 +1070,19 @@ body.geofences-page {
     gap: 8px;
 }
 
+.icon-btn,
+.icon-btn:link,
+.icon-btn:visited,
+.icon-btn:hover,
+.icon-btn:active {
+    color: white !important;
+    text-decoration: none;
+}
+
+.icon-btn svg {
+    stroke: white !important;
+}
+
 /* ===========================================
    Settings Page
    =========================================== */
@@ -1203,6 +1216,7 @@ h3.setting-label {
     min-height: 100vh;
     background: var(--gray-900);
     padding-top: 56px;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .events-container {
@@ -1271,6 +1285,7 @@ h3.setting-label {
 .event-title {
     font-size: 14px;
     font-weight: 500;
+    color: white !important;
 }
 
 .event-meta {
@@ -1287,6 +1302,7 @@ h3.setting-label {
     min-height: 100vh;
     background: var(--gray-900);
     padding-top: 56px;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .geofences-container {
