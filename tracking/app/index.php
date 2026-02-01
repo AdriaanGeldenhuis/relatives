@@ -74,7 +74,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
 // Override cache version for tracking app AFTER header (header sets 12.0.0)
 // Use unique version to bust Cloudflare CDN cache
-$cacheVersion = '12.3.5';
+$cacheVersion = '12.3.6';
 ?>
 
 <!-- PWA Manifest for Native App Shell Support -->

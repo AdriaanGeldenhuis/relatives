@@ -37,7 +37,7 @@ try {
 
 $pageTitle = 'Tracking Settings';
 $canEdit = in_array($user['role'], ['owner', 'admin']);
-$cacheVersion = '12.3.5';
+$cacheVersion = '12.3.6';
 ?>
 <!DOCTYPE html>
 <html lang="en">
