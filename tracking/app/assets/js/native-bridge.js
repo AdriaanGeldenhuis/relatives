@@ -362,5 +362,95 @@ window.NativeBridge = {
             });
         }
         // Fallback to web toast handled elsewhere
+    },
+
+    /**
+     * Get current location from native app
+     * Returns a Promise that resolves with {lat, lng, accuracy} or rejects with error
+     */
+    getCurrentLocation() {
+        return new Promise((resolve, reject) => {
+            if (!this.isNativeApp) {
+                reject(new Error('Not running in native app'));
+                return;
+            }
+
+            // Set up a timeout for native response
+            const timeoutId = setTimeout(() => {
+                delete window._nativeLocationCallback;
+                reject({ code: 3, message: 'Native location request timed out' });
+            }, 30000);
+
+            // Set up callback for native to call back
+            window._nativeLocationCallback = (success, lat, lng, accuracy, errorCode, errorMessage) => {
+                clearTimeout(timeoutId);
+                delete window._nativeLocationCallback;
+
+                if (success) {
+                    resolve({
+                        lat: parseFloat(lat),
+                        lng: parseFloat(lng),
+                        accuracy: parseFloat(accuracy) || 0
+                    });
+                } else {
+                    reject({
+                        code: errorCode || 1,
+                        message: errorMessage || 'Native location failed'
+                    });
+                }
+            };
+
+            // Request location from native
+            if (this.isAndroid && window.Android?.getCurrentLocation) {
+                window.Android.getCurrentLocation();
+            } else if (this.isIOS && window.webkit?.messageHandlers?.tracking) {
+                window.webkit.messageHandlers.tracking.postMessage({
+                    action: 'getCurrentLocation'
+                });
+            } else if (this.isCapacitor && window.Capacitor?.Plugins?.Geolocation) {
+                // Capacitor has its own geolocation plugin
+                window.Capacitor.Plugins.Geolocation.getCurrentPosition({
+                    enableHighAccuracy: true,
+                    timeout: 30000,
+                    maximumAge: 60000
+                }).then(pos => {
+                    clearTimeout(timeoutId);
+                    delete window._nativeLocationCallback;
+                    resolve({
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy
+                    });
+                }).catch(err => {
+                    clearTimeout(timeoutId);
+                    delete window._nativeLocationCallback;
+                    reject({
+                        code: err.code || 1,
+                        message: err.message || 'Capacitor location failed'
+                    });
+                });
+            } else {
+                // Native bridge exists but no location method available
+                clearTimeout(timeoutId);
+                delete window._nativeLocationCallback;
+                reject(new Error('Native location not available'));
+            }
+        });
+    },
+
+    /**
+     * Check if native location is available
+     */
+    hasNativeLocation() {
+        if (this.isAndroid && window.Android?.getCurrentLocation) {
+            return true;
+        }
+        if (this.isIOS && window.webkit?.messageHandlers?.tracking) {
+            return true;
+        }
+        if (this.isCapacitor && window.Capacitor?.Plugins?.Geolocation) {
+            return true;
+        }
+        return false;
     }
 };

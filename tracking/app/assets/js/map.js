@@ -435,8 +435,31 @@ window.TrackingMap = {
 
     /**
      * Get user's current location
+     * Tries native location first (when in native app), then falls back to browser geolocation
      */
-    getCurrentLocation() {
+    async getCurrentLocation() {
+        // Try native location first when in native app
+        if (window.NativeBridge?.isNativeApp && window.NativeBridge.hasNativeLocation()) {
+            try {
+                const loc = await window.NativeBridge.getCurrentLocation();
+                return loc;
+            } catch (nativeErr) {
+                console.warn('Native location failed, trying browser geolocation:', nativeErr);
+                // Fall through to browser geolocation
+            }
+        }
+
+        // Browser geolocation with retry logic
+        return this._getBrowserLocation();
+    },
+
+    /**
+     * Get location using browser geolocation API with retry logic
+     */
+    _getBrowserLocation(retryCount = 0) {
+        const MAX_RETRIES = 2;
+        const TIMEOUT_MS = 20000; // 20 seconds per attempt
+
         return new Promise((resolve, reject) => {
             if (!navigator.geolocation) {
                 reject(new Error('Geolocation not supported'));
@@ -455,10 +478,22 @@ window.TrackingMap = {
                     lng: pos.coords.longitude,
                     accuracy: pos.coords.accuracy
                 }),
-                err => reject(err),
+                err => {
+                    // Only retry on timeout errors (code 3), not permission denied (code 1)
+                    if (err.code === 3 && retryCount < MAX_RETRIES) {
+                        console.warn(`Geolocation timeout, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+                        // Retry with lower accuracy on subsequent attempts for faster response
+                        this._getBrowserLocation(retryCount + 1)
+                            .then(resolve)
+                            .catch(reject);
+                    } else {
+                        reject(err);
+                    }
+                },
                 {
-                    enableHighAccuracy: true,
-                    timeout: 15000,        // Increased from 10s to 15s
+                    // Use lower accuracy on retries for faster response
+                    enableHighAccuracy: retryCount === 0,
+                    timeout: TIMEOUT_MS,
                     maximumAge: 60000      // Accept cached position up to 1 minute old
                 }
             );
