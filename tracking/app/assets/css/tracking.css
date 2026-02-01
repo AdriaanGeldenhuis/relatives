@@ -100,10 +100,55 @@ body.geofences-page {
     font-size: 12px;
     z-index: 90;
     box-shadow: var(--shadow-md);
+    /* Button styles */
+    border: none;
+    cursor: pointer;
+    color: white;
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+.session-indicator:hover {
+    transform: translateX(-50%) scale(1.05);
+}
+
+.session-indicator:active {
+    transform: translateX(-50%) scale(0.98);
 }
 
 .session-indicator.hidden {
     display: none;
+}
+
+/* Sleeping state - Orange/warning - devices not tracking */
+.session-indicator.session-sleeping {
+    background: rgba(237, 137, 54, 0.95);
+}
+
+.session-indicator.session-sleeping .session-dot {
+    background: white;
+    animation: none;
+}
+
+/* Active state - Dark with green dot */
+.session-indicator.session-active {
+    background: rgba(26, 32, 44, 0.95);
+    cursor: default;
+}
+
+.session-indicator.session-active:hover {
+    transform: translateX(-50%);
+}
+
+/* Waking state - Blue/primary - loading */
+.session-indicator.session-waking {
+    background: rgba(102, 126, 234, 0.95);
+    pointer-events: none;
+}
+
+.session-indicator.session-waking .session-dot {
+    background: white;
+    animation: spin 1s linear infinite;
 }
 
 .session-dot {

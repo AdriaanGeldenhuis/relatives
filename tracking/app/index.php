@@ -74,7 +74,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
 // Override cache version for tracking app AFTER header (header sets 12.0.0)
 // Use unique version to bust Cloudflare CDN cache
-$cacheVersion = '12.2.2';
+$cacheVersion = '12.3.0';
 ?>
 
 <!-- PWA Manifest for Native App Shell Support -->
@@ -90,11 +90,11 @@ $cacheVersion = '12.2.2';
     <!-- Map Container -->
     <div id="map"></div>
 
-    <!-- Session Indicator -->
-    <div id="session-indicator" class="session-indicator hidden">
+    <!-- Session Indicator / Wake Button -->
+    <button id="session-indicator" class="session-indicator session-sleeping" title="Click to wake tracking devices">
         <div class="session-dot"></div>
-        <span class="session-text">Live session active</span>
-    </div>
+        <span class="session-text">Wake Devices</span>
+    </button>
 
     <!-- Family Panel (popup) -->
     <div id="family-panel" class="family-panel">
