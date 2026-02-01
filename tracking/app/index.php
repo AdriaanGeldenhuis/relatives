@@ -72,8 +72,9 @@ $pageCSS = ['/tracking/app/assets/css/tracking.css'];
 // Include global header
 require_once __DIR__ . '/../../shared/components/header.php';
 
-// Override cache version for tracking app AFTER header (header sets 12.0.0, we need 12.1.0)
-$cacheVersion = '12.1.0';
+// Override cache version for tracking app AFTER header (header sets 12.0.0)
+// Use unique version to bust Cloudflare CDN cache
+$cacheVersion = '12.2.1';
 ?>
 
 <!-- PWA Manifest for Native App Shell Support -->
