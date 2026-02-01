@@ -49,8 +49,13 @@ try {
         $locationRepo = new LocationRepo($db, $trackingCache);
         $userLoc = $locationRepo->getCurrent($toUserId);
 
-        if (!$userLoc || $userLoc['family_id'] !== $familyId) {
-            jsonError('user_not_found', 'User location not available', 404);
+        if (!$userLoc) {
+            jsonError('user_not_found', 'User location not available. User may not have shared their location yet.', 404);
+        }
+
+        // Cast both to int for safe comparison
+        if ((int)$userLoc['family_id'] !== (int)$familyId) {
+            jsonError('user_not_found', 'User not in your family', 403);
         }
 
         $toLat = (float)$userLoc['lat'];
@@ -100,7 +105,8 @@ try {
     $route = $directions->getRoute($fromLat, $fromLng, $toLat, $toLng, $profile);
 
     if (!$route) {
-        jsonError('route_failed', 'Could not calculate route. Mapbox API may have returned an error.', 500);
+        $errorMsg = $directions->getLastError() ?: 'Could not calculate route';
+        jsonError('route_failed', $errorMsg, 500);
     }
 
     // Add destination name if we have it

@@ -2,8 +2,8 @@
 /**
  * POST /tracking/api/simple_location.php
  *
- * Simplified location update - direct to database.
- * No caching, no fancy features - just stores the location.
+ * Simplified location update for browser-based tracking.
+ * Stores location AND processes geofences for enter/exit detection.
  */
 
 session_start();
@@ -16,8 +16,8 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Get user info
-require_once __DIR__ . '/../../core/bootstrap.php';
+// Use tracking bootstrap (includes geofence services)
+require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
 $userId = (int)$_SESSION['user_id'];
 
@@ -172,6 +172,24 @@ try {
 
     $historyId = (int)$db->lastInsertId();
 
+    // =========================================
+    // PROCESS GEOFENCES (enter/exit detection)
+    // =========================================
+    $geofenceEvents = [];
+    try {
+        $geofenceRepo = new GeofenceRepo($db, $trackingCache);
+        $eventsRepo = new EventsRepo($db);
+        $alertsRepo = new AlertsRepo($db, $trackingCache);
+        $alertsEngine = new AlertsEngine($alertsRepo, $eventsRepo);
+        $geofenceEngine = new GeofenceEngine($geofenceRepo, $eventsRepo, $alertsEngine);
+
+        // Process geofence transitions
+        $geofenceEvents = $geofenceEngine->process($familyId, $userId, $lat, $lng);
+    } catch (Exception $e) {
+        // Log but don't fail the request - location was saved successfully
+        error_log('Geofence processing error: ' . $e->getMessage());
+    }
+
     header('Content-Type: application/json');
     echo json_encode([
         'success' => true,
@@ -179,7 +197,8 @@ try {
             'accepted' => true,
             'motion_state' => $motionState,
             'stored_history' => true,
-            'history_id' => $historyId
+            'history_id' => $historyId,
+            'geofence_events' => $geofenceEvents
         ]
     ]);
 
