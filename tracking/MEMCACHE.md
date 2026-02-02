@@ -2,6 +2,24 @@
 
 All tracking cache keys use the prefix `trk:` to namespace from other app caches.
 
+## Architecture
+
+The tracking module uses a **two-tier caching architecture**:
+
+1. **Memcached** (primary) - Fast, distributed in-memory cache
+2. **MySQL** (fallback) - Database-backed cache table for when Memcached is unavailable
+
+The `TrackingCache` class wraps the core `Cache` class and provides typed methods for each cache entity.
+
+### Key Features
+
+- **Silent failure** - Cache misses are normal, never throw errors
+- **Consistent JSON storage** - All array data stored as JSON for compatibility
+- **Proper TTL management** - Each entity type has appropriate TTL
+- **No double encoding** - Data is encoded once at the tracking layer
+
+---
+
 ## Key Reference
 
 | Key Pattern | TTL | Description | Invalidation |
@@ -30,6 +48,8 @@ All tracking cache keys use the prefix `trk:` to namespace from other app caches
 **Value:**
 ```json
 {
+  "id": 1,
+  "family_id": 42,
   "active": true,
   "started_by": 123,
   "started_at": "2024-01-15T14:00:00Z",
@@ -40,7 +60,7 @@ All tracking cache keys use the prefix `trk:` to namespace from other app caches
 
 **TTL:** `session_ttl_seconds` from settings (default 300s)
 
-**Set by:** `keepalive.php`
+**Set by:** `keepalive.php` via SessionsRepo
 
 **Read by:** `session_status.php`, `location.php` (SessionGate)
 
@@ -68,9 +88,9 @@ All tracking cache keys use the prefix `trk:` to namespace from other app caches
 
 **TTL:** 120s (refreshed on each update)
 
-**Set by:** `location.php`, `batch.php`
+**Set by:** LocationRepo.upsertCurrent()
 
-**Read by:** `current.php`, GeofenceEngine
+**Read by:** LocationRepo.getCurrent()
 
 ---
 
@@ -80,28 +100,26 @@ All tracking cache keys use the prefix `trk:` to namespace from other app caches
 
 **Value:**
 ```json
-{
-  "family_id": 42,
-  "members": [
-    {
-      "user_id": 123,
-      "name": "John",
-      "avatar_color": "#667eea",
-      "lat": -26.2041,
-      "lng": 28.0473,
-      "motion_state": "moving",
-      "recorded_at": "2024-01-15T14:30:00Z"
-    }
-  ],
-  "updated_at": "2024-01-15T14:30:05Z"
-}
+[
+  {
+    "user_id": 123,
+    "name": "John",
+    "avatar_color": "#667eea",
+    "has_avatar": true,
+    "lat": -26.2041,
+    "lng": 28.0473,
+    "motion_state": "moving",
+    "recorded_at": "2024-01-15T14:30:00Z",
+    "updated_at": "2024-01-15T14:30:05Z"
+  }
+]
 ```
 
 **TTL:** 10s (short for freshness)
 
-**Set by:** `current.php` (after DB query)
+**Set by:** LocationRepo.getFamilyCurrent()
 
-**Read by:** `current.php` (before DB query)
+**Invalidated by:** LocationRepo.upsertCurrent()
 
 ---
 
@@ -113,9 +131,9 @@ All tracking cache keys use the prefix `trk:` to namespace from other app caches
 
 **TTL:** 600s (10 minutes)
 
-**Set by:** `settings_get.php`, SettingsRepo
+**Set by:** SettingsRepo.get()
 
-**Invalidated by:** `settings_save.php`
+**Invalidated by:** SettingsRepo.save()
 
 ---
 
@@ -173,16 +191,17 @@ All tracking cache keys use the prefix `trk:` to namespace from other app caches
     "type": "circle",
     "center_lat": -26.2041,
     "center_lng": 28.0473,
-    "radius_m": 100
+    "radius_m": 100,
+    "active": true
   }
 ]
 ```
 
 **TTL:** 600s (10 minutes)
 
-**Set by:** GeofenceRepo
+**Set by:** GeofenceRepo.getAll()
 
-**Invalidated by:** Geofence CRUD operations
+**Invalidated by:** GeofenceRepo create/update/delete
 
 ---
 
@@ -193,19 +212,16 @@ All tracking cache keys use the prefix `trk:` to namespace from other app caches
 **Value:**
 ```json
 {
-  "1": true,
-  "2": false,
-  "3": false
+  "1": {"is_inside": true, "last_entered_at": "2024-01-15T14:00:00Z", "last_exited_at": null},
+  "2": {"is_inside": false, "last_entered_at": null, "last_exited_at": "2024-01-15T13:00:00Z"}
 }
 ```
 
-(Key is geofence_id, value is is_inside)
-
 **TTL:** 600s (10 minutes)
 
-**Set by:** GeofenceEngine
+**Set by:** GeofenceRepo.getUserState()
 
-**Invalidated by:** State changes
+**Invalidated by:** GeofenceRepo.updateState()
 
 ---
 
@@ -213,9 +229,25 @@ All tracking cache keys use the prefix `trk:` to namespace from other app caches
 
 **Purpose:** Cache family's saved places.
 
+**Value:**
+```json
+[
+  {
+    "id": 1,
+    "label": "Home",
+    "category": "home",
+    "lat": -26.2041,
+    "lng": 28.0473,
+    "radius_m": 100
+  }
+]
+```
+
 **TTL:** 600s (10 minutes)
 
-**Invalidated by:** Place CRUD operations
+**Set by:** PlacesRepo.getAll()
+
+**Invalidated by:** PlacesRepo create/update/delete
 
 ---
 
@@ -225,19 +257,53 @@ All tracking cache keys use the prefix `trk:` to namespace from other app caches
 
 **Profile:** `driving`, `walking`, `cycling`
 
-**Hash:** MD5 of `{fromLat},{fromLng}|{toLat},{toLng}`
+**Hash:** First 16 chars of MD5 of coordinates rounded to 5 decimal places
+
+**Value:**
+```json
+{
+  "profile": "driving",
+  "from": {"lat": -26.2041, "lng": 28.0473},
+  "to": {"lat": -26.1234, "lng": 28.1234},
+  "distance_m": 5000,
+  "duration_s": 600,
+  "distance_text": "5.0 km",
+  "duration_text": "10 min",
+  "geometry": {"type": "LineString", "coordinates": [...]},
+  "fetched_at": "2024-01-15T14:30:00Z"
+}
+```
 
 **TTL:** 21600s (6 hours) - routes don't change often
+
+**Set by:** MapboxDirections.getRoute()
 
 ---
 
 ### `trk:alerts:{familyId}` - Alert Rules
 
-**Purpose:** Cache family's alert rules.
+**Purpose:** Cache family's alert rules configuration.
+
+**Value:**
+```json
+{
+  "family_id": 42,
+  "enabled": true,
+  "arrive_place_enabled": true,
+  "leave_place_enabled": true,
+  "enter_geofence_enabled": true,
+  "exit_geofence_enabled": true,
+  "cooldown_seconds": 900,
+  "quiet_hours_start": "22:00",
+  "quiet_hours_end": "07:00"
+}
+```
 
 **TTL:** 600s (10 minutes)
 
-**Invalidated by:** `alerts_rules_save.php`
+**Set by:** AlertsRepo.getRules()
+
+**Invalidated by:** AlertsRepo.saveRules()
 
 ---
 
@@ -247,50 +313,99 @@ All tracking cache keys use the prefix `trk:` to namespace from other app caches
 
 **Example key:** `trk:alerts_cd:42:enter_geofence:123:5`
 
-**Value:** Timestamp of last delivery
+**Value:** Unix timestamp of last delivery (integer)
 
 **TTL:** `cooldown_seconds` from alert rules
 
+**Set by:** AlertsRepo.recordDelivery()
+
 ---
 
-## Usage Pattern
+## Usage Patterns
 
-### Read-through cache:
+### Read-through Cache
 
 ```php
-$key = "trk:settings:{$familyId}";
-$settings = $cache->get($key);
-
-if ($settings === null) {
-    $settings = $repo->getFromDb($familyId);
-    $cache->set($key, $settings, 600);
+// In repository method
+$cached = $this->cache->getSettings($familyId);
+if ($cached !== null) {
+    return $cached;
 }
+
+// Cache miss - query database
+$settings = $this->queryFromDb($familyId);
+
+// Store in cache
+$this->cache->setSettings($familyId, $settings);
 
 return $settings;
 ```
 
-### Write-through invalidation:
+### Write-through Invalidation
 
 ```php
-// Save to DB
-$repo->save($familyId, $data);
+// Save to database
+$this->db->update('tracking_family_settings', $data, ['family_id' => $familyId]);
 
-// Invalidate cache
-$cache->delete("trk:settings:{$familyId}");
+// Invalidate cache - next read will refresh from DB
+$this->cache->deleteSettings($familyId);
 ```
 
-### Cooldown check:
+### Cooldown Check
 
 ```php
-$key = "trk:alerts_cd:{$familyId}:{$rule}:{$userId}:{$targetId}";
-$lastSent = $cache->get($key);
-
+// Check if still in cooldown
+$lastSent = $this->cache->getAlertCooldown($familyId, $ruleType, $userId, $targetId);
 if ($lastSent !== null) {
-    // Still in cooldown
-    return false;
+    return false; // Still in cooldown
 }
 
-// Send alert, set cooldown
-$cache->set($key, time(), $cooldownSeconds);
-return true;
+// Send alert
+$this->sendAlert(...);
+
+// Set cooldown
+$this->cache->setAlertCooldown($familyId, $ruleType, $userId, $targetId, $cooldownSeconds);
 ```
+
+### Bulk Invalidation
+
+```php
+// When settings change significantly, invalidate all related caches
+$this->cache->invalidateFamily($familyId);
+
+// When user settings change
+$this->cache->invalidateUser($userId);
+```
+
+---
+
+## TTL Constants
+
+All TTLs are defined as constants in `TrackingCache`:
+
+```php
+const TTL_CURRENT = 120;           // 2 minutes
+const TTL_FAMILY_SNAPSHOT = 10;    // 10 seconds
+const TTL_SETTINGS = 600;          // 10 minutes
+const TTL_RATE_LIMIT = 300;        // 5 minutes
+const TTL_GEOFENCES = 600;         // 10 minutes
+const TTL_GEO_STATE = 600;         // 10 minutes
+const TTL_PLACES = 600;            // 10 minutes
+const TTL_DIRECTIONS = 21600;      // 6 hours
+const TTL_ALERTS = 600;            // 10 minutes
+```
+
+---
+
+## Debugging
+
+Check cache status via:
+
+```php
+// In API or debug endpoint
+$trackingCache = new TrackingCache($cache);
+echo "Cache available: " . ($trackingCache->available() ? 'yes' : 'no');
+echo "Cache type: " . $trackingCache->getType(); // 'memcached' or 'mysql'
+```
+
+Monitor cache efficiency by checking hit/miss ratios in your Memcached stats.
