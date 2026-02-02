@@ -160,6 +160,25 @@ body.geofences-page {
     animation: spin 1s linear infinite;
 }
 
+/* Stale state - Yellow/warning - session active but no recent data */
+.session-indicator.session-stale {
+    background: rgba(237, 137, 54, 0.9);
+    cursor: default;
+}
+
+.session-indicator.session-stale .session-dot {
+    background: white;
+    animation: pulse 1.5s infinite;
+}
+
+.session-indicator.session-stale .session-text {
+    color: white;
+}
+
+.session-indicator.session-stale:hover {
+    transform: translateX(-50%);
+}
+
 .session-dot {
     width: 8px;
     height: 8px;

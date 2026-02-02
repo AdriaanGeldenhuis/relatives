@@ -73,8 +73,8 @@ window.Polling = {
                 TrackingState.setMembers(response.data.members);
                 TrackingState.setSession(response.data.session);
 
-                // Update session indicator
-                this.updateSessionIndicator(response.data.session);
+                // Update session indicator (pass members to check for fresh data)
+                this.updateSessionIndicator(response.data.session, response.data.members);
 
                 // Hide loading on first successful fetch
                 document.getElementById('loading-overlay').classList.add('hidden');
@@ -179,18 +179,28 @@ window.Polling = {
         }
     },
 
-    updateSessionIndicator(session) {
+    updateSessionIndicator(session, members = null) {
         const indicator = document.getElementById('session-indicator');
         const text = indicator.querySelector('.session-text');
 
         // Remove all state classes
-        indicator.classList.remove('session-sleeping', 'session-active', 'session-waking', 'hidden');
+        indicator.classList.remove('session-sleeping', 'session-active', 'session-waking', 'session-stale', 'hidden');
 
         if (session && session.active) {
-            // Active session - green indicator
-            indicator.classList.add('session-active');
-            text.textContent = 'Live session active';
-            indicator.title = 'Tracking session is active';
+            // Check if any member has fresh data (not stale)
+            const hasRecentData = members && members.some(m => m.status === 'active');
+
+            if (hasRecentData) {
+                // Active session with recent data - green indicator
+                indicator.classList.add('session-active');
+                text.textContent = 'Live session active';
+                indicator.title = 'Tracking session is active';
+            } else {
+                // Active session but all data is stale - yellow/warning indicator
+                indicator.classList.add('session-stale');
+                text.textContent = 'No recent updates';
+                indicator.title = 'Session active but no recent location data';
+            }
         } else {
             // No session - show wake button
             indicator.classList.add('session-sleeping');
