@@ -79,7 +79,25 @@ if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
 
 // Optional fields
 $accuracy = isset($input['accuracy_m']) ? (float)$input['accuracy_m'] : (isset($input['accuracy']) ? (float)$input['accuracy'] : null);
-$speed = isset($input['speed_mps']) ? (float)$input['speed_mps'] : (isset($input['speed']) ? (float)$input['speed'] : null);
+
+// Speed - handle different input formats
+// If generic 'speed' field > 50, assume it's km/h not m/s (heuristic)
+$speed = null;
+if (isset($input['speed_mps'])) {
+    $speed = (float)$input['speed_mps'];
+} elseif (isset($input['speed_kmh'])) {
+    $speed = (float)$input['speed_kmh'] / 3.6;
+} elseif (isset($input['speed'])) {
+    $speed = (float)$input['speed'];
+    if ($speed > 50) {
+        $speed = $speed / 3.6; // Assume km/h, convert to m/s
+    }
+}
+// Sanity check: cap at 100 m/s (360 km/h)
+if ($speed !== null && $speed > 100) {
+    $speed = null;
+}
+
 $bearing = isset($input['bearing_deg']) ? (float)$input['bearing_deg'] : (isset($input['heading']) ? (float)$input['heading'] : null);
 $altitude = isset($input['altitude_m']) ? (float)$input['altitude_m'] : (isset($input['altitude']) ? (float)$input['altitude'] : null);
 $deviceId = isset($input['device_id']) ? substr($input['device_id'], 0, 64) : null;

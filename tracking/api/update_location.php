@@ -66,13 +66,24 @@ if (isset($input['accuracy_m'])) {
 }
 
 // Speed - convert km/h to m/s if needed
+// If generic 'speed' field > 50, assume it's km/h not m/s (heuristic)
 if (isset($input['speed_mps'])) {
-    $translated['speed_mps'] = $input['speed_mps'];
+    $speed = (float)$input['speed_mps'];
 } elseif (isset($input['speed_kmh'])) {
-    $translated['speed_mps'] = $input['speed_kmh'] / 3.6;
+    $speed = (float)$input['speed_kmh'] / 3.6;
 } elseif (isset($input['speed'])) {
-    $translated['speed_mps'] = $input['speed'];
+    $speed = (float)$input['speed'];
+    if ($speed > 50) {
+        $speed = $speed / 3.6; // Assume km/h, convert to m/s
+    }
+} else {
+    $speed = null;
 }
+// Sanity check: cap at 100 m/s (360 km/h)
+if ($speed !== null && $speed > 100) {
+    $speed = null;
+}
+$translated['speed_mps'] = $speed;
 
 // Bearing/heading
 if (isset($input['bearing_deg'])) {

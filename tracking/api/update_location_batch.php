@@ -120,13 +120,23 @@ foreach ($input['locations'] as $loc) {
     }
 
     // Speed - convert km/h to m/s
+    // If generic 'speed' field > 50, assume it's km/h not m/s (heuristic)
+    $speed = null;
     if (isset($loc['speed_mps'])) {
-        $translated['speed_mps'] = (float)$loc['speed_mps'];
+        $speed = (float)$loc['speed_mps'];
     } elseif (isset($loc['speed_kmh'])) {
-        $translated['speed_mps'] = (float)$loc['speed_kmh'] / 3.6;
+        $speed = (float)$loc['speed_kmh'] / 3.6;
     } elseif (isset($loc['speed'])) {
-        $translated['speed_mps'] = (float)$loc['speed'];
+        $speed = (float)$loc['speed'];
+        if ($speed > 50) {
+            $speed = $speed / 3.6; // Assume km/h, convert to m/s
+        }
     }
+    // Sanity check: cap at 100 m/s (360 km/h)
+    if ($speed !== null && $speed > 100) {
+        $speed = null;
+    }
+    $translated['speed_mps'] = $speed;
 
     // Bearing/heading
     if (isset($loc['bearing_deg'])) {
