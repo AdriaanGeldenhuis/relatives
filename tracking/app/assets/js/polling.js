@@ -194,12 +194,12 @@ window.Polling = {
                 // Active session with recent data - green indicator
                 indicator.classList.add('session-active');
                 text.textContent = 'Live session active';
-                indicator.title = 'Tracking session is active';
+                indicator.title = 'Click to refresh locations';
             } else {
                 // Active session but all data is stale - yellow/warning indicator
                 indicator.classList.add('session-stale');
                 text.textContent = 'No recent updates';
-                indicator.title = 'Session active but no recent location data';
+                indicator.title = 'Click to request fresh locations';
             }
         } else {
             // No session - show wake button
@@ -211,20 +211,26 @@ window.Polling = {
 
     async handleWakeClick() {
         const indicator = document.getElementById('session-indicator');
+        const text = indicator.querySelector('.session-text');
+        const originalText = text.textContent;
+        const wasWaking = indicator.classList.contains('session-waking');
 
-        // Only act if in sleeping state
-        if (!indicator.classList.contains('session-sleeping')) {
+        // Don't double-click while waking
+        if (wasWaking) {
             return;
         }
 
-        // Show waking state
-        indicator.classList.remove('session-sleeping');
+        // Show refreshing state
+        indicator.classList.remove('session-sleeping', 'session-active', 'session-stale');
         indicator.classList.add('session-waking');
-        indicator.querySelector('.session-text').textContent = 'Waking...';
+        text.textContent = 'Refreshing...';
 
         try {
-            // Send keepalive to wake devices
+            // Send keepalive to wake/extend session
             await this.sendKeepalive();
+
+            // Immediately fetch fresh locations
+            await this.fetchLocations();
 
             // Start polling if not already running
             if (!this.isRunning) {
@@ -233,18 +239,18 @@ window.Polling = {
 
             // Show success toast
             if (window.Toast) {
-                Toast.show('Devices are now tracking', 'success');
+                Toast.show('Devices notified - waiting for updates', 'success');
             }
         } catch (err) {
-            console.error('Failed to wake devices:', err);
+            console.error('Failed to refresh:', err);
 
-            // Revert to sleeping state
+            // Revert to previous state
             indicator.classList.remove('session-waking');
             indicator.classList.add('session-sleeping');
-            indicator.querySelector('.session-text').textContent = 'Wake Devices';
+            text.textContent = originalText;
 
             if (window.Toast) {
-                Toast.show('Could not wake devices. Try again.', 'error');
+                Toast.show('Could not refresh. Try again.', 'error');
             }
         }
     }
