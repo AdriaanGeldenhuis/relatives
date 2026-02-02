@@ -64,13 +64,28 @@ if (isset($input['accuracy_m'])) {
 }
 
 // Speed - convert km/h to m/s if needed
+// Note: speed > 50 m/s = 180 km/h, very fast for a car
+// If generic 'speed' field is > 50, assume it's km/h not m/s
 if (isset($input['speed_mps'])) {
-    $translated['speed_mps'] = $input['speed_mps'];
+    $speed = (float)$input['speed_mps'];
 } elseif (isset($input['speed_kmh'])) {
-    $translated['speed_mps'] = $input['speed_kmh'] / 3.6;
+    $speed = (float)$input['speed_kmh'] / 3.6;
 } elseif (isset($input['speed'])) {
-    $translated['speed_mps'] = $input['speed'];
+    $speed = (float)$input['speed'];
+    // Heuristic: if speed > 50, it's likely km/h not m/s
+    if ($speed > 50) {
+        $speed = $speed / 3.6;
+    }
+} else {
+    $speed = null;
 }
+
+// Sanity check: cap speed at 100 m/s (360 km/h) - faster than any normal vehicle
+if ($speed !== null && $speed > 100) {
+    $speed = null; // Treat as invalid/unknown
+}
+
+$translated['speed_mps'] = $speed;
 
 // Bearing/heading
 if (isset($input['bearing_deg'])) {

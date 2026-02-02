@@ -134,7 +134,7 @@ body.geofences-page {
 /* Active state - Light green tint with white dot and text */
 .session-indicator.session-active {
     background: rgba(72, 187, 120, 0.9);
-    cursor: default;
+    cursor: pointer;
 }
 
 .session-indicator.session-active .session-dot {
@@ -146,7 +146,7 @@ body.geofences-page {
 }
 
 .session-indicator.session-active:hover {
-    transform: translateX(-50%);
+    transform: translateX(-50%) scale(1.05);
 }
 
 /* Waking state - Blue/primary - loading */
@@ -158,6 +158,25 @@ body.geofences-page {
 .session-indicator.session-waking .session-dot {
     background: white;
     animation: spin 1s linear infinite;
+}
+
+/* Stale state - Yellow/warning - session active but no recent data */
+.session-indicator.session-stale {
+    background: rgba(237, 137, 54, 0.9);
+    cursor: pointer;
+}
+
+.session-indicator.session-stale .session-dot {
+    background: white;
+    animation: pulse 1.5s infinite;
+}
+
+.session-indicator.session-stale .session-text {
+    color: white;
+}
+
+.session-indicator.session-stale:hover {
+    transform: translateX(-50%) scale(1.05);
 }
 
 .session-dot {

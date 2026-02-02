@@ -51,9 +51,17 @@ window.Format = {
 
     /**
      * Format speed
+     * @param {number} mps - Speed in meters per second
+     * @param {string} units - 'metric' or 'imperial'
      */
     speed(mps, units = 'metric') {
         if (!mps) return null;
+
+        // Sanity check: if stored value > 100 m/s (360 km/h), it's likely
+        // corrupted data (old bug stored km/h as m/s). Return null.
+        if (mps > 100) {
+            return null;
+        }
 
         if (units === 'imperial') {
             return (mps * 2.237).toFixed(1) + ' mph';
