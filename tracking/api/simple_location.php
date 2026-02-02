@@ -104,12 +104,6 @@ $deviceId = isset($input['device_id']) ? substr($input['device_id'], 0, 64) : nu
 $platform = isset($input['platform']) ? substr($input['platform'], 0, 20) : 'web';
 $appVersion = isset($input['app_version']) ? substr($input['app_version'], 0, 20) : 'web-1.0';
 
-// Determine motion state
-$motionState = 'unknown';
-if ($speed !== null) {
-    $motionState = $speed > 1.0 ? 'moving' : 'idle';
-}
-
 // Current timestamp
 $recordedAt = date('Y-m-d H:i:s');
 if (isset($input['recorded_at'])) {
@@ -121,6 +115,72 @@ if (isset($input['recorded_at'])) {
         $recordedAt = date('Y-m-d H:i:s', (int)$ts);
     } else {
         $recordedAt = $ts;
+    }
+}
+
+// =========================================
+// DETERMINE MOTION STATE (with GPS noise filtering)
+// =========================================
+$motionState = 'unknown';
+
+// Get previous location to validate speed
+$prevStmt = $db->prepare("SELECT lat, lng, recorded_at FROM tracking_current WHERE user_id = ? LIMIT 1");
+$prevStmt->execute([$userId]);
+$prevLoc = $prevStmt->fetch(PDO::FETCH_ASSOC);
+
+if ($prevLoc) {
+    // Calculate distance and time
+    $prevLat = (float)$prevLoc['lat'];
+    $prevLng = (float)$prevLoc['lng'];
+    $prevTime = strtotime($prevLoc['recorded_at']);
+    $nowTime = strtotime($recordedAt);
+    $timeDelta = max(1, $nowTime - $prevTime);
+
+    // Haversine distance calculation
+    $earthRadius = 6371000;
+    $dLat = deg2rad($lat - $prevLat);
+    $dLng = deg2rad($lng - $prevLng);
+    $a = sin($dLat / 2) * sin($dLat / 2) +
+         cos(deg2rad($prevLat)) * cos(deg2rad($lat)) *
+         sin($dLng / 2) * sin($dLng / 2);
+    $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+    $distance = $earthRadius * $c;
+
+    // Calculate actual speed from position change
+    $calculatedSpeed = $timeDelta > 5 ? $distance / $timeDelta : null;
+
+    // Determine motion state with validation
+    $speedThreshold = 1.0; // m/s
+    $distanceThreshold = 50; // meters
+
+    if ($distance >= $distanceThreshold) {
+        // Significant position change - definitely moving
+        $motionState = 'moving';
+    } elseif ($calculatedSpeed !== null && $timeDelta >= 5) {
+        // We can calculate speed from position change
+        if ($calculatedSpeed >= $speedThreshold) {
+            $motionState = 'moving';
+        } elseif ($speed !== null && $speed >= $speedThreshold && $calculatedSpeed < $speedThreshold) {
+            // GPS says moving but position hasn't changed - GPS noise
+            $motionState = 'idle';
+        } else {
+            $motionState = 'idle';
+        }
+    } elseif ($speed !== null && $speed >= $speedThreshold) {
+        // Short time delta, check if any movement at all
+        if ($distance < 10) {
+            // GPS says fast but hasn't moved 10m - noise
+            $motionState = 'idle';
+        } else {
+            $motionState = 'moving';
+        }
+    } else {
+        $motionState = 'idle';
+    }
+} else {
+    // No previous location, use GPS speed if available
+    if ($speed !== null) {
+        $motionState = $speed > 1.0 ? 'moving' : 'idle';
     }
 }
 
