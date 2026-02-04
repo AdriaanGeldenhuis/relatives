@@ -34,7 +34,7 @@ if (!$trip) {
 $expenses = HT_DB::fetchAll(
     "SELECT e.*, u.full_name as paid_by_name
      FROM ht_trip_expenses e
-     LEFT JOIN users u ON e.user_id = u.id
+     LEFT JOIN users u ON e.paid_by = u.id
      WHERE e.trip_id = ?
      ORDER BY e.expense_date DESC, e.created_at DESC",
     [$tripId]
