@@ -999,6 +999,8 @@ function setupEmojiPicker() {
     var pickerBtn = document.getElementById('emojiPickerBtn');
     var picker = document.getElementById('emojiPicker');
     var input = document.getElementById('messageInput');
+    var scrollArea = document.getElementById('emojiScrollArea');
+    var searchInput = document.getElementById('emojiSearch');
 
     if (!pickerBtn || !picker || !input) {
         console.error('Emoji picker elements not found');
@@ -1008,8 +1010,12 @@ function setupEmojiPicker() {
     // Toggle picker on button click
     pickerBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        var isVisible = picker.style.display === 'block';
-        picker.style.display = isVisible ? 'none' : 'block';
+        var isVisible = picker.style.display === 'flex';
+        picker.style.display = isVisible ? 'none' : 'flex';
+        if (!isVisible && searchInput) {
+            searchInput.value = '';
+            filterEmojis('');
+        }
     });
 
     // Handle emoji selection
@@ -1020,35 +1026,94 @@ function setupEmojiPicker() {
         }
     });
 
-    // Handle category switching
+    // Handle category navigation - scroll to section
     var catButtons = picker.querySelectorAll('.emoji-cat-btn');
-    var catContents = picker.querySelectorAll('.emoji-category-content');
 
     catButtons.forEach(function(btn) {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
             var category = btn.dataset.category;
+            var section = document.getElementById('emoji-section-' + category);
 
             // Update active button
             catButtons.forEach(function(b) { b.classList.remove('active'); });
             btn.classList.add('active');
 
-            // Show/hide category content
-            catContents.forEach(function(content) {
-                if (content.dataset.category === category) {
-                    content.style.display = 'grid';
-                } else {
-                    content.style.display = 'none';
-                }
-            });
+            // Scroll to section
+            if (section && scrollArea) {
+                scrollArea.scrollTop = section.offsetTop - scrollArea.offsetTop;
+            }
         });
     });
+
+    // Update active category on scroll
+    if (scrollArea) {
+        var scrollTimeout;
+        scrollArea.addEventListener('scroll', function() {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(function() {
+                var sections = scrollArea.querySelectorAll('.emoji-section');
+                var scrollTop = scrollArea.scrollTop;
+                var activeCategory = 'smileys';
+
+                for (var i = 0; i < sections.length; i++) {
+                    var section = sections[i];
+                    if (section.offsetTop - scrollArea.offsetTop <= scrollTop + 50) {
+                        activeCategory = section.id.replace('emoji-section-', '');
+                    }
+                }
+
+                catButtons.forEach(function(btn) {
+                    if (btn.dataset.category === activeCategory) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+            }, 50);
+        });
+    }
+
+    // Search functionality
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            filterEmojis(searchInput.value.toLowerCase());
+        });
+    }
 
     // Close picker when clicking outside
     document.addEventListener('click', function(e) {
         if (!picker.contains(e.target) && e.target !== pickerBtn) {
             picker.style.display = 'none';
         }
+    });
+}
+
+function filterEmojis(query) {
+    var sections = document.querySelectorAll('.emoji-section');
+    var items = document.querySelectorAll('.emoji-item');
+
+    if (!query) {
+        // Show all sections and items
+        sections.forEach(function(s) {
+            s.style.display = 'block';
+            var title = s.querySelector('.emoji-section-title');
+            if (title) title.style.display = 'block';
+        });
+        items.forEach(function(i) { i.style.display = 'flex'; });
+        return;
+    }
+
+    // Hide section titles when searching, show matching emojis
+    sections.forEach(function(s) {
+        var title = s.querySelector('.emoji-section-title');
+        if (title) title.style.display = 'none';
+        s.style.display = 'block';
+    });
+
+    // For now, show all emojis (proper search would need emoji keywords database)
+    items.forEach(function(item) {
+        item.style.display = 'flex';
     });
 }
 
