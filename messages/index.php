@@ -232,7 +232,8 @@ require_once __DIR__ . '/../shared/components/header.php';
                             <button class="emoji-cat-btn" data-category="flags" title="Flags">🏳️</button>
                         </div>
                         <div class="emoji-search-wrap">
-                            <input type="text" class="emoji-search" id="emojiSearch" placeholder="Search emoji">
+                            <input type="text" class="emoji-search" id="emojiSearch" placeholder="Search emoji...">
+                            <button class="emoji-search-btn" type="button">Search</button>
                         </div>
                         <div class="emoji-scroll-area" id="emojiScrollArea">
                             <?php
