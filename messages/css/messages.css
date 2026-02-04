@@ -1024,9 +1024,29 @@ html, body {
 #emojiPicker .emoji-scroll-area {
     flex: 1 !important;
     min-height: 0 !important;
-    overflow-y: auto !important;
+    max-height: 100% !important;
+    overflow-y: scroll !important;
     overflow-x: hidden !important;
     padding: 8px !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+#emojiPicker .emoji-scroll-area::-webkit-scrollbar {
+    width: 6px !important;
+}
+
+#emojiPicker .emoji-scroll-area::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2) !important;
+    border-radius: 3px !important;
+}
+
+#emojiPicker .emoji-scroll-area::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-radius: 3px !important;
+}
+
+#emojiPicker .emoji-scroll-area::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5) !important;
 }
 
 #emojiPicker .emoji-section {
