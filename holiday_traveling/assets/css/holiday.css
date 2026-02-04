@@ -534,10 +534,18 @@
 }
 
 .ht-select option {
-    background: #374151;
-    color: #ffffff;
+    background: #374151 !important;
+    background-color: #374151 !important;
+    color: #ffffff !important;
     padding: 12px 14px;
     font-size: 14px;
+}
+
+.ht-select option:hover,
+.ht-select option:focus,
+.ht-select option:checked {
+    background: #4b5563 !important;
+    background-color: #4b5563 !important;
 }
 
 .ht-textarea {
