@@ -1029,22 +1029,31 @@ function setupEmojiPicker() {
     // Handle category navigation - scroll to section
     var catButtons = picker.querySelectorAll('.emoji-cat-btn');
 
-    catButtons.forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            var category = btn.dataset.category;
-            var section = document.getElementById('emoji-section-' + category);
+    for (var i = 0; i < catButtons.length; i++) {
+        (function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var category = btn.getAttribute('data-category');
+                var section = document.getElementById('emoji-section-' + category);
 
-            // Update active button
-            catButtons.forEach(function(b) { b.classList.remove('active'); });
-            btn.classList.add('active');
+                console.log('Category clicked:', category, 'Section found:', section);
 
-            // Scroll to section
-            if (section && scrollArea) {
-                scrollArea.scrollTop = section.offsetTop - scrollArea.offsetTop;
-            }
-        });
-    });
+                // Update active button
+                for (var j = 0; j < catButtons.length; j++) {
+                    catButtons[j].classList.remove('active');
+                }
+                btn.classList.add('active');
+
+                // Scroll to section
+                if (section && scrollArea) {
+                    var sectionTop = section.offsetTop;
+                    scrollArea.scrollTop = sectionTop;
+                    console.log('Scrolling to:', sectionTop);
+                }
+            });
+        })(catButtons[i]);
+    }
 
     // Update active category on scroll
     if (scrollArea) {
@@ -1056,21 +1065,21 @@ function setupEmojiPicker() {
                 var scrollTop = scrollArea.scrollTop;
                 var activeCategory = 'smileys';
 
-                for (var i = 0; i < sections.length; i++) {
-                    var section = sections[i];
-                    if (section.offsetTop - scrollArea.offsetTop <= scrollTop + 50) {
-                        activeCategory = section.id.replace('emoji-section-', '');
+                for (var k = 0; k < sections.length; k++) {
+                    var sect = sections[k];
+                    if (sect.offsetTop <= scrollTop + 60) {
+                        activeCategory = sect.id.replace('emoji-section-', '');
                     }
                 }
 
-                catButtons.forEach(function(btn) {
-                    if (btn.dataset.category === activeCategory) {
-                        btn.classList.add('active');
+                for (var m = 0; m < catButtons.length; m++) {
+                    if (catButtons[m].getAttribute('data-category') === activeCategory) {
+                        catButtons[m].classList.add('active');
                     } else {
-                        btn.classList.remove('active');
+                        catButtons[m].classList.remove('active');
                     }
-                });
-            }, 50);
+                }
+            }, 100);
         });
     }
 
