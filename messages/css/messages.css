@@ -723,6 +723,7 @@ html, body {
    MESSAGE INPUT
    ============================================ */
 .message-input-container {
+    position: relative;
     border-top: 1px solid var(--glass-border);
     background: var(--glass-light);
     padding: var(--space-md) var(--space-xl);
