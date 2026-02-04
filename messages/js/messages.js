@@ -996,30 +996,54 @@ function copyTextFallback(text) {
 // EMOJI PICKER - FIXED
 // ============================================
 function setupEmojiPicker() {
-    const pickerBtn = document.getElementById('emojiPickerBtn');
-    const picker = document.getElementById('emojiPicker');
-    const input = document.getElementById('messageInput');
-    
+    var pickerBtn = document.getElementById('emojiPickerBtn');
+    var picker = document.getElementById('emojiPicker');
+    var input = document.getElementById('messageInput');
+
     if (!pickerBtn || !picker || !input) {
         console.error('Emoji picker elements not found');
         return;
     }
-    
+
     // Toggle picker on button click
     pickerBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        const isVisible = picker.style.display === 'block';
+        var isVisible = picker.style.display === 'block';
         picker.style.display = isVisible ? 'none' : 'block';
     });
-    
+
     // Handle emoji selection
     picker.addEventListener('click', function(e) {
         if (e.target.classList.contains('emoji-item')) {
-            const emoji = e.target.dataset.emoji || e.target.textContent;
+            var emoji = e.target.dataset.emoji || e.target.textContent;
             insertEmoji(emoji);
         }
     });
-    
+
+    // Handle category switching
+    var catButtons = picker.querySelectorAll('.emoji-cat-btn');
+    var catContents = picker.querySelectorAll('.emoji-category-content');
+
+    catButtons.forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var category = btn.dataset.category;
+
+            // Update active button
+            catButtons.forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+
+            // Show/hide category content
+            catContents.forEach(function(content) {
+                if (content.dataset.category === category) {
+                    content.style.display = 'grid';
+                } else {
+                    content.style.display = 'none';
+                }
+            });
+        });
+    });
+
     // Close picker when clicking outside
     document.addEventListener('click', function(e) {
         if (!picker.contains(e.target) && e.target !== pickerBtn) {
@@ -1029,18 +1053,18 @@ function setupEmojiPicker() {
 }
 
 function insertEmoji(emoji) {
-    const input = document.getElementById('messageInput');
-    const cursorPos = input.selectionStart;
-    const textBefore = input.value.substring(0, cursorPos);
-    const textAfter = input.value.substring(cursorPos);
-    
+    var input = document.getElementById('messageInput');
+    var cursorPos = input.selectionStart;
+    var textBefore = input.value.substring(0, cursorPos);
+    var textAfter = input.value.substring(cursorPos);
+
     input.value = textBefore + emoji + textAfter;
     input.focus();
-    
+
     // Set cursor position after emoji
-    const newPos = cursorPos + emoji.length;
+    var newPos = cursorPos + emoji.length;
     input.setSelectionRange(newPos, newPos);
-    
+
     // Close picker
     document.getElementById('emojiPicker').style.display = 'none';
 }

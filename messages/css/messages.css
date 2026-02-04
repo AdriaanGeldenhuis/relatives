@@ -901,13 +901,51 @@ html, body {
     overscroll-behavior: contain;
 }
 
-.emoji-grid {
+.emoji-categories {
+    display: flex;
+    gap: 2px;
+    padding: var(--space-xs);
+    margin-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--glass-border);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.emoji-cat-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-base);
+    flex-shrink: 0;
+    opacity: 0.6;
+}
+
+.emoji-cat-btn:hover {
+    background: var(--glass-light);
+    opacity: 1;
+}
+
+.emoji-cat-btn.active {
+    background: var(--glass-medium);
+    opacity: 1;
+}
+
+.emoji-category-content {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
     gap: 4px;
+}
+
+.emoji-grid {
+    display: block;
     padding: var(--space-xs);
     padding-bottom: var(--space-md);
     touch-action: pan-y;
+    max-height: 250px;
+    overflow-y: auto;
 }
 
 .emoji-grid::-webkit-scrollbar {
@@ -953,21 +991,30 @@ html, body {
     .emoji-picker {
         right: var(--space-md);
         left: var(--space-md);
-        max-height: 280px;
+        max-height: 320px;
     }
-    
-    .emoji-grid {
+
+    .emoji-category-content {
         grid-template-columns: repeat(6, 1fr);
+    }
+
+    .emoji-cat-btn {
+        font-size: 1.1rem;
+        padding: var(--space-xs);
     }
 }
 
 @media (max-width: 480px) {
-    .emoji-grid {
-        grid-template-columns: repeat(5, 1fr);
+    .emoji-category-content {
+        grid-template-columns: repeat(6, 1fr);
     }
-    
+
     .emoji-item {
         font-size: 1.25rem;
+    }
+
+    .emoji-cat-btn {
+        font-size: 1rem;
     }
 }
 
@@ -1058,7 +1105,7 @@ html, body {
         right: var(--space-md);
     }
 
-    .emoji-grid {
+    .emoji-category-content {
         grid-template-columns: repeat(6, 1fr);
     }
 }
@@ -1082,7 +1129,7 @@ html, body {
         padding: var(--space-xs);
     }
 
-    .emoji-grid {
+    .emoji-category-content {
         grid-template-columns: repeat(5, 1fr);
     }
 
