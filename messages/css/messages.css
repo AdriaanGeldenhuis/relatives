@@ -899,12 +899,12 @@ html, body {
     height: 400px;
     max-height: 50vh;
     display: none;
-    flex-direction: column;
     overflow: hidden;
 }
 
-.emoji-picker[style*="flex"] {
+.emoji-picker.active {
     display: flex !important;
+    flex-direction: column !important;
 }
 
 .emoji-categories {
@@ -978,8 +978,9 @@ html, body {
 }
 
 .emoji-scroll-area {
-    flex: 1;
-    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: scroll !important;
     overflow-x: hidden;
     padding: 0 8px 8px;
     -webkit-overflow-scrolling: touch;

@@ -1010,11 +1010,15 @@ function setupEmojiPicker() {
     // Toggle picker on button click
     pickerBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        var isVisible = picker.style.display === 'flex';
-        picker.style.display = isVisible ? 'none' : 'flex';
-        if (!isVisible && searchInput) {
-            searchInput.value = '';
-            filterEmojis('');
+        var isVisible = picker.classList.contains('active');
+        if (isVisible) {
+            picker.classList.remove('active');
+        } else {
+            picker.classList.add('active');
+            if (searchInput) {
+                searchInput.value = '';
+                filterEmojis('');
+            }
         }
     });
 
@@ -1093,7 +1097,7 @@ function setupEmojiPicker() {
     // Close picker when clicking outside
     document.addEventListener('click', function(e) {
         if (!picker.contains(e.target) && e.target !== pickerBtn) {
-            picker.style.display = 'none';
+            picker.classList.remove('active');
         }
     });
 }
@@ -1140,7 +1144,7 @@ function insertEmoji(emoji) {
     input.setSelectionRange(newPos, newPos);
 
     // Close picker
-    document.getElementById('emojiPicker').style.display = 'none';
+    document.getElementById('emojiPicker').classList.remove('active');
 }
 
 // ============================================
