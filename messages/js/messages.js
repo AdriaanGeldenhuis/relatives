@@ -1041,19 +1041,15 @@ function setupEmojiPicker() {
                 var category = btn.getAttribute('data-category');
                 var section = document.getElementById('emoji-section-' + category);
 
-                console.log('Category clicked:', category, 'Section found:', section);
-
                 // Update active button
                 for (var j = 0; j < catButtons.length; j++) {
                     catButtons[j].classList.remove('active');
                 }
                 btn.classList.add('active');
 
-                // Scroll to section
-                if (section && scrollArea) {
-                    var sectionTop = section.offsetTop;
-                    scrollArea.scrollTop = sectionTop;
-                    console.log('Scrolling to:', sectionTop);
+                // Scroll to section using scrollIntoView
+                if (section) {
+                    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
             });
         })(catButtons[i]);

@@ -173,32 +173,6 @@ $categories = [
                 </div>
             </div>
             <div class="ht-form-group">
-                <label class="ht-label">Paid By *</label>
-                <select name="paid_by" class="ht-select" required>
-                    <!-- Populated by JavaScript -->
-                    <option value="">Loading members...</option>
-                </select>
-            </div>
-            <div class="ht-form-group">
-                <label class="ht-label">Split Options</label>
-                <div class="ht-radio-group">
-                    <label class="ht-radio-label">
-                        <input type="radio" name="split_type" value="everyone" checked>
-                        <span>Split evenly with everyone</span>
-                    </label>
-                    <label class="ht-radio-label">
-                        <input type="radio" name="split_type" value="custom">
-                        <span>Custom split</span>
-                    </label>
-                </div>
-            </div>
-            <div id="customSplitSection" class="ht-form-group" style="display: none;">
-                <label class="ht-label">Split With</label>
-                <div id="splitWithContainer" class="ht-split-members">
-                    <!-- Populated by JavaScript -->
-                </div>
-            </div>
-            <div class="ht-form-group">
                 <label class="ht-label">Notes (optional)</label>
                 <textarea name="notes" class="ht-textarea" rows="2" placeholder="Add any additional details..." maxlength="500"></textarea>
             </div>
