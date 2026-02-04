@@ -132,6 +132,10 @@ body.geofences-page {
     animation: none;
 }
 
+.session-indicator.session-sleeping .session-text {
+    color: white;
+}
+
 /* Active state - Light green tint with white dot and text */
 .session-indicator.session-active {
     background: rgba(72, 187, 120, 0.9);
@@ -159,6 +163,10 @@ body.geofences-page {
 .session-indicator.session-waking .session-dot {
     background: white;
     animation: spin 1s linear infinite;
+}
+
+.session-indicator.session-waking .session-text {
+    color: white;
 }
 
 /* Stale state - Yellow/warning - session active but no recent data */
