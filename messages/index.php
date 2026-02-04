@@ -219,7 +219,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </div>
 
                     <!-- Emoji Picker -->
-                    <div class="emoji-picker" id="emojiPicker" style="display: none;">
+                    <div class="emoji-picker" id="emojiPicker">
                         <div class="emoji-categories">
                             <button class="emoji-cat-btn active" data-category="smileys" title="Smileys">😀</button>
                             <button class="emoji-cat-btn" data-category="people" title="People">👋</button>
