@@ -70,10 +70,13 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initializeChat() {
-    MessageSystem.currentUserId = document.getElementById('currentUserId')?.value;
-    MessageSystem.currentUserName = document.getElementById('currentUserName')?.value;
-    MessageSystem.familyId = document.getElementById('familyId')?.value;
-    
+    var userIdEl = document.getElementById('currentUserId');
+    var userNameEl = document.getElementById('currentUserName');
+    var familyIdEl = document.getElementById('familyId');
+    MessageSystem.currentUserId = userIdEl ? userIdEl.value : null;
+    MessageSystem.currentUserName = userNameEl ? userNameEl.value : null;
+    MessageSystem.familyId = familyIdEl ? familyIdEl.value : null;
+
     console.log('💬 Chat initialized:', {
         userId: MessageSystem.currentUserId,
         userName: MessageSystem.currentUserName,
@@ -232,7 +235,7 @@ async function loadInitialMessages() {
         const data = await response.json();
         console.log('✅ Data received:', {
             success: data.success,
-            messageCount: data.messages?.length
+            messageCount: data.messages ? data.messages.length : 0
         });
         
         if (data.success) {
@@ -910,9 +913,11 @@ function showMessageOptions(messageId, event) {
 }
 
 function contextReplyMessage() {
-    const messageEl = document.querySelector(`[data-message-id="${MessageSystem.contextMessageId}"]`);
-    const text = messageEl.querySelector('.message-text')?.textContent || '';
-    const name = messageEl.querySelector('.message-author')?.textContent || 'Someone';
+    var messageEl = document.querySelector('[data-message-id="' + MessageSystem.contextMessageId + '"]');
+    var textEl = messageEl ? messageEl.querySelector('.message-text') : null;
+    var nameEl = messageEl ? messageEl.querySelector('.message-author') : null;
+    var text = textEl ? textEl.textContent : '';
+    var name = nameEl ? nameEl.textContent : 'Someone';
     replyToMessage(MessageSystem.contextMessageId, name, text);
 }
 
@@ -934,7 +939,8 @@ async function deleteMessage() {
         const data = await response.json();
         
         if (data.success) {
-            document.querySelector(`[data-message-id="${MessageSystem.contextMessageId}"]`)?.remove();
+            var msgToRemove = document.querySelector('[data-message-id="' + MessageSystem.contextMessageId + '"]');
+            if (msgToRemove) msgToRemove.parentNode.removeChild(msgToRemove);
         } else {
             showError(data.message || 'Failed to delete message');
         }
@@ -945,11 +951,44 @@ async function deleteMessage() {
 }
 
 function copyMessage() {
-    const messageEl = document.querySelector(`[data-message-id="${MessageSystem.contextMessageId}"]`);
-    const text = messageEl.querySelector('.message-text')?.textContent;
+    var messageEl = document.querySelector('[data-message-id="' + MessageSystem.contextMessageId + '"]');
+    var textEl = messageEl ? messageEl.querySelector('.message-text') : null;
+    var text = textEl ? textEl.textContent : null;
     if (text) {
-        navigator.clipboard.writeText(text);
+        // Try modern clipboard API first, then fallback to execCommand
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function() {
+                showNotification('Message copied!');
+            }).catch(function() {
+                copyTextFallback(text);
+            });
+        } else {
+            copyTextFallback(text);
+        }
+    }
+}
+
+function copyTextFallback(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    ta.setAttribute('readonly', '');
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, 99999);
+    var success = false;
+    try {
+        success = document.execCommand('copy');
+    } catch (e) {
+        success = false;
+    }
+    document.body.removeChild(ta);
+    if (success) {
         showNotification('Message copied!');
+    } else {
+        showNotification('Could not copy message');
     }
 }
 
@@ -957,53 +996,155 @@ function copyMessage() {
 // EMOJI PICKER - FIXED
 // ============================================
 function setupEmojiPicker() {
-    const pickerBtn = document.getElementById('emojiPickerBtn');
-    const picker = document.getElementById('emojiPicker');
-    const input = document.getElementById('messageInput');
-    
+    var pickerBtn = document.getElementById('emojiPickerBtn');
+    var picker = document.getElementById('emojiPicker');
+    var input = document.getElementById('messageInput');
+    var scrollArea = document.getElementById('emojiScrollArea');
+    var searchInput = document.getElementById('emojiSearch');
+
     if (!pickerBtn || !picker || !input) {
         console.error('Emoji picker elements not found');
         return;
     }
-    
+
     // Toggle picker on button click
     pickerBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        const isVisible = picker.style.display === 'block';
-        picker.style.display = isVisible ? 'none' : 'block';
+        var isVisible = picker.classList.contains('active');
+        if (isVisible) {
+            picker.classList.remove('active');
+        } else {
+            picker.classList.add('active');
+            if (searchInput) {
+                searchInput.value = '';
+                filterEmojis('');
+            }
+        }
     });
-    
+
     // Handle emoji selection
     picker.addEventListener('click', function(e) {
         if (e.target.classList.contains('emoji-item')) {
-            const emoji = e.target.dataset.emoji || e.target.textContent;
+            var emoji = e.target.dataset.emoji || e.target.textContent;
             insertEmoji(emoji);
         }
     });
-    
+
+    // Handle category navigation - scroll to section
+    var catButtons = picker.querySelectorAll('.emoji-cat-btn');
+
+    for (var i = 0; i < catButtons.length; i++) {
+        (function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var category = btn.getAttribute('data-category');
+                var section = document.getElementById('emoji-section-' + category);
+
+                console.log('Category clicked:', category, 'Section found:', section);
+
+                // Update active button
+                for (var j = 0; j < catButtons.length; j++) {
+                    catButtons[j].classList.remove('active');
+                }
+                btn.classList.add('active');
+
+                // Scroll to section
+                if (section && scrollArea) {
+                    var sectionTop = section.offsetTop;
+                    scrollArea.scrollTop = sectionTop;
+                    console.log('Scrolling to:', sectionTop);
+                }
+            });
+        })(catButtons[i]);
+    }
+
+    // Update active category on scroll
+    if (scrollArea) {
+        var scrollTimeout;
+        scrollArea.addEventListener('scroll', function() {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(function() {
+                var sections = scrollArea.querySelectorAll('.emoji-section');
+                var scrollTop = scrollArea.scrollTop;
+                var activeCategory = 'smileys';
+
+                for (var k = 0; k < sections.length; k++) {
+                    var sect = sections[k];
+                    if (sect.offsetTop <= scrollTop + 60) {
+                        activeCategory = sect.id.replace('emoji-section-', '');
+                    }
+                }
+
+                for (var m = 0; m < catButtons.length; m++) {
+                    if (catButtons[m].getAttribute('data-category') === activeCategory) {
+                        catButtons[m].classList.add('active');
+                    } else {
+                        catButtons[m].classList.remove('active');
+                    }
+                }
+            }, 100);
+        });
+    }
+
+    // Search functionality
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            filterEmojis(searchInput.value.toLowerCase());
+        });
+    }
+
     // Close picker when clicking outside
     document.addEventListener('click', function(e) {
         if (!picker.contains(e.target) && e.target !== pickerBtn) {
-            picker.style.display = 'none';
+            picker.classList.remove('active');
         }
     });
 }
 
+function filterEmojis(query) {
+    var sections = document.querySelectorAll('.emoji-section');
+    var items = document.querySelectorAll('.emoji-item');
+
+    if (!query) {
+        // Show all sections and items
+        sections.forEach(function(s) {
+            s.style.display = 'block';
+            var title = s.querySelector('.emoji-section-title');
+            if (title) title.style.display = 'block';
+        });
+        items.forEach(function(i) { i.style.display = 'flex'; });
+        return;
+    }
+
+    // Hide section titles when searching, show matching emojis
+    sections.forEach(function(s) {
+        var title = s.querySelector('.emoji-section-title');
+        if (title) title.style.display = 'none';
+        s.style.display = 'block';
+    });
+
+    // For now, show all emojis (proper search would need emoji keywords database)
+    items.forEach(function(item) {
+        item.style.display = 'flex';
+    });
+}
+
 function insertEmoji(emoji) {
-    const input = document.getElementById('messageInput');
-    const cursorPos = input.selectionStart;
-    const textBefore = input.value.substring(0, cursorPos);
-    const textAfter = input.value.substring(cursorPos);
-    
+    var input = document.getElementById('messageInput');
+    var cursorPos = input.selectionStart;
+    var textBefore = input.value.substring(0, cursorPos);
+    var textAfter = input.value.substring(cursorPos);
+
     input.value = textBefore + emoji + textAfter;
     input.focus();
-    
+
     // Set cursor position after emoji
-    const newPos = cursorPos + emoji.length;
+    var newPos = cursorPos + emoji.length;
     input.setSelectionRange(newPos, newPos);
-    
+
     // Close picker
-    document.getElementById('emojiPicker').style.display = 'none';
+    document.getElementById('emojiPicker').classList.remove('active');
 }
 
 // ============================================

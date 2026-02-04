@@ -114,7 +114,8 @@ self.addEventListener('fetch', (event) => {
     }
 
     // HTML pages - network first, fallback to offline page
-    if (request.headers.get('Accept')?.includes('text/html')) {
+    var acceptHeader = request.headers.get('Accept');
+    if (acceptHeader && acceptHeader.includes('text/html')) {
         event.respondWith(
             fetch(request)
                 .catch(() => caches.match(OFFLINE_URL))

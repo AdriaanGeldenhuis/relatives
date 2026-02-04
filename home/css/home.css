@@ -83,7 +83,7 @@ body {
 
 .bg-animation {
     position: fixed;
-    inset: 0;
+    top: 0; right: 0; bottom: 0; left: 0;
     z-index: -1;
     pointer-events: none;
     background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
@@ -760,7 +760,7 @@ body {
 
 .progress-text {
     position: absolute;
-    inset: 0;
+    top: 0; right: 0; bottom: 0; left: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -959,7 +959,7 @@ body {
 .stat-card::before {
     content: '';
     position: absolute;
-    inset: 0;
+    top: 0; right: 0; bottom: 0; left: 0;
     background: linear-gradient(135deg, 
         rgba(255, 255, 255, 0.1) 0%, 
         transparent 60%);

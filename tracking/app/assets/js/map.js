@@ -435,30 +435,52 @@ window.TrackingMap = {
 
     /**
      * Get user's current location
+     * Returns a promise that resolves with {lat, lng, accuracy} or rejects with an error
      */
-    getCurrentLocation() {
-        return new Promise((resolve, reject) => {
+    getCurrentLocation: function() {
+        return new Promise(function(resolve, reject) {
             if (!navigator.geolocation) {
-                reject(new Error('Geolocation not supported'));
+                reject(new Error('Geolocation not supported by your browser'));
                 return;
             }
 
             // Check if HTTPS (required for geolocation in modern browsers)
             if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                reject({ code: 0, message: 'HTTPS required for geolocation' });
+                reject(new Error('Secure connection (HTTPS) required for location access'));
                 return;
             }
 
             navigator.geolocation.getCurrentPosition(
-                pos => resolve({
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    accuracy: pos.coords.accuracy
-                }),
-                err => reject(err),
+                function(pos) {
+                    resolve({
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy
+                    });
+                },
+                function(err) {
+                    // Provide user-friendly error messages based on error code
+                    var message;
+                    switch (err.code) {
+                        case 1: // PERMISSION_DENIED
+                            message = 'Location permission denied';
+                            break;
+                        case 2: // POSITION_UNAVAILABLE
+                            message = 'Location information unavailable';
+                            break;
+                        case 3: // TIMEOUT
+                            message = 'Location request timed out';
+                            break;
+                        default:
+                            message = err.message || 'Could not get location';
+                    }
+                    var error = new Error(message);
+                    error.code = err.code;
+                    reject(error);
+                },
                 {
                     enableHighAccuracy: true,
-                    timeout: 15000,        // Increased from 10s to 15s
+                    timeout: 15000,        // 15 seconds timeout
                     maximumAge: 60000      // Accept cached position up to 1 minute old
                 }
             );
