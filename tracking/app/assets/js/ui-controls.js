@@ -182,47 +182,78 @@ window.UIControls = {
     },
 
     async getDirections() {
-        const userId = TrackingState.selectedMember;
+        var userId = TrackingState.selectedMember;
         if (!userId) return;
 
         try {
-            let myLoc;
+            var myLoc = null;
+            var myUserId = window.TRACKING_CONFIG ? window.TRACKING_CONFIG.userId : null;
 
-            // In native app, try to use the current user's tracked location first
-            if (NativeBridge.isNativeApp) {
-                const myUserId = window.TRACKING_CONFIG.userId;
-                const myMember = TrackingState.getMember(myUserId);
+            // Strategy 1: Use current user's tracked location from state
+            if (myUserId) {
+                var myMember = TrackingState.getMember(myUserId);
                 if (myMember && myMember.lat && myMember.lng) {
                     myLoc = { lat: myMember.lat, lng: myMember.lng };
                     console.log('[Directions] Using tracked location from state');
                 }
             }
 
-            // Fall back to browser geolocation if we don't have tracked location
+            // Strategy 2: Try browser geolocation (only if we don't have tracked location)
             if (!myLoc) {
                 try {
                     myLoc = await TrackingMap.getCurrentLocation();
+                    console.log('[Directions] Using browser geolocation');
                 } catch (geoErr) {
-                    // If geolocation fails in native app, give helpful error
-                    if (NativeBridge.isNativeApp) {
-                        Toast.show('Location not available. Make sure location tracking is enabled.', 'error');
-                        return;
-                    }
-                    throw geoErr;
+                    console.warn('[Directions] Browser geolocation failed:', geoErr.message || geoErr);
+                    // Continue to next strategy
                 }
             }
 
-            const response = await TrackingAPI.getDirections(
+            // Strategy 3: Fetch current user's last known location from server
+            if (!myLoc && myUserId) {
+                try {
+                    var response = await fetch('/tracking/api/location.php?user_id=' + myUserId, {
+                        credentials: 'same-origin'
+                    });
+                    if (response.ok) {
+                        var data = await response.json();
+                        if (data.success && data.location && data.location.lat && data.location.lng) {
+                            myLoc = { lat: data.location.lat, lng: data.location.lng };
+                            console.log('[Directions] Using last known location from server');
+                        }
+                    }
+                } catch (fetchErr) {
+                    console.warn('[Directions] Could not fetch last known location:', fetchErr);
+                }
+            }
+
+            // If we still don't have a location, show helpful error
+            if (!myLoc) {
+                Toast.show('Could not determine your location. Please enable location services or start tracking.', 'error');
+                return;
+            }
+
+            // Get destination member's location
+            var destMember = TrackingState.getMember(userId);
+            if (!destMember || !destMember.lat || !destMember.lng) {
+                Toast.show('Selected member\'s location is not available', 'error');
+                return;
+            }
+
+            var dirResponse = await TrackingAPI.getDirections(
                 { lat: myLoc.lat, lng: myLoc.lng },
-                { userId }
+                { userId: userId }
             );
 
-            if (response.success) {
-                TrackingState.setDirectionsRoute(response.data);
-                Directions.show(response.data);
+            if (dirResponse.success) {
+                TrackingState.setDirectionsRoute(dirResponse.data);
+                Directions.show(dirResponse.data);
                 this.hidePopup();
+            } else {
+                Toast.show(dirResponse.message || 'Could not get directions', 'error');
             }
         } catch (err) {
+            console.error('[Directions] Error:', err);
             Toast.show(err.message || 'Could not get directions', 'error');
         }
     },
