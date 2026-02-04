@@ -144,10 +144,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <span class="qa-icon">📊</span>
                         <span>Analytics</span>
                     </button>
-                    <button onclick="shareList()" class="quick-action-btn">
-                        <span class="qa-icon">📤</span>
-                        <span>Share</span>
-                    </button>
                 </div>
             </div>
         </div>
