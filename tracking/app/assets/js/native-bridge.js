@@ -50,7 +50,7 @@ window.NativeBridge = {
         }
 
         // Check for iOS WKWebView
-        if (window.webkit?.messageHandlers?.tracking) {
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             this.platform = 'ios';
             this.isNativeApp = true;
             this.isIOS = true;
@@ -59,7 +59,7 @@ window.NativeBridge = {
 
         // Check for Capacitor
         if (typeof window.Capacitor !== 'undefined') {
-            this.platform = window.Capacitor.getPlatform?.() || 'capacitor';
+            this.platform = (window.Capacitor.getPlatform && window.Capacitor.getPlatform()) || 'capacitor';
             this.isNativeApp = true;
             this.isCapacitor = true;
             this.isAndroid = this.platform === 'android';
@@ -128,9 +128,9 @@ window.NativeBridge = {
      * Notify native that tracking screen is visible
      */
     onTrackingVisible() {
-        if (this.isAndroid && window.Android?.onTrackingScreenVisible) {
+        if (this.isAndroid && window.Android && window.Android.onTrackingScreenVisible) {
             window.Android.onTrackingScreenVisible();
-        } else if (this.isIOS && window.webkit?.messageHandlers?.tracking) {
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'screenVisible'
             });
@@ -143,9 +143,9 @@ window.NativeBridge = {
      * Notify native that tracking screen is hidden
      */
     onTrackingHidden() {
-        if (this.isAndroid && window.Android?.onTrackingScreenHidden) {
+        if (this.isAndroid && window.Android && window.Android.onTrackingScreenHidden) {
             window.Android.onTrackingScreenHidden();
-        } else if (this.isIOS && window.webkit?.messageHandlers?.tracking) {
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'screenHidden'
             });
@@ -160,18 +160,18 @@ window.NativeBridge = {
     syncAuthToNative() {
         if (!this.isNativeApp) return;
 
-        const config = window.TRACKING_CONFIG;
-        if (!config?.userId) return;
+        var config = window.TRACKING_CONFIG;
+        if (!config || !config.userId) return;
 
         // Get session token from cookie or config
-        const sessionToken = this.getSessionToken();
+        var sessionToken = this.getSessionToken();
 
-        if (this.isAndroid && window.Android?.setAuthData) {
+        if (this.isAndroid && window.Android && window.Android.setAuthData) {
             window.Android.setAuthData(
                 String(config.userId),
                 sessionToken || ''
             );
-        } else if (this.isIOS && window.webkit?.messageHandlers?.tracking) {
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'setAuth',
                 userId: config.userId,
@@ -197,10 +197,11 @@ window.NativeBridge = {
     /**
      * Update tracking settings on native side
      */
-    updateTrackingSettings(intervalSeconds, highAccuracyMode = true) {
-        if (this.isAndroid && window.Android?.updateTrackingSettings) {
+    updateTrackingSettings(intervalSeconds, highAccuracyMode) {
+        if (highAccuracyMode === undefined) highAccuracyMode = true;
+        if (this.isAndroid && window.Android && window.Android.updateTrackingSettings) {
             window.Android.updateTrackingSettings(intervalSeconds, highAccuracyMode);
-        } else if (this.isIOS && window.webkit?.messageHandlers?.tracking) {
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'updateSettings',
                 interval: intervalSeconds,
@@ -212,10 +213,11 @@ window.NativeBridge = {
     /**
      * Request temporary high-frequency location updates
      */
-    requestLocationBoost(durationSeconds = 60) {
-        if (this.isAndroid && window.Android?.requestLocationBoost) {
+    requestLocationBoost(durationSeconds) {
+        if (durationSeconds === undefined) durationSeconds = 60;
+        if (this.isAndroid && window.Android && window.Android.requestLocationBoost) {
             window.Android.requestLocationBoost(durationSeconds);
-        } else if (this.isIOS && window.webkit?.messageHandlers?.tracking) {
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'locationBoost',
                 duration: durationSeconds
@@ -226,11 +228,11 @@ window.NativeBridge = {
     /**
      * Start native location tracking
      */
-    startTracking() {
-        if (this.isAndroid && window.Android?.startTracking) {
+    startTracking: function() {
+        if (this.isAndroid && window.Android && window.Android.startTracking) {
             window.Android.startTracking();
             return true;
-        } else if (this.isIOS && window.webkit?.messageHandlers?.tracking) {
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'startTracking'
             });
@@ -242,11 +244,11 @@ window.NativeBridge = {
     /**
      * Stop native location tracking
      */
-    stopTracking() {
-        if (this.isAndroid && window.Android?.stopTracking) {
+    stopTracking: function() {
+        if (this.isAndroid && window.Android && window.Android.stopTracking) {
             window.Android.stopTracking();
             return true;
-        } else if (this.isIOS && window.webkit?.messageHandlers?.tracking) {
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'stopTracking'
             });
@@ -258,8 +260,8 @@ window.NativeBridge = {
     /**
      * Check if native tracking is currently enabled
      */
-    isTrackingEnabled() {
-        if (this.isAndroid && window.Android?.isTrackingEnabled) {
+    isTrackingEnabled: function() {
+        if (this.isAndroid && window.Android && window.Android.isTrackingEnabled) {
             return window.Android.isTrackingEnabled();
         }
         // For iOS and others, we don't have a sync way to check
@@ -269,8 +271,8 @@ window.NativeBridge = {
     /**
      * Get FCM token for push notifications
      */
-    getFCMToken() {
-        if (this.isAndroid && window.Android?.getFCMToken) {
+    getFCMToken: function() {
+        if (this.isAndroid && window.Android && window.Android.getFCMToken) {
             return window.Android.getFCMToken();
         }
         return null;
@@ -279,10 +281,10 @@ window.NativeBridge = {
     /**
      * Clear auth data on logout
      */
-    clearAuth() {
-        if (this.isAndroid && window.Android?.clearAuthData) {
+    clearAuth: function() {
+        if (this.isAndroid && window.Android && window.Android.clearAuthData) {
             window.Android.clearAuthData();
-        } else if (this.isIOS && window.webkit?.messageHandlers?.tracking) {
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'clearAuth'
             });
@@ -292,19 +294,19 @@ window.NativeBridge = {
     /**
      * Log message to native console
      */
-    log(tag, message) {
-        if (this.isAndroid && window.Android?.logFromJS) {
+    log: function(tag, message) {
+        if (this.isAndroid && window.Android && window.Android.logFromJS) {
             window.Android.logFromJS(tag, message);
         }
         // Always log to browser console too
-        console.log(`[${tag}]`, message);
+        console.log('[' + tag + ']', message);
     },
 
     /**
      * Notify native that web app is ready
      */
-    notifyNativeReady() {
-        if (this.isAndroid && window.Android?.logFromJS) {
+    notifyNativeReady: function() {
+        if (this.isAndroid && window.Android && window.Android.logFromJS) {
             window.Android.logFromJS('NativeBridge', 'Web app ready');
         }
     },
@@ -312,11 +314,15 @@ window.NativeBridge = {
     /**
      * Post message to Capacitor plugins
      */
-    postCapacitorMessage(action, data = {}) {
-        if (!window.Capacitor?.Plugins?.Tracking) return;
+    postCapacitorMessage: function(action, data) {
+        if (data === undefined) data = {};
+        if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Tracking) return;
 
         try {
-            window.Capacitor.Plugins.Tracking[action]?.(data);
+            var trackingPlugin = window.Capacitor.Plugins.Tracking;
+            if (trackingPlugin[action]) {
+                trackingPlugin[action](data);
+            }
         } catch (e) {
             console.warn('[NativeBridge] Capacitor message failed:', e);
         }
@@ -325,27 +331,29 @@ window.NativeBridge = {
     /**
      * Request native permissions (location, notifications)
      */
-    async requestPermissions() {
-        if (this.isCapacitor && window.Capacitor?.Plugins?.Permissions) {
-            try {
-                const result = await window.Capacitor.Plugins.Permissions.query({
-                    name: 'location'
-                });
+    requestPermissions: function() {
+        var self = this;
+        if (self.isCapacitor && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Permissions) {
+            return window.Capacitor.Plugins.Permissions.query({
+                name: 'location'
+            }).then(function(result) {
                 if (result.state !== 'granted') {
-                    await window.Capacitor.Plugins.Permissions.request({
+                    return window.Capacitor.Plugins.Permissions.request({
                         name: 'location'
                     });
                 }
-            } catch (e) {
+            }).catch(function(e) {
                 console.warn('[NativeBridge] Permission request failed:', e);
-            }
+            });
         }
+        return Promise.resolve();
     },
 
     /**
      * Vibrate device (for notifications/alerts)
      */
-    vibrate(pattern = [100]) {
+    vibrate: function(pattern) {
+        if (pattern === undefined) pattern = [100];
         if ('vibrate' in navigator) {
             navigator.vibrate(pattern);
         }
@@ -354,8 +362,8 @@ window.NativeBridge = {
     /**
      * Show native toast/snackbar message
      */
-    showNativeToast(message) {
-        if (this.isCapacitor && window.Capacitor?.Plugins?.Toast) {
+    showNativeToast: function(message) {
+        if (this.isCapacitor && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Toast) {
             window.Capacitor.Plugins.Toast.show({
                 text: message,
                 duration: 'short'

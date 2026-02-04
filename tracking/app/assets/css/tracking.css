@@ -43,7 +43,8 @@ body {
 }
 
 /* Only hide overflow on map page, allow scrolling on sub-pages */
-body:has(.tracking-page-wrapper) {
+/* Use class-based approach for broader browser support instead of :has() */
+body.tracking-map-page {
     overflow: hidden !important;
 }
 
@@ -553,7 +554,10 @@ body.geofences-page {
 .marker-avatar::before {
     content: '';
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     border-radius: 50%;
     background: var(--pin-color);
     z-index: -1;

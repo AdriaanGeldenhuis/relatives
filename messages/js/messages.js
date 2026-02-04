@@ -70,10 +70,13 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initializeChat() {
-    MessageSystem.currentUserId = document.getElementById('currentUserId')?.value;
-    MessageSystem.currentUserName = document.getElementById('currentUserName')?.value;
-    MessageSystem.familyId = document.getElementById('familyId')?.value;
-    
+    var userIdEl = document.getElementById('currentUserId');
+    var userNameEl = document.getElementById('currentUserName');
+    var familyIdEl = document.getElementById('familyId');
+    MessageSystem.currentUserId = userIdEl ? userIdEl.value : null;
+    MessageSystem.currentUserName = userNameEl ? userNameEl.value : null;
+    MessageSystem.familyId = familyIdEl ? familyIdEl.value : null;
+
     console.log('💬 Chat initialized:', {
         userId: MessageSystem.currentUserId,
         userName: MessageSystem.currentUserName,
@@ -232,7 +235,7 @@ async function loadInitialMessages() {
         const data = await response.json();
         console.log('✅ Data received:', {
             success: data.success,
-            messageCount: data.messages?.length
+            messageCount: data.messages ? data.messages.length : 0
         });
         
         if (data.success) {
@@ -910,9 +913,11 @@ function showMessageOptions(messageId, event) {
 }
 
 function contextReplyMessage() {
-    const messageEl = document.querySelector(`[data-message-id="${MessageSystem.contextMessageId}"]`);
-    const text = messageEl.querySelector('.message-text')?.textContent || '';
-    const name = messageEl.querySelector('.message-author')?.textContent || 'Someone';
+    var messageEl = document.querySelector('[data-message-id="' + MessageSystem.contextMessageId + '"]');
+    var textEl = messageEl ? messageEl.querySelector('.message-text') : null;
+    var nameEl = messageEl ? messageEl.querySelector('.message-author') : null;
+    var text = textEl ? textEl.textContent : '';
+    var name = nameEl ? nameEl.textContent : 'Someone';
     replyToMessage(MessageSystem.contextMessageId, name, text);
 }
 
@@ -934,7 +939,8 @@ async function deleteMessage() {
         const data = await response.json();
         
         if (data.success) {
-            document.querySelector(`[data-message-id="${MessageSystem.contextMessageId}"]`)?.remove();
+            var msgToRemove = document.querySelector('[data-message-id="' + MessageSystem.contextMessageId + '"]');
+            if (msgToRemove) msgToRemove.parentNode.removeChild(msgToRemove);
         } else {
             showError(data.message || 'Failed to delete message');
         }
@@ -945,11 +951,44 @@ async function deleteMessage() {
 }
 
 function copyMessage() {
-    const messageEl = document.querySelector(`[data-message-id="${MessageSystem.contextMessageId}"]`);
-    const text = messageEl.querySelector('.message-text')?.textContent;
+    var messageEl = document.querySelector('[data-message-id="' + MessageSystem.contextMessageId + '"]');
+    var textEl = messageEl ? messageEl.querySelector('.message-text') : null;
+    var text = textEl ? textEl.textContent : null;
     if (text) {
-        navigator.clipboard.writeText(text);
+        // Try modern clipboard API first, then fallback to execCommand
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function() {
+                showNotification('Message copied!');
+            }).catch(function() {
+                copyTextFallback(text);
+            });
+        } else {
+            copyTextFallback(text);
+        }
+    }
+}
+
+function copyTextFallback(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    ta.setAttribute('readonly', '');
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, 99999);
+    var success = false;
+    try {
+        success = document.execCommand('copy');
+    } catch (e) {
+        success = false;
+    }
+    document.body.removeChild(ta);
+    if (success) {
         showNotification('Message copied!');
+    } else {
+        showNotification('Could not copy message');
     }
 }
 

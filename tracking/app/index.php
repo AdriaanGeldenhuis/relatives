@@ -77,6 +77,9 @@ require_once __DIR__ . '/../../shared/components/header.php';
 $cacheVersion = '12.3.6';
 ?>
 
+<!-- Add body class for tracking map page (replaces CSS :has() for browser compatibility) -->
+<script>document.body.classList.add('tracking-map-page');</script>
+
 <!-- PWA Manifest for Native App Shell Support -->
 <link rel="manifest" href="/tracking/app/manifest.json">
 <meta name="format-detection" content="telephone=no">

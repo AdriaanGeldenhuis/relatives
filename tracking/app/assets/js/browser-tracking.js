@@ -26,7 +26,7 @@ window.BrowserTracking = {
 
         // Skip if native app is handling tracking
         // Check NativeBridge first, then legacy interfaces
-        if (window.NativeBridge?.isNativeApp && window.NativeBridge.isTrackingEnabled()) {
+        if (window.NativeBridge && window.NativeBridge.isNativeApp && window.NativeBridge.isTrackingEnabled()) {
             console.log('Native app tracking active - skipping browser geolocation');
             return;
         }
