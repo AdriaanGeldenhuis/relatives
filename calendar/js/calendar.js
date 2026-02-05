@@ -567,27 +567,84 @@ function positionDayEvents(events) {
 
     const hourHeight = 60; // Height of each hour slot in pixels (from CSS .day-hour)
 
-    events.forEach(event => {
+    // Calculate time offsets for all events
+    const eventsWithTimes = events.map(event => {
         const startDate = new Date(event.starts_at);
         const endDate = new Date(event.ends_at);
+        const startOffset = startDate.getHours() + (startDate.getMinutes() / 60);
+        const endOffset = endDate.getHours() + (endDate.getMinutes() / 60);
+        return { ...event, startOffset, endOffset };
+    });
 
-        const startHour = startDate.getHours();
-        const startMinutes = startDate.getMinutes();
-        const endHour = endDate.getHours();
-        const endMinutes = endDate.getMinutes();
+    // Sort events by start time, then by duration (longer events first)
+    eventsWithTimes.sort((a, b) => {
+        if (a.startOffset !== b.startOffset) return a.startOffset - b.startOffset;
+        return (b.endOffset - b.startOffset) - (a.endOffset - a.startOffset);
+    });
 
-        // Calculate position based on hour slots
-        const startOffset = startHour + (startMinutes / 60);
-        const endOffset = endHour + (endMinutes / 60);
-        const top = startOffset * hourHeight;
-        const height = Math.max((endOffset - startOffset) * hourHeight, 30); // Min height 30px
-        
+    // Find overlapping groups and assign columns
+    const columns = []; // Array of arrays, each containing events in that column
+    const eventColumns = new Map(); // Map event id to its column index
+    const eventMaxColumns = new Map(); // Map event id to max columns it overlaps with
+
+    eventsWithTimes.forEach(event => {
+        // Find the first column where this event doesn't overlap with existing events
+        let columnIndex = 0;
+        let placed = false;
+
+        while (!placed) {
+            if (!columns[columnIndex]) {
+                columns[columnIndex] = [];
+            }
+
+            // Check if this event overlaps with any event in this column
+            const hasOverlap = columns[columnIndex].some(existingEvent => {
+                return event.startOffset < existingEvent.endOffset &&
+                       event.endOffset > existingEvent.startOffset;
+            });
+
+            if (!hasOverlap) {
+                columns[columnIndex].push(event);
+                eventColumns.set(event.id, columnIndex);
+                placed = true;
+            } else {
+                columnIndex++;
+            }
+        }
+    });
+
+    // Calculate max overlapping columns for each event
+    eventsWithTimes.forEach(event => {
+        let maxOverlap = 1;
+        for (let col = 0; col < columns.length; col++) {
+            const hasOverlap = columns[col].some(e => {
+                return event.startOffset < e.endOffset &&
+                       event.endOffset > e.startOffset;
+            });
+            if (hasOverlap) {
+                maxOverlap = col + 1;
+            }
+        }
+        eventMaxColumns.set(event.id, maxOverlap);
+    });
+
+    // Render events with proper positioning
+    eventsWithTimes.forEach(event => {
+        const top = event.startOffset * hourHeight;
+        const height = Math.max((event.endOffset - event.startOffset) * hourHeight, 30); // Min height 30px
+        const columnIndex = eventColumns.get(event.id);
+        const totalColumns = eventMaxColumns.get(event.id);
+        const widthPercent = 100 / totalColumns;
+        const leftPercent = columnIndex * widthPercent;
+
         const eventEl = document.createElement('div');
         eventEl.className = 'day-view-event';
         eventEl.style.cssText = `
             top: ${top}px;
             height: ${height}px;
             background: ${event.color};
+            left: ${leftPercent}%;
+            width: calc(${widthPercent}% - 4px);
         `;
         eventEl.innerHTML = `
             <div class="day-view-event-time">
@@ -597,7 +654,7 @@ function positionDayEvents(events) {
             ${event.location ? `<div class="day-view-event-location">📍 ${event.location}</div>` : ''}
         `;
         eventEl.onclick = () => showEventDetails(event.id);
-        
+
         dayEventsColumn.appendChild(eventEl);
     });
 }
