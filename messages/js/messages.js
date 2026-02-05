@@ -1009,6 +1009,9 @@ function setupEmojiPicker() {
         return;
     }
 
+    // Ensure picker starts closed
+    picker.classList.remove('active');
+
     // Toggle picker on button click
     pickerBtn.addEventListener('click', function(e) {
         e.stopPropagation();
