@@ -255,6 +255,29 @@ require_once __DIR__ . '/../shared/components/header.php';
     </div>
 </div>
 
+<!-- Share Modal -->
+<div id="shareModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h2>📤 Share Weather</h2>
+            <button onclick="WeatherWidget.getInstance().closeShareModal()" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom: 16px; color: rgba(255,255,255,0.8);">Choose how to share:</p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <button onclick="WeatherWidget.getInstance().exportWeatherPDF()" class="btn btn-primary" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px;">
+                    <span style="font-size: 1.25rem;">📄</span>
+                    <span>Export as PDF</span>
+                </button>
+                <button onclick="WeatherWidget.getInstance().shareWeatherWhatsApp()" class="btn" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; background: #25D366; color: white;">
+                    <span style="font-size: 1.25rem;">💬</span>
+                    <span>Share to WhatsApp</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Pass user location to JavaScript -->
 <script>
 window.USER_LOCATION = <?php echo $userLocation ? json_encode([
