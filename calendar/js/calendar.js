@@ -646,7 +646,7 @@ function positionDayEvents(events) {
             left: ${leftPercent}%;
             width: calc(${widthPercent}% - 4px);
         `;
-        eventEl.innerHTML = `<div class="day-view-event-title">${event.title}</div>`;
+        eventEl.innerHTML = `<div class="event-title">${event.title}</div>`;
         eventEl.onclick = () => showEventDetails(event.id);
 
         dayEventsColumn.appendChild(eventEl);
