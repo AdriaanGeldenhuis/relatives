@@ -456,13 +456,14 @@ body {
     right: 10px;
     border-radius: var(--radius-sm);
     border-left: 4px solid;
-    padding: var(--space-sm);
+    padding: 4px 8px;
     cursor: pointer;
     transition: all var(--transition-base);
     display: flex;
-    gap: var(--space-sm);
+    align-items: center;
+    gap: var(--space-xs);
     overflow: hidden;
-    min-height: 50px;
+    box-sizing: border-box;
 }
 
 .timeline-event:hover {
@@ -502,8 +503,7 @@ body {
     flex: 1;
     min-width: 0;
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
 }
 
 .event-title {
