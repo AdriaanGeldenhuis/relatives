@@ -37,7 +37,7 @@ try {
         "SELECT tm.user_id, u.name, tm.role
          FROM ht_trip_members tm
          JOIN users u ON tm.user_id = u.id
-         WHERE tm.trip_id = ? AND tm.status = 'accepted'",
+         WHERE tm.trip_id = ? AND tm.status = 'joined'",
         [$tripId]
     );
 

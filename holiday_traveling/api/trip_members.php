@@ -49,12 +49,12 @@ try {
         'role' => 'owner'
     ];
 
-    // Get accepted trip members
+    // Get joined trip members
     $tripMembers = HT_DB::fetchAll(
         "SELECT tm.user_id, u.name, u.email, tm.role
          FROM ht_trip_members tm
          JOIN users u ON tm.user_id = u.id
-         WHERE tm.trip_id = ? AND tm.status = 'accepted'
+         WHERE tm.trip_id = ? AND tm.status = 'joined'
          ORDER BY u.name",
         [$tripId]
     );
