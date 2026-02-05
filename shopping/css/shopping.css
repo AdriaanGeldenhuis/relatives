@@ -1714,6 +1714,12 @@ body {
     align-items: center;
 }
 
+/* Elevate item card when its gear menu is open */
+.item-card:has(.gear-dropdown.active),
+.item-card.gear-menu-open {
+    z-index: 1000;
+}
+
 .gear-dropdown {
     display: none;
     position: absolute;

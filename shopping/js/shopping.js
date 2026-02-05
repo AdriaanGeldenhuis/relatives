@@ -1715,7 +1715,18 @@ function toggleGearMenu(event, itemId) {
     closeAllListGearMenus();
 
     // Toggle this menu
+    const isOpening = !menu.classList.contains('active');
     menu.classList.toggle('active');
+
+    // Add/remove elevated class on parent item-card for z-index
+    const itemCard = menu.closest('.item-card');
+    if (itemCard) {
+        if (isOpening) {
+            itemCard.classList.add('gear-menu-open');
+        } else {
+            itemCard.classList.remove('gear-menu-open');
+        }
+    }
 
     // Position the menu
     const btn = event.currentTarget;
@@ -1735,6 +1746,10 @@ function toggleGearMenu(event, itemId) {
 function closeAllGearMenus() {
     document.querySelectorAll('.gear-dropdown.active').forEach(menu => {
         menu.classList.remove('active');
+    });
+    // Remove elevated z-index class from all item-cards
+    document.querySelectorAll('.item-card.gear-menu-open').forEach(card => {
+        card.classList.remove('gear-menu-open');
     });
 }
 
