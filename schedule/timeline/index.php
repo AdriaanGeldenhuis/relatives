@@ -231,16 +231,6 @@ require_once __DIR__ . '/../../shared/components/header.php';
                         </div>
                     <?php endfor; ?>
 
-                    <!-- Current Time Indicator -->
-                    <?php if ($isToday && $currentHour >= $timelineStart && $currentHour <= $timelineEnd): ?>
-                        <?php
-                        $currentPosition = (($currentHour - $timelineStart) + ($currentMinute / 60)) / $totalHours * 100;
-                        ?>
-                        <div class="current-time-line" style="top: <?php echo $currentPosition; ?>%" id="currentTimeLine">
-                            <span class="current-time-marker">NOW</span>
-                        </div>
-                    <?php endif; ?>
-
                     <!-- Events -->
                     <?php if (empty($events)): ?>
                         <div class="no-events">
