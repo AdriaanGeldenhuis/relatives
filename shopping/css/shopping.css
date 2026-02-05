@@ -181,67 +181,6 @@ body {
     font-weight: 500;
 }
 
-/* ============================================
-   QUICK ACTIONS (Styled like schedule)
-   ============================================ */
-
-.quick-actions {
-    display: flex;
-    gap: var(--shopping-space-sm);
-    margin-top: var(--shopping-space-lg);
-    flex-wrap: wrap;
-    justify-content: center;
-    position: relative;
-    z-index: 1;
-}
-
-.quick-action-btn {
-    background: var(--shopping-glass-medium);
-    border: 1px solid var(--shopping-glass-border);
-    border-radius: var(--shopping-radius-md);
-    padding: var(--shopping-space-sm) var(--shopping-space-md);
-    color: white;
-    cursor: pointer;
-    transition: var(--shopping-transition);
-    display: flex;
-    align-items: center;
-    gap: var(--shopping-space-xs);
-    font-weight: 700;
-    font-size: 0.85rem;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-}
-
-.quick-action-btn:hover {
-    background: var(--shopping-glass-heavy);
-    transform: translateY(-4px) scale(1.05);
-    box-shadow: var(--shopping-shadow-lg);
-}
-
-.quick-action-btn:active {
-    transform: translateY(-2px) scale(1.02);
-}
-
-.quick-action-btn.active {
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.4), rgba(118, 75, 162, 0.4));
-    border-color: var(--shopping-primary);
-}
-
-.quick-action-btn.has-bought {
-    background: linear-gradient(135deg, rgba(67, 233, 123, 0.25), rgba(56, 249, 215, 0.25));
-    border-color: rgba(67, 233, 123, 0.5);
-}
-
-.quick-action-btn.has-bought:hover {
-    background: linear-gradient(135deg, rgba(67, 233, 123, 0.4), rgba(56, 249, 215, 0.4));
-    border-color: var(--shopping-success);
-}
-
-.quick-action-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    pointer-events: none;
-}
 
 .bought-badge {
     background: linear-gradient(135deg, #43e97b, #38f9d7);
@@ -1553,16 +1492,7 @@ body {
     .greeting-text {
         font-size: 3rem;
     }
-    
-    .quick-actions {
-        justify-content: center;
-    }
-    
-    .quick-action-btn {
-        flex: 0 1 auto;
-        min-width: 160px;
-    }
-    
+
     .quick-add-content {
         flex-wrap: nowrap;
     }
@@ -1605,11 +1535,7 @@ body {
     .greeting-text {
         font-size: 1.5rem;
     }
-    
-    .quick-action-btn {
-        min-width: 120px;
-    }
-    
+
     .list-stats {
         grid-template-columns: repeat(3, 1fr);
         padding: var(--shopping-space-sm);
