@@ -53,4 +53,5 @@ $user = HT_Auth::user();
     window.HT.csrfToken = '<?php echo HT_CSRF::token(); ?>';
     window.HT.userId = <?php echo HT_Auth::userId() ?? 'null'; ?>;
     window.HT.familyId = <?php echo HT_Auth::familyId() ?? 'null'; ?>;
+    window.HT.getCSRFToken = function() { return window.HT.csrfToken || ''; };
 </script>
