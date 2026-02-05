@@ -34,16 +34,16 @@ try {
 
     // Get trip members
     $members = HT_DB::fetchAll(
-        "SELECT tm.user_id, u.name, tm.role
+        "SELECT tm.user_id, u.full_name as name, tm.role
          FROM ht_trip_members tm
          JOIN users u ON tm.user_id = u.id
-         WHERE tm.trip_id = ? AND tm.status = 'accepted'",
+         WHERE tm.trip_id = ? AND tm.status = 'joined'",
         [$tripId]
     );
 
     // Add trip owner
     $owner = HT_DB::fetchOne(
-        "SELECT t.user_id, u.name
+        "SELECT t.user_id, u.full_name as name
          FROM ht_trips t
          JOIN users u ON t.user_id = u.id
          WHERE t.id = ?",

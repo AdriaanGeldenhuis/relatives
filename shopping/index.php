@@ -131,20 +131,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </h1>
                 <p class="greeting-subtitle">Smart family shopping with AI</p>
 
-                <div class="quick-actions">
-                    <button onclick="showAddItemModal()" class="quick-action-btn">
-                        <span class="qa-icon">➕</span>
-                        <span>Add Item</span>
-                    </button>
-                    <button onclick="toggleBulkMode()" class="quick-action-btn" id="bulkModeBtn">
-                        <span class="qa-icon">☑️</span>
-                        <span>Bulk</span>
-                    </button>
-                    <button onclick="showAnalytics()" class="quick-action-btn">
-                        <span class="qa-icon">📊</span>
-                        <span>Analytics</span>
-                    </button>
-                </div>
             </div>
         </div>
 

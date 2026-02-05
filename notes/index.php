@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $body = trim($_POST['body'] ?? '');
                 $color = $_POST['color'] ?? '#ffeb3b';
 
-                if ($type === 'text' && empty($body) && !isset($_FILES['image'])) {
+                if ($type === 'text' && empty($body) && !isset($_FILES['images'])) {
                     throw new Exception('Note content is required');
                 }
 
