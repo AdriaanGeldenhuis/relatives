@@ -544,24 +544,26 @@ function createMessageElement(msg) {
     let reactionsHtml = '';
     if (msg.reactions && msg.reactions.length > 0) {
         reactionsHtml = '<div class="message-reactions">';
-        
+
         const grouped = {};
         msg.reactions.forEach(r => {
             if (!grouped[r.emoji]) grouped[r.emoji] = [];
             grouped[r.emoji].push(r.user_id);
         });
-        
+
         Object.entries(grouped).forEach(([emoji, users]) => {
             const hasOwn = users.includes(parseInt(MessageSystem.currentUserId));
+            const countDisplay = users.length > 1 ? `<span class="reaction-count">${users.length}</span>` : '';
             reactionsHtml += `
-                <div class="reaction ${hasOwn ? 'own' : ''}" 
+                <div class="reaction ${hasOwn ? 'own' : ''}"
                      onclick="toggleReaction(${msg.id}, '${emoji}')"
                      title="${users.length} reaction(s)">
-                    ${emoji} <span class="reaction-count">${users.length}</span>
+                    ${emoji}${countDisplay}
                 </div>
             `;
         });
-        
+
+        reactionsHtml += `<div class="reaction reaction-add" onclick="showReactionPicker(${msg.id})" title="Add reaction">+</div>`;
         reactionsHtml += '</div>';
     }
     
