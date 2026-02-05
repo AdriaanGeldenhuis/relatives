@@ -646,13 +646,7 @@ function positionDayEvents(events) {
             left: ${leftPercent}%;
             width: calc(${widthPercent}% - 4px);
         `;
-        eventEl.innerHTML = `
-            <div class="day-view-event-time">
-                ${formatTime(event.starts_at)} - ${formatTime(event.ends_at)}
-            </div>
-            <div class="day-view-event-title">${event.title}</div>
-            ${event.location ? `<div class="day-view-event-location">📍 ${event.location}</div>` : ''}
-        `;
+        eventEl.innerHTML = `<div class="day-view-event-title">${event.title}</div>`;
         eventEl.onclick = () => showEventDetails(event.id);
 
         dayEventsColumn.appendChild(eventEl);
