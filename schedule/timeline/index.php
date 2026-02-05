@@ -226,9 +226,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
                     <!-- Hour Lines -->
                     <?php for ($hour = $timelineStart; $hour <= $timelineEnd; $hour++): ?>
-                        <div class="hour-line <?php echo $hour === $currentHour && $isToday ? 'current-hour' : ''; ?>"
-                             style="top: <?php echo (($hour - $timelineStart) / $totalHours) * 100; ?>%">
-                        </div>
+                        <div class="hour-line" style="top: <?php echo (($hour - $timelineStart) / $totalHours) * 100; ?>%"></div>
                     <?php endfor; ?>
 
                     <!-- Events -->
