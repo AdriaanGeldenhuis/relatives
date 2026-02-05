@@ -54,7 +54,7 @@ try {
 
 $pageTitle = 'Weather';
 $activePage = 'weather';
-$cacheVersion = '10.0.0';
+$cacheVersion = '10.1.0';
 $pageCSS = ['/weather/css/weather.css?v=' . $cacheVersion];
 $pageJS = ['/weather/js/weather.js?v=' . $cacheVersion];
 
