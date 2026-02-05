@@ -28,7 +28,7 @@ try {
 
     // Get trip owner
     $owner = HT_DB::fetchOne(
-        "SELECT t.user_id, u.name, u.email
+        "SELECT t.user_id, u.full_name as name, u.email
          FROM ht_trips t
          JOIN users u ON t.user_id = u.id
          WHERE t.id = ?",
@@ -51,11 +51,11 @@ try {
 
     // Get joined trip members
     $tripMembers = HT_DB::fetchAll(
-        "SELECT tm.user_id, u.name, u.email, tm.role
+        "SELECT tm.user_id, u.full_name as name, u.email, tm.role
          FROM ht_trip_members tm
          JOIN users u ON tm.user_id = u.id
          WHERE tm.trip_id = ? AND tm.status = 'joined'
-         ORDER BY u.name",
+         ORDER BY u.full_name",
         [$tripId]
     );
 
