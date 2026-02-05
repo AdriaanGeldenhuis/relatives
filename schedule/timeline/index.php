@@ -275,10 +275,6 @@ require_once __DIR__ . '/../../shared/components/header.php';
                                  data-event-id="<?php echo $event['id']; ?>"
                                  onclick="showEventDetails(<?php echo $event['id']; ?>)">
 
-                                <div class="event-time-badge">
-                                    <?php echo date('H:i', $startTime); ?>
-                                </div>
-
                                 <div class="event-content">
                                     <div class="event-title">
                                         <span class="event-icon"><?php echo $typeInfo['icon']; ?></span>
@@ -289,15 +285,6 @@ require_once __DIR__ . '/../../shared/components/header.php';
                                         <?php if ($event['repeat_rule']): ?>
                                             <span class="repeat-badge">🔁</span>
                                         <?php endif; ?>
-                                    </div>
-
-                                    <div class="event-meta">
-                                        <span class="time-range">
-                                            <?php echo date('H:i', $startTime); ?> → <?php echo date('H:i', $endTime); ?>
-                                        </span>
-                                        <span class="duration">
-                                            ⏱️ <?php echo formatDuration($duration); ?>
-                                        </span>
                                     </div>
                                 </div>
 
