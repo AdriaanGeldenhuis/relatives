@@ -992,6 +992,29 @@ require_once __DIR__ . '/../shared/components/header.php';
     </div>
 </div>
 
+<!-- Export Modal -->
+<div id="exportModal" class="modal">
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h2>📤 Export Schedule</h2>
+            <button onclick="closeModal('exportModal')" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom: 16px;">Choose export format:</p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <button onclick="exportAsPDF()" class="btn btn-primary" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px;">
+                    <span style="font-size: 1.25rem;">📄</span>
+                    <span>Export as PDF</span>
+                </button>
+                <button onclick="shareToWhatsApp()" class="btn btn-success" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; background: #25D366;">
+                    <span style="font-size: 1.25rem;">💬</span>
+                    <span>Share to WhatsApp</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Week View Modal - Fullscreen -->
 <div id="weekViewModal" class="modal">
     <div class="modal-content modal-week-fullscreen">
