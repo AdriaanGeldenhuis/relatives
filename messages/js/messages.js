@@ -569,7 +569,7 @@ function createMessageElement(msg) {
     
     const actions = `
         <div class="message-actions">
-            <button class="message-action-btn" onclick="replyToMessage(${msg.id}, '${escapeHtml(msg.full_name)}', '${escapeHtml(msg.content || '')}')" title="Reply">↩️</button>
+            <button class="message-action-btn" onclick="replyToMessage(${msg.id}, '${escapeForAttr(msg.full_name)}', '${escapeForAttr(msg.content || '')}')" title="Reply">↩️</button>
             <button class="message-action-btn" onclick="showReactionPicker(${msg.id})" title="React">😊</button>
             ${isOwn && window.enableEditMessage ? `<button class="message-action-btn" onclick="enableEditMessage(${msg.id})" title="Edit">✏️</button>` : ''}
             <button class="message-action-btn" onclick="showMessageOptions(${msg.id}, event)" title="More">⋮</button>
@@ -1267,6 +1267,11 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function escapeForAttr(text) {
+    if (!text) return '';
+    return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
 }
 
 function linkify(text) {
