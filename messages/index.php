@@ -50,7 +50,7 @@ try {
 $pageTitle = 'Family Chat';
 $activePage = 'messages';
 
-$cacheVersion = '10.1.0';
+$cacheVersion = '10.2.0';
 $pageCSS = [
     '/messages/css/messages.css?v=' . $cacheVersion,
     '/messages/css/messages-enhanced.css?v=' . $cacheVersion
