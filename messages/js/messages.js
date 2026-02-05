@@ -492,8 +492,9 @@ function displayMessages(messages, clearFirst = false) {
 // ============================================
 function createMessageElement(msg) {
     const isOwn = msg.user_id == MessageSystem.currentUserId;
+    const hasReactions = msg.reactions && msg.reactions.length > 0;
     const div = document.createElement('div');
-    div.className = `message ${isOwn ? 'own' : ''}`;
+    div.className = `message ${isOwn ? 'own' : ''} ${hasReactions ? 'has-reactions' : ''}`;
     div.dataset.messageId = msg.id;
     div.dataset.userId = msg.user_id;
 
