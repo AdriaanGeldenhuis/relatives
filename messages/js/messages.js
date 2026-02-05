@@ -740,21 +740,33 @@ async function toggleReaction(messageId, emoji) {
     }
 }
 
-function showReactionPicker(messageId) {
+function showReactionPicker(messageId, event) {
+    // Remove any existing reaction picker
+    const existingPicker = document.querySelector('.reaction-picker');
+    if (existingPicker) existingPicker.remove();
+
     const picker = document.createElement('div');
-    picker.className = 'emoji-picker reaction-picker';
-    picker.style.display = 'block';
-    picker.style.position = 'fixed';
-    picker.style.zIndex = '1001';
-    
-    const emojis = ['❤️', '👍', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
-    
-    picker.innerHTML = '<div class="emoji-grid">' +
-        emojis.map(e => `<button class="emoji-item" data-emoji="${e}" onclick="toggleReaction(${messageId}, '${e}'); this.parentElement.parentElement.remove();">${e}</button>`).join('') +
-        '</div>';
-    
+    picker.className = 'reaction-picker';
+
+    const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '🙏', '🔥', '🎉', '👏', '💯', '🤔', '😍', '🥳', '😭', '💀'];
+
+    picker.innerHTML = `
+        <div class="reaction-picker-grid">
+            ${emojis.map(e => `<button class="reaction-picker-item" onclick="toggleReaction(${messageId}, '${e}'); document.querySelector('.reaction-picker').remove();">${e}</button>`).join('')}
+        </div>
+    `;
+
     document.body.appendChild(picker);
-    
+
+    // Position the picker in center of screen on mobile, or near click on desktop
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const pickerWidth = 320;
+    const pickerHeight = 120;
+
+    picker.style.left = Math.max(10, (viewportWidth - pickerWidth) / 2) + 'px';
+    picker.style.top = Math.max(10, (viewportHeight - pickerHeight) / 2) + 'px';
+
     setTimeout(() => {
         document.addEventListener('click', function removePickerClick(e) {
             if (!picker.contains(e.target)) {
