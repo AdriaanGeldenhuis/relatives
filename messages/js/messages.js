@@ -27,7 +27,7 @@ const MessageSystem = {
     sessionWarmedUp: false,
     
     // Media
-    mediaFile: null,
+    mediaFiles: [],
     
     // Retry Logic
     loadRetryCount: 0,
@@ -521,7 +521,30 @@ function createMessageElement(msg) {
     
     let mediaHtml = '';
     if (msg.media_path) {
-        if (msg.message_type === 'image') {
+        if (msg.message_type === 'multi') {
+            // Multiple files stored as JSON
+            try {
+                const files = typeof msg.media_path === 'string' ? JSON.parse(msg.media_path) : msg.media_path;
+                mediaHtml = '<div class="message-media message-media-multi">';
+                files.forEach(f => {
+                    if (f.type && f.type.startsWith('image/')) {
+                        mediaHtml += `<img src="${f.path}" alt="${escapeHtml(f.name)}" loading="lazy" onclick="openMediaViewer('${f.path}', 'image')">`;
+                    } else if (f.type && f.type.startsWith('video/')) {
+                        mediaHtml += `<video src="${f.path}" controls></video>`;
+                    } else if (f.type && f.type.startsWith('audio/')) {
+                        mediaHtml += `<audio src="${f.path}" controls></audio>`;
+                    } else {
+                        const ext = f.name ? f.name.split('.').pop().toUpperCase() : 'FILE';
+                        const icon = (f.type === 'application/pdf') ? '📄' : '📎';
+                        const size = f.size ? (f.size / 1024).toFixed(0) + 'KB' : '';
+                        mediaHtml += `<a href="${f.path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(f.name)}</span><small>${ext} ${size}</small></a>`;
+                    }
+                });
+                mediaHtml += '</div>';
+            } catch (e) {
+                mediaHtml = '';
+            }
+        } else if (msg.message_type === 'image') {
             mediaHtml = `
                 <div class="message-media">
                     <img src="${msg.media_path}" alt="Image" loading="lazy" onclick="openMediaViewer('${msg.media_path}', 'image')">
@@ -537,6 +560,15 @@ function createMessageElement(msg) {
             mediaHtml = `
                 <div class="message-media">
                     <audio src="${msg.media_path}" controls></audio>
+                </div>
+            `;
+        } else if (msg.message_type === 'document') {
+            const fileName = msg.media_path.split('/').pop();
+            const ext = fileName.split('.').pop().toUpperCase();
+            const icon = ext === 'PDF' ? '📄' : '📎';
+            mediaHtml = `
+                <div class="message-media">
+                    <a href="${msg.media_path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(fileName)}</span><small>${ext}</small></a>
                 </div>
             `;
         }
@@ -615,7 +647,7 @@ async function sendMessage() {
     const input = document.getElementById('messageInput');
     const content = input.value.trim();
     
-    if (!content && !MessageSystem.mediaFile) return;
+    if (!content && MessageSystem.mediaFiles.length === 0) return;
     
     const sendBtn = document.getElementById('sendBtn');
     sendBtn.disabled = true;
@@ -629,9 +661,9 @@ async function sendMessage() {
             formData.append('reply_to_message_id', MessageSystem.replyToMessageId);
         }
         
-        if (MessageSystem.mediaFile) {
-            formData.append('media', MessageSystem.mediaFile);
-        }
+        MessageSystem.mediaFiles.forEach((file, i) => {
+            formData.append('media[]', file);
+        });
         
         const url = window.location.origin + '/messages/api/send.php';
         
@@ -865,30 +897,80 @@ function cancelReply() {
 // MEDIA HANDLING
 // ============================================
 function handleFileSelect(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    MessageSystem.mediaFile = file;
-    
-    const preview = document.getElementById('mediaPreview');
-    const previewImage = document.getElementById('previewImage');
-    const previewVideo = document.getElementById('previewVideo');
-    
-    if (file.type.startsWith('image/')) {
-        previewImage.src = URL.createObjectURL(file);
-        previewImage.style.display = 'block';
-        previewVideo.style.display = 'none';
-    } else if (file.type.startsWith('video/')) {
-        previewVideo.src = URL.createObjectURL(file);
-        previewVideo.style.display = 'block';
-        previewImage.style.display = 'none';
+    const files = Array.from(event.target.files);
+    if (!files.length) return;
+
+    // Max 10 files
+    const newFiles = files.slice(0, 10 - MessageSystem.mediaFiles.length);
+    if (newFiles.length === 0) {
+        showError('Maximum 10 files allowed');
+        return;
     }
-    
+    MessageSystem.mediaFiles.push(...newFiles);
+
+    const preview = document.getElementById('mediaPreview');
+    const previewContent = document.getElementById('previewContent');
+
+    // Clear old previews (keep the cancel button)
+    previewContent.querySelectorAll('.preview-item').forEach(el => el.remove());
+
+    MessageSystem.mediaFiles.forEach((file, i) => {
+        const item = document.createElement('div');
+        item.className = 'preview-item';
+
+        if (file.type.startsWith('image/')) {
+            item.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="Preview">
+                <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+        } else if (file.type.startsWith('video/')) {
+            item.innerHTML = `<video src="${URL.createObjectURL(file)}" controls></video>
+                <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+        } else {
+            const ext = file.name.split('.').pop().toUpperCase();
+            const icon = file.type === 'application/pdf' ? '📄' : '📎';
+            item.innerHTML = `<div class="doc-preview">${icon}<span class="doc-name">${escapeHtml(file.name)}</span><span class="doc-size">${ext} · ${(file.size / 1024).toFixed(0)}KB</span></div>
+                <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+        }
+        previewContent.appendChild(item);
+    });
+
     preview.style.display = 'block';
+    // Reset input so same file can be re-selected
+    event.target.value = '';
+}
+
+function removeFile(index) {
+    MessageSystem.mediaFiles.splice(index, 1);
+    if (MessageSystem.mediaFiles.length === 0) {
+        cancelMedia();
+    } else {
+        // Re-render previews
+        const fakeEvent = { target: { files: [], value: '' } };
+        const preview = document.getElementById('mediaPreview');
+        const previewContent = document.getElementById('previewContent');
+        previewContent.querySelectorAll('.preview-item').forEach(el => el.remove());
+
+        MessageSystem.mediaFiles.forEach((file, i) => {
+            const item = document.createElement('div');
+            item.className = 'preview-item';
+            if (file.type.startsWith('image/')) {
+                item.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="Preview">
+                    <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+            } else if (file.type.startsWith('video/')) {
+                item.innerHTML = `<video src="${URL.createObjectURL(file)}" controls></video>
+                    <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+            } else {
+                const ext = file.name.split('.').pop().toUpperCase();
+                const icon = file.type === 'application/pdf' ? '📄' : '📎';
+                item.innerHTML = `<div class="doc-preview">${icon}<span class="doc-name">${escapeHtml(file.name)}</span><span class="doc-size">${ext} · ${(file.size / 1024).toFixed(0)}KB</span></div>
+                    <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+            }
+            previewContent.appendChild(item);
+        });
+    }
 }
 
 function cancelMedia() {
-    MessageSystem.mediaFile = null;
+    MessageSystem.mediaFiles = [];
     document.getElementById('mediaPreview').style.display = 'none';
     document.getElementById('fileInput').value = '';
 }
@@ -1407,6 +1489,7 @@ window.showReplyPreview = showReplyPreview;
 window.cancelReply = cancelReply;
 window.handleFileSelect = handleFileSelect;
 window.cancelMedia = cancelMedia;
+window.removeFile = removeFile;
 window.insertEmoji = insertEmoji;
 window.showMessageOptions = showMessageOptions;
 window.contextReplyMessage = contextReplyMessage;
