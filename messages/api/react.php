@@ -107,9 +107,20 @@ try {
         }
     }
     
+    // Fetch updated reactions for this message
+    $stmt = $db->prepare("
+        SELECT user_id, emoji
+        FROM message_reactions
+        WHERE message_id = ?
+        ORDER BY created_at ASC
+    ");
+    $stmt->execute([$messageId]);
+    $reactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
     echo json_encode([
         'success' => true,
-        'action' => $action
+        'action' => $action,
+        'reactions' => $reactions
     ]);
     
 } catch (Exception $e) {

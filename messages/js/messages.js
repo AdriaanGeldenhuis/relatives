@@ -597,10 +597,10 @@ function createMessageElement(msg) {
                 ${replyHtml}
                 ${msg.content ? `<div class="message-text">${linkify(escapeHtml(msg.content))}${editedIndicator}</div>` : ''}
                 ${mediaHtml}
-                ${reactionsHtml}
                 ${actions}
                 <span class="message-time">${time}</span>
             </div>
+            ${reactionsHtml}
         </div>
         ${isOwn ? avatar : ''}
     `;
@@ -720,21 +720,71 @@ async function checkTypingStatus() {
 // ============================================
 // REACTIONS
 // ============================================
+function buildReactionsHtml(messageId, reactions) {
+    if (!reactions || reactions.length === 0) return '';
+
+    const grouped = {};
+    reactions.forEach(r => {
+        if (!grouped[r.emoji]) grouped[r.emoji] = [];
+        grouped[r.emoji].push(parseInt(r.user_id));
+    });
+
+    let html = '<div class="message-reactions">';
+
+    Object.entries(grouped).forEach(([emoji, users]) => {
+        const hasOwn = users.includes(parseInt(MessageSystem.currentUserId));
+        const countDisplay = users.length > 1 ? `<span class="reaction-count">${users.length}</span>` : '';
+        html += `
+            <div class="reaction ${hasOwn ? 'own' : ''}"
+                 onclick="toggleReaction(${messageId}, '${emoji}')"
+                 title="${users.length} reaction(s)">
+                ${emoji}${countDisplay}
+            </div>
+        `;
+    });
+
+    html += `<div class="reaction reaction-add" onclick="showReactionPicker(${messageId})" title="Add reaction">+</div>`;
+    html += '</div>';
+    return html;
+}
+
+function updateReactionDOM(messageId, reactions) {
+    const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageEl) return;
+
+    const contentEl = messageEl.querySelector('.message-content');
+    if (!contentEl) return;
+
+    // Remove old reactions
+    const oldReactions = messageEl.querySelector('.message-reactions');
+    if (oldReactions) oldReactions.remove();
+
+    if (reactions && reactions.length > 0) {
+        const html = buildReactionsHtml(messageId, reactions);
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        contentEl.appendChild(temp.firstElementChild);
+        messageEl.classList.add('has-reactions');
+    } else {
+        messageEl.classList.remove('has-reactions');
+    }
+}
+
 async function toggleReaction(messageId, emoji) {
     try {
         const url = window.location.origin + '/messages/api/react.php';
-        
+
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message_id: messageId, emoji: emoji }),
             credentials: 'same-origin'
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
-            setTimeout(() => loadNewMessages(), 300);
+            updateReactionDOM(messageId, data.reactions || []);
         }
     } catch (error) {
         console.error('Error toggling reaction:', error);

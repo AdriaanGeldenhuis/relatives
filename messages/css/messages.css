@@ -620,11 +620,8 @@ html, body {
     cursor: pointer;
 }
 
-/* Reactions - WhatsApp style at bottom left of message */
+/* Reactions - WhatsApp style below message bubble */
 .message-reactions {
-    position: absolute;
-    bottom: -10px;
-    left: 10px;
     display: inline-flex;
     align-items: center;
     gap: 2px;
@@ -632,6 +629,9 @@ html, body {
     border-radius: 16px;
     padding: 2px 6px;
     box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
+    margin-top: -10px;
+    margin-left: 10px;
+    position: relative;
     z-index: 1;
 }
 
