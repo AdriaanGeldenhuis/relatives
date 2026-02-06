@@ -649,29 +649,14 @@ async function sendMessage() {
             cancelReply();
             cancelMedia();
 
-            // Retry loading until the sent message appears in the DOM
-            const sentId = data.message_id;
-            let attempts = 0;
-
-            const loadSentMessage = async () => {
-                if (attempts >= 5) return;
-                attempts++;
-
-                // Wait if another load is in progress
-                if (MessageSystem.isLoadingMessages) {
-                    setTimeout(loadSentMessage, 500);
-                    return;
+            // Instantly display the sent message from server response
+            if (data.sent_message) {
+                displayMessages([data.sent_message], false);
+                if (data.sent_message.id > MessageSystem.lastMessageId) {
+                    MessageSystem.lastMessageId = data.sent_message.id;
                 }
-
-                await loadNewMessages();
-
-                // If our message still isn't in the DOM, retry
-                if (sentId && !document.querySelector(`[data-message-id="${sentId}"]`)) {
-                    setTimeout(loadSentMessage, 500);
-                }
-            };
-
-            setTimeout(loadSentMessage, 300);
+                scrollToBottom();
+            }
         } else {
             showError(data.message || 'Failed to send message');
         }

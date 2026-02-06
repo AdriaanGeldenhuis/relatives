@@ -256,12 +256,36 @@ try {
         error_log('Audit log failed: ' . $e->getMessage());
     }
     
+    // Fetch the full sent message to return to client for instant display
+    $stmt = $db->prepare("
+        SELECT
+            m.id,
+            m.user_id,
+            m.content,
+            m.message_type,
+            m.media_path,
+            m.reply_to_message_id,
+            m.created_at,
+            m.edited_at,
+            u.full_name,
+            u.avatar_color,
+            u.has_avatar,
+            (SELECT content FROM messages WHERE id = m.reply_to_message_id LIMIT 1) as reply_to_content
+        FROM messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.id = ?
+    ");
+    $stmt->execute([$messageId]);
+    $sentMessage = $stmt->fetch(PDO::FETCH_ASSOC);
+    $sentMessage['reactions'] = [];
+
     echo json_encode([
         'success' => true,
         'message_id' => $messageId,
         'message' => 'Message sent successfully',
         'message_type' => $messageType,
-        'media_path' => $mediaPath
+        'media_path' => $mediaPath,
+        'sent_message' => $sentMessage
     ]);
     
 } catch (Exception $e) {
