@@ -807,24 +807,28 @@ function showReactionPicker(messageId, event) {
     const picker = document.createElement('div');
     picker.className = 'reaction-picker';
 
-    const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '🙏', '🔥', '🎉', '👏', '💯', '🤔', '😍', '🥳', '😭', '💀'];
+    const quickEmojis = ['👍', '❤️', '😂', '🔥'];
+    const moreEmojis = ['🎉', '👏', '💯', '🤔', '😍', '🥳', '😭', '💀', '😮', '😢', '😡', '🙏'];
 
     picker.innerHTML = `
-        <div class="reaction-picker-grid">
-            ${emojis.map(e => `<button class="reaction-picker-item" onclick="toggleReaction(${messageId}, '${e}'); document.querySelector('.reaction-picker').remove();">${e}</button>`).join('')}
+        <div class="reaction-picker-row">
+            ${quickEmojis.map(e => `<button class="reaction-picker-item" onclick="toggleReaction(${messageId}, '${e}'); document.querySelector('.reaction-picker').remove();">${e}</button>`).join('')}
+            <button class="reaction-picker-item reaction-picker-more" onclick="document.querySelector('.reaction-picker-expanded').style.display='grid'">+</button>
+        </div>
+        <div class="reaction-picker-expanded" style="display:none;">
+            ${moreEmojis.map(e => `<button class="reaction-picker-item" onclick="toggleReaction(${messageId}, '${e}'); document.querySelector('.reaction-picker').remove();">${e}</button>`).join('')}
         </div>
     `;
 
     document.body.appendChild(picker);
 
-    // Position the picker in center of screen on mobile, or near click on desktop
+    // Position near the message
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const pickerWidth = 320;
-    const pickerHeight = 120;
+    const pickerRect = picker.getBoundingClientRect();
 
-    picker.style.left = Math.max(10, (viewportWidth - pickerWidth) / 2) + 'px';
-    picker.style.top = Math.max(10, (viewportHeight - pickerHeight) / 2) + 'px';
+    picker.style.left = Math.max(10, (viewportWidth - pickerRect.width) / 2) + 'px';
+    picker.style.top = Math.max(10, (viewportHeight - pickerRect.height) / 2) + 'px';
 
     setTimeout(() => {
         document.addEventListener('click', function removePickerClick(e) {
