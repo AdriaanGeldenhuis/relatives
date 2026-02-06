@@ -633,6 +633,7 @@ html, body {
     margin-left: 10px;
     position: relative;
     z-index: 1;
+    width: fit-content;
 }
 
 .reaction {
