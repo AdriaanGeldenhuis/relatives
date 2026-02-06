@@ -924,9 +924,19 @@ html, body {
     margin-bottom: var(--space-md);
 }
 
-.reply-content,
+.reply-content {
+    position: relative;
+}
+
 .preview-content {
     position: relative;
+    max-height: 200px;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: flex-start;
+    padding-right: 4px;
 }
 
 .reply-header {
