@@ -785,14 +785,14 @@ if (typeof window.sendMessage === 'function') {
         const input = document.getElementById('messageInput');
         const content = input.value.trim();
         
-        if (!content && !window.MessageSystem.mediaFile) return;
+        if (!content && window.MessageSystem.mediaFiles.length === 0) return;
         
         // Check if offline
         if (!navigator.onLine) {
             queueMessageForOffline({
                 content: content,
                 reply_to_message_id: window.MessageSystem.replyToMessageId,
-                mediaFile: window.MessageSystem.mediaFile
+                mediaFiles: window.MessageSystem.mediaFiles
             });
             
             input.value = '';

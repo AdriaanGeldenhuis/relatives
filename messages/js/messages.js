@@ -27,7 +27,7 @@ const MessageSystem = {
     sessionWarmedUp: false,
     
     // Media
-    mediaFile: null,
+    mediaFiles: [],
     
     // Retry Logic
     loadRetryCount: 0,
@@ -521,7 +521,30 @@ function createMessageElement(msg) {
     
     let mediaHtml = '';
     if (msg.media_path) {
-        if (msg.message_type === 'image') {
+        if (msg.message_type === 'multi') {
+            // Multiple files stored as JSON
+            try {
+                const files = typeof msg.media_path === 'string' ? JSON.parse(msg.media_path) : msg.media_path;
+                mediaHtml = '<div class="message-media message-media-multi">';
+                files.forEach(f => {
+                    if (f.type && f.type.startsWith('image/')) {
+                        mediaHtml += `<img src="${f.path}" alt="${escapeHtml(f.name)}" loading="lazy" onclick="openMediaViewer('${f.path}', 'image')">`;
+                    } else if (f.type && f.type.startsWith('video/')) {
+                        mediaHtml += `<video src="${f.path}" controls></video>`;
+                    } else if (f.type && f.type.startsWith('audio/')) {
+                        mediaHtml += `<audio src="${f.path}" controls></audio>`;
+                    } else {
+                        const ext = f.name ? f.name.split('.').pop().toUpperCase() : 'FILE';
+                        const icon = (f.type === 'application/pdf') ? '📄' : '📎';
+                        const size = f.size ? (f.size / 1024).toFixed(0) + 'KB' : '';
+                        mediaHtml += `<a href="${f.path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(f.name)}</span><small>${ext} ${size}</small></a>`;
+                    }
+                });
+                mediaHtml += '</div>';
+            } catch (e) {
+                mediaHtml = '';
+            }
+        } else if (msg.message_type === 'image') {
             mediaHtml = `
                 <div class="message-media">
                     <img src="${msg.media_path}" alt="Image" loading="lazy" onclick="openMediaViewer('${msg.media_path}', 'image')">
@@ -537,6 +560,15 @@ function createMessageElement(msg) {
             mediaHtml = `
                 <div class="message-media">
                     <audio src="${msg.media_path}" controls></audio>
+                </div>
+            `;
+        } else if (msg.message_type === 'document') {
+            const fileName = msg.media_path.split('/').pop();
+            const ext = fileName.split('.').pop().toUpperCase();
+            const icon = ext === 'PDF' ? '📄' : '📎';
+            mediaHtml = `
+                <div class="message-media">
+                    <a href="${msg.media_path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(fileName)}</span><small>${ext}</small></a>
                 </div>
             `;
         }
@@ -597,10 +629,10 @@ function createMessageElement(msg) {
                 ${replyHtml}
                 ${msg.content ? `<div class="message-text">${linkify(escapeHtml(msg.content))}${editedIndicator}</div>` : ''}
                 ${mediaHtml}
-                ${reactionsHtml}
                 ${actions}
                 <span class="message-time">${time}</span>
             </div>
+            ${reactionsHtml}
         </div>
         ${isOwn ? avatar : ''}
     `;
@@ -615,7 +647,7 @@ async function sendMessage() {
     const input = document.getElementById('messageInput');
     const content = input.value.trim();
     
-    if (!content && !MessageSystem.mediaFile) return;
+    if (!content && MessageSystem.mediaFiles.length === 0) return;
     
     const sendBtn = document.getElementById('sendBtn');
     sendBtn.disabled = true;
@@ -629,9 +661,9 @@ async function sendMessage() {
             formData.append('reply_to_message_id', MessageSystem.replyToMessageId);
         }
         
-        if (MessageSystem.mediaFile) {
-            formData.append('media', MessageSystem.mediaFile);
-        }
+        MessageSystem.mediaFiles.forEach((file, i) => {
+            formData.append('media[]', file);
+        });
         
         const url = window.location.origin + '/messages/api/send.php';
         
@@ -648,7 +680,15 @@ async function sendMessage() {
             input.style.height = 'auto';
             cancelReply();
             cancelMedia();
-            setTimeout(() => loadNewMessages(), 500);
+
+            // Instantly display the sent message from server response
+            if (data.sent_message) {
+                displayMessages([data.sent_message], false);
+                if (data.sent_message.id > MessageSystem.lastMessageId) {
+                    MessageSystem.lastMessageId = data.sent_message.id;
+                }
+                scrollToBottom();
+            }
         } else {
             showError(data.message || 'Failed to send message');
         }
@@ -720,21 +760,71 @@ async function checkTypingStatus() {
 // ============================================
 // REACTIONS
 // ============================================
+function buildReactionsHtml(messageId, reactions) {
+    if (!reactions || reactions.length === 0) return '';
+
+    const grouped = {};
+    reactions.forEach(r => {
+        if (!grouped[r.emoji]) grouped[r.emoji] = [];
+        grouped[r.emoji].push(parseInt(r.user_id));
+    });
+
+    let html = '<div class="message-reactions">';
+
+    Object.entries(grouped).forEach(([emoji, users]) => {
+        const hasOwn = users.includes(parseInt(MessageSystem.currentUserId));
+        const countDisplay = users.length > 1 ? `<span class="reaction-count">${users.length}</span>` : '';
+        html += `
+            <div class="reaction ${hasOwn ? 'own' : ''}"
+                 onclick="toggleReaction(${messageId}, '${emoji}')"
+                 title="${users.length} reaction(s)">
+                ${emoji}${countDisplay}
+            </div>
+        `;
+    });
+
+    html += `<div class="reaction reaction-add" onclick="showReactionPicker(${messageId})" title="Add reaction">+</div>`;
+    html += '</div>';
+    return html;
+}
+
+function updateReactionDOM(messageId, reactions) {
+    const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageEl) return;
+
+    const contentEl = messageEl.querySelector('.message-content');
+    if (!contentEl) return;
+
+    // Remove old reactions
+    const oldReactions = messageEl.querySelector('.message-reactions');
+    if (oldReactions) oldReactions.remove();
+
+    if (reactions && reactions.length > 0) {
+        const html = buildReactionsHtml(messageId, reactions);
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        contentEl.appendChild(temp.firstElementChild);
+        messageEl.classList.add('has-reactions');
+    } else {
+        messageEl.classList.remove('has-reactions');
+    }
+}
+
 async function toggleReaction(messageId, emoji) {
     try {
         const url = window.location.origin + '/messages/api/react.php';
-        
+
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message_id: messageId, emoji: emoji }),
             credentials: 'same-origin'
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
-            setTimeout(() => loadNewMessages(), 300);
+            updateReactionDOM(messageId, data.reactions || []);
         }
     } catch (error) {
         console.error('Error toggling reaction:', error);
@@ -749,24 +839,28 @@ function showReactionPicker(messageId, event) {
     const picker = document.createElement('div');
     picker.className = 'reaction-picker';
 
-    const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '🙏', '🔥', '🎉', '👏', '💯', '🤔', '😍', '🥳', '😭', '💀'];
+    const quickEmojis = ['👍', '❤️', '😂', '🔥'];
+    const moreEmojis = ['🎉', '👏', '💯', '🤔', '😍', '🥳', '😭', '💀', '😮', '😢', '😡', '🙏'];
 
     picker.innerHTML = `
-        <div class="reaction-picker-grid">
-            ${emojis.map(e => `<button class="reaction-picker-item" onclick="toggleReaction(${messageId}, '${e}'); document.querySelector('.reaction-picker').remove();">${e}</button>`).join('')}
+        <div class="reaction-picker-row">
+            ${quickEmojis.map(e => `<button class="reaction-picker-item" onclick="toggleReaction(${messageId}, '${e}'); document.querySelector('.reaction-picker').remove();">${e}</button>`).join('')}
+            <button class="reaction-picker-item reaction-picker-more" onclick="document.querySelector('.reaction-picker-expanded').style.display='grid'">+</button>
+        </div>
+        <div class="reaction-picker-expanded" style="display:none;">
+            ${moreEmojis.map(e => `<button class="reaction-picker-item" onclick="toggleReaction(${messageId}, '${e}'); document.querySelector('.reaction-picker').remove();">${e}</button>`).join('')}
         </div>
     `;
 
     document.body.appendChild(picker);
 
-    // Position the picker in center of screen on mobile, or near click on desktop
+    // Position near the message
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const pickerWidth = 320;
-    const pickerHeight = 120;
+    const pickerRect = picker.getBoundingClientRect();
 
-    picker.style.left = Math.max(10, (viewportWidth - pickerWidth) / 2) + 'px';
-    picker.style.top = Math.max(10, (viewportHeight - pickerHeight) / 2) + 'px';
+    picker.style.left = Math.max(10, (viewportWidth - pickerRect.width) / 2) + 'px';
+    picker.style.top = Math.max(10, (viewportHeight - pickerRect.height) / 2) + 'px';
 
     setTimeout(() => {
         document.addEventListener('click', function removePickerClick(e) {
@@ -803,30 +897,80 @@ function cancelReply() {
 // MEDIA HANDLING
 // ============================================
 function handleFileSelect(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    MessageSystem.mediaFile = file;
-    
-    const preview = document.getElementById('mediaPreview');
-    const previewImage = document.getElementById('previewImage');
-    const previewVideo = document.getElementById('previewVideo');
-    
-    if (file.type.startsWith('image/')) {
-        previewImage.src = URL.createObjectURL(file);
-        previewImage.style.display = 'block';
-        previewVideo.style.display = 'none';
-    } else if (file.type.startsWith('video/')) {
-        previewVideo.src = URL.createObjectURL(file);
-        previewVideo.style.display = 'block';
-        previewImage.style.display = 'none';
+    const files = Array.from(event.target.files);
+    if (!files.length) return;
+
+    // Max 10 files
+    const newFiles = files.slice(0, 10 - MessageSystem.mediaFiles.length);
+    if (newFiles.length === 0) {
+        showError('Maximum 10 files allowed');
+        return;
     }
-    
+    MessageSystem.mediaFiles.push(...newFiles);
+
+    const preview = document.getElementById('mediaPreview');
+    const previewContent = document.getElementById('previewContent');
+
+    // Clear old previews (keep the cancel button)
+    previewContent.querySelectorAll('.preview-item').forEach(el => el.remove());
+
+    MessageSystem.mediaFiles.forEach((file, i) => {
+        const item = document.createElement('div');
+        item.className = 'preview-item';
+
+        if (file.type.startsWith('image/')) {
+            item.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="Preview">
+                <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+        } else if (file.type.startsWith('video/')) {
+            item.innerHTML = `<video src="${URL.createObjectURL(file)}" controls></video>
+                <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+        } else {
+            const ext = file.name.split('.').pop().toUpperCase();
+            const icon = file.type === 'application/pdf' ? '📄' : '📎';
+            item.innerHTML = `<div class="doc-preview">${icon}<span class="doc-name">${escapeHtml(file.name)}</span><span class="doc-size">${ext} · ${(file.size / 1024).toFixed(0)}KB</span></div>
+                <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+        }
+        previewContent.appendChild(item);
+    });
+
     preview.style.display = 'block';
+    // Reset input so same file can be re-selected
+    event.target.value = '';
+}
+
+function removeFile(index) {
+    MessageSystem.mediaFiles.splice(index, 1);
+    if (MessageSystem.mediaFiles.length === 0) {
+        cancelMedia();
+    } else {
+        // Re-render previews
+        const fakeEvent = { target: { files: [], value: '' } };
+        const preview = document.getElementById('mediaPreview');
+        const previewContent = document.getElementById('previewContent');
+        previewContent.querySelectorAll('.preview-item').forEach(el => el.remove());
+
+        MessageSystem.mediaFiles.forEach((file, i) => {
+            const item = document.createElement('div');
+            item.className = 'preview-item';
+            if (file.type.startsWith('image/')) {
+                item.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="Preview">
+                    <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+            } else if (file.type.startsWith('video/')) {
+                item.innerHTML = `<video src="${URL.createObjectURL(file)}" controls></video>
+                    <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+            } else {
+                const ext = file.name.split('.').pop().toUpperCase();
+                const icon = file.type === 'application/pdf' ? '📄' : '📎';
+                item.innerHTML = `<div class="doc-preview">${icon}<span class="doc-name">${escapeHtml(file.name)}</span><span class="doc-size">${ext} · ${(file.size / 1024).toFixed(0)}KB</span></div>
+                    <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
+            }
+            previewContent.appendChild(item);
+        });
+    }
 }
 
 function cancelMedia() {
-    MessageSystem.mediaFile = null;
+    MessageSystem.mediaFiles = [];
     document.getElementById('mediaPreview').style.display = 'none';
     document.getElementById('fileInput').value = '';
 }
@@ -1345,6 +1489,7 @@ window.showReplyPreview = showReplyPreview;
 window.cancelReply = cancelReply;
 window.handleFileSelect = handleFileSelect;
 window.cancelMedia = cancelMedia;
+window.removeFile = removeFile;
 window.insertEmoji = insertEmoji;
 window.showMessageOptions = showMessageOptions;
 window.contextReplyMessage = contextReplyMessage;

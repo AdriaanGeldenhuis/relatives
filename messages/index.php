@@ -50,7 +50,7 @@ try {
 $pageTitle = 'Family Chat';
 $activePage = 'messages';
 
-$cacheVersion = '10.6.0';
+$cacheVersion = '10.8.1';
 $pageCSS = [
     '/messages/css/messages.css?v=' . $cacheVersion,
     '/messages/css/messages-enhanced.css?v=' . $cacheVersion
@@ -185,9 +185,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                     <!-- Media Preview -->
                     <div class="media-preview" id="mediaPreview" style="display: none;">
-                        <div class="preview-content">
-                            <img id="previewImage" style="display: none;">
-                            <video id="previewVideo" style="display: none;" controls></video>
+                        <div class="preview-content" id="previewContent">
                             <button onclick="cancelMedia()" class="cancel-media">✕</button>
                         </div>
                     </div>
@@ -197,9 +195,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <button class="attachment-btn" onclick="document.getElementById('fileInput').click()" title="Attach">
                             📎
                         </button>
-                        
-                        <input type="file" id="fileInput" style="display: none;" 
-                               accept="image/*,video/*" onchange="handleFileSelect(event)">
+
+                        <input type="file" id="fileInput" style="display: none;" multiple
+                               accept="image/*,video/*,audio/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf"
+                               onchange="handleFileSelect(event)">
                         
                         <button class="emoji-btn" id="emojiPickerBtn" title="Emoji">
                             😊

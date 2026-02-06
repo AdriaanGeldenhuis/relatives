@@ -69,24 +69,31 @@ try {
         throw new Exception('Message not found');
     }
     
-    // Check if reaction already exists
+    // Check if this exact reaction already exists (for toggle off)
     $stmt = $db->prepare("
-        SELECT id FROM message_reactions 
+        SELECT id FROM message_reactions
         WHERE message_id = ? AND user_id = ? AND emoji = ?
     ");
     $stmt->execute([$messageId, $userId, $emoji]);
     $existingReaction = $stmt->fetchColumn();
-    
+
     if ($existingReaction) {
-        // Remove reaction
+        // Remove reaction (toggle off)
         $stmt = $db->prepare("
-            DELETE FROM message_reactions 
+            DELETE FROM message_reactions
             WHERE id = ?
         ");
         $stmt->execute([$existingReaction]);
         $action = 'removed';
     } else {
-        // Add reaction
+        // Limit: one emoji per person per message - remove any previous reaction first
+        $stmt = $db->prepare("
+            DELETE FROM message_reactions
+            WHERE message_id = ? AND user_id = ?
+        ");
+        $stmt->execute([$messageId, $userId]);
+
+        // Add the new reaction
         $stmt = $db->prepare("
             INSERT INTO message_reactions (message_id, user_id, emoji, created_at)
             VALUES (?, ?, ?, NOW())
@@ -107,9 +114,20 @@ try {
         }
     }
     
+    // Fetch updated reactions for this message
+    $stmt = $db->prepare("
+        SELECT user_id, emoji
+        FROM message_reactions
+        WHERE message_id = ?
+        ORDER BY created_at ASC
+    ");
+    $stmt->execute([$messageId]);
+    $reactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
     echo json_encode([
         'success' => true,
-        'action' => $action
+        'action' => $action,
+        'reactions' => $reactions
     ]);
     
 } catch (Exception $e) {

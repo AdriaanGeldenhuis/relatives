@@ -70,100 +70,129 @@ try {
     if (empty($content) && empty($_FILES['media'])) {
         throw new Exception('Message cannot be empty');
     }
-    
+
     if (strlen($content) > 5000) {
         throw new Exception('Message too long (max 5000 characters)');
     }
-    
+
     $mediaPath = null;
     $mediaThumbnail = null;
     $messageType = 'text';
-    
-    if (!empty($_FILES['media']) && $_FILES['media']['error'] === UPLOAD_ERR_OK) {
-        $file = $_FILES['media'];
-        
-        $allowedTypes = [
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 
-            'video/mp4', 'video/quicktime', 'video/webm',
-            'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav'
-        ];
-        
-        if (!in_array($file['type'], $allowedTypes)) {
-            throw new Exception('Invalid file type. Allowed: images, videos, audio');
+
+    $allowedTypes = [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'video/mp4', 'video/quicktime', 'video/webm',
+        'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'text/plain', 'text/csv', 'application/rtf'
+    ];
+
+    $mimeToExt = [
+        'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp',
+        'video/mp4' => 'mp4', 'video/quicktime' => 'mov', 'video/webm' => 'webm',
+        'audio/webm' => 'webm', 'audio/ogg' => 'ogg', 'audio/mpeg' => 'mp3', 'audio/wav' => 'wav',
+        'application/pdf' => 'pdf', 'application/msword' => 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+        'application/vnd.ms-excel' => 'xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
+        'application/vnd.ms-powerpoint' => 'ppt',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'pptx',
+        'text/plain' => 'txt', 'text/csv' => 'csv', 'application/rtf' => 'rtf'
+    ];
+
+    // Handle multiple file uploads (media[])
+    if (!empty($_FILES['media']['name'][0])) {
+        $fileCount = count($_FILES['media']['name']);
+        if ($fileCount > 10) {
+            throw new Exception('Maximum 10 files allowed');
         }
-        
-        if ($file['size'] > 50 * 1024 * 1024) {
-            throw new Exception('File too large (max 50MB)');
-        }
-        
+
         $uploadDir = __DIR__ . '/../../uploads/messages/' . date('Y/m/');
         if (!is_dir($uploadDir)) {
             if (!mkdir($uploadDir, 0755, true)) {
                 throw new Exception('Failed to create upload directory');
             }
         }
-        
-        $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-        if (empty($extension)) {
-            $mimeToExt = [
-                'image/jpeg' => 'jpg',
-                'image/png' => 'png',
-                'image/gif' => 'gif',
-                'image/webp' => 'webp',
-                'video/mp4' => 'mp4',
-                'video/quicktime' => 'mov',
-                'video/webm' => 'webm',
-                'audio/webm' => 'webm',
-                'audio/ogg' => 'ogg',
-                'audio/mpeg' => 'mp3',
-                'audio/wav' => 'wav'
-            ];
-            $extension = $mimeToExt[$file['type']] ?? 'bin';
-        }
-        
-        $filename = uniqid('msg_') . '_' . time() . '.' . $extension;
-        $filepath = $uploadDir . $filename;
-        
-        if (!move_uploaded_file($file['tmp_name'], $filepath)) {
-            throw new Exception('Failed to upload file');
-        }
-        
-        $mediaPath = '/uploads/messages/' . date('Y/m/') . $filename;
-        
-        if (strpos($file['type'], 'image/') === 0) {
-            $messageType = 'image';
-            
-            try {
-                $thumbnailPath = $uploadDir . 'thumb_' . $filename;
-                $image = imagecreatefromstring(file_get_contents($filepath));
-                
-                if ($image) {
-                    $width = imagesx($image);
-                    $height = imagesy($image);
-                    $thumbWidth = 200;
-                    $thumbHeight = (int)(($height / $width) * $thumbWidth);
-                    
-                    $thumb = imagecreatetruecolor($thumbWidth, $thumbHeight);
-                    imagecopyresampled($thumb, $image, 0, 0, 0, 0, $thumbWidth, $thumbHeight, $width, $height);
-                    
-                    if ($extension === 'png') {
-                        imagepng($thumb, $thumbnailPath, 8);
-                    } else {
-                        imagejpeg($thumb, $thumbnailPath, 85);
-                    }
-                    
-                    imagedestroy($image);
-                    imagedestroy($thumb);
-                    
-                    $mediaThumbnail = '/uploads/messages/' . date('Y/m/') . 'thumb_' . $filename;
-                }
-            } catch (Exception $e) {
-                error_log('Thumbnail creation failed: ' . $e->getMessage());
+
+        $uploadedPaths = [];
+        $firstType = null;
+
+        for ($i = 0; $i < $fileCount; $i++) {
+            if ($_FILES['media']['error'][$i] !== UPLOAD_ERR_OK) continue;
+
+            $fileType = $_FILES['media']['type'][$i];
+            $fileSize = $_FILES['media']['size'][$i];
+            $fileName = $_FILES['media']['name'][$i];
+            $fileTmp  = $_FILES['media']['tmp_name'][$i];
+
+            if (!in_array($fileType, $allowedTypes)) {
+                throw new Exception('Invalid file type: ' . $fileName);
             }
-        } elseif (strpos($file['type'], 'video/') === 0) {
-            $messageType = 'video';
-        } elseif (strpos($file['type'], 'audio/') === 0) {
-            $messageType = 'audio';
+            if ($fileSize > 50 * 1024 * 1024) {
+                throw new Exception('File too large (max 50MB): ' . $fileName);
+            }
+
+            $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+            if (empty($extension)) {
+                $extension = $mimeToExt[$fileType] ?? 'bin';
+            }
+
+            $uniqueName = uniqid('msg_') . '_' . time() . '_' . $i . '.' . $extension;
+            $filepath = $uploadDir . $uniqueName;
+
+            if (!move_uploaded_file($fileTmp, $filepath)) {
+                throw new Exception('Failed to upload: ' . $fileName);
+            }
+
+            $webPath = '/uploads/messages/' . date('Y/m/') . $uniqueName;
+            $uploadedPaths[] = ['path' => $webPath, 'name' => $fileName, 'type' => $fileType, 'size' => $fileSize];
+
+            if ($firstType === null) $firstType = $fileType;
+
+            // Generate thumbnail for first image
+            if ($i === 0 && strpos($fileType, 'image/') === 0) {
+                try {
+                    $thumbnailPath = $uploadDir . 'thumb_' . $uniqueName;
+                    $image = imagecreatefromstring(file_get_contents($filepath));
+                    if ($image) {
+                        $width = imagesx($image);
+                        $height = imagesy($image);
+                        $thumbWidth = 200;
+                        $thumbHeight = (int)(($height / $width) * $thumbWidth);
+                        $thumb = imagecreatetruecolor($thumbWidth, $thumbHeight);
+                        imagecopyresampled($thumb, $image, 0, 0, 0, 0, $thumbWidth, $thumbHeight, $width, $height);
+                        if ($extension === 'png') {
+                            imagepng($thumb, $thumbnailPath, 8);
+                        } else {
+                            imagejpeg($thumb, $thumbnailPath, 85);
+                        }
+                        imagedestroy($image);
+                        imagedestroy($thumb);
+                        $mediaThumbnail = '/uploads/messages/' . date('Y/m/') . 'thumb_' . $uniqueName;
+                    }
+                } catch (Exception $e) {
+                    error_log('Thumbnail creation failed: ' . $e->getMessage());
+                }
+            }
+        }
+
+        if (count($uploadedPaths) === 1) {
+            // Single file - store path directly for backward compatibility
+            $mediaPath = $uploadedPaths[0]['path'];
+            if (strpos($firstType, 'image/') === 0) $messageType = 'image';
+            elseif (strpos($firstType, 'video/') === 0) $messageType = 'video';
+            elseif (strpos($firstType, 'audio/') === 0) $messageType = 'audio';
+            else $messageType = 'document';
+        } elseif (count($uploadedPaths) > 1) {
+            // Multiple files - store as JSON array
+            $mediaPath = json_encode($uploadedPaths);
+            $messageType = 'multi';
         }
     }
     
@@ -256,12 +285,36 @@ try {
         error_log('Audit log failed: ' . $e->getMessage());
     }
     
+    // Fetch the full sent message to return to client for instant display
+    $stmt = $db->prepare("
+        SELECT
+            m.id,
+            m.user_id,
+            m.content,
+            m.message_type,
+            m.media_path,
+            m.reply_to_message_id,
+            m.created_at,
+            m.edited_at,
+            u.full_name,
+            u.avatar_color,
+            u.has_avatar,
+            (SELECT content FROM messages WHERE id = m.reply_to_message_id LIMIT 1) as reply_to_content
+        FROM messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.id = ?
+    ");
+    $stmt->execute([$messageId]);
+    $sentMessage = $stmt->fetch(PDO::FETCH_ASSOC);
+    $sentMessage['reactions'] = [];
+
     echo json_encode([
         'success' => true,
         'message_id' => $messageId,
         'message' => 'Message sent successfully',
         'message_type' => $messageType,
-        'media_path' => $mediaPath
+        'media_path' => $mediaPath,
+        'sent_message' => $sentMessage
     ]);
     
 } catch (Exception $e) {
