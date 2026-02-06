@@ -740,14 +740,15 @@ body {
 .day-view-event {
     position: absolute;
     left: 0;
-    right: 0;
-    padding: 10px;
+    width: 100%;
+    padding: 8px;
     border-radius: var(--radius-md);
     cursor: pointer;
     transition: all var(--transition-base);
     box-shadow: var(--shadow-md);
     color: white;
     overflow: hidden;
+    box-sizing: border-box;
 }
 
 .day-view-event:active {

@@ -54,7 +54,7 @@ try {
 
 $pageTitle = 'Weather';
 $activePage = 'weather';
-$cacheVersion = '10.0.0';
+$cacheVersion = '10.1.0';
 $pageCSS = ['/weather/css/weather.css?v=' . $cacheVersion];
 $pageJS = ['/weather/js/weather.js?v=' . $cacheVersion];
 
@@ -250,6 +250,29 @@ require_once __DIR__ . '/../shared/components/header.php';
             <div class="weather-loading">
                 <div class="loading-spinner">☁️</div>
                 <p>Loading...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Share Modal -->
+<div id="shareModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h2>📤 Share Weather</h2>
+            <button onclick="WeatherWidget.getInstance().closeShareModal()" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom: 16px; color: rgba(255,255,255,0.8);">Choose export format:</p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <button onclick="WeatherWidget.getInstance().exportWeatherPDF()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; background: linear-gradient(135deg, #667eea, #764ba2); color: white; transition: all 0.2s ease;">
+                    <span style="font-size: 1.25rem;">📄</span>
+                    <span>Export as PDF</span>
+                </button>
+                <button onclick="WeatherWidget.getInstance().shareWeatherWhatsApp()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; background: #25D366; color: white; transition: all 0.2s ease;">
+                    <span style="font-size: 1.25rem;">💬</span>
+                    <span>Share to WhatsApp</span>
+                </button>
             </div>
         </div>
     </div>

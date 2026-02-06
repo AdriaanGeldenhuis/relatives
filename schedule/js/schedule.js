@@ -1772,35 +1772,97 @@ function createNewTemplate() {
 // EXPORT
 // ============================================
 function exportSchedule() {
-    const events = Array.from(document.querySelectorAll('.event-card')).map(card => {
+    showModal('exportModal');
+}
+
+function getScheduleData() {
+    return Array.from(document.querySelectorAll('.event-card')).map(card => {
         const name = card.querySelector('.note-title')?.textContent.trim() || '';
         const timeEl = card.querySelector('.event-time');
         const time = timeEl ? timeEl.textContent.replace('⏰ ', '').trim() : '';
         const durationEl = card.querySelector('.event-duration');
         const duration = durationEl ? durationEl.textContent.replace('⏱️ ', '').trim() : '';
         const type = card.getAttribute('data-note-type') || 'todo';
-        const status = card.classList.contains('done') ? 'Done' : 
+        const status = card.classList.contains('done') ? 'Done' :
                       card.classList.contains('in_progress') ? 'In Progress' : 'Pending';
         const notes = card.querySelector('.event-notes')?.textContent.trim() || '';
-        
+
         return { name, time, duration, type, status, notes };
     });
-    
-    let csv = 'Event,Time,Duration,Type,Status,Notes\n';
-    
-    events.forEach(event => {
-        csv += `"${event.name}","${event.time}","${event.duration}","${event.type}","${event.status}","${event.notes}"\n`;
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `schedule-${window.ScheduleApp.selectedDate}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-    
-    showToast('📥 Schedule exported!', 'success');
+}
+
+function exportAsPDF() {
+    closeModal('exportModal');
+    const events = getScheduleData();
+    const date = window.ScheduleApp.selectedDate;
+
+    // Create printable HTML
+    const printContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Schedule - ${date}</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                h1 { color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+                .event { padding: 12px; margin: 8px 0; border-left: 4px solid #667eea; background: #f5f5f5; }
+                .event-name { font-weight: bold; font-size: 16px; }
+                .event-details { color: #666; font-size: 14px; margin-top: 4px; }
+                .status-done { border-left-color: #10b981; }
+                .status-progress { border-left-color: #f59e0b; }
+                .status-pending { border-left-color: #667eea; }
+            </style>
+        </head>
+        <body>
+            <h1>📅 Schedule for ${date}</h1>
+            ${events.length === 0 ? '<p>No events scheduled</p>' : events.map(e => `
+                <div class="event status-${e.status.toLowerCase().replace(' ', '-')}">
+                    <div class="event-name">${e.name}</div>
+                    <div class="event-details">
+                        ${e.time ? '🕐 ' + e.time : ''}
+                        ${e.duration ? '⏱️ ' + e.duration : ''}
+                        | ${e.type} | ${e.status}
+                    </div>
+                    ${e.notes ? '<div class="event-details">📝 ' + e.notes + '</div>' : ''}
+                </div>
+            `).join('')}
+        </body>
+        </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.onload = function() {
+        printWindow.print();
+    };
+
+    showToast('📄 PDF ready to print!', 'success');
+}
+
+function shareToWhatsApp() {
+    closeModal('exportModal');
+    const events = getScheduleData();
+    const date = window.ScheduleApp.selectedDate;
+
+    let message = `📅 *Schedule for ${date}*\n\n`;
+
+    if (events.length === 0) {
+        message += 'No events scheduled';
+    } else {
+        events.forEach((e, i) => {
+            const statusIcon = e.status === 'Done' ? '✅' : e.status === 'In Progress' ? '🔄' : '⏳';
+            message += `${i + 1}. *${e.name}*\n`;
+            if (e.time) message += `   🕐 ${e.time}\n`;
+            if (e.duration) message += `   ⏱️ ${e.duration}\n`;
+            message += `   ${statusIcon} ${e.status}\n\n`;
+        });
+    }
+
+    const encodedMessage = encodeURIComponent(message);
+    window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+
+    showToast('💬 Opening WhatsApp...', 'success');
 }
 
 // ============================================
@@ -2250,6 +2312,8 @@ window.goToPickedDate = goToPickedDate;
 window.changeView = changeView;
 window.showQuickAdd = showQuickAdd;
 window.exportSchedule = exportSchedule;
+window.exportAsPDF = exportAsPDF;
+window.shareToWhatsApp = shareToWhatsApp;
 window.showModal = showModal;
 window.closeModal = closeModal;
 window.toggleReminderInput = toggleReminderInput;

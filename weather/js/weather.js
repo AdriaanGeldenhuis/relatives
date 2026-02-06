@@ -824,16 +824,100 @@ class WeatherWidget {
     }
 
     shareWeather() {
+        if (!this.currentWeather || !this.location) {
+            this.showNotification('No weather data to share', 'error');
+            return;
+        }
+        document.getElementById('shareModal').classList.add('active');
+    }
+
+    closeShareModal() {
+        document.getElementById('shareModal').classList.remove('active');
+    }
+
+    exportWeatherPDF() {
+        this.closeShareModal();
         if (!this.currentWeather || !this.location) return;
 
-        const text = `Weather in ${this.location.city || 'your location'}: ${this.currentWeather.temperature}°C, ${this.currentWeather.description}`;
+        const location = this.location.city || 'Your Location';
+        const weather = this.currentWeather;
+        const forecast = this.forecast || [];
 
-        if (navigator.share) {
-            navigator.share({ title: 'Weather', text });
-        } else {
-            navigator.clipboard.writeText(text);
-            this.showNotification('Weather copied to clipboard!', 'success');
+        const printContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Weather - ${location}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; }
+                    h1 { color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+                    .current { background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+                    .current-temp { font-size: 48px; font-weight: bold; }
+                    .current-desc { font-size: 18px; color: #666; }
+                    .forecast { display: flex; gap: 10px; flex-wrap: wrap; }
+                    .forecast-day { background: #f5f5f5; padding: 15px; border-radius: 8px; text-align: center; min-width: 100px; }
+                    .forecast-date { font-weight: bold; margin-bottom: 5px; }
+                    .forecast-temp { font-size: 14px; color: #666; }
+                </style>
+            </head>
+            <body>
+                <h1>🌤️ Weather for ${location}</h1>
+                <div class="current">
+                    <div class="current-temp">${weather.temperature}°${this.units === 'celsius' ? 'C' : 'F'}</div>
+                    <div class="current-desc">${weather.description}</div>
+                    <p>💧 Humidity: ${weather.humidity}% | 💨 Wind: ${weather.windSpeed} km/h</p>
+                </div>
+                ${forecast.length > 0 ? `
+                    <h2>📅 5-Day Forecast</h2>
+                    <div class="forecast">
+                        ${forecast.slice(0, 5).map(day => `
+                            <div class="forecast-day">
+                                <div class="forecast-date">${new Date(day.date).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' })}</div>
+                                <div style="font-size: 24px;">${day.icon || '☁️'}</div>
+                                <div class="forecast-temp">${day.tempMax}° / ${day.tempMin}°</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </body>
+            </html>
+        `;
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.onload = function() {
+            printWindow.print();
+        };
+
+        this.showNotification('📄 PDF ready to print!', 'success');
+    }
+
+    shareWeatherWhatsApp() {
+        this.closeShareModal();
+        if (!this.currentWeather || !this.location) return;
+
+        const location = this.location.city || 'Your Location';
+        const weather = this.currentWeather;
+        const forecast = this.forecast || [];
+
+        let message = `🌤️ *Weather in ${location}*\n\n`;
+        message += `🌡️ *${weather.temperature}°${this.units === 'celsius' ? 'C' : 'F'}* - ${weather.description}\n`;
+        message += `💧 Humidity: ${weather.humidity}%\n`;
+        message += `💨 Wind: ${weather.windSpeed} km/h\n`;
+
+        if (forecast.length > 0) {
+            message += `\n📅 *Forecast:*\n`;
+            forecast.slice(0, 5).forEach(day => {
+                const date = new Date(day.date).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' });
+                message += `${date}: ${day.tempMax}°/${day.tempMin}° ${day.description || ''}\n`;
+            });
         }
+
+        const encodedMessage = encodeURIComponent(message);
+        window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+
+        this.showNotification('💬 Opening WhatsApp...', 'success');
     }
 
     showNotification(message, type = 'info') {

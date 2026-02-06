@@ -226,20 +226,8 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
                     <!-- Hour Lines -->
                     <?php for ($hour = $timelineStart; $hour <= $timelineEnd; $hour++): ?>
-                        <div class="hour-line <?php echo $hour === $currentHour && $isToday ? 'current-hour' : ''; ?>"
-                             style="top: <?php echo (($hour - $timelineStart) / $totalHours) * 100; ?>%">
-                        </div>
+                        <div class="hour-line" style="top: <?php echo (($hour - $timelineStart) / $totalHours) * 100; ?>%"></div>
                     <?php endfor; ?>
-
-                    <!-- Current Time Indicator -->
-                    <?php if ($isToday && $currentHour >= $timelineStart && $currentHour <= $timelineEnd): ?>
-                        <?php
-                        $currentPosition = (($currentHour - $timelineStart) + ($currentMinute / 60)) / $totalHours * 100;
-                        ?>
-                        <div class="current-time-line" style="top: <?php echo $currentPosition; ?>%" id="currentTimeLine">
-                            <span class="current-time-marker">NOW</span>
-                        </div>
-                    <?php endif; ?>
 
                     <!-- Events -->
                     <?php if (empty($events)): ?>
@@ -275,10 +263,6 @@ require_once __DIR__ . '/../../shared/components/header.php';
                                  data-event-id="<?php echo $event['id']; ?>"
                                  onclick="showEventDetails(<?php echo $event['id']; ?>)">
 
-                                <div class="event-time-badge">
-                                    <?php echo date('H:i', $startTime); ?>
-                                </div>
-
                                 <div class="event-content">
                                     <div class="event-title">
                                         <span class="event-icon"><?php echo $typeInfo['icon']; ?></span>
@@ -289,15 +273,6 @@ require_once __DIR__ . '/../../shared/components/header.php';
                                         <?php if ($event['repeat_rule']): ?>
                                             <span class="repeat-badge">🔁</span>
                                         <?php endif; ?>
-                                    </div>
-
-                                    <div class="event-meta">
-                                        <span class="time-range">
-                                            <?php echo date('H:i', $startTime); ?> → <?php echo date('H:i', $endTime); ?>
-                                        </span>
-                                        <span class="duration">
-                                            ⏱️ <?php echo formatDuration($duration); ?>
-                                        </span>
                                     </div>
                                 </div>
 

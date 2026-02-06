@@ -492,8 +492,9 @@ function displayMessages(messages, clearFirst = false) {
 // ============================================
 function createMessageElement(msg) {
     const isOwn = msg.user_id == MessageSystem.currentUserId;
+    const hasReactions = msg.reactions && msg.reactions.length > 0;
     const div = document.createElement('div');
-    div.className = `message ${isOwn ? 'own' : ''}`;
+    div.className = `message ${isOwn ? 'own' : ''} ${hasReactions ? 'has-reactions' : ''}`;
     div.dataset.messageId = msg.id;
     div.dataset.userId = msg.user_id;
 
@@ -544,30 +545,32 @@ function createMessageElement(msg) {
     let reactionsHtml = '';
     if (msg.reactions && msg.reactions.length > 0) {
         reactionsHtml = '<div class="message-reactions">';
-        
+
         const grouped = {};
         msg.reactions.forEach(r => {
             if (!grouped[r.emoji]) grouped[r.emoji] = [];
             grouped[r.emoji].push(r.user_id);
         });
-        
+
         Object.entries(grouped).forEach(([emoji, users]) => {
             const hasOwn = users.includes(parseInt(MessageSystem.currentUserId));
+            const countDisplay = users.length > 1 ? `<span class="reaction-count">${users.length}</span>` : '';
             reactionsHtml += `
-                <div class="reaction ${hasOwn ? 'own' : ''}" 
+                <div class="reaction ${hasOwn ? 'own' : ''}"
                      onclick="toggleReaction(${msg.id}, '${emoji}')"
                      title="${users.length} reaction(s)">
-                    ${emoji} <span class="reaction-count">${users.length}</span>
+                    ${emoji}${countDisplay}
                 </div>
             `;
         });
-        
+
+        reactionsHtml += `<div class="reaction reaction-add" onclick="showReactionPicker(${msg.id})" title="Add reaction">+</div>`;
         reactionsHtml += '</div>';
     }
     
     const actions = `
         <div class="message-actions">
-            <button class="message-action-btn" onclick="replyToMessage(${msg.id}, '${escapeHtml(msg.full_name)}', '${escapeHtml(msg.content || '')}')" title="Reply">↩️</button>
+            <button class="message-action-btn" onclick="replyToMessage(${msg.id}, '${escapeForAttr(msg.full_name)}', '${escapeForAttr(msg.content || '')}')" title="Reply">↩️</button>
             <button class="message-action-btn" onclick="showReactionPicker(${msg.id})" title="React">😊</button>
             ${isOwn && window.enableEditMessage ? `<button class="message-action-btn" onclick="enableEditMessage(${msg.id})" title="Edit">✏️</button>` : ''}
             <button class="message-action-btn" onclick="showMessageOptions(${msg.id}, event)" title="More">⋮</button>
@@ -738,21 +741,33 @@ async function toggleReaction(messageId, emoji) {
     }
 }
 
-function showReactionPicker(messageId) {
+function showReactionPicker(messageId, event) {
+    // Remove any existing reaction picker
+    const existingPicker = document.querySelector('.reaction-picker');
+    if (existingPicker) existingPicker.remove();
+
     const picker = document.createElement('div');
-    picker.className = 'emoji-picker reaction-picker';
-    picker.style.display = 'block';
-    picker.style.position = 'fixed';
-    picker.style.zIndex = '1001';
-    
-    const emojis = ['❤️', '👍', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
-    
-    picker.innerHTML = '<div class="emoji-grid">' +
-        emojis.map(e => `<button class="emoji-item" data-emoji="${e}" onclick="toggleReaction(${messageId}, '${e}'); this.parentElement.parentElement.remove();">${e}</button>`).join('') +
-        '</div>';
-    
+    picker.className = 'reaction-picker';
+
+    const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '🙏', '🔥', '🎉', '👏', '💯', '🤔', '😍', '🥳', '😭', '💀'];
+
+    picker.innerHTML = `
+        <div class="reaction-picker-grid">
+            ${emojis.map(e => `<button class="reaction-picker-item" onclick="toggleReaction(${messageId}, '${e}'); document.querySelector('.reaction-picker').remove();">${e}</button>`).join('')}
+        </div>
+    `;
+
     document.body.appendChild(picker);
-    
+
+    // Position the picker in center of screen on mobile, or near click on desktop
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const pickerWidth = 320;
+    const pickerHeight = 120;
+
+    picker.style.left = Math.max(10, (viewportWidth - pickerWidth) / 2) + 'px';
+    picker.style.top = Math.max(10, (viewportHeight - pickerHeight) / 2) + 'px';
+
     setTimeout(() => {
         document.addEventListener('click', function removePickerClick(e) {
             if (!picker.contains(e.target)) {
@@ -1007,6 +1022,9 @@ function setupEmojiPicker() {
         return;
     }
 
+    // Ensure picker starts closed
+    picker.classList.remove('active');
+
     // Toggle picker on button click
     pickerBtn.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -1250,6 +1268,11 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function escapeForAttr(text) {
+    if (!text) return '';
+    return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
 }
 
 function linkify(text) {
