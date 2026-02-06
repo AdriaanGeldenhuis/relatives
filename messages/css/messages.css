@@ -620,18 +620,18 @@ html, body {
     cursor: pointer;
 }
 
-/* Reactions - WhatsApp style at bottom right of message */
+/* Reactions - WhatsApp style at bottom left of message */
 .message-reactions {
     position: absolute;
     bottom: -10px;
-    right: 10px;
+    left: 10px;
     display: inline-flex;
     align-items: center;
-    gap: 1px;
-    background: rgba(40, 40, 40, 0.9);
-    border-radius: 12px;
+    gap: 2px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
     padding: 2px 6px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
     z-index: 1;
 }
 
@@ -659,21 +659,21 @@ html, body {
 .reaction-count {
     font-weight: 600;
     font-size: 0.65rem;
-    color: rgba(255, 255, 255, 0.9);
+    color: rgba(0, 0, 0, 0.6);
     margin-left: 1px;
 }
 
 .reaction-add {
     font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(0, 0, 0, 0.35);
     font-weight: 300;
-    border-left: 1px solid rgba(255, 255, 255, 0.2);
+    border-left: 1px solid rgba(0, 0, 0, 0.1);
     padding-left: 4px;
     margin-left: 4px;
 }
 
 .reaction-add:hover {
-    color: rgba(255, 255, 255, 0.9);
+    color: rgba(0, 0, 0, 0.6);
 }
 
 /* Add spacing for messages with reactions */
