@@ -1,372 +1,553 @@
 <?php
+/**
+ * ============================================
+ * FAMILY TRACKING - GEOFENCE MANAGEMENT
+ * List, create, edit, and delete geofences
+ * ============================================
+ */
 declare(strict_types=1);
 
-/**
- * Geofences Management Page
- */
+session_start();
 
-// Start session first
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Quick session check
-if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
-    header('Location: /login.php', true, 302);
+if (!isset($_SESSION['user_id'])) {
+    header('Location: /login.php');
     exit;
 }
 
-// Load bootstrap
 require_once __DIR__ . '/../../core/bootstrap.php';
 
-// Validate session with database
-try {
-    $auth = new Auth($db);
-    $user = $auth->getCurrentUser();
-
-    if (!$user) {
-        header('Location: /login.php?session_expired=1', true, 302);
-        exit;
-    }
-
-} catch (Exception $e) {
-    error_log('Geofences page error: ' . $e->getMessage());
-    header('Location: /login.php?error=1', true, 302);
+$auth = new Auth($db);
+$user = $auth->getCurrentUser();
+if (!$user) {
+    header('Location: /login.php');
     exit;
 }
 
+require_once __DIR__ . '/../core/bootstrap_tracking.php';
+
+$trackingCache = new TrackingCache($cache);
+$familyId = (int)$user['family_id'];
+$isAdmin = in_array($user['role'], ['owner', 'admin']);
+
+// Load geofences
+$geoRepo = new GeofenceRepo($db, $trackingCache);
+$geofences = $geoRepo->listAll($familyId);
+
+$mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
+
 $pageTitle = 'Geofences';
-$cacheVersion = '1.0.2';
+$pageCSS = ['/tracking/app/assets/css/tracking.css'];
+require_once __DIR__ . '/../../shared/components/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle) ?> - Relatives</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/tracking.css?v=<?php echo $cacheVersion; ?>">
-</head>
-<body class="geofences-page">
-    <!-- Top Bar -->
-    <div class="tracking-topbar">
-        <a href="index.php" class="back-btn">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-        </a>
-        <div class="topbar-title">Geofences</div>
-        <div class="topbar-actions">
-            <a href="events.php" class="icon-btn" title="Events">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 8v4l3 3"/>
-                    <circle cx="12" cy="12" r="10"/>
-                </svg>
-            </a>
-        </div>
-    </div>
 
-    <div class="geofences-container">
-        <!-- Geofences List -->
-        <div id="geofences-list">
-            <div style="text-align: center; padding: 40px; color: var(--gray-500);">
-                Loading geofences...
-            </div>
-        </div>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
 
-        <!-- Add Button -->
-        <button id="btn-add" class="add-geofence-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="16"/>
-                <line x1="8" y1="12" x2="16" y2="12"/>
-            </svg>
+<div class="tracking-content">
+
+    <a href="/tracking/app/" class="tracking-back">Back to Map</a>
+
+    <div class="tracking-content-header">
+        <div>
+            <h1 class="tracking-content-title">Geofences</h1>
+            <p class="tracking-content-subtitle">Set up zones to get alerts when family members enter or leave.</p>
+        </div>
+        <?php if ($isAdmin): ?>
+        <button class="tracking-add-btn" id="addGeofenceBtn">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             Add Geofence
         </button>
+        <?php endif; ?>
     </div>
 
-    <!-- Add/Edit Modal -->
-    <div id="modal" class="modal hidden">
-        <div class="modal-backdrop"></div>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modal-title">Add Geofence</h3>
-                <button class="popup-close" id="modal-close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" id="geo-name" class="setting-input" style="width: 100%;" placeholder="Home, Work, School...">
+    <!-- Add Geofence Form (hidden by default) -->
+    <?php if ($isAdmin): ?>
+    <div class="geofence-form trk-hidden" id="geofenceForm">
+        <h3 class="geofence-form-title" id="geofenceFormTitle">Add New Geofence</h3>
+
+        <div class="form-group">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-input" id="gfName" placeholder="e.g. Home, School, Office" maxlength="100">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Type</label>
+            <div class="geofence-type-selector">
+                <div class="geofence-type-option active" data-type="circle" id="typeCircle">
+                    <div class="geofence-type-badge circle" style="margin:0 auto 6px"></div>
+                    Circle
                 </div>
-                <div class="form-group">
-                    <label>Center (tap on main map to set)</label>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="number" id="geo-lat" class="setting-input" placeholder="Latitude" step="any" style="flex: 1;">
-                        <input type="number" id="geo-lng" class="setting-input" placeholder="Longitude" step="any" style="flex: 1;">
-                    </div>
+                <div class="geofence-type-option" data-type="polygon" id="typePolygon">
+                    <div class="geofence-type-badge polygon" style="margin:0 auto 6px"></div>
+                    Polygon
                 </div>
-                <div class="form-group">
-                    <label>Radius (meters)</label>
-                    <input type="range" id="geo-radius" min="50" max="1000" value="100" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px;"><span id="radius-display">100</span>m</div>
-                </div>
-                <div class="form-group">
-                    <label>Active</label>
-                    <label class="toggle">
-                        <input type="checkbox" id="geo-active" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="popup-btn" id="btn-cancel">Cancel</button>
-                <button class="popup-btn primary" id="btn-save">Save</button>
             </div>
         </div>
+
+        <div class="form-group" id="radiusGroup">
+            <label class="form-label">Radius (meters)</label>
+            <input type="number" class="form-input" id="gfRadius" value="200" min="50" max="50000" step="50">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">
+                Location
+                <span class="form-label-desc">Click on the map to place the geofence center</span>
+            </label>
+            <div class="geofence-form-map" id="geofenceFormMap"></div>
+            <input type="hidden" id="gfLat">
+            <input type="hidden" id="gfLng">
+            <input type="hidden" id="gfPolygonJson">
+            <input type="hidden" id="gfEditId">
+        </div>
+
+        <div class="consent-actions">
+            <button class="consent-btn consent-btn-secondary" id="gfCancel">Cancel</button>
+            <button class="consent-btn consent-btn-primary" id="gfSave">Save Geofence</button>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- Geofence List -->
+    <div class="geofence-list" id="geofenceList">
+        <?php if (empty($geofences)): ?>
+            <div class="tracking-empty">
+                <div class="tracking-empty-icon"></div>
+                <div class="tracking-empty-title">No geofences yet</div>
+                <div class="tracking-empty-text">Create geofences to get alerts when family members enter or leave specific areas.</div>
+            </div>
+        <?php else: ?>
+            <?php foreach ($geofences as $gf): ?>
+            <div class="geofence-card" data-id="<?php echo (int)$gf['id']; ?>">
+                <div class="geofence-card-header">
+                    <div class="geofence-card-name">
+                        <span class="geofence-type-badge <?php echo e($gf['type']); ?>"></span>
+                        <?php echo e($gf['name']); ?>
+                        <span class="geofence-active-badge <?php echo $gf['active'] ? 'active' : 'inactive'; ?>">
+                            <?php echo $gf['active'] ? 'Active' : 'Inactive'; ?>
+                        </span>
+                    </div>
+                    <?php if ($isAdmin): ?>
+                    <div class="geofence-card-actions">
+                        <button class="geofence-action-btn edit-gf-btn"
+                                data-id="<?php echo (int)$gf['id']; ?>"
+                                data-name="<?php echo e($gf['name']); ?>"
+                                data-type="<?php echo e($gf['type']); ?>"
+                                data-lat="<?php echo e((string)$gf['center_lat']); ?>"
+                                data-lng="<?php echo e((string)$gf['center_lng']); ?>"
+                                data-radius="<?php echo e((string)$gf['radius_m']); ?>"
+                                data-polygon="<?php echo e($gf['polygon_json'] ?? ''); ?>"
+                                data-active="<?php echo $gf['active'] ? '1' : '0'; ?>"
+                                title="Edit">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        </button>
+                        <button class="geofence-action-btn delete delete-gf-btn"
+                                data-id="<?php echo (int)$gf['id']; ?>"
+                                data-name="<?php echo e($gf['name']); ?>"
+                                title="Delete">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <div class="geofence-card-meta">
+                    <?php if ($gf['type'] === 'circle'): ?>
+                        <span class="geofence-card-meta-item">Radius: <?php echo number_format((float)$gf['radius_m']); ?>m</span>
+                    <?php endif; ?>
+                    <span class="geofence-card-meta-item">Created: <?php echo date('M j, Y', strtotime($gf['created_at'])); ?></span>
+                </div>
+                <div class="geofence-card-map" id="gfMap<?php echo (int)$gf['id']; ?>"
+                     data-lat="<?php echo e((string)$gf['center_lat']); ?>"
+                     data-lng="<?php echo e((string)$gf['center_lng']); ?>"
+                     data-type="<?php echo e($gf['type']); ?>"
+                     data-radius="<?php echo e((string)$gf['radius_m']); ?>"
+                     data-polygon="<?php echo e($gf['polygon_json'] ?? ''); ?>">
+                </div>
+            </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
     </div>
 
-    <div id="toast-container" class="toast-container"></div>
+</div>
 
-    <style>
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 200;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal.hidden { display: none; }
-        .modal-backdrop {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.7);
-        }
-        .modal-content {
-            position: relative;
-            background: var(--gray-800);
-            border-radius: var(--radius-lg);
-            width: calc(100% - 24px);
-            max-width: 400px;
-            max-height: 90vh;
-            overflow: auto;
-        }
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 16px;
-            border-bottom: 1px solid var(--gray-700);
-        }
-        .modal-header h3 {
-            font-size: 18px;
-            font-weight: 600;
-        }
-        .modal-body {
-            padding: 16px;
-        }
-        .modal-footer {
-            display: flex;
-            gap: 8px;
-            padding: 16px;
-            border-top: 1px solid var(--gray-700);
-        }
-        .modal-footer button {
-            flex: 1;
-        }
-        .form-group {
-            margin-bottom: 16px;
-        }
-        .form-group label {
-            display: block;
-            font-size: 13px;
-            color: var(--gray-400);
-            margin-bottom: 8px;
-        }
-    </style>
+<script>
+    window.TrackingConfig = window.TrackingConfig || {};
+    window.TrackingConfig.mapboxToken = <?php echo json_encode($mapboxToken); ?>;
+    window.TrackingConfig.apiBase = '/tracking/api';
+    window.TrackingConfig.familyId = <?php echo $familyId; ?>;
+    window.TrackingConfig.isAdmin = <?php echo json_encode($isAdmin); ?>;
+</script>
 
-    <script src="assets/js/format.js?v=<?php echo $cacheVersion; ?>"></script>
-    <script src="assets/js/api.js?v=<?php echo $cacheVersion; ?>"></script>
-    <script>
-        let geofences = [];
-        let editingId = null;
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
 
-        const Toast = {
-            container: document.getElementById('toast-container'),
-            show(message, type = 'info') {
-                const toast = document.createElement('div');
-                toast.className = `toast ${type}`;
-                toast.textContent = message;
-                this.container.appendChild(toast);
-                setTimeout(() => toast.remove(), 3000);
-            }
-        };
+<?php
+$pageJS = [
+    '/tracking/app/assets/js/state.js',
+];
+require_once __DIR__ . '/../../shared/components/footer.php';
+?>
 
-        // Load geofences
-        async function loadGeofences() {
-            const list = document.getElementById('geofences-list');
+<script>
+(function() {
+    'use strict';
 
-            try {
-                const response = await TrackingAPI.getGeofences();
+    var token = window.TrackingConfig.mapboxToken;
+    if (!token) return;
 
-                if (response.success) {
-                    geofences = response.data.geofences;
-                    renderGeofences();
-                }
-            } catch (err) {
-                list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--danger);">Failed to load geofences</div>';
-            }
-        }
+    mapboxgl.accessToken = token;
 
-        function renderGeofences() {
-            const list = document.getElementById('geofences-list');
+    // Initialize mini-maps for each geofence card
+    document.querySelectorAll('.geofence-card-map').forEach(function(el) {
+        var lat = parseFloat(el.dataset.lat);
+        var lng = parseFloat(el.dataset.lng);
+        var type = el.dataset.type;
+        var radius = parseFloat(el.dataset.radius) || 200;
 
-            if (geofences.length === 0) {
-                list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--gray-500);">No geofences yet. Create one to get started.</div>';
-                return;
-            }
+        if (!lat || !lng) return;
 
-            list.innerHTML = geofences.map(geo => `
-                <div class="geofence-card" data-id="${geo.id}">
-                    <div class="geofence-header">
-                        <div>
-                            <div class="geofence-name">${escapeHtml(geo.name)}</div>
-                            <div class="geofence-meta">
-                                ${geo.radius_m}m radius - ${geo.active ? 'Active' : 'Inactive'}
-                            </div>
-                        </div>
-                        <div class="geofence-actions">
-                            <button class="btn-sm btn-edit" data-id="${geo.id}">Edit</button>
-                            <button class="btn-sm danger btn-delete" data-id="${geo.id}">Delete</button>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-
-            // Add event listeners
-            list.querySelectorAll('.btn-edit').forEach(btn => {
-                btn.addEventListener('click', () => openEdit(parseInt(btn.dataset.id)));
-            });
-
-            list.querySelectorAll('.btn-delete').forEach(btn => {
-                btn.addEventListener('click', () => deleteGeofence(parseInt(btn.dataset.id)));
-            });
-        }
-
-        // Modal
-        const modal = document.getElementById('modal');
-        document.getElementById('btn-add').addEventListener('click', () => openAdd());
-        document.getElementById('modal-close').addEventListener('click', closeModal);
-        document.getElementById('btn-cancel').addEventListener('click', closeModal);
-        document.querySelector('.modal-backdrop').addEventListener('click', closeModal);
-
-        // Radius slider
-        document.getElementById('geo-radius').addEventListener('input', (e) => {
-            document.getElementById('radius-display').textContent = e.target.value;
+        var miniMap = new mapboxgl.Map({
+            container: el,
+            style: 'mapbox://styles/mapbox/dark-v11',
+            center: [lng, lat],
+            zoom: type === 'circle' ? Math.max(13, 16 - Math.log2(radius / 100)) : 14,
+            interactive: false,
+            attributionControl: false
         });
 
-        function openAdd() {
-            editingId = null;
-            document.getElementById('modal-title').textContent = 'Add Geofence';
-            document.getElementById('geo-name').value = '';
-            document.getElementById('geo-lat').value = '';
-            document.getElementById('geo-lng').value = '';
-            document.getElementById('geo-radius').value = 100;
-            document.getElementById('radius-display').textContent = '100';
-            document.getElementById('geo-active').checked = true;
-            modal.classList.remove('hidden');
+        miniMap.on('load', function() {
+            if (type === 'circle') {
+                var circleGeoJson = createCircleGeoJSON(lng, lat, radius);
+                miniMap.addSource('geofence', { type: 'geojson', data: circleGeoJson });
+                miniMap.addLayer({
+                    id: 'geofence-fill',
+                    type: 'fill',
+                    source: 'geofence',
+                    paint: { 'fill-color': '#667eea', 'fill-opacity': 0.2 }
+                });
+                miniMap.addLayer({
+                    id: 'geofence-line',
+                    type: 'line',
+                    source: 'geofence',
+                    paint: { 'line-color': '#667eea', 'line-width': 2 }
+                });
+            } else if (type === 'polygon' && el.dataset.polygon) {
+                try {
+                    var coords = JSON.parse(el.dataset.polygon);
+                    if (coords.length >= 3) {
+                        var closed = coords.slice();
+                        closed.push(closed[0]);
+                        miniMap.addSource('geofence', {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: { type: 'Polygon', coordinates: [closed.map(function(c) { return [c[1], c[0]]; })] }
+                            }
+                        });
+                        miniMap.addLayer({
+                            id: 'geofence-fill',
+                            type: 'fill',
+                            source: 'geofence',
+                            paint: { 'fill-color': '#f093fb', 'fill-opacity': 0.2 }
+                        });
+                        miniMap.addLayer({
+                            id: 'geofence-line',
+                            type: 'line',
+                            source: 'geofence',
+                            paint: { 'line-color': '#f093fb', 'line-width': 2 }
+                        });
+                    }
+                } catch(e) {}
+            }
+
+            // Center marker
+            new mapboxgl.Marker({ color: '#667eea' }).setLngLat([lng, lat]).addTo(miniMap);
+        });
+    });
+
+    // Create circle GeoJSON
+    function createCircleGeoJSON(lng, lat, radiusM) {
+        var points = 64;
+        var coords = [];
+        var km = radiusM / 1000;
+        for (var i = 0; i <= points; i++) {
+            var angle = (i / points) * 2 * Math.PI;
+            var dx = km * Math.cos(angle);
+            var dy = km * Math.sin(angle);
+            var dLng = dx / (111.32 * Math.cos(lat * Math.PI / 180));
+            var dLat = dy / 110.574;
+            coords.push([lng + dLng, lat + dLat]);
         }
+        return {
+            type: 'Feature',
+            geometry: { type: 'Polygon', coordinates: [coords] }
+        };
+    }
 
-        function openEdit(id) {
-            const geo = geofences.find(g => g.id === id);
-            if (!geo) return;
+    // Add geofence UI
+    var formEl = document.getElementById('geofenceForm');
+    var addBtn = document.getElementById('addGeofenceBtn');
+    var formMap = null;
+    var formMarker = null;
+    var formCircle = null;
+    var selectedType = 'circle';
+    var polygonPoints = [];
 
-            editingId = id;
-            document.getElementById('modal-title').textContent = 'Edit Geofence';
-            document.getElementById('geo-name').value = geo.name;
-            document.getElementById('geo-lat').value = geo.center_lat;
-            document.getElementById('geo-lng').value = geo.center_lng;
-            document.getElementById('geo-radius').value = geo.radius_m;
-            document.getElementById('radius-display').textContent = geo.radius_m;
-            document.getElementById('geo-active').checked = geo.active;
-            modal.classList.remove('hidden');
+    if (addBtn) {
+        addBtn.addEventListener('click', function() {
+            resetForm();
+            document.getElementById('geofenceFormTitle').textContent = 'Add New Geofence';
+            formEl.classList.remove('trk-hidden');
+            formEl.scrollIntoView({ behavior: 'smooth' });
+            initFormMap();
+        });
+    }
+
+    document.querySelectorAll('.geofence-type-option').forEach(function(el) {
+        el.addEventListener('click', function() {
+            document.querySelectorAll('.geofence-type-option').forEach(function(e) { e.classList.remove('active'); });
+            el.classList.add('active');
+            selectedType = el.dataset.type;
+            document.getElementById('radiusGroup').style.display = selectedType === 'circle' ? '' : 'none';
+            polygonPoints = [];
+            if (formMap) clearFormMapLayers();
+        });
+    });
+
+    function initFormMap() {
+        if (formMap) {
+            formMap.resize();
+            return;
         }
+        formMap = new mapboxgl.Map({
+            container: 'geofenceFormMap',
+            style: 'mapbox://styles/mapbox/dark-v11',
+            center: [28.0473, -26.2041],
+            zoom: 12,
+            attributionControl: false
+        });
+        formMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-        function closeModal() {
-            modal.classList.add('hidden');
-            editingId = null;
+        formMap.on('click', function(e) {
+            var lngLat = e.lngLat;
+            if (selectedType === 'circle') {
+                document.getElementById('gfLat').value = lngLat.lat.toFixed(6);
+                document.getElementById('gfLng').value = lngLat.lng.toFixed(6);
+                drawFormCircle(lngLat.lng, lngLat.lat);
+            } else {
+                polygonPoints.push([lngLat.lat, lngLat.lng]);
+                document.getElementById('gfPolygonJson').value = JSON.stringify(polygonPoints);
+                if (polygonPoints.length === 1) {
+                    document.getElementById('gfLat').value = lngLat.lat.toFixed(6);
+                    document.getElementById('gfLng').value = lngLat.lng.toFixed(6);
+                }
+                drawFormPolygon();
+            }
+        });
+    }
+
+    function drawFormCircle(lng, lat) {
+        var radius = parseFloat(document.getElementById('gfRadius').value) || 200;
+        var data = createCircleGeoJSON(lng, lat, radius);
+        clearFormMapLayers();
+
+        formMap.addSource('form-geofence', { type: 'geojson', data: data });
+        formMap.addLayer({ id: 'form-gf-fill', type: 'fill', source: 'form-geofence', paint: { 'fill-color': '#667eea', 'fill-opacity': 0.2 } });
+        formMap.addLayer({ id: 'form-gf-line', type: 'line', source: 'form-geofence', paint: { 'line-color': '#667eea', 'line-width': 2 } });
+
+        if (formMarker) formMarker.remove();
+        formMarker = new mapboxgl.Marker({ color: '#667eea' }).setLngLat([lng, lat]).addTo(formMap);
+    }
+
+    function drawFormPolygon() {
+        clearFormMapLayers();
+        if (polygonPoints.length < 2) {
+            if (polygonPoints.length === 1) {
+                if (formMarker) formMarker.remove();
+                formMarker = new mapboxgl.Marker({ color: '#f093fb' })
+                    .setLngLat([polygonPoints[0][1], polygonPoints[0][0]])
+                    .addTo(formMap);
+            }
+            return;
         }
+        var coords = polygonPoints.map(function(p) { return [p[1], p[0]]; });
+        var closed = coords.slice();
+        closed.push(closed[0]);
 
-        // Save
-        document.getElementById('btn-save').addEventListener('click', async () => {
-            const name = document.getElementById('geo-name').value.trim();
-            const lat = parseFloat(document.getElementById('geo-lat').value);
-            const lng = parseFloat(document.getElementById('geo-lng').value);
-            const radius = parseInt(document.getElementById('geo-radius').value);
-            const active = document.getElementById('geo-active').checked;
+        formMap.addSource('form-geofence', {
+            type: 'geojson',
+            data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [closed] } }
+        });
+        formMap.addLayer({ id: 'form-gf-fill', type: 'fill', source: 'form-geofence', paint: { 'fill-color': '#f093fb', 'fill-opacity': 0.2 } });
+        formMap.addLayer({ id: 'form-gf-line', type: 'line', source: 'form-geofence', paint: { 'line-color': '#f093fb', 'line-width': 2 } });
+    }
 
-            if (!name) {
-                Toast.show('Name is required', 'error');
+    function clearFormMapLayers() {
+        if (!formMap) return;
+        try { formMap.removeLayer('form-gf-fill'); } catch(e) {}
+        try { formMap.removeLayer('form-gf-line'); } catch(e) {}
+        try { formMap.removeSource('form-geofence'); } catch(e) {}
+    }
+
+    function resetForm() {
+        if (document.getElementById('gfName')) document.getElementById('gfName').value = '';
+        if (document.getElementById('gfRadius')) document.getElementById('gfRadius').value = '200';
+        if (document.getElementById('gfLat')) document.getElementById('gfLat').value = '';
+        if (document.getElementById('gfLng')) document.getElementById('gfLng').value = '';
+        if (document.getElementById('gfPolygonJson')) document.getElementById('gfPolygonJson').value = '';
+        if (document.getElementById('gfEditId')) document.getElementById('gfEditId').value = '';
+        selectedType = 'circle';
+        polygonPoints = [];
+        document.querySelectorAll('.geofence-type-option').forEach(function(e) { e.classList.remove('active'); });
+        var circleOpt = document.getElementById('typeCircle');
+        if (circleOpt) circleOpt.classList.add('active');
+        var rg = document.getElementById('radiusGroup');
+        if (rg) rg.style.display = '';
+        if (formMap) clearFormMapLayers();
+        if (formMarker) { formMarker.remove(); formMarker = null; }
+    }
+
+    // Cancel button
+    var cancelBtn = document.getElementById('gfCancel');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            formEl.classList.add('trk-hidden');
+            resetForm();
+        });
+    }
+
+    // Radius change re-draws circle
+    var radiusInput = document.getElementById('gfRadius');
+    if (radiusInput) {
+        radiusInput.addEventListener('input', function() {
+            var lat = parseFloat(document.getElementById('gfLat').value);
+            var lng = parseFloat(document.getElementById('gfLng').value);
+            if (lat && lng && selectedType === 'circle') {
+                drawFormCircle(lng, lat);
+            }
+        });
+    }
+
+    // Save geofence
+    var saveBtn = document.getElementById('gfSave');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function() {
+            var name = document.getElementById('gfName').value.trim();
+            var lat = document.getElementById('gfLat').value;
+            var lng = document.getElementById('gfLng').value;
+            var radius = document.getElementById('gfRadius').value;
+            var polygonJson = document.getElementById('gfPolygonJson').value;
+            var editId = document.getElementById('gfEditId').value;
+
+            if (!name) { alert('Please enter a name'); return; }
+            if (!lat || !lng) { alert('Please click on the map to set a location'); return; }
+            if (selectedType === 'polygon' && polygonPoints.length < 3 && !polygonJson) {
+                alert('Please click at least 3 points on the map for a polygon');
                 return;
             }
 
-            if (isNaN(lat) || isNaN(lng)) {
-                Toast.show('Valid coordinates are required', 'error');
-                return;
-            }
-
-            const data = {
-                name,
-                center_lat: lat,
-                center_lng: lng,
-                radius_m: radius,
-                active
+            var payload = {
+                name: name,
+                type: selectedType,
+                center_lat: parseFloat(lat),
+                center_lng: parseFloat(lng),
+                radius_m: selectedType === 'circle' ? parseFloat(radius) : 0,
+                polygon_json: selectedType === 'polygon' ? (polygonJson || JSON.stringify(polygonPoints)) : null
             };
 
-            try {
-                if (editingId) {
-                    await TrackingAPI.updateGeofence(editingId, data);
-                    Toast.show('Geofence updated', 'success');
+            var url = window.TrackingConfig.apiBase;
+            var method = 'POST';
+
+            if (editId) {
+                url += '/geofences_update.php';
+                payload.id = parseInt(editId);
+            } else {
+                url += '/geofences_add.php';
+            }
+
+            saveBtn.disabled = true;
+            fetch(url, {
+                method: method,
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                saveBtn.disabled = false;
+                if (data.ok) {
+                    location.reload();
                 } else {
-                    await TrackingAPI.addGeofence(data);
-                    Toast.show('Geofence created', 'success');
+                    alert(data.error || 'Failed to save geofence');
                 }
-
-                closeModal();
-                loadGeofences();
-            } catch (err) {
-                Toast.show(err.message || 'Failed to save', 'error');
-            }
+            })
+            .catch(function(err) {
+                saveBtn.disabled = false;
+                alert('Network error');
+            });
         });
+    }
 
-        // Delete
-        async function deleteGeofence(id) {
-            if (!confirm('Delete this geofence?')) return;
+    // Edit buttons
+    document.querySelectorAll('.edit-gf-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.getElementById('geofenceFormTitle').textContent = 'Edit Geofence';
+            document.getElementById('gfEditId').value = btn.dataset.id;
+            document.getElementById('gfName').value = btn.dataset.name;
+            document.getElementById('gfLat').value = btn.dataset.lat;
+            document.getElementById('gfLng').value = btn.dataset.lng;
+            document.getElementById('gfRadius').value = btn.dataset.radius || '200';
 
-            try {
-                await TrackingAPI.deleteGeofence(id);
-                Toast.show('Geofence deleted', 'success');
-                loadGeofences();
-            } catch (err) {
-                Toast.show(err.message || 'Failed to delete', 'error');
+            selectedType = btn.dataset.type || 'circle';
+            document.querySelectorAll('.geofence-type-option').forEach(function(e) { e.classList.remove('active'); });
+            var opt = document.querySelector('[data-type="' + selectedType + '"]');
+            if (opt) opt.classList.add('active');
+            document.getElementById('radiusGroup').style.display = selectedType === 'circle' ? '' : 'none';
+
+            if (btn.dataset.polygon) {
+                document.getElementById('gfPolygonJson').value = btn.dataset.polygon;
+                try { polygonPoints = JSON.parse(btn.dataset.polygon); } catch(e) { polygonPoints = []; }
             }
-        }
 
-        function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
-        }
+            formEl.classList.remove('trk-hidden');
+            formEl.scrollIntoView({ behavior: 'smooth' });
+            initFormMap();
 
-        loadGeofences();
-    </script>
-</body>
-</html>
+            setTimeout(function() {
+                var lat = parseFloat(btn.dataset.lat);
+                var lng = parseFloat(btn.dataset.lng);
+                if (formMap && lat && lng) {
+                    formMap.flyTo({ center: [lng, lat], zoom: 14 });
+                    if (selectedType === 'circle') {
+                        drawFormCircle(lng, lat);
+                    } else if (polygonPoints.length >= 2) {
+                        drawFormPolygon();
+                    }
+                }
+            }, 500);
+        });
+    });
+
+    // Delete buttons
+    document.querySelectorAll('.delete-gf-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            if (!confirm('Delete geofence "' + btn.dataset.name + '"?')) return;
+
+            fetch(window.TrackingConfig.apiBase + '/geofences_delete.php', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: parseInt(btn.dataset.id) })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    location.reload();
+                } else {
+                    alert(data.error || 'Failed to delete');
+                }
+            })
+            .catch(function() { alert('Network error'); });
+        });
+    });
+
+})();
+</script>

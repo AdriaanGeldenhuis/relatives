@@ -1,144 +1,103 @@
 /**
- * State Management
+ * Tracking App - Global State Manager
+ *
+ * Provides a centralized, observable state store for the tracking application.
+ * Supports event-based listeners so modules can react to state changes without
+ * tight coupling.
+ *
+ * Usage:
+ *   Tracking.setState('members', [...]);
+ *   Tracking.getState('members');
+ *   Tracking.onStateChange('members', (newValue, oldValue) => { ... });
  */
+window.Tracking = window.Tracking || {};
 
-window.TrackingState = {
-    // Current data
-    members: [],
-    session: null,
-    settings: null,
-    geofences: [],
-    places: [],
-
-    // UI state
-    selectedMember: null,
-    followingMember: null,
-    showGeofences: false,
-    directionsRoute: null,
-
-    // Listeners
-    listeners: {},
+(function () {
+    'use strict';
 
     /**
-     * Subscribe to state changes
+     * Internal state object. Every key listed here is considered a valid
+     * state property. Additional keys can be set at runtime.
      */
-    on(event, callback) {
-        if (!this.listeners[event]) {
-            this.listeners[event] = [];
+    var state = {
+        members: [],
+        selectedMember: null,
+        geofences: [],
+        places: [],
+        settings: {},
+        sessionActive: false,
+        mapReady: false,
+        isNative: false,
+        consentGiven: false,
+    };
+
+    /**
+     * Map of state key -> array of listener callbacks.
+     * Each callback receives (newValue, oldValue).
+     * @type {Object.<string, Function[]>}
+     */
+    var listeners = {};
+
+    /**
+     * Set a value in the global state and notify listeners.
+     *
+     * @param {string} key   - The state property name.
+     * @param {*}      value - The new value.
+     */
+    function setState(key, value) {
+        var oldValue = state[key];
+        state[key] = value;
+
+        if (listeners[key]) {
+            for (var i = 0; i < listeners[key].length; i++) {
+                try {
+                    listeners[key][i](value, oldValue);
+                } catch (err) {
+                    console.error('[State] Listener error for "' + key + '":', err);
+                }
+            }
         }
-        this.listeners[event].push(callback);
-    },
-
-    /**
-     * Emit event
-     */
-    emit(event, data) {
-        if (this.listeners[event]) {
-            this.listeners[event].forEach(cb => cb(data));
-        }
-    },
-
-    /**
-     * Update members
-     */
-    setMembers(members) {
-        this.members = members;
-        this.emit('members:updated', members);
-    },
-
-    /**
-     * Get member by ID
-     */
-    getMember(userId) {
-        // Use loose equality to handle both string and integer IDs
-        return this.members.find(m => m.user_id == userId);
-    },
-
-    /**
-     * Update session state
-     */
-    setSession(session) {
-        this.session = session;
-        this.emit('session:updated', session);
-    },
-
-    /**
-     * Update settings
-     */
-    setSettings(settings) {
-        this.settings = settings;
-        this.emit('settings:updated', settings);
-    },
-
-    /**
-     * Update geofences
-     */
-    setGeofences(geofences) {
-        this.geofences = geofences;
-        this.emit('geofences:updated', geofences);
-    },
-
-    /**
-     * Update places
-     */
-    setPlaces(places) {
-        this.places = places;
-        this.emit('places:updated', places);
-    },
-
-    /**
-     * Select a member
-     */
-    selectMember(userId) {
-        this.selectedMember = userId;
-        this.emit('member:selected', userId);
-    },
-
-    /**
-     * Clear selection
-     */
-    clearSelection() {
-        this.selectedMember = null;
-        this.emit('member:selected', null);
-    },
-
-    /**
-     * Start following a member
-     */
-    startFollowing(userId) {
-        this.followingMember = userId;
-        this.emit('follow:started', userId);
-    },
-
-    /**
-     * Stop following
-     */
-    stopFollowing() {
-        this.followingMember = null;
-        this.emit('follow:stopped');
-    },
-
-    /**
-     * Toggle geofences visibility
-     */
-    toggleGeofences() {
-        this.showGeofences = !this.showGeofences;
-        this.emit('geofences:toggled', this.showGeofences);
-    },
-
-    /**
-     * Set directions route
-     */
-    setDirectionsRoute(route) {
-        this.directionsRoute = route;
-        this.emit('directions:updated', route);
-    },
-
-    /**
-     * Clear directions
-     */
-    clearDirections() {
-        this.directionsRoute = null;
-        this.emit('directions:cleared');
     }
-};
+
+    /**
+     * Retrieve a value from the global state.
+     *
+     * @param {string} key - The state property name.
+     * @returns {*} The current value, or undefined if the key does not exist.
+     */
+    function getState(key) {
+        return state[key];
+    }
+
+    /**
+     * Register a callback that fires whenever a given state key changes.
+     *
+     * @param {string}   key      - The state property to observe.
+     * @param {Function} callback - Called with (newValue, oldValue).
+     * @returns {Function} An unsubscribe function that removes this listener.
+     */
+    function onStateChange(key, callback) {
+        if (typeof callback !== 'function') {
+            throw new TypeError('[State] onStateChange callback must be a function');
+        }
+
+        if (!listeners[key]) {
+            listeners[key] = [];
+        }
+        listeners[key].push(callback);
+
+        // Return an unsubscribe function for easy cleanup.
+        return function unsubscribe() {
+            var idx = listeners[key].indexOf(callback);
+            if (idx !== -1) {
+                listeners[key].splice(idx, 1);
+            }
+        };
+    }
+
+    // Expose on the Tracking namespace.
+    Tracking.state = state;
+    Tracking.setState = setState;
+    Tracking.getState = getState;
+    Tracking.onStateChange = onStateChange;
+})();

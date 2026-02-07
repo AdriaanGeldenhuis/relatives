@@ -1,25 +1,25 @@
 <?php
-/**
- * GET /tracking/api/session_status.php
- *
- * Returns the current session status.
- * Used by mobile apps to check if they should track.
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-header('Content-Type: application/json');
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    Response::error('method_not_allowed', 405);
+}
 
-// Auth required
-$user = requireAuth();
-$familyId = $user['family_id'];
+$ctx = SiteContext::require($db);
 
-// Initialize services
-$sessionsRepo = new SessionsRepo($db, $trackingCache);
+$trackingCache = new TrackingCache($cache);
+$sessionsRepo = new SessionsRepo($db);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
-$sessionGate = new SessionGate($sessionsRepo, $settingsRepo);
+$settings = $settingsRepo->get($ctx->familyId);
 
-// Get status
-$status = $sessionGate->getStatus($familyId);
+$sessionGate = new SessionGate(
+    $trackingCache,
+    $sessionsRepo,
+    (int) ($settings['session_ttl_seconds'] ?? 300)
+);
 
-jsonSuccess($status);
+$status = $sessionGate->getStatus($ctx->familyId, $settings);
+
+Response::success($status);

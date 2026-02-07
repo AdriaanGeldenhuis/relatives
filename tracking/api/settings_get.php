@@ -1,25 +1,17 @@
 <?php
-/**
- * GET /tracking/api/settings_get.php
- *
- * Get family tracking settings.
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-header('Content-Type: application/json');
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    Response::error('method_not_allowed', 405);
+}
 
-// Auth required
-$user = requireAuth();
-$familyId = $user['family_id'];
+$ctx = SiteContext::require($db);
 
-// Initialize services
+$trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 
-// Get settings
-$settings = $settingsRepo->get($familyId);
+$settings = $settingsRepo->get($ctx->familyId);
 
-// Add some context
-$settings['can_edit'] = in_array($user['role'], ['owner', 'admin']);
-
-jsonSuccess($settings);
+Response::success($settings);

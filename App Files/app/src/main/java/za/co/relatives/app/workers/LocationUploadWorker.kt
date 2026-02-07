@@ -1,8 +1,6 @@
 package za.co.relatives.app.workers
 
 import android.content.Context
-import android.os.BatteryManager
-import android.os.Build
 import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -12,184 +10,195 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.google.gson.reflect.TypeToken
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
+import za.co.relatives.app.data.QueuedLocationEntity
 import za.co.relatives.app.data.TrackingDatabase
-import za.co.relatives.app.utils.PreferencesManager
+import za.co.relatives.app.network.NetworkClient
 import java.util.concurrent.TimeUnit
 
 /**
- * WorkManager-based location batch uploader.
+ * WorkManager worker that batch-uploads queued location updates to the
+ * Relatives backend.
  *
- * Decoupled from collection: runs when network is available,
- * flushes Room queue in batches, marks sent, cleans up.
- *
- * Survives service death, app kills, and device restarts.
+ * Reads up to 100 unsent rows from the Room queue, POSTs them as JSON, and
+ * marks each row as sent on success. Transient failures trigger exponential
+ * backoff (starting at 30 s); auth failures (401/403) cause an immediate
+ * abort without retry.
  */
 class LocationUploadWorker(
-    context: Context,
+    appContext: Context,
     params: WorkerParameters
-) : CoroutineWorker(context, params) {
+) : CoroutineWorker(appContext, params) {
 
     companion object {
         private const val TAG = "LocationUploadWorker"
-        private const val WORK_NAME = "location_upload"
-        private const val BATCH_UPLOAD_URL = "https://www.relatives.co.za/tracking/api/update_location_batch.php"
+        const val WORK_NAME = "location_upload"
+        private const val BATCH_URL = "https://www.relatives.co.za/tracking/api/batch.php"
+        private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
+        private const val MAX_RETRY_COUNT = 5
+
+        private const val PREF_NAME = "relatives_prefs"
+        private const val PREF_LAST_UPLOAD = "last_upload_time"
 
         /**
-         * Schedule a one-time upload when network becomes available.
-         * Uses KEEP policy to avoid duplicate work.
+         * Convenience to enqueue a one-shot upload with a network constraint.
          */
         fun enqueue(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
-
             val request = OneTimeWorkRequestBuilder<LocationUploadWorker>()
                 .setConstraints(constraints)
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .setBackoffCriteria(
+                    BackoffPolicy.EXPONENTIAL,
+                    30, TimeUnit.SECONDS
+                )
                 .build()
-
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.KEEP, request)
-
-            Log.d(TAG, "Upload work enqueued (network-constrained)")
         }
     }
 
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
-    private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+    private val dao = TrackingDatabase.getInstance(appContext).queuedLocationDao()
+    private val gson = Gson()
+    private val http = NetworkClient.getInstance(appContext)
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Upload worker starting (attempt: $runAttemptCount)")
+    override suspend fun doWork(): Result {
+        Log.d(TAG, "Upload worker starting (attempt $runAttemptCount)")
 
-        val dao = TrackingDatabase.getInstance(applicationContext).queuedLocationDao()
-        val unsent = dao.getUnsent()
-
-        if (unsent.isEmpty()) {
-            Log.d(TAG, "No unsent locations in queue")
-            dao.deleteSent() // Cleanup any previously sent
-            return@withContext Result.success()
+        // Fetch unsent locations.
+        val batch = dao.getUnsent(limit = 100)
+        if (batch.isEmpty()) {
+            Log.d(TAG, "No unsent locations, nothing to do")
+            // Clean up old sent rows while we're here.
+            dao.deleteSent()
+            return Result.success()
         }
 
-        Log.d(TAG, "Found ${unsent.size} unsent locations to upload")
-
-        val sessionToken = PreferencesManager.sessionToken
-        if (sessionToken.isNullOrBlank()) {
-            Log.w(TAG, "No session token - retrying later")
-            return@withContext Result.retry()
+        // Filter out items that have exceeded the maximum retry count.
+        val viable = batch.filter { it.retryCount < MAX_RETRY_COUNT }
+        val exhausted = batch.filter { it.retryCount >= MAX_RETRY_COUNT }
+        exhausted.forEach { dao.markSent(it.clientEventId) } // discard
+        if (viable.isEmpty()) {
+            dao.deleteSent()
+            return Result.success()
         }
 
-        val deviceUuid = PreferencesManager.getDeviceUuid()
-
-        // Build batch request
-        val locationsArray = JSONArray()
-        unsent.forEach { loc ->
-            locationsArray.put(JSONObject().apply {
-                put("latitude", loc.latitude)
-                put("longitude", loc.longitude)
-                put("accuracy_m", loc.accuracy.toInt())
-                put("speed_kmh", loc.speedKmh)
-                put("heading_deg", loc.bearing ?: 0)
-                put("altitude_m", loc.altitude ?: JSONObject.NULL)
-                put("is_moving", loc.isMoving)
-                put("battery_level", loc.batteryLevel ?: JSONObject.NULL)
-                put("client_event_id", loc.clientEventId)
-                put("client_timestamp", loc.timestamp)
-            })
+        return try {
+            val responseBody = postBatch(viable)
+            handleSuccess(viable, responseBody)
+            Result.success()
+        } catch (e: AuthFailureException) {
+            Log.w(TAG, "Auth failure (${e.httpCode}), not retrying")
+            Result.failure()
+        } catch (e: Exception) {
+            Log.e(TAG, "Upload failed, will retry", e)
+            viable.forEach { dao.incrementRetry(it.clientEventId) }
+            Result.retry()
         }
+    }
 
-        val body = JSONObject().apply {
-            put("device_uuid", deviceUuid)
-            put("platform", "android")
-            put("device_name", Build.MODEL)
-            put("source", "native")
-            put("session_token", sessionToken)
-            put("locations", locationsArray)
+    // ------------------------------------------------------------------ //
+    //  Network
+    // ------------------------------------------------------------------ //
+
+    private fun postBatch(items: List<QueuedLocationEntity>): String {
+        val payload = items.map { entity ->
+            mapOf(
+                "client_event_id" to entity.clientEventId,
+                "lat" to entity.lat,
+                "lng" to entity.lng,
+                "accuracy" to entity.accuracy,
+                "altitude" to entity.altitude,
+                "bearing" to entity.bearing,
+                "speed" to entity.speed,
+                "speed_kmh" to entity.speedKmh,
+                "is_moving" to entity.isMoving,
+                "battery_level" to entity.batteryLevel,
+                "timestamp" to entity.timestamp
+            )
         }
+        val jsonBody = gson.toJson(mapOf("locations" to payload))
 
         val request = Request.Builder()
-            .url(BATCH_UPLOAD_URL)
-            .addHeader("Content-Type", "application/json")
-            .addHeader("Authorization", "Bearer $sessionToken")
-            .addHeader("User-Agent", "RelativesAndroid/1.0")
-            .post(body.toString().toRequestBody(jsonMediaType))
+            .url(BATCH_URL)
+            .post(jsonBody.toRequestBody(JSON_MEDIA))
             .build()
 
-        try {
-            val response = httpClient.newCall(request).execute()
-            val responseBody = response.body?.string()
+        val response = http.newCall(request).execute()
+        val body = response.body?.string().orEmpty()
 
-            when {
-                response.isSuccessful -> {
-                    Log.d(TAG, "Batch upload successful (${unsent.size} locations)")
-
-                    // Parse results for partial failures
-                    val json = JSONObject(responseBody ?: "{}")
-                    val results = json.optJSONArray("results")
-                    val sentIds = mutableListOf<String>()
-                    val failedIds = mutableListOf<String>()
-
-                    if (results != null) {
-                        for (i in 0 until results.length()) {
-                            val result = results.getJSONObject(i)
-                            val clientEventId = result.optString("client_event_id")
-                            if (result.optBoolean("success", false) || result.optBoolean("already_exists", false)) {
-                                sentIds.add(clientEventId)
-                            } else {
-                                failedIds.add(clientEventId)
-                            }
-                        }
-                    } else {
-                        // No per-item results, assume all sent
-                        sentIds.addAll(unsent.map { it.clientEventId })
-                    }
-
-                    if (sentIds.isNotEmpty()) {
-                        dao.markSent(sentIds)
-                    }
-                    if (failedIds.isNotEmpty()) {
-                        dao.incrementRetry(failedIds)
-                    }
-
-                    // Cleanup sent items
-                    dao.deleteSent()
-
-                    // Apply server settings if present
-                    PreferencesManager.applyServerSettings(json.optJSONObject("server_settings"))
-
-                    PreferencesManager.lastUploadTime = System.currentTimeMillis()
-
-                    return@withContext Result.success()
-                }
-                response.code in listOf(401, 403) -> {
-                    Log.w(TAG, "Auth failure (${response.code}) - will retry after token refresh")
-                    return@withContext Result.retry()
-                }
-                response.code == 402 -> {
-                    Log.w(TAG, "Subscription locked - not retrying")
-                    return@withContext Result.failure()
-                }
-                else -> {
-                    Log.e(TAG, "Upload failed (${response.code}): $responseBody")
-                    dao.incrementRetry(unsent.map { it.clientEventId })
-                    return@withContext Result.retry()
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Upload worker exception: ${e.message}", e)
-            dao.incrementRetry(unsent.map { it.clientEventId })
-            return@withContext Result.retry()
+        when (response.code) {
+            in 200..299 -> return body
+            401, 403 -> throw AuthFailureException(response.code, body)
+            else -> throw UploadException(response.code, body)
         }
     }
 
+    // ------------------------------------------------------------------ //
+    //  Success handling
+    // ------------------------------------------------------------------ //
+
+    private suspend fun handleSuccess(items: List<QueuedLocationEntity>, responseBody: String) {
+        // Mark all items as sent.
+        items.forEach { dao.markSent(it.clientEventId) }
+
+        // Persist the last upload timestamp.
+        applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(PREF_LAST_UPLOAD, System.currentTimeMillis())
+            .apply()
+
+        // Clean up sent rows.
+        dao.deleteSent()
+
+        // Try to parse and apply server settings.
+        applyServerSettings(responseBody)
+
+        Log.d(TAG, "Successfully uploaded ${items.size} locations")
+    }
+
+    /**
+     * Parse the server response for settings that should be applied to the
+     * tracking service (e.g. updated interval).
+     */
+    private fun applyServerSettings(responseBody: String) {
+        try {
+            val json = gson.fromJson(responseBody, JsonObject::class.java) ?: return
+            val settings = json.getAsJsonObject("settings") ?: return
+
+            val prefs = applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+
+            if (settings.has("update_interval")) {
+                editor.putLong(
+                    "server_update_interval",
+                    settings.get("update_interval").asLong
+                )
+            }
+            if (settings.has("tracking_enabled")) {
+                editor.putBoolean(
+                    "server_tracking_enabled",
+                    settings.get("tracking_enabled").asBoolean
+                )
+            }
+
+            editor.apply()
+            Log.d(TAG, "Applied server settings from response")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not parse server settings", e)
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Exceptions
+    // ------------------------------------------------------------------ //
+
+    private class AuthFailureException(val httpCode: Int, message: String) : Exception(message)
+    private class UploadException(val httpCode: Int, message: String) : Exception(message)
 }

@@ -1,124 +1,73 @@
 <?php
 /**
- * Prune Events Job
+ * ============================================
+ * CRON JOB: PRUNE OLD TRACKING EVENTS
  *
- * Run via cron: 0 4 * * * php /path/to/tracking/jobs/prune_events.php
+ * Deletes tracking events older than each family's
+ * configured events_retention_days setting.
  *
- * Deletes tracking events older than retention period.
- * Also cleans up old alert deliveries.
+ * Recommended schedule: daily (e.g. 3:00 AM)
+ *   0 3 * * * php /path/to/tracking/jobs/prune_events.php
+ * ============================================
  */
+declare(strict_types=1);
 
-// CLI only
+// Prevent web access
 if (php_sapi_name() !== 'cli') {
-    die('CLI only');
+    http_response_code(403);
+    exit('CLI only');
 }
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-echo "=== Prune Tracking Events ===\n";
-echo "Started: " . date('Y-m-d H:i:s') . "\n\n";
+$startTime = microtime(true);
+$totalDeleted = 0;
 
-$settingsRepo = new SettingsRepo($db, $trackingCache);
-$eventsRepo = new EventsRepo($db);
-$alertsRepo = new AlertsRepo($db, $trackingCache);
-
-// Get all families
-$stmt = $db->query("SELECT id FROM families WHERE subscription_status NOT IN ('expired', 'cancelled')");
-$families = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-$totalEventsPruned = 0;
-$totalDeliveriesPruned = 0;
-
-foreach ($families as $familyId) {
-    // Get family settings
-    $settings = $settingsRepo->get($familyId);
-    $retentionDays = $settings['events_retention_days'];
-
-    // Calculate cutoff
-    $cutoff = date('Y-m-d H:i:s', strtotime("-{$retentionDays} days"));
-
-    // Count events to delete
+try {
+    // Get all families with their events_retention_days setting
     $stmt = $db->prepare("
-        SELECT COUNT(*) FROM tracking_events
-        WHERE family_id = ? AND created_at < ?
+        SELECT family_id, events_retention_days
+        FROM tracking_family_settings
+        WHERE events_retention_days > 0
     ");
-    $stmt->execute([$familyId, $cutoff]);
-    $count = $stmt->fetchColumn();
+    $stmt->execute();
+    $families = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    if ($count > 0) {
-        echo "Family {$familyId}: {$count} events older than {$retentionDays} days\n";
+    if (empty($families)) {
+        // Use global default if no family settings exist
+        $defaultRetention = SettingsRepo::getDefaults()['events_retention_days'];
+        $eventsRepo = new EventsRepo($db);
+        $deleted = $eventsRepo->prune($defaultRetention);
+        $totalDeleted += $deleted;
+        echo "[prune_events] Default retention {$defaultRetention}d: deleted {$deleted} events\n";
+    } else {
+        $eventsRepo = new EventsRepo($db);
 
-        // Delete in batches
-        $deleted = 0;
-        while ($deleted < $count) {
+        foreach ($families as $family) {
+            $retention = (int)$family['events_retention_days'];
+            $familyId = (int)$family['family_id'];
+
+            // Delete events for this specific family older than retention period
             $stmt = $db->prepare("
                 DELETE FROM tracking_events
-                WHERE family_id = ? AND created_at < ?
-                LIMIT 5000
+                WHERE family_id = ?
+                  AND created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
             ");
-            $stmt->execute([$familyId, $cutoff]);
-            $batchDeleted = $stmt->rowCount();
+            $stmt->execute([$familyId, $retention]);
+            $deleted = $stmt->rowCount();
+            $totalDeleted += $deleted;
 
-            if ($batchDeleted === 0) break;
-
-            $deleted += $batchDeleted;
-            echo "  Deleted batch: {$batchDeleted} (total: {$deleted})\n";
-
-            usleep(100000);
+            if ($deleted > 0) {
+                echo "[prune_events] Family {$familyId} (retention {$retention}d): deleted {$deleted} events\n";
+            }
         }
-
-        $totalEventsPruned += $deleted;
-    }
-}
-
-// Prune alert deliveries (keep 30 days regardless of settings)
-echo "\n--- Pruning alert deliveries ---\n";
-$deliveryCutoff = date('Y-m-d H:i:s', strtotime('-30 days'));
-
-$stmt = $db->prepare("
-    SELECT COUNT(*) FROM tracking_alert_deliveries
-    WHERE delivered_at < ?
-");
-$stmt->execute([$deliveryCutoff]);
-$deliveryCount = $stmt->fetchColumn();
-
-if ($deliveryCount > 0) {
-    echo "Alert deliveries to prune: {$deliveryCount}\n";
-
-    $deleted = 0;
-    while ($deleted < $deliveryCount) {
-        $stmt = $db->prepare("
-            DELETE FROM tracking_alert_deliveries
-            WHERE delivered_at < ?
-            LIMIT 5000
-        ");
-        $stmt->execute([$deliveryCutoff]);
-        $batchDeleted = $stmt->rowCount();
-
-        if ($batchDeleted === 0) break;
-
-        $deleted += $batchDeleted;
-        echo "  Deleted batch: {$batchDeleted} (total: {$deleted})\n";
-
-        usleep(100000);
     }
 
-    $totalDeliveriesPruned = $deleted;
+    $elapsed = round(microtime(true) - $startTime, 3);
+    echo "[prune_events] Complete. Total deleted: {$totalDeleted}. Time: {$elapsed}s\n";
+
+} catch (Exception $e) {
+    error_log('[prune_events] ERROR: ' . $e->getMessage());
+    echo "[prune_events] ERROR: " . $e->getMessage() . "\n";
+    exit(1);
 }
-
-// Clean up expired sessions
-echo "\n--- Cleaning expired sessions ---\n";
-$stmt = $db->prepare("
-    UPDATE tracking_family_sessions
-    SET active = 0
-    WHERE active = 1 AND expires_at < NOW()
-");
-$stmt->execute();
-$expiredSessions = $stmt->rowCount();
-echo "Expired sessions cleaned: {$expiredSessions}\n";
-
-echo "\n=== Summary ===\n";
-echo "Total events pruned: {$totalEventsPruned}\n";
-echo "Total deliveries pruned: {$totalDeliveriesPruned}\n";
-echo "Expired sessions cleaned: {$expiredSessions}\n";
-echo "Completed: " . date('Y-m-d H:i:s') . "\n";

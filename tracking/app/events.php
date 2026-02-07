@@ -1,237 +1,279 @@
 <?php
+/**
+ * ============================================
+ * FAMILY TRACKING - EVENTS TIMELINE
+ * Shows tracking events with filters and
+ * infinite scroll / load more
+ * ============================================
+ */
 declare(strict_types=1);
 
-/**
- * Tracking Events Page
- */
+session_start();
 
-// Start session first
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Quick session check
-if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
-    header('Location: /login.php', true, 302);
+if (!isset($_SESSION['user_id'])) {
+    header('Location: /login.php');
     exit;
 }
 
-// Load bootstrap
 require_once __DIR__ . '/../../core/bootstrap.php';
 
-// Validate session with database
-try {
-    $auth = new Auth($db);
-    $user = $auth->getCurrentUser();
-
-    if (!$user) {
-        header('Location: /login.php?session_expired=1', true, 302);
-        exit;
-    }
-
-} catch (Exception $e) {
-    error_log('Tracking events error: ' . $e->getMessage());
-    header('Location: /login.php?error=1', true, 302);
+$auth = new Auth($db);
+$user = $auth->getCurrentUser();
+if (!$user) {
+    header('Location: /login.php');
     exit;
 }
 
+require_once __DIR__ . '/../core/bootstrap_tracking.php';
+
+$familyId = (int)$user['family_id'];
+
+// Load initial events
+$eventsRepo = new EventsRepo($db);
+$filter = isset($_GET['type']) ? trim($_GET['type']) : null;
+$allowedTypes = ['enter_geofence', 'exit_geofence', 'arrive_place', 'leave_place'];
+if ($filter && !in_array($filter, $allowedTypes, true)) {
+    $filter = null;
+}
+$events = $eventsRepo->list($familyId, 30, 0, $filter);
+
 $pageTitle = 'Tracking Events';
-$cacheVersion = '1.0.2';
+$pageCSS = ['/tracking/app/assets/css/tracking.css'];
+require_once __DIR__ . '/../../shared/components/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle) ?> - Relatives</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/tracking.css?v=<?php echo $cacheVersion; ?>">
-</head>
-<body class="events-page">
-    <!-- Top Bar -->
-    <div class="tracking-topbar">
-        <a href="index.php" class="back-btn">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-        </a>
-        <div class="topbar-title">Events</div>
-        <div class="topbar-actions">
-            <a href="geofences.php" class="icon-btn" title="Geofences">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <circle cx="12" cy="12" r="4"/>
-                </svg>
-            </a>
+
+<div class="tracking-content">
+
+    <a href="/tracking/app/" class="tracking-back">Back to Map</a>
+
+    <div class="tracking-content-header">
+        <div>
+            <h1 class="tracking-content-title">Events</h1>
+            <p class="tracking-content-subtitle">Recent tracking activity for your family.</p>
         </div>
     </div>
 
-    <div class="events-container">
-        <!-- Filters -->
-        <div class="events-filters">
-            <button class="filter-btn active" data-filter="all">All</button>
-            <button class="filter-btn" data-filter="geofence">Geofence</button>
-            <button class="filter-btn" data-filter="place">Places</button>
-            <button class="filter-btn" data-filter="session">Sessions</button>
-        </div>
+    <!-- Filters -->
+    <div class="event-filters">
+        <a href="/tracking/app/events.php"
+           class="event-filter-btn <?php echo !$filter ? 'active' : ''; ?>">All</a>
+        <a href="/tracking/app/events.php?type=enter_geofence"
+           class="event-filter-btn <?php echo $filter === 'enter_geofence' ? 'active' : ''; ?>">Enter Geofence</a>
+        <a href="/tracking/app/events.php?type=exit_geofence"
+           class="event-filter-btn <?php echo $filter === 'exit_geofence' ? 'active' : ''; ?>">Exit Geofence</a>
+        <a href="/tracking/app/events.php?type=arrive_place"
+           class="event-filter-btn <?php echo $filter === 'arrive_place' ? 'active' : ''; ?>">Arrive Place</a>
+        <a href="/tracking/app/events.php?type=leave_place"
+           class="event-filter-btn <?php echo $filter === 'leave_place' ? 'active' : ''; ?>">Leave Place</a>
+    </div>
 
-        <!-- Events List -->
-        <div id="events-list" class="events-list">
-            <div style="text-align: center; padding: 40px; color: var(--gray-500);">
-                Loading events...
+    <!-- Timeline -->
+    <?php if (empty($events)): ?>
+        <div class="tracking-empty">
+            <div class="tracking-empty-icon"></div>
+            <div class="tracking-empty-title">No events yet</div>
+            <div class="tracking-empty-text">Events will appear here when family members enter or leave geofences and places.</div>
+        </div>
+    <?php else: ?>
+        <div class="events-timeline" id="eventsTimeline">
+            <?php foreach ($events as $ev): ?>
+            <?php
+                $meta = $ev['meta_json'] ? json_decode($ev['meta_json'], true) : [];
+                $nodeClass = 'enter';
+                $label = 'Event';
+                switch ($ev['event_type']) {
+                    case 'enter_geofence':
+                        $nodeClass = 'enter';
+                        $label = 'Entered Geofence';
+                        break;
+                    case 'exit_geofence':
+                        $nodeClass = 'exit';
+                        $label = 'Exited Geofence';
+                        break;
+                    case 'arrive_place':
+                        $nodeClass = 'arrive';
+                        $label = 'Arrived at Place';
+                        break;
+                    case 'leave_place':
+                        $nodeClass = 'leave';
+                        $label = 'Left Place';
+                        break;
+                }
+                $userName = e($meta['user_name'] ?? $ev['user_name'] ?? 'Unknown');
+                $targetName = e($meta['geofence_name'] ?? $meta['place_name'] ?? $meta['name'] ?? 'Unknown');
+                $time = $ev['occurred_at'] ?? $ev['created_at'] ?? '';
+                $timeFormatted = $time ? date('M j, g:i A', strtotime($time)) : '';
+                $timeAgo = '';
+                if ($time) {
+                    $diff = time() - strtotime($time);
+                    if ($diff < 60) $timeAgo = 'just now';
+                    elseif ($diff < 3600) $timeAgo = floor($diff / 60) . 'm ago';
+                    elseif ($diff < 86400) $timeAgo = floor($diff / 3600) . 'h ago';
+                    else $timeAgo = floor($diff / 86400) . 'd ago';
+                }
+            ?>
+            <div class="event-item trk-slide-up">
+                <div class="event-node <?php echo $nodeClass; ?>"></div>
+                <div class="event-header">
+                    <span class="event-type-label"><?php echo $label; ?></span>
+                    <span class="event-time" title="<?php echo e($timeFormatted); ?>"><?php echo e($timeAgo); ?></span>
+                </div>
+                <div class="event-body">
+                    <span class="event-user"><?php echo $userName; ?></span>
+                    <?php if ($ev['event_type'] === 'enter_geofence' || $ev['event_type'] === 'arrive_place'): ?>
+                        entered
+                    <?php else: ?>
+                        left
+                    <?php endif; ?>
+                    <span class="event-target"><?php echo $targetName; ?></span>
+                    <?php if ($timeFormatted): ?>
+                        <span style="display:block;margin-top:4px;font-size:11px;color:rgba(255,255,255,0.4)"><?php echo e($timeFormatted); ?></span>
+                    <?php endif; ?>
+                </div>
             </div>
+            <?php endforeach; ?>
         </div>
 
         <!-- Load More -->
-        <button id="btn-load-more" class="popup-btn" style="width: 100%; margin-top: 16px; display: none;">
-            Load More
-        </button>
-    </div>
+        <div class="events-load-more" id="loadMoreContainer">
+            <button class="events-load-btn" id="loadMoreBtn">Load More</button>
+        </div>
 
-    <div id="toast-container" class="toast-container"></div>
+        <div class="events-loading" id="eventsLoading">
+            <div class="spinner"></div>
+        </div>
+    <?php endif; ?>
 
-    <script src="assets/js/format.js?v=<?php echo $cacheVersion; ?>"></script>
-    <script src="assets/js/api.js?v=<?php echo $cacheVersion; ?>"></script>
-    <script>
-        let currentFilter = 'all';
-        let offset = 0;
-        const limit = 30;
+</div>
 
-        // Filter button clicks
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentFilter = btn.dataset.filter;
-                offset = 0;
-                loadEvents(true);
-            });
-        });
+<script>
+    window.TrackingConfig = window.TrackingConfig || {};
+    window.TrackingConfig.apiBase = '/tracking/api';
+    window.TrackingConfig.familyId = <?php echo $familyId; ?>;
+</script>
 
-        // Load more
-        document.getElementById('btn-load-more').addEventListener('click', () => {
-            loadEvents(false);
-        });
+<?php
+$pageJS = [
+    '/tracking/app/assets/js/state.js',
+];
+require_once __DIR__ . '/../../shared/components/footer.php';
+?>
 
-        async function loadEvents(replace = true) {
-            const list = document.getElementById('events-list');
-            const loadMoreBtn = document.getElementById('btn-load-more');
+<script>
+(function() {
+    'use strict';
 
-            if (replace) {
-                list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--gray-500);">Loading...</div>';
-            }
+    var offset = 30;
+    var limit = 30;
+    var loading = false;
+    var noMore = false;
+    var filter = <?php echo json_encode($filter); ?>;
+    var loadBtn = document.getElementById('loadMoreBtn');
+    var loadingEl = document.getElementById('eventsLoading');
+    var timeline = document.getElementById('eventsTimeline');
+    var loadContainer = document.getElementById('loadMoreContainer');
 
-            const params = { limit, offset };
+    if (!loadBtn || !timeline) return;
 
-            if (currentFilter === 'geofence') {
-                params.event_types = 'enter_geofence,exit_geofence';
-            } else if (currentFilter === 'place') {
-                params.event_types = 'arrive_place,leave_place';
-            } else if (currentFilter === 'session') {
-                params.event_types = 'session_on,session_off';
-            }
+    loadBtn.addEventListener('click', loadMore);
 
-            try {
-                const response = await TrackingAPI.getEvents(params);
+    // Infinite scroll
+    window.addEventListener('scroll', function() {
+        if (loading || noMore) return;
+        var scrollBottom = window.innerHeight + window.scrollY;
+        var docHeight = document.documentElement.scrollHeight;
+        if (scrollBottom >= docHeight - 300) {
+            loadMore();
+        }
+    });
 
-                if (response.success) {
-                    const events = response.data.events;
+    function loadMore() {
+        if (loading || noMore) return;
+        loading = true;
+        loadBtn.disabled = true;
+        loadingEl.classList.add('active');
 
-                    if (replace) {
-                        list.innerHTML = '';
-                    }
+        var url = window.TrackingConfig.apiBase + '/events_list.php' +
+            '?limit=' + limit + '&offset=' + offset;
+        if (filter) url += '&type=' + encodeURIComponent(filter);
 
-                    if (events.length === 0 && offset === 0) {
-                        list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--gray-500);">No events found</div>';
-                        loadMoreBtn.style.display = 'none';
-                        return;
-                    }
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                loading = false;
+                loadBtn.disabled = false;
+                loadingEl.classList.remove('active');
 
-                    events.forEach(event => {
-                        list.appendChild(createEventItem(event));
-                    });
-
-                    offset += events.length;
-                    loadMoreBtn.style.display = events.length < limit ? 'none' : 'block';
+                if (!data.ok || !data.events || data.events.length === 0) {
+                    noMore = true;
+                    loadContainer.style.display = 'none';
+                    return;
                 }
-            } catch (err) {
-                list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--danger);">Failed to load events</div>';
-            }
-        }
 
-        function createEventItem(event) {
-            const div = document.createElement('div');
-            div.className = 'event-item';
+                offset += data.events.length;
 
-            const iconClass = getIconClass(event.event_type);
-            const icon = getIcon(event.event_type);
-            const title = getEventTitle(event);
+                data.events.forEach(function(ev) {
+                    var meta = {};
+                    if (ev.meta_json) {
+                        try { meta = JSON.parse(ev.meta_json); } catch(e) {}
+                    }
 
-            div.innerHTML = `
-                <div class="event-icon ${iconClass}">
-                    ${icon}
-                </div>
-                <div class="event-content">
-                    <div class="event-title">${escapeHtml(title)}</div>
-                    <div class="event-meta">
-                        ${event.user_name ? escapeHtml(event.user_name) + ' - ' : ''}
-                        ${Format.timeAgo(event.occurred_at)}
-                    </div>
-                </div>
-            `;
+                    var nodeClass = 'enter';
+                    var label = 'Event';
+                    var action = 'entered';
+                    switch (ev.event_type) {
+                        case 'enter_geofence': nodeClass = 'enter'; label = 'Entered Geofence'; action = 'entered'; break;
+                        case 'exit_geofence': nodeClass = 'exit'; label = 'Exited Geofence'; action = 'left'; break;
+                        case 'arrive_place': nodeClass = 'arrive'; label = 'Arrived at Place'; action = 'entered'; break;
+                        case 'leave_place': nodeClass = 'leave'; label = 'Left Place'; action = 'left'; break;
+                    }
 
-            return div;
-        }
+                    var userName = escapeHtml(meta.user_name || ev.user_name || 'Unknown');
+                    var targetName = escapeHtml(meta.geofence_name || meta.place_name || meta.name || 'Unknown');
+                    var time = ev.occurred_at || ev.created_at || '';
+                    var timeAgo = formatTimeAgo(time);
 
-        function getIconClass(type) {
-            if (type.includes('enter') || type.includes('arrive') || type === 'session_on') return 'enter';
-            if (type.includes('exit') || type.includes('leave') || type === 'session_off') return 'exit';
-            return 'session';
-        }
+                    var html = '<div class="event-item trk-slide-up">' +
+                        '<div class="event-node ' + nodeClass + '"></div>' +
+                        '<div class="event-header">' +
+                        '<span class="event-type-label">' + label + '</span>' +
+                        '<span class="event-time">' + timeAgo + '</span>' +
+                        '</div>' +
+                        '<div class="event-body">' +
+                        '<span class="event-user">' + userName + '</span> ' + action + ' ' +
+                        '<span class="event-target">' + targetName + '</span>' +
+                        '</div></div>';
 
-        function getIcon(type) {
-            if (type.includes('geofence')) {
-                return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>';
-            }
-            if (type.includes('place')) {
-                return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
-            }
-            return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
-        }
+                    timeline.insertAdjacentHTML('beforeend', html);
+                });
 
-        function getEventTitle(event) {
-            const meta = event.meta || {};
+                if (data.events.length < limit) {
+                    noMore = true;
+                    loadContainer.style.display = 'none';
+                }
+            })
+            .catch(function(err) {
+                loading = false;
+                loadBtn.disabled = false;
+                loadingEl.classList.remove('active');
+                console.error('[Events] Load error:', err);
+            });
+    }
 
-            switch (event.event_type) {
-                case 'enter_geofence':
-                    return `Entered ${meta.geofence_name || 'geofence'}`;
-                case 'exit_geofence':
-                    return `Left ${meta.geofence_name || 'geofence'}`;
-                case 'arrive_place':
-                    return `Arrived at ${meta.place_label || 'place'}`;
-                case 'leave_place':
-                    return `Left ${meta.place_label || 'place'}`;
-                case 'session_on':
-                    return 'Tracking session started';
-                case 'session_off':
-                    return 'Tracking session ended';
-                case 'alert_triggered':
-                    return `Alert: ${meta.rule_type || 'unknown'}`;
-                default:
-                    return event.event_type.replace(/_/g, ' ');
-            }
-        }
+    function formatTimeAgo(dateStr) {
+        if (!dateStr) return '';
+        var diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+        if (diff < 60) return 'just now';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+        return Math.floor(diff / 86400) + 'd ago';
+    }
 
-        function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
-        }
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
 
-        // Initial load
-        loadEvents(true);
-    </script>
-</body>
-</html>
+})();
+</script>

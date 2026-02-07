@@ -1,75 +1,97 @@
 <?php
-/**
- * Session Gate
- *
- * Controls Mode 1 (Family Live Session) behavior.
- * Determines if location uploads should be accepted based on session state.
- */
+declare(strict_types=1);
 
+/**
+ * Mode 1: Live Session Gate
+ * Manages family tracking sessions. Devices should only upload
+ * locations when an active session exists.
+ */
 class SessionGate
 {
-    private SessionsRepo $sessionsRepo;
-    private SettingsRepo $settingsRepo;
+    private TrackingCache $cache;
+    private SessionsRepo $repo;
+    private int $ttlSeconds;
 
-    public function __construct(SessionsRepo $sessionsRepo, SettingsRepo $settingsRepo)
+    public function __construct(TrackingCache $cache, SessionsRepo $repo, int $ttlSeconds = 300)
     {
-        $this->sessionsRepo = $sessionsRepo;
-        $this->settingsRepo = $settingsRepo;
+        $this->cache = $cache;
+        $this->repo = $repo;
+        $this->ttlSeconds = $ttlSeconds;
     }
 
     /**
-     * Check if location upload should be accepted.
-     *
-     * Returns:
-     * - ['allowed' => true] if upload is allowed
-     * - ['allowed' => false, 'reason' => 'session_off'] if rejected
+     * Check if a live session is active for this family.
      */
-    public function check(int $familyId): array
+    public function isActive(int $familyId): bool
     {
-        $settings = $this->settingsRepo->get($familyId);
-
-        // Mode 2 (Motion-based) doesn't use session gating
-        if ($settings['mode'] === 2) {
-            return ['allowed' => true];
+        // Check cache first
+        $cached = $this->cache->getSession($familyId);
+        if ($cached !== null && ($cached['active'] ?? false)) {
+            return true;
         }
 
-        // Mode 1: Check session
-        $isActive = $this->sessionsRepo->isActive($familyId);
-
-        if (!$isActive) {
-            return [
-                'allowed' => false,
-                'reason' => 'session_off',
-                'message' => 'No active tracking session. Open the tracking page to start.'
-            ];
+        // Fallback to DB
+        $session = $this->repo->getActive($familyId);
+        if ($session) {
+            $this->cache->setSession($familyId, ['active' => true], $this->ttlSeconds);
+            return true;
         }
 
-        return ['allowed' => true];
+        return false;
     }
 
     /**
-     * Get session status for API.
+     * Start or extend a live session (called by keepalive)
      */
-    public function getStatus(int $familyId): array
+    public function keepalive(int $familyId, int $userId): array
     {
-        $settings = $this->settingsRepo->get($familyId);
-        $sessionStatus = $this->sessionsRepo->getStatus($familyId);
+        $session = $this->repo->getActive($familyId);
+
+        if ($session) {
+            $this->repo->ping($session['id'], $this->ttlSeconds);
+        } else {
+            $session = $this->repo->create($familyId, $userId, $this->ttlSeconds);
+        }
+
+        $this->cache->setSession($familyId, ['active' => true], $this->ttlSeconds);
 
         return [
-            'mode' => $settings['mode'],
-            'session' => $sessionStatus,
-            'should_track' => $settings['mode'] === 2 || $sessionStatus['active']
+            'active' => true,
+            'expires_in' => $this->ttlSeconds,
         ];
     }
 
     /**
-     * Keepalive (start or refresh session).
+     * End a live session
      */
-    public function keepalive(int $familyId, int $userId): array
+    public function end(int $familyId): void
     {
-        $settings = $this->settingsRepo->get($familyId);
-        $ttl = $settings['session_ttl_seconds'];
+        $this->repo->deactivateAll($familyId);
+        $this->cache->deleteSession($familyId);
+    }
 
-        return $this->sessionsRepo->keepalive($familyId, $userId, $ttl);
+    /**
+     * Get session status for a family
+     */
+    public function getStatus(int $familyId, array $settings): array
+    {
+        $mode = (int) ($settings['mode'] ?? 1);
+
+        if ($mode === 2) {
+            return [
+                'mode' => 2,
+                'should_track' => true,
+                'moving_interval' => (int) ($settings['moving_interval_seconds'] ?? 30),
+                'idle_interval' => (int) ($settings['idle_interval_seconds'] ?? 300),
+            ];
+        }
+
+        $active = $this->isActive($familyId);
+        return [
+            'mode' => 1,
+            'should_track' => $active,
+            'keepalive_interval' => (int) ($settings['keepalive_interval_seconds'] ?? 30),
+            'session_ttl' => (int) ($settings['session_ttl_seconds'] ?? 300),
+        ];
     }
 }

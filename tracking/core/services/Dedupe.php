@@ -1,122 +1,58 @@
 <?php
-/**
- * Dedupe Service
- *
- * Prevents storing near-identical location points.
- */
+declare(strict_types=1);
 
+/**
+ * Location deduplication
+ * Skips near-duplicate GPS points to reduce noise and storage
+ */
 class Dedupe
 {
     private TrackingCache $cache;
-    private SettingsRepo $settingsRepo;
+    private int $radiusM;
+    private int $timeSeconds;
 
-    public function __construct(TrackingCache $cache, SettingsRepo $settingsRepo)
+    public function __construct(TrackingCache $cache, int $radiusM = 10, int $timeSeconds = 60)
     {
         $this->cache = $cache;
-        $this->settingsRepo = $settingsRepo;
+        $this->radiusM = $radiusM;
+        $this->timeSeconds = $timeSeconds;
     }
 
     /**
-     * Check if location is a duplicate.
-     *
-     * @param int $userId
-     * @param int $familyId
-     * @param array $location ['lat' => float, 'lng' => float, 'recorded_at' => string]
-     * @return array ['is_duplicate' => bool, 'reason' => string]
+     * Check if a location is a duplicate of the last known point.
+     * Returns true if it IS a duplicate (should be skipped).
      */
-    public function check(int $userId, int $familyId, array $location): array
+    public function isDuplicate(int $userId, float $lat, float $lng, string $recordedAt): bool
     {
-        $settings = $this->settingsRepo->get($familyId);
-        $radiusM = $settings['dedupe_radius_m'];
-        $timeSeconds = $settings['dedupe_time_seconds'];
-
-        // Dedupe disabled
-        if ($radiusM <= 0 && $timeSeconds <= 0) {
-            return ['is_duplicate' => false];
+        $last = $this->cache->getDedupePoint($userId);
+        if ($last === null) {
+            $this->remember($userId, $lat, $lng, $recordedAt);
+            return false;
         }
 
-        $lastPoint = $this->cache->getDedupe($userId);
+        $distance = geo_haversineDistance(
+            (float) $last['lat'],
+            (float) $last['lng'],
+            $lat,
+            $lng
+        );
 
-        if ($lastPoint === null) {
-            // First point, not a duplicate
-            $this->recordPoint($userId, $familyId, $location);
-            return ['is_duplicate' => false];
+        $timeDiff = abs(time() - Time::parse($last['ts']));
+
+        if ($distance < $this->radiusM && $timeDiff < $this->timeSeconds) {
+            return true;
         }
 
-        // Check time
-        $lastTime = $lastPoint['recorded_at'] ?? 0;
-        $currentTime = is_numeric($location['recorded_at'])
-            ? $location['recorded_at']
-            : strtotime($location['recorded_at']);
-
-        $timeDelta = abs($currentTime - $lastTime);
-
-        if ($timeSeconds > 0 && $timeDelta < $timeSeconds) {
-            // Within time threshold, check distance
-            $distance = $this->haversineDistance(
-                $lastPoint['lat'], $lastPoint['lng'],
-                $location['lat'], $location['lng']
-            );
-
-            if ($radiusM > 0 && $distance < $radiusM) {
-                return [
-                    'is_duplicate' => true,
-                    'reason' => 'too_similar',
-                    'distance_m' => round($distance, 1),
-                    'time_delta_s' => $timeDelta
-                ];
-            }
-        }
-
-        // Not a duplicate, record this point
-        $this->recordPoint($userId, $familyId, $location);
-        return ['is_duplicate' => false];
+        $this->remember($userId, $lat, $lng, $recordedAt);
+        return false;
     }
 
-    /**
-     * Record a point for future dedupe checks.
-     */
-    private function recordPoint(int $userId, int $familyId, array $location): void
+    private function remember(int $userId, float $lat, float $lng, string $ts): void
     {
-        $settings = $this->settingsRepo->get($familyId);
-        $ttl = max(60, $settings['dedupe_time_seconds'] * 2);
-
-        $recordedAt = is_numeric($location['recorded_at'])
-            ? $location['recorded_at']
-            : strtotime($location['recorded_at']);
-
-        $this->cache->setDedupe($userId, [
-            'lat' => $location['lat'],
-            'lng' => $location['lng'],
-            'recorded_at' => $recordedAt
-        ], $ttl);
-    }
-
-    /**
-     * Clear dedupe cache for a user (e.g., on settings change).
-     */
-    public function clear(int $userId): void
-    {
-        // The cache key will naturally expire
-        // Could add explicit delete if needed
-    }
-
-    /**
-     * Calculate Haversine distance.
-     */
-    private function haversineDistance(float $lat1, float $lng1, float $lat2, float $lng2): float
-    {
-        $earthRadius = 6371000;
-
-        $dLat = deg2rad($lat2 - $lat1);
-        $dLng = deg2rad($lng2 - $lng1);
-
-        $a = sin($dLat / 2) * sin($dLat / 2) +
-             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-             sin($dLng / 2) * sin($dLng / 2);
-
-        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-
-        return $earthRadius * $c;
+        $this->cache->setDedupePoint($userId, [
+            'lat' => $lat,
+            'lng' => $lng,
+            'ts' => $ts,
+        ], $this->timeSeconds * 2);
     }
 }

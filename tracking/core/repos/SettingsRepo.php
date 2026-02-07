@@ -1,17 +1,15 @@
 <?php
-/**
- * Settings Repository
- *
- * Manages tracking_family_settings table.
- */
+declare(strict_types=1);
 
+/**
+ * Family tracking settings repository
+ */
 class SettingsRepo
 {
     private PDO $db;
     private TrackingCache $cache;
 
-    // Default settings
-    const DEFAULTS = [
+    private const DEFAULTS = [
         'mode' => 1,
         'session_ttl_seconds' => 300,
         'keepalive_interval_seconds' => 30,
@@ -26,7 +24,7 @@ class SettingsRepo
         'units' => 'metric',
         'map_style' => 'streets',
         'history_retention_days' => 30,
-        'events_retention_days' => 90
+        'events_retention_days' => 90,
     ];
 
     public function __construct(PDO $db, TrackingCache $cache)
@@ -36,145 +34,72 @@ class SettingsRepo
     }
 
     /**
-     * Get settings for a family.
-     * Creates with defaults if not exists.
+     * Get settings for a family, creating defaults if not exists
      */
     public function get(int $familyId): array
     {
-        // Try cache first
         $cached = $this->cache->getSettings($familyId);
         if ($cached !== null) {
-            return $cached;
+            return array_merge(self::DEFAULTS, $cached);
         }
 
-        // Query DB
-        $stmt = $this->db->prepare("
-            SELECT * FROM tracking_family_settings WHERE family_id = ?
-        ");
+        $stmt = $this->db->prepare("SELECT * FROM tracking_family_settings WHERE family_id = ?");
         $stmt->execute([$familyId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$row) {
-            // Create with defaults
-            $row = $this->createDefaults($familyId);
+            $this->createDefaults($familyId);
+            $settings = array_merge(self::DEFAULTS, ['family_id' => $familyId]);
+        } else {
+            $settings = array_merge(self::DEFAULTS, $row);
         }
 
-        // Convert to proper types
-        $settings = $this->hydrate($row);
-
-        // Cache it
         $this->cache->setSettings($familyId, $settings);
-
         return $settings;
     }
 
     /**
-     * Save settings for a family.
+     * Update settings for a family
      */
-    public function save(int $familyId, array $data): array
+    public function save(int $familyId, array $data): bool
     {
-        // Ensure row exists
-        $current = $this->get($familyId);
+        $allowed = array_keys(self::DEFAULTS);
+        $sets = [];
+        $params = [];
 
-        // Build update
-        $fields = [];
-        $values = [];
-
-        $allowedFields = array_keys(self::DEFAULTS);
-        foreach ($allowedFields as $field) {
-            if (isset($data[$field])) {
-                $fields[] = "{$field} = ?";
-                $values[] = $data[$field];
+        foreach ($data as $key => $value) {
+            if (in_array($key, $allowed, true)) {
+                $sets[] = "{$key} = ?";
+                $params[] = $value;
             }
         }
 
-        if (empty($fields)) {
-            return $current;
+        if (empty($sets)) {
+            return false;
         }
 
-        $fields[] = "updated_at = NOW()";
-        $values[] = $familyId;
-
-        $sql = "UPDATE tracking_family_settings SET " . implode(', ', $fields) . " WHERE family_id = ?";
+        $params[] = $familyId;
+        $sql = "UPDATE tracking_family_settings SET " . implode(', ', $sets) . " WHERE family_id = ?";
         $stmt = $this->db->prepare($sql);
-        $stmt->execute($values);
+        $result = $stmt->execute($params);
 
-        // Invalidate cache
-        $this->cache->deleteSettings($familyId);
+        if ($result) {
+            $this->cache->deleteSettings($familyId);
+        }
 
-        // Return fresh
-        return $this->get($familyId);
+        return $result;
     }
 
-    /**
-     * Create default settings for a family.
-     */
-    private function createDefaults(int $familyId): array
+    private function createDefaults(int $familyId): void
     {
-        $defaults = self::DEFAULTS;
-
         $stmt = $this->db->prepare("
-            INSERT INTO tracking_family_settings (
-                family_id, mode, session_ttl_seconds, keepalive_interval_seconds,
-                moving_interval_seconds, idle_interval_seconds, speed_threshold_mps,
-                distance_threshold_m, min_accuracy_m, dedupe_radius_m,
-                dedupe_time_seconds, rate_limit_seconds, units, map_style,
-                history_retention_days, events_retention_days, created_at
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()
-            )
-            ON DUPLICATE KEY UPDATE family_id = family_id
+            INSERT IGNORE INTO tracking_family_settings (family_id) VALUES (?)
         ");
-
-        $stmt->execute([
-            $familyId,
-            $defaults['mode'],
-            $defaults['session_ttl_seconds'],
-            $defaults['keepalive_interval_seconds'],
-            $defaults['moving_interval_seconds'],
-            $defaults['idle_interval_seconds'],
-            $defaults['speed_threshold_mps'],
-            $defaults['distance_threshold_m'],
-            $defaults['min_accuracy_m'],
-            $defaults['dedupe_radius_m'],
-            $defaults['dedupe_time_seconds'],
-            $defaults['rate_limit_seconds'],
-            $defaults['units'],
-            $defaults['map_style'],
-            $defaults['history_retention_days'],
-            $defaults['events_retention_days']
-        ]);
-
-        // Query back
-        $stmt = $this->db->prepare("SELECT * FROM tracking_family_settings WHERE family_id = ?");
         $stmt->execute([$familyId]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Convert DB row to proper types.
-     */
-    private function hydrate(array $row): array
+    public static function getDefaults(): array
     {
-        return [
-            'family_id' => (int)$row['family_id'],
-            'mode' => (int)$row['mode'],
-            'session_ttl_seconds' => (int)$row['session_ttl_seconds'],
-            'keepalive_interval_seconds' => (int)$row['keepalive_interval_seconds'],
-            'moving_interval_seconds' => (int)$row['moving_interval_seconds'],
-            'idle_interval_seconds' => (int)$row['idle_interval_seconds'],
-            'speed_threshold_mps' => (float)$row['speed_threshold_mps'],
-            'distance_threshold_m' => (int)$row['distance_threshold_m'],
-            'min_accuracy_m' => (int)$row['min_accuracy_m'],
-            'dedupe_radius_m' => (int)$row['dedupe_radius_m'],
-            'dedupe_time_seconds' => (int)$row['dedupe_time_seconds'],
-            'rate_limit_seconds' => (int)$row['rate_limit_seconds'],
-            'units' => $row['units'],
-            'map_style' => $row['map_style'],
-            'history_retention_days' => (int)$row['history_retention_days'],
-            'events_retention_days' => (int)$row['events_retention_days'],
-            'created_at' => $row['created_at'],
-            'updated_at' => $row['updated_at']
-        ];
+        return self::DEFAULTS;
     }
 }

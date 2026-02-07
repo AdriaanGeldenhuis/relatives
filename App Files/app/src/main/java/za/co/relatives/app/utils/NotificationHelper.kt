@@ -6,144 +6,167 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import za.co.relatives.app.MainActivity
-import za.co.relatives.app.services.TrackingLocationService
 import za.co.relatives.app.R
 
+/**
+ * Centralised helper for notification channels and notification construction.
+ *
+ * Channel IDs
+ * - [CHANNEL_TRACKING] : low-importance, used by the foreground location service.
+ * - [CHANNEL_ALERTS]   : high-importance, used for family alerts and FCM messages.
+ */
 object NotificationHelper {
-    const val CHANNEL_ID = "tracking_channel"
+
+    // ── Channel IDs ────────────────────────────────────────────────────────
+
+    const val CHANNEL_TRACKING = "relatives_tracking"
     const val CHANNEL_ALERTS = "relatives_alerts"
-    const val NOTIFICATION_ID = 1001
-    const val ALERT_NOTIFICATION_ID = 2001
 
-    fun createNotificationChannel(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager: NotificationManager =
-                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    // ── Notification IDs ───────────────────────────────────────────────────
 
-            // 1. Tracking Channel (Low importance, silent)
-            val trackingName = "Tracking Service"
-            val trackingDesc = "Notifications for location tracking service"
-            val trackingImportance = NotificationManager.IMPORTANCE_LOW
-            val trackingChannel = NotificationChannel(CHANNEL_ID, trackingName, trackingImportance).apply {
-                description = trackingDesc
-            }
-            notificationManager.createNotificationChannel(trackingChannel)
+    const val TRACKING_NOTIFICATION_ID = 1
+    private var nextAlertId = 2_000
 
-            // 2. Alerts Channel (High importance, sound)
-            val alertsName = "Relatives Alerts"
-            val alertsDesc = "Notifications for messages and alerts"
-            val alertsImportance = NotificationManager.IMPORTANCE_HIGH
-            val alertsChannel = NotificationChannel(CHANNEL_ALERTS, alertsName, alertsImportance).apply {
-                description = alertsDesc
-                enableVibration(true)
-                enableLights(true)
-            }
-            notificationManager.createNotificationChannel(alertsChannel)
+    // ── Broadcast actions for pause / resume ───────────────────────────────
+
+    const val ACTION_PAUSE_TRACKING = "za.co.relatives.app.ACTION_PAUSE_TRACKING"
+    const val ACTION_RESUME_TRACKING = "za.co.relatives.app.ACTION_RESUME_TRACKING"
+
+    // ── Channel creation ───────────────────────────────────────────────────
+
+    /**
+     * Idempotent channel registration.  Safe to call on every app start;
+     * the system ignores duplicate channel creation.
+     */
+    fun createChannels(context: Context) {
+        val manager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val trackingChannel = NotificationChannel(
+            CHANNEL_TRACKING,
+            "Location Tracking",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "Ongoing notification while location tracking is active"
+            setShowBadge(false)
         }
+
+        val alertsChannel = NotificationChannel(
+            CHANNEL_ALERTS,
+            "Alerts & Messages",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Important notifications from your family group"
+            enableVibration(true)
+            enableLights(true)
+        }
+
+        manager.createNotificationChannels(listOf(trackingChannel, alertsChannel))
     }
 
-    fun buildTrackingNotification(context: Context, isPaused: Boolean): Notification {
-        // 1. Content Intent: Open App on Click
-        val openAppIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-        val contentPendingIntent = PendingIntent.getActivity(
+    // ── Foreground-service notification ─────────────────────────────────────
+
+    /**
+     * Build the persistent notification shown while the location tracking
+     * foreground service is running.
+     *
+     * @param isPaused When `true` the notification shows a "Resume" action;
+     *                 otherwise it shows "Pause".
+     */
+    fun buildTrackingNotification(
+        context: Context,
+        isPaused: Boolean = false,
+    ): Notification {
+        // Tap -> open the app
+        val contentIntent = PendingIntent.getActivity(
             context,
             0,
-            openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle("Location tracking active")
-            .setContentText("Your location is being shared with your family.")
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(true) // Prevents swiping away
-            .setCategory(NotificationCompat.CATEGORY_SERVICE) // Tells system this is a service notification
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE) // Show immediately
-            .setContentIntent(contentPendingIntent)
-
-        if (isPaused) {
-            val resumeIntent = Intent(context, TrackingLocationService::class.java).apply {
-                action = TrackingLocationService.ACTION_RESUME_TRACKING
-            }
-            val resumePendingIntent = PendingIntent.getService(
-                context,
-                2,
-                resumeIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            builder.addAction(
-                android.R.drawable.ic_media_play,
-                "Resume Tracking",
-                resumePendingIntent
-            ).setContentText("Tracking is paused.")
+        // Pause / Resume toggle
+        val toggleAction =
+            if (isPaused) ACTION_RESUME_TRACKING else ACTION_PAUSE_TRACKING
+        val toggleIntent = PendingIntent.getBroadcast(
+            context,
+            1,
+            Intent(toggleAction).setPackage(context.packageName),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val toggleLabel = if (isPaused) "Resume" else "Pause"
+        val toggleIcon = if (isPaused) {
+            android.R.drawable.ic_media_play
         } else {
-            val pauseIntent = Intent(context, TrackingLocationService::class.java).apply {
-                action = TrackingLocationService.ACTION_PAUSE_TRACKING
-            }
-            val pausePendingIntent = PendingIntent.getService(
-                context,
-                1,
-                pauseIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            builder.addAction(
-                android.R.drawable.ic_media_pause,
-                "Pause Tracking",
-                pausePendingIntent
-            )
+            android.R.drawable.ic_media_pause
         }
 
-        return builder.build()
+        val statusText = if (isPaused) {
+            "Location tracking paused"
+        } else {
+            "Sharing your location with family"
+        }
+
+        return NotificationCompat.Builder(context, CHANNEL_TRACKING)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Relatives")
+            .setContentText(statusText)
+            .setOngoing(true)
+            .setContentIntent(contentIntent)
+            .addAction(toggleIcon, toggleLabel, toggleIntent)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .build()
     }
 
-    fun updateTrackingNotification(context: Context, isPaused: Boolean) {
-        val notification = buildTrackingNotification(context, isPaused)
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID, notification)
-    }
+    // ── Alert / push notification ──────────────────────────────────────────
 
-    fun showNewMessageNotification(context: Context, unreadCount: Int, latestTitle: String? = null, latestMessage: String? = null) {
-        // Intent to open MainActivity when clicked
+    /**
+     * Post a high-priority alert notification.
+     *
+     * @param actionUrl Optional deep-link path or full URL.  When the user
+     *                  taps the notification the [MainActivity] will load
+     *                  this URL in the WebView.
+     */
+    fun showAlertNotification(
+        context: Context,
+        title: String,
+        body: String,
+        actionUrl: String? = null,
+    ) {
+        val notificationId = nextAlertId++
+
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            // We can add data to tell MainActivity to open /notifications/
-            putExtra("open_url", "https://www.relatives.co.za/notifications/")
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (!actionUrl.isNullOrBlank()) {
+                putExtra("action_url", actionUrl)
+            }
         }
 
-        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+        val pendingIntent = PendingIntent.getActivity(
             context,
-            0,
+            notificationId,
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-
-        // Use custom title/message if provided, otherwise generic fallback
-        val title = if (!latestTitle.isNullOrEmpty()) latestTitle else "New Notification"
-
-        val text = if (!latestMessage.isNullOrEmpty()) {
-            latestMessage
-        } else {
-            if (unreadCount == 1) "You have 1 unread notification." else "You have $unreadCount unread notifications."
-        }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS)
-            .setSmallIcon(android.R.drawable.ic_dialog_info) // Or app icon
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text)) // Expandable text for long messages
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
             .build()
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(ALERT_NOTIFICATION_ID, notification)
+        val manager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(notificationId, notification)
     }
 }

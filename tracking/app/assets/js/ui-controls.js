@@ -1,409 +1,281 @@
 /**
- * UI Controls Module
+ * Tracking App - UI Controls & Buttons
+ *
+ * Wires up interactive UI elements: wake button, consent dialog, notification
+ * and microphone permissions, settings panel toggle, and dark mode toggle.
+ *
+ * Requires: Tracking.api, Tracking.nativeBridge, Tracking.map,
+ *           Tracking.getState, Tracking.setState
+ *
+ * Usage:
+ *   Tracking.uiControls.init();
  */
+window.Tracking = window.Tracking || {};
 
-window.UIControls = {
-    popup: null,
+(function () {
+    'use strict';
 
-    init() {
-        this.popup = document.getElementById('member-popup');
+    // -----------------------------------------------------------------------
+    // Constants
+    // -----------------------------------------------------------------------
 
-        // Center all button
-        document.getElementById('btn-center-all').addEventListener('click', () => {
-            TrackingMap.fitAll();
-            TrackingState.stopFollowing();
-        });
+    var CONSENT_KEY = 'tracking_consent_given';
 
-        // My location button
-        document.getElementById('btn-my-location').addEventListener('click', async () => {
-            try {
-                const loc = await TrackingMap.getCurrentLocation();
-                TrackingMap.panTo(loc.lat, loc.lng, 15);
-            } catch (err) {
-                console.error('Geolocation error:', err);
-
-                // Provide specific error messages based on error code
-                let message = 'Could not get your location';
-
-                if (err.code === 1) {
-                    // PERMISSION_DENIED
-                    message = 'Location permission denied. Please enable location access in your browser settings.';
-                } else if (err.code === 2) {
-                    // POSITION_UNAVAILABLE
-                    message = 'Location unavailable. Please check if GPS/Location is enabled on your device.';
-                } else if (err.code === 3) {
-                    // TIMEOUT
-                    message = 'Location request timed out. Please try again.';
-                } else if (!navigator.geolocation) {
-                    message = 'Geolocation is not supported by your browser.';
-                } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                    message = 'Location requires HTTPS. Please use a secure connection.';
-                }
-
-                Toast.show(message, 'error');
-            }
-        });
-
-        // Geofences button
-        document.getElementById('btn-geofences').addEventListener('click', () => {
-            TrackingState.toggleGeofences();
-            document.getElementById('btn-geofences').classList.toggle('active', TrackingState.showGeofences);
-        });
-
-        // Events button
-        document.getElementById('btn-events').addEventListener('click', () => {
-            window.location.href = 'events.php';
-        });
-
-        // Settings button
-        document.getElementById('btn-settings').addEventListener('click', () => {
-            window.location.href = 'settings.php';
-        });
-
-        // Map theme button
-        document.getElementById('btn-map-theme').addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.toggleThemePicker();
-        });
-
-        // Theme picker options
-        document.querySelectorAll('.theme-option').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const theme = btn.dataset.theme;
-                TrackingMap.setTheme(theme);
-                this.updateThemeSelection(theme);
-                this.hideThemePicker();
-            });
-        });
-
-        // Close theme picker on outside click
-        document.addEventListener('click', (e) => {
-            const themePicker = document.getElementById('theme-picker');
-            const themeBtn = document.getElementById('btn-map-theme');
-            if (!themePicker.contains(e.target) && !themeBtn.contains(e.target)) {
-                this.hideThemePicker();
-            }
-        });
-
-        // Initialize theme selection indicator
-        this.updateThemeSelection(TrackingMap.currentTheme || 'dark');
-
-        // Popup controls
-        document.getElementById('popup-close').addEventListener('click', () => this.hidePopup());
-        document.getElementById('btn-follow').addEventListener('click', () => this.startFollow());
-        document.getElementById('btn-directions').addEventListener('click', () => this.getDirections());
-
-        // Listen for member selection
-        TrackingState.on('member:selected', (userId) => {
-            if (userId) {
-                this.showPopup(userId);
-            } else {
-                this.hidePopup();
-            }
-        });
-
-        // Click outside popup to close
-        document.addEventListener('click', (e) => {
-            if (!this.popup.contains(e.target) &&
-                !e.target.closest('.marker') &&
-                !e.target.closest('.member-item') &&
-                !this.popup.classList.contains('hidden')) {
-                TrackingState.clearSelection();
-            }
-        });
-    },
-
-    showPopup(userId) {
-        const member = TrackingState.getMember(userId);
-        if (!member) return;
-
-        // Update popup content with avatar image
-        const avatar = document.getElementById('popup-avatar');
-        avatar.style.backgroundColor = member.avatar_color;
-        avatar.innerHTML = `
-            <img src="${member.avatar_url}"
-                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                 style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
-            <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${Format.initials(member.name)}</span>
-        `;
-
-        document.getElementById('popup-name').textContent = member.name;
-
-        let status = Format.statusText(member.status, member.motion_state);
-        if (member.updated_at) {
-            status += ' - ' + Format.timeAgo(member.updated_at);
-        }
-        document.getElementById('popup-status').textContent = status;
-
-        // Update member details
-        this.updateMemberDetails(member);
-
-        // Update follow button text
-        const followBtn = document.getElementById('btn-follow');
-        if (TrackingState.followingMember === userId) {
-            followBtn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <line x1="9" y1="9" x2="15" y2="15"/>
-                    <line x1="15" y1="9" x2="9" y2="15"/>
-                </svg>
-                Unfollow
-            `;
-        } else {
-            followBtn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                </svg>
-                Follow
-            `;
-        }
-
-        this.popup.classList.remove('hidden');
-    },
-
-    hidePopup() {
-        this.popup.classList.add('hidden');
-    },
-
-    startFollow() {
-        const userId = TrackingState.selectedMember;
-        if (!userId) return;
-
-        if (TrackingState.followingMember === userId) {
-            TrackingState.stopFollowing();
-            Toast.show('Stopped following');
-        } else {
-            TrackingState.startFollowing(userId);
-            const member = TrackingState.getMember(userId);
-            Toast.show(`Following ${member.name}`);
-        }
-
-        this.showPopup(userId); // Refresh popup
-    },
-
-    async getDirections() {
-        var userId = TrackingState.selectedMember;
-        if (!userId) return;
-
-        try {
-            var myLoc = null;
-            var myUserId = window.TRACKING_CONFIG ? window.TRACKING_CONFIG.userId : null;
-
-            // Strategy 1: Use current user's tracked location from state
-            if (myUserId) {
-                var myMember = TrackingState.getMember(myUserId);
-                if (myMember && myMember.lat && myMember.lng) {
-                    myLoc = { lat: myMember.lat, lng: myMember.lng };
-                    console.log('[Directions] Using tracked location from state');
-                }
-            }
-
-            // Strategy 2: Try browser geolocation (only if we don't have tracked location)
-            if (!myLoc) {
-                try {
-                    myLoc = await TrackingMap.getCurrentLocation();
-                    console.log('[Directions] Using browser geolocation');
-                } catch (geoErr) {
-                    console.warn('[Directions] Browser geolocation failed:', geoErr.message || geoErr);
-                    // Continue to next strategy
-                }
-            }
-
-            // Strategy 3: Fetch current user's last known location from server
-            if (!myLoc && myUserId) {
-                try {
-                    var response = await fetch('/tracking/api/location.php?user_id=' + myUserId, {
-                        credentials: 'same-origin'
-                    });
-                    if (response.ok) {
-                        var data = await response.json();
-                        if (data.success && data.location && data.location.lat && data.location.lng) {
-                            myLoc = { lat: data.location.lat, lng: data.location.lng };
-                            console.log('[Directions] Using last known location from server');
-                        }
-                    }
-                } catch (fetchErr) {
-                    console.warn('[Directions] Could not fetch last known location:', fetchErr);
-                }
-            }
-
-            // If we still don't have a location, show helpful error
-            if (!myLoc) {
-                Toast.show('Could not determine your location. Please enable location services or start tracking.', 'error');
-                return;
-            }
-
-            // Get destination member's location
-            var destMember = TrackingState.getMember(userId);
-            if (!destMember || !destMember.lat || !destMember.lng) {
-                Toast.show('Selected member\'s location is not available', 'error');
-                return;
-            }
-
-            var dirResponse = await TrackingAPI.getDirections(
-                { lat: myLoc.lat, lng: myLoc.lng },
-                { userId: userId }
-            );
-
-            if (dirResponse.success) {
-                TrackingState.setDirectionsRoute(dirResponse.data);
-                Directions.show(dirResponse.data);
-                this.hidePopup();
-            } else {
-                Toast.show(dirResponse.message || 'Could not get directions', 'error');
-            }
-        } catch (err) {
-            console.error('[Directions] Error:', err);
-            Toast.show(err.message || 'Could not get directions', 'error');
-        }
-    },
+    // -----------------------------------------------------------------------
+    // Initialisation
+    // -----------------------------------------------------------------------
 
     /**
-     * Toggle theme picker visibility
+     * Set up all UI event listeners. Should be called once after the DOM is
+     * ready and other modules are initialised.
      */
-    toggleThemePicker() {
-        const themePicker = document.getElementById('theme-picker');
-        themePicker.classList.toggle('hidden');
-
-        if (!themePicker.classList.contains('hidden')) {
-            document.getElementById('btn-map-theme').classList.add('active');
-        } else {
-            document.getElementById('btn-map-theme').classList.remove('active');
-        }
-    },
-
-    /**
-     * Hide theme picker
-     */
-    hideThemePicker() {
-        const themePicker = document.getElementById('theme-picker');
-        themePicker.classList.add('hidden');
-        document.getElementById('btn-map-theme').classList.remove('active');
-    },
-
-    /**
-     * Update theme selection indicator
-     */
-    updateThemeSelection(theme) {
-        document.querySelectorAll('.theme-option').forEach(btn => {
-            if (btn.dataset.theme === theme) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        });
-    },
-
-    /**
-     * Update member details in popup
-     */
-    updateMemberDetails(member) {
-        // Speed
-        const speedRow = document.getElementById('detail-speed');
-        const speedValue = document.getElementById('popup-speed');
-        if (member.speed_mps && member.speed_mps > 0) {
-            speedValue.textContent = Format.speed(member.speed_mps);
-            speedRow.classList.remove('hidden');
-        } else {
-            speedValue.textContent = 'Stationary';
-            speedRow.classList.remove('hidden');
-        }
-
-        // Bearing / Direction
-        const bearingRow = document.getElementById('detail-bearing');
-        const bearingValue = document.getElementById('popup-bearing');
-        if (member.bearing_deg !== null && member.bearing_deg !== undefined) {
-            bearingValue.textContent = this.formatBearing(member.bearing_deg);
-            bearingRow.classList.remove('hidden');
-        } else {
-            bearingRow.classList.add('hidden');
-        }
-
-        // Accuracy
-        const accuracyRow = document.getElementById('detail-accuracy');
-        const accuracyValue = document.getElementById('popup-accuracy');
-        if (member.accuracy_m) {
-            accuracyValue.textContent = '±' + Math.round(member.accuracy_m) + ' m';
-            accuracyRow.classList.remove('hidden');
-        } else {
-            accuracyRow.classList.add('hidden');
-        }
-
-        // Updated time
-        const updatedValue = document.getElementById('popup-updated');
-        if (member.updated_at) {
-            updatedValue.textContent = Format.timeAgo(member.updated_at);
-        } else if (member.recorded_at) {
-            updatedValue.textContent = Format.timeAgo(member.recorded_at);
-        } else {
-            updatedValue.textContent = '--';
-        }
-
-        // Coordinates / Address
-        const coordsValue = document.getElementById('popup-coordinates');
-        if (member.lat && member.lng) {
-            coordsValue.textContent = 'Loading address...';
-            this.reverseGeocode(member.lat, member.lng).then(address => {
-                coordsValue.textContent = address;
-            });
-        } else {
-            coordsValue.textContent = '--';
-        }
-    },
-
-    /**
-     * Reverse geocode coordinates to address
-     */
-    async reverseGeocode(lat, lng) {
-        try {
-            const token = window.TRACKING_CONFIG.mapboxToken;
-            const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&types=address,place,locality,neighborhood`;
-
-            const response = await fetch(url);
-            const data = await response.json();
-
-            if (data.features && data.features.length > 0) {
-                // Get the most specific address available
-                const place = data.features[0];
-                return place.place_name.split(',').slice(0, 2).join(',');
-            }
-            return lat.toFixed(5) + ', ' + lng.toFixed(5);
-        } catch (err) {
-            console.error('Geocoding error:', err);
-            return lat.toFixed(5) + ', ' + lng.toFixed(5);
-        }
-    },
-
-    /**
-     * Format bearing to compass direction
-     */
-    formatBearing(degrees) {
-        const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-        const index = Math.round(degrees / 45) % 8;
-        return directions[index] + ' (' + Math.round(degrees) + '°)';
+    function init() {
+        bindWakeButton();
+        bindSettingsToggle();
+        bindDarkModeToggle();
     }
-};
 
-/**
- * Toast notifications
- */
-window.Toast = {
-    container: null,
+    // -----------------------------------------------------------------------
+    // Wake button
+    // -----------------------------------------------------------------------
 
-    init() {
-        this.container = document.getElementById('toast-container');
-    },
+    /**
+     * Attach handler to the wake button (id="btn-wake").
+     * Uses the native bridge when available, otherwise falls back to the API.
+     */
+    function bindWakeButton() {
+        var btn = document.getElementById('btn-wake');
+        if (!btn) return;
 
-    show(message, type = 'info', duration = 3000) {
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
+        btn.addEventListener('click', function () {
+            btn.disabled = true;
+            btn.textContent = 'Waking...';
 
-        this.container.appendChild(toast);
+            var promise;
+            if (Tracking.nativeBridge && Tracking.nativeBridge.isNative()) {
+                Tracking.nativeBridge.wakeAllDevices();
+                promise = Promise.resolve();
+            } else {
+                promise = Tracking.api.wakeDevices();
+            }
 
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => toast.remove(), 300);
-        }, duration);
+            promise
+                .then(function () {
+                    btn.textContent = 'Sent!';
+                    setTimeout(function () {
+                        btn.textContent = 'Wake Devices';
+                        btn.disabled = false;
+                    }, 2000);
+                })
+                .catch(function (err) {
+                    console.error('[UIControls] Wake failed:', err);
+                    btn.textContent = 'Wake Devices';
+                    btn.disabled = false;
+                });
+        });
     }
-};
+
+    // -----------------------------------------------------------------------
+    // Consent dialog
+    // -----------------------------------------------------------------------
+
+    /**
+     * Check whether the user has previously given tracking consent.
+     *
+     * @returns {boolean}
+     */
+    function hasConsent() {
+        try {
+            return localStorage.getItem(CONSENT_KEY) === 'true';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Show the tracking consent dialog if consent has not yet been given.
+     * Returns a Promise that resolves to true when consent is granted, or
+     * false if declined.
+     *
+     * Looks for a dialog element with id="consent-dialog" in the DOM. If the
+     * element does not exist, a simple one is created dynamically.
+     *
+     * @returns {Promise<boolean>}
+     */
+    function showConsentDialog() {
+        if (hasConsent()) {
+            Tracking.setState('consentGiven', true);
+            return Promise.resolve(true);
+        }
+
+        return new Promise(function (resolve) {
+            var dialog = document.getElementById('consent-dialog');
+
+            // Build a minimal dialog if none exists in the markup.
+            if (!dialog) {
+                dialog = document.createElement('div');
+                dialog.id = 'consent-dialog';
+                dialog.style.cssText =
+                    'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;' +
+                    'align-items:center;justify-content:center;z-index:9999;';
+                dialog.innerHTML =
+                    '<div style="background:#fff;border-radius:12px;padding:24px;max-width:400px;' +
+                    'margin:16px;text-align:center;">' +
+                        '<h3 style="margin:0 0 12px;">Location Tracking Consent</h3>' +
+                        '<p style="color:#555;font-size:14px;margin:0 0 20px;">' +
+                            'This app tracks your location to share it with your family members. ' +
+                            'Your location data is only visible to your family group.' +
+                        '</p>' +
+                        '<div style="display:flex;gap:10px;justify-content:center;">' +
+                            '<button id="consent-decline" style="padding:8px 20px;border:1px solid #d1d5db;' +
+                            'border-radius:8px;background:#fff;cursor:pointer;">Decline</button>' +
+                            '<button id="consent-accept" style="padding:8px 20px;border:none;' +
+                            'border-radius:8px;background:#3b82f6;color:#fff;cursor:pointer;">Allow</button>' +
+                        '</div>' +
+                    '</div>';
+                document.body.appendChild(dialog);
+            } else {
+                dialog.style.display = 'flex';
+            }
+
+            var accept = document.getElementById('consent-accept');
+            var decline = document.getElementById('consent-decline');
+
+            function cleanup() {
+                if (accept) accept.removeEventListener('click', onAccept);
+                if (decline) decline.removeEventListener('click', onDecline);
+                dialog.style.display = 'none';
+            }
+
+            function onAccept() {
+                try { localStorage.setItem(CONSENT_KEY, 'true'); } catch (e) { /* noop */ }
+                Tracking.setState('consentGiven', true);
+                cleanup();
+                resolve(true);
+            }
+
+            function onDecline() {
+                Tracking.setState('consentGiven', false);
+                cleanup();
+                resolve(false);
+            }
+
+            if (accept) accept.addEventListener('click', onAccept);
+            if (decline) decline.addEventListener('click', onDecline);
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Notification permission
+    // -----------------------------------------------------------------------
+
+    /**
+     * Request notification permission from the browser if not already granted.
+     *
+     * @returns {Promise<string>} The permission state ('granted', 'denied',
+     *          'default', or 'unsupported').
+     */
+    function requestNotificationPermission() {
+        if (!('Notification' in window)) {
+            return Promise.resolve('unsupported');
+        }
+        if (Notification.permission === 'granted') {
+            return Promise.resolve('granted');
+        }
+        if (Notification.permission === 'denied') {
+            return Promise.resolve('denied');
+        }
+        return Notification.requestPermission().then(function (result) {
+            return result;
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Microphone permission
+    // -----------------------------------------------------------------------
+
+    /**
+     * Request microphone access (for voice assistant in footer).
+     *
+     * @returns {Promise<boolean>} True if granted, false otherwise.
+     */
+    function requestMicrophonePermission() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            console.warn('[UIControls] getUserMedia not supported.');
+            return Promise.resolve(false);
+        }
+
+        return navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(function (stream) {
+                // Immediately stop the stream; we only needed the permission.
+                stream.getTracks().forEach(function (track) { track.stop(); });
+                return true;
+            })
+            .catch(function (err) {
+                console.warn('[UIControls] Microphone permission denied:', err);
+                return false;
+            });
+    }
+
+    // -----------------------------------------------------------------------
+    // Settings panel toggle
+    // -----------------------------------------------------------------------
+
+    /**
+     * Toggle visibility of the settings panel (id="settings-panel").
+     */
+    function bindSettingsToggle() {
+        var btn = document.getElementById('btn-settings');
+        var panel = document.getElementById('settings-panel');
+        if (!btn || !panel) return;
+
+        btn.addEventListener('click', function () {
+            var isOpen = panel.style.display !== 'none' && panel.style.display !== '';
+            panel.style.display = isOpen ? 'none' : 'block';
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Dark mode toggle
+    // -----------------------------------------------------------------------
+
+    /**
+     * Toggle dark mode map style and body class.
+     */
+    function bindDarkModeToggle() {
+        var btn = document.getElementById('btn-dark-mode');
+        if (!btn) return;
+
+        btn.addEventListener('click', function () {
+            var settings = Tracking.getState('settings') || {};
+            var isDark = settings.map_style === 'dark';
+            var newStyle = isDark ? 'streets' : 'dark';
+
+            Tracking.setState('settings', Object.assign({}, settings, { map_style: newStyle }));
+
+            // Update the Mapbox style.
+            var styleUrl = newStyle === 'dark'
+                ? 'mapbox://styles/mapbox/dark-v11'
+                : 'mapbox://styles/mapbox/streets-v12';
+
+            if (Tracking.map && Tracking.map.setStyle) {
+                Tracking.map.setStyle(styleUrl);
+            }
+
+            // Toggle body class for non-map UI elements.
+            document.body.classList.toggle('dark-mode', newStyle === 'dark');
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Public interface
+    // -----------------------------------------------------------------------
+
+    Tracking.uiControls = {
+        init: init,
+        showConsentDialog: showConsentDialog,
+        hasConsent: hasConsent,
+        requestNotificationPermission: requestNotificationPermission,
+        requestMicrophonePermission: requestMicrophonePermission,
+    };
+})();

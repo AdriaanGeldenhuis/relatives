@@ -1,25 +1,17 @@
 <?php
-/**
- * GET /tracking/api/places_list.php
- *
- * Get all saved places for the family.
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-header('Content-Type: application/json');
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    Response::error('method_not_allowed', 405);
+}
 
-// Auth required
-$user = requireAuth();
-$familyId = $user['family_id'];
+$ctx = SiteContext::require($db);
 
-// Initialize services
-$placesRepo = new PlacesRepo($db, $trackingCache);
+$trackingCache = new TrackingCache($cache);
+$repo = new PlacesRepo($db, $trackingCache);
 
-// Get places
-$places = $placesRepo->getAll($familyId);
+$places = $repo->listAll($ctx->familyId);
 
-jsonSuccess([
-    'places' => $places,
-    'count' => count($places)
-]);
+Response::success($places);

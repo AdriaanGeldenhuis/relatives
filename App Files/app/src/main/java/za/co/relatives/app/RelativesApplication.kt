@@ -5,10 +5,13 @@ import za.co.relatives.app.utils.NotificationHelper
 import za.co.relatives.app.utils.PreferencesManager
 
 class RelativesApplication : Application() {
+
+    lateinit var preferencesManager: PreferencesManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
-        // Initialize Utilities
-        PreferencesManager.init(this)
-        NotificationHelper.createNotificationChannel(this)
+        preferencesManager = PreferencesManager(this)
+        NotificationHelper.createChannels(this)
     }
 }

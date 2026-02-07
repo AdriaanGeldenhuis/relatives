@@ -1,5 +1,6 @@
 package za.co.relatives.app.workers
 
+import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
@@ -8,84 +9,101 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import za.co.relatives.app.services.TrackingLocationService
-import za.co.relatives.app.utils.PreferencesManager
 import java.util.concurrent.TimeUnit
 
 /**
- * WorkManager-based service checker - aggressive restart for killed services.
+ * Periodic WorkManager task (every 15 minutes) that acts as a watchdog for
+ * [TrackingLocationService].
  *
- * Runs every 5 minutes (WorkManager minimum for periodic is 15, but we use
- * REPLACE policy to force fresh scheduling). Restarts tracking service if
- * no upload happened within 6 minutes (heartbeat is 5 min, so 6 min = missed).
+ * If the user has tracking enabled but the foreground service is no longer
+ * running (e.g. killed by the OS), this worker restarts it and triggers a
+ * location upload flush.
  */
 class TrackingServiceChecker(
-    context: Context,
+    appContext: Context,
     params: WorkerParameters
-) : CoroutineWorker(context, params) {
+) : CoroutineWorker(appContext, params) {
 
     companion object {
-        private const val TAG = "TrackingServiceChecker"
-        private const val WORK_NAME = "tracking_service_checker"
-        private const val DEAD_THRESHOLD_BUFFER_MS = 60 * 1000L  // 60s buffer on top of heartbeat
+        private const val TAG = "TrackingSvcChecker"
+        const val WORK_NAME = "tracking_service_checker"
+
+        private const val PREF_NAME = "relatives_prefs"
+        private const val PREF_TRACKING_ENABLED = "tracking_enabled"
+        private const val PREF_LAST_UPLOAD = "last_upload_time"
+
+        /** Stale threshold: if no upload for 10 minutes the service is dead. */
+        private const val STALE_THRESHOLD_MS = 10L * 60 * 1000
 
         /**
-         * Schedule periodic checks every 15 minutes (WorkManager minimum).
-         * Combined with AlarmManager in the service for tighter checks.
+         * Schedule the periodic checker. Safe to call multiple times -- uses
+         * [ExistingPeriodicWorkPolicy.KEEP] so duplicate enqueues are ignored.
          */
         fun schedule(context: Context) {
-            val workRequest = PeriodicWorkRequestBuilder<TrackingServiceChecker>(
-                15, TimeUnit.MINUTES,
-                5, TimeUnit.MINUTES  // Flex interval
+            val request = PeriodicWorkRequestBuilder<TrackingServiceChecker>(
+                15, TimeUnit.MINUTES
             ).build()
-
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
-                workRequest
-            )
-
-            Log.d(TAG, "Scheduled periodic tracking service checker (every 15 min)")
+            WorkManager.getInstance(context)
+                .enqueueUniquePeriodicWork(
+                    WORK_NAME,
+                    ExistingPeriodicWorkPolicy.KEEP,
+                    request
+                )
         }
 
-        /**
-         * Cancel periodic checks.
-         * Call this when tracking is disabled.
-         */
+        /** Cancel the periodic checker (e.g. when tracking is deliberately disabled). */
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
-            Log.d(TAG, "Cancelled tracking service checker")
         }
     }
 
     override suspend fun doWork(): Result {
-        Log.d(TAG, "Checking tracking service status...")
+        val prefs = applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        val trackingEnabled = prefs.getBoolean(PREF_TRACKING_ENABLED, false)
 
-        // Initialize PreferencesManager if needed
-        PreferencesManager.init(applicationContext)
-
-        // Check if tracking should be enabled
-        if (!PreferencesManager.isTrackingEnabled()) {
-            Log.d(TAG, "Tracking disabled in preferences, skipping restart")
+        if (!trackingEnabled) {
+            Log.d(TAG, "Tracking not enabled, skipping check")
             return Result.success()
         }
 
-        // Check if service is running by checking last upload time
-        // Use dynamic heartbeat from server settings + buffer
-        val heartbeatMs = PreferencesManager.idleHeartbeatSeconds * 1000L
-        val deadThresholdMs = heartbeatMs + DEAD_THRESHOLD_BUFFER_MS
-        val lastUploadTime = PreferencesManager.lastUploadTime
-        val timeSinceLastUpload = System.currentTimeMillis() - lastUploadTime
+        val serviceRunning = isServiceRunning()
+        val lastUpload = prefs.getLong(PREF_LAST_UPLOAD, 0L)
+        val stale = System.currentTimeMillis() - lastUpload > STALE_THRESHOLD_MS
 
-        if (timeSinceLastUpload > deadThresholdMs) {
-            // Service hasn't uploaded within heartbeat window - likely killed
-            Log.w(TAG, "No upload in ${timeSinceLastUpload / 1000}s (threshold: ${deadThresholdMs / 1000}s) - restarting")
-            TrackingLocationService.startTracking(applicationContext)
-            // Also flush any queued locations
-            LocationUploadWorker.enqueue(applicationContext)
-        } else {
-            Log.d(TAG, "Service healthy (last upload ${timeSinceLastUpload / 1000}s ago)")
+        Log.d(TAG, "Check: serviceRunning=$serviceRunning stale=$stale lastUpload=$lastUpload")
+
+        if (!serviceRunning || stale) {
+            Log.w(TAG, "Service appears dead or stale, restarting")
+            restartService()
         }
 
         return Result.success()
+    }
+
+    /**
+     * Check whether [TrackingLocationService] is currently among the running
+     * services for this process.
+     */
+    @Suppress("DEPRECATION")
+    private fun isServiceRunning(): Boolean {
+        val am = applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val services = am.getRunningServices(Int.MAX_VALUE)
+        val targetName = TrackingLocationService::class.java.name
+        return services.any { it.service.className == targetName }
+    }
+
+    /**
+     * Restart the tracking service and immediately trigger a location upload
+     * to flush any items that accumulated while the service was dead.
+     */
+    private fun restartService() {
+        try {
+            TrackingLocationService.start(applicationContext)
+            // Flush queued locations.
+            LocationUploadWorker.enqueue(applicationContext)
+            Log.i(TAG, "Tracking service restarted and upload flushed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to restart tracking service", e)
+        }
     }
 }

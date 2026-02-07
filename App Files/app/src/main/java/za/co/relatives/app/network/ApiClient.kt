@@ -1,86 +1,118 @@
 package za.co.relatives.app.network
 
-import android.util.Log
+import android.content.Context
 import com.google.gson.Gson
-import okhttp3.*
+import com.google.gson.JsonObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.IOException
 
-object ApiClient {
-    private const val BASE_URL = "https://www.relatives.co.za/api/"
-    private val client = OkHttpClient()
+/**
+ * Lightweight API client for the Relatives backend.
+ *
+ * All network calls run on [Dispatchers.IO] and return parsed results or throw.
+ * The shared [NetworkClient] instance handles session cookies transparently.
+ */
+class ApiClient(private val context: Context) {
+
+    companion object {
+        private const val BASE_URL = "https://www.relatives.co.za/api/"
+        private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
+    }
+
+    private val http by lazy { NetworkClient.getInstance(context) }
     private val gson = Gson()
-    private val JSON = "application/json; charset=utf-8".toMediaType()
 
-    data class SubscriptionStatus(
-        val status: String,
-        val trial_ends_at: String?,
-        val subscription_expires_at: String?,
-        val max_members: Int,
-        val members_count: Int
-    )
+    // ------------------------------------------------------------------ //
+    //  Subscription
+    // ------------------------------------------------------------------ //
 
-    data class VerifyRequest(
-        val family_id: String,
-        val plan_code: String,
-        val purchase_token: String
-    )
-
-    fun getSubscriptionStatus(familyId: String, callback: (SubscriptionStatus?) -> Unit) {
-        val url = "${BASE_URL}subscription.php?action=status&family_id=$familyId"
-        
+    /**
+     * Check the current family's subscription / trial status.
+     *
+     * @return Parsed JSON object with keys such as `status`, `plan`,
+     *   `trial_remaining_days`, `is_active`, etc.
+     */
+    suspend fun getSubscriptionStatus(): JsonObject = withContext(Dispatchers.IO) {
         val request = Request.Builder()
-            .url(url)
+            .url("${BASE_URL}subscription/status.php")
             .get()
             .build()
-
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e("ApiClient", "Failed to fetch status", e)
-                callback(null)
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (it.isSuccessful) {
-                        try {
-                            val body = it.body?.string()
-                            val status = gson.fromJson(body, SubscriptionStatus::class.java)
-                            callback(status)
-                        } catch (e: Exception) {
-                            Log.e("ApiClient", "JSON Parse Error", e)
-                            callback(null)
-                        }
-                    } else {
-                        callback(null)
-                    }
-                }
-            }
-        })
+        executeJson(request)
     }
 
-    fun verifyPurchase(familyId: String, planCode: String, purchaseToken: String, callback: (Boolean) -> Unit) {
-        val url = "${BASE_URL}subscription.php?action=verify_google"
-        
-        val json = gson.toJson(VerifyRequest(familyId, planCode, purchaseToken))
-        val body = json.toRequestBody(JSON)
-        
+    /**
+     * Verify a Google Play purchase with the backend.
+     *
+     * The server validates the purchase token with Google, activates the plan
+     * for the family, and returns the new subscription state.
+     */
+    suspend fun verifyPurchase(
+        familyId: String,
+        planCode: String,
+        purchaseToken: String
+    ): JsonObject = withContext(Dispatchers.IO) {
+        val body = JsonObject().apply {
+            addProperty("family_id", familyId)
+            addProperty("plan_code", planCode)
+            addProperty("purchase_token", purchaseToken)
+        }
         val request = Request.Builder()
-            .url(url)
-            .post(body)
+            .url("${BASE_URL}subscription/verify_purchase.php")
+            .post(gson.toJson(body).toRequestBody(JSON_MEDIA))
             .build()
+        executeJson(request)
+    }
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                callback(false)
-            }
+    // ------------------------------------------------------------------ //
+    //  FCM token registration
+    // ------------------------------------------------------------------ //
 
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    callback(it.isSuccessful)
-                }
-            }
-        })
+    /**
+     * Register (or update) the device FCM token with the backend so it can
+     * send push notifications to this device.
+     */
+    suspend fun registerFcmToken(token: String): JsonObject = withContext(Dispatchers.IO) {
+        val formBody = FormBody.Builder()
+            .add("token", token)
+            .add("platform", "android")
+            .build()
+        val request = Request.Builder()
+            .url("${BASE_URL}notifications/register_token.php")
+            .post(formBody)
+            .build()
+        executeJson(request)
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Internal helpers
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Execute [request] and parse the response body as a [JsonObject].
+     *
+     * @throws ApiException on HTTP errors or parse failures.
+     */
+    private fun executeJson(request: Request): JsonObject {
+        val response = http.newCall(request).execute()
+        val bodyString = response.body?.string().orEmpty()
+
+        if (!response.isSuccessful) {
+            throw ApiException(response.code, bodyString)
+        }
+
+        return try {
+            gson.fromJson(bodyString, JsonObject::class.java)
+                ?: throw ApiException(response.code, "Empty JSON response")
+        } catch (e: Exception) {
+            if (e is ApiException) throw e
+            throw ApiException(response.code, "Failed to parse response: ${e.message}")
+        }
     }
 }
+
+/** Simple exception carrying the HTTP status code and raw body. */
+class ApiException(val httpCode: Int, message: String) : Exception(message)
