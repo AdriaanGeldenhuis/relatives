@@ -55,7 +55,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.2.0")
 
     // Activity Recognition
-    implementation("com.google.android.gms:play-services-activity-recognition:18.1.0")
+    implementation("com.google.android.gms:play-services-activity-recognition:18.0.2")
 
     // Room (offline queue)
     implementation("androidx.room:room-runtime:2.6.1")
