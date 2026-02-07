@@ -177,14 +177,16 @@ if (!$rateCheck['allowed']) {
     ]);
 }
 
-// Session gate check (Mode 1) - BYPASSED for Android app compatibility
-// The old tracking system didn't have session gating, so the Android app
-// expects to always be able to upload locations. We accept and store them
-// even without an active session.
-// $sessionCheck = $sessionGate->check($familyId);
-// if (!$sessionCheck['allowed']) {
-//     jsonError('session_off', $sessionCheck['message'], 409);
-// }
+// Session gate check (Mode 1 only)
+// Mode 2 (motion-based) always allows uploads - the native app handles
+// when to track based on movement detection.
+// Mode 1 (live session) only accepts uploads during active sessions.
+$sessionCheck = $sessionGate->check($familyId);
+if (!$sessionCheck['allowed']) {
+    // Return 409 so the native app knows to back off, but don't hard-reject
+    // The native app's TrackingLocationService handles 409 gracefully
+    jsonError('session_off', $sessionCheck['message'] ?? 'No active tracking session', 409);
+}
 
 // Dedupe check
 $dedupeCheck = $dedupe->check($userId, $familyId, $location);

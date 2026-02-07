@@ -60,41 +60,9 @@ $cacheVersion = '12.3.6';
     </div>
 
     <div class="settings-container">
-        <!-- Mode Section -->
+        <!-- Tracking Intervals -->
         <div class="settings-section">
-            <h2>Tracking Mode</h2>
-            <div class="setting-row">
-                <div>
-                    <h3 class="setting-label">Mode</h3>
-                    <div class="setting-description">How tracking is triggered</div>
-                </div>
-                <select id="setting-mode" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
-                    <option value="1">Live Session</option>
-                    <option value="2">Motion-based</option>
-                </select>
-            </div>
-        </div>
-
-        <!-- Mode 1 Settings -->
-        <div class="settings-section" id="mode1-settings">
-            <h2>Live Session Settings</h2>
-            <div class="setting-row">
-                <div>
-                    <h3 class="setting-label">Session Timeout</h3>
-                    <div class="setting-description">How long session stays active without keepalive</div>
-                </div>
-                <select id="setting-session-ttl" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
-                    <option value="180">3 minutes</option>
-                    <option value="300">5 minutes</option>
-                    <option value="600">10 minutes</option>
-                    <option value="900">15 minutes</option>
-                </select>
-            </div>
-        </div>
-
-        <!-- Mode 2 Settings -->
-        <div class="settings-section hidden" id="mode2-settings">
-            <h2>Motion-based Settings</h2>
+            <h2>Tracking Intervals</h2>
             <div class="setting-row">
                 <div>
                     <h3 class="setting-label">Moving Interval</h3>
@@ -207,6 +175,8 @@ $cacheVersion = '12.3.6';
     </script>
     <script src="assets/js/format.js?v=<?php echo $cacheVersion; ?>"></script>
     <script src="assets/js/api.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="assets/js/native-bridge.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script>if (window.NativeBridge) NativeBridge.init();</script>
     <script>
         // Toast helper
         const Toast = {
@@ -233,8 +203,6 @@ $cacheVersion = '12.3.6';
         }
 
         function populateForm(settings) {
-            document.getElementById('setting-mode').value = settings.mode;
-            document.getElementById('setting-session-ttl').value = settings.session_ttl_seconds;
             document.getElementById('setting-moving-interval').value = settings.moving_interval_seconds;
             document.getElementById('setting-idle-interval').value = settings.idle_interval_seconds;
             document.getElementById('setting-speed-threshold').value = settings.speed_threshold_mps.toFixed(1);
@@ -242,26 +210,14 @@ $cacheVersion = '12.3.6';
             document.getElementById('setting-dedupe-radius').value = settings.dedupe_radius_m;
             document.getElementById('setting-units').value = settings.units;
             document.getElementById('setting-history-retention').value = settings.history_retention_days;
-
-            updateModeVisibility(settings.mode);
         }
-
-        function updateModeVisibility(mode) {
-            document.getElementById('mode1-settings').classList.toggle('hidden', mode != 1);
-            document.getElementById('mode2-settings').classList.toggle('hidden', mode != 2);
-        }
-
-        // Mode change
-        document.getElementById('setting-mode').addEventListener('change', (e) => {
-            updateModeVisibility(e.target.value);
-        });
 
         // Save
         if (canEdit) {
             document.getElementById('btn-save').addEventListener('click', async () => {
                 const settings = {
-                    mode: parseInt(document.getElementById('setting-mode').value),
-                    session_ttl_seconds: parseInt(document.getElementById('setting-session-ttl').value),
+                    mode: 2,
+                    session_ttl_seconds: 600,
                     moving_interval_seconds: parseInt(document.getElementById('setting-moving-interval').value),
                     idle_interval_seconds: parseInt(document.getElementById('setting-idle-interval').value),
                     speed_threshold_mps: parseFloat(document.getElementById('setting-speed-threshold').value),
@@ -275,6 +231,15 @@ $cacheVersion = '12.3.6';
                     const response = await TrackingAPI.saveSettings(settings);
                     if (response.success) {
                         Toast.show('Settings saved', 'success');
+
+                        // Push settings to native app if running inside WebView
+                        if (window.NativeBridge && window.NativeBridge.isNativeApp) {
+                            var highAccuracy = settings.min_accuracy_m <= 50;
+                            window.NativeBridge.updateTrackingSettings(
+                                settings.moving_interval_seconds,
+                                highAccuracy
+                            );
+                        }
                     }
                 } catch (err) {
                     Toast.show(err.message || 'Failed to save', 'error');

@@ -16,8 +16,8 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Get user info
-require_once __DIR__ . '/../../core/bootstrap.php';
+// Get user info - use tracking bootstrap for session/settings access
+require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
 $userId = (int)$_SESSION['user_id'];
 
@@ -109,18 +109,25 @@ try {
         ];
     }
 
+    // Get actual session status from tracking system
+    $sessionsRepo = new SessionsRepo($db, $trackingCache);
+    $settingsRepo = new SettingsRepo($db, $trackingCache);
+    $settings = $settingsRepo->get($familyId);
+    $sessionStatus = $sessionsRepo->getStatus($familyId);
+
     header('Content-Type: application/json');
     echo json_encode([
         'success' => true,
         'data' => [
             'members' => $members,
             'session' => [
-                'active' => true,
-                'expires_in_seconds' => 300
+                'active' => $settings['mode'] === 2 || $sessionStatus['active'],
+                'expires_in_seconds' => $sessionStatus['expires_in_seconds'] ?? 0,
+                'mode' => $settings['mode']
             ],
             'settings' => [
-                'mode' => 2,
-                'units' => 'metric'
+                'mode' => $settings['mode'],
+                'units' => $settings['units'] ?? 'metric'
             ],
             'timestamp' => date('Y-m-d H:i:s')
         ]
