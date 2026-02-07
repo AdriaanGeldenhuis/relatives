@@ -51,11 +51,8 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")
 
-    // Location
-    implementation("com.google.android.gms:play-services-location:21.2.0")
-
-    // Activity Recognition
-    implementation("com.google.android.gms:play-services-activity-recognition:18.0.2")
+    // Location + Activity Recognition (activity recognition is included in play-services-location)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // Room (offline queue)
     implementation("androidx.room:room-runtime:2.6.1")
