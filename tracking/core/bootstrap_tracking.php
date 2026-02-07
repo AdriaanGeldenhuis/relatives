@@ -4,7 +4,15 @@ declare(strict_types=1);
 /**
  * Tracking Bootstrap
  * Loads core app bootstrap + tracking-specific classes
+ *
+ * IMPORTANT: Start session BEFORE core bootstrap.
+ * The login flow stores session data under the default PHPSESSID cookie.
+ * If bootstrap.php starts the session first, it uses RELATIVES_SESSION
+ * cookie name, which reads from a different (empty) session.
  */
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../../core/GeoUtils.php';

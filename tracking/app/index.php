@@ -190,15 +190,17 @@ require_once __DIR__ . '/../../shared/components/header.php';
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
 
 <?php
-$pageJS = [
-    '/tracking/app/assets/js/state.js',
-];
+$pageJS = [];
 require_once __DIR__ . '/../../shared/components/footer.php';
 ?>
 
+<script src="/tracking/app/assets/js/state.js"></script>
 <script>
 (function() {
     'use strict';
+
+    // Local state for members (no external dependency)
+    var _members = [];
 
     // Register service worker
     if ('serviceWorker' in navigator) {
@@ -211,7 +213,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     document.body.classList.add('tracking-page');
 
     // Initialize Mapbox
-    if (!window.TrackingConfig.mapboxToken) {
+    if (!window.TrackingConfig || !window.TrackingConfig.mapboxToken) {
         console.error('[Tracking] No Mapbox token configured');
         return;
     }
@@ -219,7 +221,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     mapboxgl.accessToken = window.TrackingConfig.mapboxToken;
 
     var mapStyle = 'mapbox://styles/mapbox/dark-v11';
-    var savedStyle = window.TrackingConfig.settings.map_style;
+    var savedStyle = (window.TrackingConfig.settings || {}).map_style;
     if (savedStyle === 'streets') mapStyle = 'mapbox://styles/mapbox/streets-v12';
     else if (savedStyle === 'satellite') mapStyle = 'mapbox://styles/mapbox/satellite-streets-v12';
     else if (savedStyle === 'light') mapStyle = 'mapbox://styles/mapbox/light-v11';
@@ -227,7 +229,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var map = new mapboxgl.Map({
         container: 'trackingMap',
         style: mapStyle,
-        center: [28.0473, -26.2041], // Default: Johannesburg
+        center: [28.0473, -26.2041],
         zoom: 12,
         attributionControl: false
     });
@@ -239,7 +241,6 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         showUserHeading: true
     }), 'top-right');
 
-    Tracking.setState('mapReady', true);
     window.trackingMap = map;
 
     // Markers storage
@@ -250,10 +251,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         fetch(window.TrackingConfig.apiBase + '/current.php', { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (data.ok && data.members) {
-                    Tracking.setState('members', data.members);
-                    renderMembers(data.members);
-                    updateMarkers(data.members);
+                if (data.success && data.data) {
+                    _members = data.data;
+                    renderMembers(_members);
+                    updateMarkers(_members);
                 }
             })
             .catch(function(err) {
@@ -304,7 +305,6 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             html += '</div>';
         });
 
-        // Preserve scroll position
         var scrollTop = list.scrollTop;
         list.innerHTML = html;
         list.scrollTop = scrollTop;
@@ -332,7 +332,6 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             }
         });
 
-        // Remove stale markers
         Object.keys(markers).forEach(function(uid) {
             if (!activeIds[uid]) {
                 markers[uid].remove();
@@ -362,7 +361,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     function formatSpeed(mps) {
         var val = parseFloat(mps);
         if (!val || val < 0.5) return '';
-        var units = window.TrackingConfig.settings.units || 'metric';
+        var units = (window.TrackingConfig.settings || {}).units || 'metric';
         if (units === 'imperial') {
             return (val * 2.237).toFixed(0) + ' mph';
         }
@@ -377,18 +376,14 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // Fly to member
     window.flyToMember = function(userId) {
-        var members = Tracking.getState('members') || [];
-        var m = members.find(function(x) { return x.user_id == userId; });
+        var m = _members.find(function(x) { return x.user_id == userId; });
         if (m) {
             map.flyTo({ center: [parseFloat(m.lng), parseFloat(m.lat)], zoom: 16, duration: 1500 });
-            Tracking.setState('selectedMember', userId);
 
-            // Highlight active member
             document.querySelectorAll('.member-item').forEach(function(el) {
                 el.classList.toggle('active', el.dataset.userId == userId);
             });
 
-            // Open popup
             if (markers[userId]) {
                 markers[userId].togglePopup();
             }
@@ -398,8 +393,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Get directions to member
     window.getDirections = function(userId) {
         if (!navigator.geolocation) return;
-        var members = Tracking.getState('members') || [];
-        var m = members.find(function(x) { return x.user_id == userId; });
+        var m = _members.find(function(x) { return x.user_id == userId; });
         if (!m) return;
 
         navigator.geolocation.getCurrentPosition(function(pos) {
@@ -412,8 +406,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             fetch(url, { credentials: 'same-origin' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
-                    if (data.ok && data.route) {
-                        showDirections(data.route);
+                    if (data.success && data.data) {
+                        showDirections(data.data);
                     }
                 })
                 .catch(function(err) {
@@ -424,11 +418,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     function showDirections(route) {
         var bar = document.getElementById('directionsBar');
-        document.getElementById('directionsDistance').textContent = route.distance_text || '--';
-        document.getElementById('directionsDuration').textContent = route.duration_text || '--';
+        var distM = route.distance_m || 0;
+        var durS = route.duration_s || 0;
+        document.getElementById('directionsDistance').textContent = distM >= 1000 ? (distM / 1000).toFixed(1) + ' km' : Math.round(distM) + ' m';
+        document.getElementById('directionsDuration').textContent = durS >= 3600 ? Math.floor(durS / 3600) + 'h ' + Math.floor((durS % 3600) / 60) + 'm' : Math.floor(durS / 60) + ' min';
         bar.classList.add('active');
 
-        // Draw route on map if geometry available
         if (route.geometry) {
             if (map.getSource('route')) {
                 map.getSource('route').setData({ type: 'Feature', geometry: route.geometry });
@@ -487,7 +482,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            if (data.ok) {
+            if (data.success) {
                 wakeFab.classList.add('tracking-active');
                 setTimeout(function() { wakeFab.classList.remove('tracking-active'); }, 5000);
             }
@@ -503,13 +498,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         setTimeout(function() {
             consentOverlay.classList.add('active');
         }, 1500);
-    } else {
-        Tracking.setState('consentGiven', true);
     }
 
     document.getElementById('consentAccept').addEventListener('click', function() {
         localStorage.setItem('tracking_consent', '1');
-        Tracking.setState('consentGiven', true);
         consentOverlay.classList.remove('active');
         requestNotificationPermission();
     });
@@ -544,7 +536,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Initial fetch then poll
     map.on('load', function() {
         fetchMembers();
-        var pollInterval = (window.TrackingConfig.settings.keepalive_interval_seconds || 30) * 1000;
+        var pollInterval = ((window.TrackingConfig.settings || {}).keepalive_interval_seconds || 30) * 1000;
         setInterval(fetchMembers, Math.max(pollInterval, 10000));
     });
 
