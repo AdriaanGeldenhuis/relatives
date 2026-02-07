@@ -8,10 +8,17 @@
  */
 declare(strict_types=1);
 
+session_start();
+
+if (!isset($_SESSION['user_id'])) {
+    header('Location: /login.php');
+    exit;
+}
+
 require_once __DIR__ . '/../../core/bootstrap.php';
 
-$session = new Session($db);
-$user = $session->validate();
+$auth = new Auth($db);
+$user = $auth->getCurrentUser();
 if (!$user) {
     header('Location: /login.php');
     exit;
