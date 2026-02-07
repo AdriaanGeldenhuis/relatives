@@ -2,7 +2,8 @@
  * Native App Bridge Module
  *
  * Provides a unified interface for communicating with native app shells:
- * - Android WebView (window.TrackingBridge)
+ * - Android WebView via window.TrackingBridge (za.co.relatives.app)
+ * - Android WebView via window.Android (com.relatives.app)
  * - iOS WKWebView (window.webkit.messageHandlers)
  * - Capacitor/Ionic (window.Capacitor)
  *
@@ -17,6 +18,9 @@ window.NativeBridge = {
     isIOS: false,
     isCapacitor: false,
     isPWA: false,
+
+    // Reference to the Android bridge object (TrackingBridge or Android)
+    _androidBridge: null,
 
     /**
      * Initialize the native bridge and detect platform
@@ -41,11 +45,21 @@ window.NativeBridge = {
      * Detect the current platform/shell
      */
     detectPlatform() {
-        // Check for Android WebView bridge
+        // Check for Android WebView bridge (TrackingBridge = za.co.relatives.app)
         if (typeof window.TrackingBridge !== 'undefined') {
             this.platform = 'android';
             this.isNativeApp = true;
             this.isAndroid = true;
+            this._androidBridge = window.TrackingBridge;
+            return;
+        }
+
+        // Check for Android WebView bridge (Android = com.relatives.app)
+        if (typeof window.Android !== 'undefined') {
+            this.platform = 'android';
+            this.isNativeApp = true;
+            this.isAndroid = true;
+            this._androidBridge = window.Android;
             return;
         }
 
@@ -128,8 +142,8 @@ window.NativeBridge = {
      * Notify native that tracking screen is visible
      */
     onTrackingVisible() {
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.onTrackingScreenVisible) {
-            window.TrackingBridge.onTrackingScreenVisible();
+        if (this.isAndroid && this._androidBridge && this._androidBridge.onTrackingScreenVisible) {
+            this._androidBridge.onTrackingScreenVisible();
         } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'screenVisible'
@@ -143,8 +157,8 @@ window.NativeBridge = {
      * Notify native that tracking screen is hidden
      */
     onTrackingHidden() {
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.onTrackingScreenHidden) {
-            window.TrackingBridge.onTrackingScreenHidden();
+        if (this.isAndroid && this._androidBridge && this._androidBridge.onTrackingScreenHidden) {
+            this._androidBridge.onTrackingScreenHidden();
         } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'screenHidden'
@@ -166,8 +180,8 @@ window.NativeBridge = {
         // Get session token from cookie or config
         var sessionToken = this.getSessionToken();
 
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.setAuthData) {
-            window.TrackingBridge.setAuthData(
+        if (this.isAndroid && this._androidBridge && this._androidBridge.setAuthData) {
+            this._androidBridge.setAuthData(
                 String(config.userId),
                 sessionToken || ''
             );
@@ -199,8 +213,8 @@ window.NativeBridge = {
      */
     updateTrackingSettings(intervalSeconds, highAccuracyMode) {
         if (highAccuracyMode === undefined) highAccuracyMode = true;
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.updateTrackingSettings) {
-            window.TrackingBridge.updateTrackingSettings(intervalSeconds, highAccuracyMode);
+        if (this.isAndroid && this._androidBridge && this._androidBridge.updateTrackingSettings) {
+            this._androidBridge.updateTrackingSettings(intervalSeconds, highAccuracyMode);
         } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'updateSettings',
@@ -215,8 +229,8 @@ window.NativeBridge = {
      */
     requestLocationBoost(durationSeconds) {
         if (durationSeconds === undefined) durationSeconds = 60;
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.requestLocationBoost) {
-            window.TrackingBridge.requestLocationBoost(durationSeconds);
+        if (this.isAndroid && this._androidBridge && this._androidBridge.requestLocationBoost) {
+            this._androidBridge.requestLocationBoost(durationSeconds);
         } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'locationBoost',
@@ -226,11 +240,15 @@ window.NativeBridge = {
     },
 
     /**
-     * Start native location tracking
+     * Start native location tracking.
+     * On Android, this routes through the native permission flow:
+     * disclosure dialog -> OS permission -> auto-start service on grant.
      */
     startTracking: function() {
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.startTracking) {
-            window.TrackingBridge.startTracking();
+        console.log('[NativeBridge] startTracking: web button pressed');
+        if (this.isAndroid && this._androidBridge && this._androidBridge.startTracking) {
+            console.log('[NativeBridge] startTracking: calling native startTracking()');
+            this._androidBridge.startTracking();
             return true;
         } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
@@ -238,6 +256,7 @@ window.NativeBridge = {
             });
             return true;
         }
+        console.log('[NativeBridge] startTracking: no native handler available');
         return false;
     },
 
@@ -245,8 +264,9 @@ window.NativeBridge = {
      * Stop native location tracking
      */
     stopTracking: function() {
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.stopTracking) {
-            window.TrackingBridge.stopTracking();
+        console.log('[NativeBridge] stopTracking: web button pressed');
+        if (this.isAndroid && this._androidBridge && this._androidBridge.stopTracking) {
+            this._androidBridge.stopTracking();
             return true;
         } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
@@ -258,11 +278,32 @@ window.NativeBridge = {
     },
 
     /**
+     * Start native voice input.
+     * On Android, this routes through the native mic permission flow:
+     * disclosure dialog -> OS mic permission -> auto-start voice on grant.
+     */
+    startVoice: function() {
+        console.log('[NativeBridge] startVoice: web button pressed');
+        if (this.isAndroid && this._androidBridge && this._androidBridge.startVoice) {
+            console.log('[NativeBridge] startVoice: calling native startVoice()');
+            this._androidBridge.startVoice();
+            return true;
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
+            window.webkit.messageHandlers.tracking.postMessage({
+                action: 'startVoice'
+            });
+            return true;
+        }
+        console.log('[NativeBridge] startVoice: no native handler, falling back to browser');
+        return false;
+    },
+
+    /**
      * Check if native tracking is currently enabled
      */
     isTrackingEnabled: function() {
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.isTrackingEnabled) {
-            return window.TrackingBridge.isTrackingEnabled();
+        if (this.isAndroid && this._androidBridge && this._androidBridge.isTrackingEnabled) {
+            return this._androidBridge.isTrackingEnabled();
         }
         // For iOS and others, we don't have a sync way to check
         return false;
@@ -273,8 +314,8 @@ window.NativeBridge = {
      * and notifies other devices via FCM
      */
     wakeAllDevices: function() {
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.wakeAllDevices) {
-            window.TrackingBridge.wakeAllDevices();
+        if (this.isAndroid && this._androidBridge && this._androidBridge.wakeAllDevices) {
+            this._androidBridge.wakeAllDevices();
             return true;
         } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
@@ -289,8 +330,8 @@ window.NativeBridge = {
      * Get FCM token for push notifications
      */
     getFCMToken: function() {
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.getFCMToken) {
-            return window.TrackingBridge.getFCMToken();
+        if (this.isAndroid && this._androidBridge && this._androidBridge.getFCMToken) {
+            return this._androidBridge.getFCMToken();
         }
         return null;
     },
@@ -299,8 +340,8 @@ window.NativeBridge = {
      * Clear auth data on logout
      */
     clearAuth: function() {
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.clearAuthData) {
-            window.TrackingBridge.clearAuthData();
+        if (this.isAndroid && this._androidBridge && this._androidBridge.clearAuthData) {
+            this._androidBridge.clearAuthData();
         } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
             window.webkit.messageHandlers.tracking.postMessage({
                 action: 'clearAuth'
@@ -312,8 +353,8 @@ window.NativeBridge = {
      * Log message to native console
      */
     log: function(tag, message) {
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.logFromJS) {
-            window.TrackingBridge.logFromJS(tag, message);
+        if (this.isAndroid && this._androidBridge && this._androidBridge.logFromJS) {
+            this._androidBridge.logFromJS(tag, message);
         }
         // Always log to browser console too
         console.log('[' + tag + ']', message);
@@ -323,8 +364,8 @@ window.NativeBridge = {
      * Notify native that web app is ready
      */
     notifyNativeReady: function() {
-        if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.logFromJS) {
-            window.TrackingBridge.logFromJS('NativeBridge', 'Web app ready');
+        if (this.isAndroid && this._androidBridge && this._androidBridge.logFromJS) {
+            this._androidBridge.logFromJS('NativeBridge', 'Web app ready');
         }
     },
 
@@ -400,8 +441,8 @@ window.NativeBridge = {
 
         if (granted) {
             // Permission granted - now start the tracking service
-            if (this.isAndroid && window.TrackingBridge && window.TrackingBridge.startTracking) {
-                window.TrackingBridge.startTracking();
+            if (this.isAndroid && this._androidBridge && this._androidBridge.startTracking) {
+                this._androidBridge.startTracking();
             }
 
             if (window.Toast) {
