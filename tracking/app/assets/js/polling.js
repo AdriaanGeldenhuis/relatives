@@ -228,8 +228,8 @@ window.Polling = {
         try {
             // 1. Wake THIS device's native tracking (if running in native app)
             if (window.NativeBridge && window.NativeBridge.isNativeApp) {
-                if (window.Android && window.Android.wakeAllDevices) {
-                    window.Android.wakeAllDevices();
+                if (window.TrackingBridge && window.TrackingBridge.wakeAllDevices) {
+                    window.TrackingBridge.wakeAllDevices();
                 }
             }
 
