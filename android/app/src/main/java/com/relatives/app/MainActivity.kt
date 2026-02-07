@@ -209,12 +209,10 @@ class MainActivity : AppCompatActivity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle("Location Sharing")
             .setMessage(
-                "Relatives uses your device location to share your live position " +
-                "with your trusted family members for safety.\n\n" +
-                "Your location is shared only within your family group and is " +
-                "collected in the background to keep your family updated.\n\n" +
-                "You can turn off location sharing at any time in the app's " +
-                "tracking settings."
+                "Relatives uses your device location to share your live " +
+                "location with trusted family members for safety.\n\n" +
+                "Location sharing is optional and can be turned off " +
+                "anytime in Tracking Settings."
             )
             .setPositiveButton("Continue") { _, _ ->
                 isDisclosureShowing = false
@@ -245,11 +243,10 @@ class MainActivity : AppCompatActivity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle("Background Location")
             .setMessage(
-                "Background location is used to keep your live position " +
-                "updated with your family even when the app is closed.\n\n" +
-                "You can turn this off at any time in your device Settings " +
-                "or in the app's tracking settings.\n\n" +
-                "On the next screen, please select \"Allow all the time\"."
+                "If you enable \"Allow all the time\", Relatives can keep " +
+                "live family location updated even when the app is closed.\n\n" +
+                "This is optional and you can turn it off anytime in " +
+                "device Settings or Tracking Settings."
             )
             .setPositiveButton("Continue") { _, _ ->
                 isDisclosureShowing = false
