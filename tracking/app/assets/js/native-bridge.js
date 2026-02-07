@@ -226,10 +226,14 @@ window.NativeBridge = {
     },
 
     /**
-     * Start native location tracking
+     * Start native location tracking.
+     * On Android, this routes through the native permission flow:
+     * disclosure dialog -> OS permission -> auto-start service on grant.
      */
     startTracking: function() {
+        console.log('[NativeBridge] startTracking: web button pressed');
         if (this.isAndroid && window.Android && window.Android.startTracking) {
+            console.log('[NativeBridge] startTracking: calling Android.startTracking()');
             window.Android.startTracking();
             return true;
         } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
@@ -238,6 +242,7 @@ window.NativeBridge = {
             });
             return true;
         }
+        console.log('[NativeBridge] startTracking: no native handler available');
         return false;
     },
 
@@ -245,6 +250,7 @@ window.NativeBridge = {
      * Stop native location tracking
      */
     stopTracking: function() {
+        console.log('[NativeBridge] stopTracking: web button pressed');
         if (this.isAndroid && window.Android && window.Android.stopTracking) {
             window.Android.stopTracking();
             return true;
@@ -254,6 +260,27 @@ window.NativeBridge = {
             });
             return true;
         }
+        return false;
+    },
+
+    /**
+     * Start native voice input.
+     * On Android, this routes through the native mic permission flow:
+     * disclosure dialog -> OS mic permission -> auto-start voice on grant.
+     */
+    startVoice: function() {
+        console.log('[NativeBridge] startVoice: web button pressed');
+        if (this.isAndroid && window.Android && window.Android.startVoice) {
+            console.log('[NativeBridge] startVoice: calling Android.startVoice()');
+            window.Android.startVoice();
+            return true;
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
+            window.webkit.messageHandlers.tracking.postMessage({
+                action: 'startVoice'
+            });
+            return true;
+        }
+        console.log('[NativeBridge] startVoice: no native handler, falling back to browser');
         return false;
     },
 

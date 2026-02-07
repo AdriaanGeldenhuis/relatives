@@ -1,30 +1,97 @@
 package com.relatives.app.webview
 
-import android.content.Context
 import android.content.Intent
 import android.util.Log
 import android.webkit.JavascriptInterface
+import com.relatives.app.MainActivity
 import com.relatives.app.tracking.PreferencesManager
 import com.relatives.app.tracking.TrackingLocationService
 
 /**
  * JavaScript interface exposed to WebView as `window.Android`.
  *
- * Methods match the web interface defined in tracking.js:
- * - onTrackingScreenVisible()
- * - onTrackingScreenHidden()
+ * Methods match the web interface defined in native-bridge.js:
+ * - startTracking() / stopTracking()
+ * - startVoice()
+ * - onTrackingScreenVisible() / onTrackingScreenHidden()
  * - updateTrackingSettings(intervalSeconds, highAccuracyMode)
  * - setAuthData(userId, sessionToken)
  * - requestLocationBoost(intervalSeconds)
+ *
+ * IMPORTANT: startTracking() routes through MainActivity.requestTrackingPermissions()
+ * to ensure proper permission flow with disclosure dialogs. It does NOT directly
+ * start the service.
  */
-class WebViewBridge(private val context: Context) {
+class WebViewBridge(private val activity: MainActivity) {
 
     companion object {
         private const val TAG = "WebViewBridge"
         const val INTERFACE_NAME = "Android"
     }
 
-    private val prefs = PreferencesManager(context)
+    private val prefs = PreferencesManager(activity)
+
+    // ============ TRACKING CONTROL ============
+
+    /**
+     * Start location tracking.
+     * Called when user taps "Start Tracking" in the web UI.
+     *
+     * Routes through MainActivity to handle the full permission flow:
+     * disclosure -> OS permission -> auto-start service on grant.
+     *
+     * Does NOT directly start the service.
+     */
+    @JavascriptInterface
+    fun startTracking() {
+        Log.d(TAG, "BRIDGE startTracking called")
+
+        // Must run on UI thread for AlertDialog
+        activity.runOnUiThread {
+            Log.d(TAG, "startTracking: routing to MainActivity.requestTrackingPermissions()")
+            activity.requestTrackingPermissions()
+        }
+    }
+
+    /**
+     * Stop location tracking.
+     * Called when user disables tracking in the app.
+     */
+    @JavascriptInterface
+    fun stopTracking() {
+        Log.d(TAG, "BRIDGE stopTracking called")
+        TrackingLocationService.stopTracking(activity)
+    }
+
+    /**
+     * Check if tracking is currently enabled.
+     *
+     * @return true if tracking is enabled
+     */
+    @JavascriptInterface
+    fun isTrackingEnabled(): Boolean {
+        return prefs.isTrackingEnabled
+    }
+
+    // ============ VOICE CONTROL ============
+
+    /**
+     * Start voice input.
+     * Called when user taps the voice/mic button in the web UI.
+     *
+     * Routes through MainActivity to handle mic permission flow:
+     * disclosure -> OS permission -> auto-start voice on grant.
+     */
+    @JavascriptInterface
+    fun startVoice() {
+        Log.d(TAG, "BRIDGE startVoice called")
+
+        // Must run on UI thread for AlertDialog
+        activity.runOnUiThread {
+            Log.d(TAG, "startVoice: routing to MainActivity.requestMicPermission()")
+            activity.requestMicPermission()
+        }
+    }
 
     // ============ TRACKING SCREEN VISIBILITY ============
 
@@ -36,10 +103,16 @@ class WebViewBridge(private val context: Context) {
     fun onTrackingScreenVisible() {
         Log.d(TAG, "onTrackingScreenVisible")
 
-        val intent = Intent(context, TrackingLocationService::class.java).apply {
+        // Only send intent if tracking is active
+        if (!prefs.isTrackingEnabled) {
+            Log.d(TAG, "Tracking not enabled, ignoring visibility change")
+            return
+        }
+
+        val intent = Intent(activity, TrackingLocationService::class.java).apply {
             action = TrackingLocationService.ACTION_VIEWER_VISIBLE
         }
-        context.startService(intent)
+        activity.startService(intent)
     }
 
     /**
@@ -50,10 +123,16 @@ class WebViewBridge(private val context: Context) {
     fun onTrackingScreenHidden() {
         Log.d(TAG, "onTrackingScreenHidden")
 
-        val intent = Intent(context, TrackingLocationService::class.java).apply {
+        // Only send intent if tracking is active
+        if (!prefs.isTrackingEnabled) {
+            Log.d(TAG, "Tracking not enabled, ignoring visibility change")
+            return
+        }
+
+        val intent = Intent(activity, TrackingLocationService::class.java).apply {
             action = TrackingLocationService.ACTION_VIEWER_HIDDEN
         }
-        context.startService(intent)
+        activity.startService(intent)
     }
 
     // ============ SETTINGS ============
@@ -68,12 +147,12 @@ class WebViewBridge(private val context: Context) {
     fun updateTrackingSettings(intervalSeconds: Int, highAccuracyMode: Boolean) {
         Log.d(TAG, "updateTrackingSettings: interval=$intervalSeconds, highAccuracy=$highAccuracyMode")
 
-        val intent = Intent(context, TrackingLocationService::class.java).apply {
+        val intent = Intent(activity, TrackingLocationService::class.java).apply {
             action = TrackingLocationService.ACTION_UPDATE_SETTINGS
             putExtra(TrackingLocationService.EXTRA_INTERVAL_SECONDS, intervalSeconds)
             putExtra(TrackingLocationService.EXTRA_HIGH_ACCURACY, highAccuracyMode)
         }
-        context.startService(intent)
+        activity.startService(intent)
     }
 
     /**
@@ -121,38 +200,6 @@ class WebViewBridge(private val context: Context) {
         return ""
     }
 
-    // ============ TRACKING CONTROL ============
-
-    /**
-     * Start location tracking.
-     * Called when user enables tracking in the app.
-     */
-    @JavascriptInterface
-    fun startTracking() {
-        Log.d(TAG, "startTracking")
-        TrackingLocationService.startTracking(context)
-    }
-
-    /**
-     * Stop location tracking.
-     * Called when user disables tracking in the app.
-     */
-    @JavascriptInterface
-    fun stopTracking() {
-        Log.d(TAG, "stopTracking")
-        TrackingLocationService.stopTracking(context)
-    }
-
-    /**
-     * Check if tracking is currently enabled.
-     *
-     * @return true if tracking is enabled
-     */
-    @JavascriptInterface
-    fun isTrackingEnabled(): Boolean {
-        return prefs.isTrackingEnabled
-    }
-
     /**
      * Clear auth data (logout).
      */
@@ -164,7 +211,7 @@ class WebViewBridge(private val context: Context) {
         prefs.sessionToken = null
 
         // Stop tracking since user logged out
-        TrackingLocationService.stopTracking(context)
+        TrackingLocationService.stopTracking(activity)
     }
 
     // ============ UTILITY ============
