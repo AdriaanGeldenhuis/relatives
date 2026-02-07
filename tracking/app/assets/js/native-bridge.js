@@ -387,5 +387,35 @@ window.NativeBridge = {
             });
         }
         // Fallback to web toast handled elsewhere
+    },
+
+    /**
+     * Called by native app after permission disclosure flow completes.
+     * Triggered from MainActivity.notifyWebPermissionResult().
+     *
+     * @param {boolean} granted - Whether location permission was granted
+     */
+    onPermissionResult: function(granted) {
+        console.log('[NativeBridge] Permission result:', granted);
+
+        if (granted) {
+            // Permission granted - now start the tracking service
+            if (this.isAndroid && window.Android && window.Android.startTracking) {
+                window.Android.startTracking();
+            }
+
+            if (window.Toast) {
+                Toast.show('Location sharing enabled', 'success');
+            }
+        } else {
+            if (window.Toast) {
+                Toast.show('Location permission is needed for tracking', 'info');
+            }
+        }
+
+        // Fire custom event for any UI that needs to know
+        window.dispatchEvent(new CustomEvent('native:permissionResult', {
+            detail: { granted: granted }
+        }));
     }
 };

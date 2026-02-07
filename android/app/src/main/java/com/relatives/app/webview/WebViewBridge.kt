@@ -1,10 +1,12 @@
 package com.relatives.app.webview
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
 import android.webkit.JavascriptInterface
+import com.relatives.app.MainActivity
 import com.relatives.app.tracking.PreferencesManager
 import com.relatives.app.tracking.TrackingLocationService
 
@@ -135,11 +137,31 @@ class WebViewBridge(private val context: Context) {
     /**
      * Start location tracking.
      * Called when user enables tracking in the app.
+     *
+     * This does NOT directly start the service. It goes through
+     * MainActivity's permission flow which shows the prominent
+     * disclosure dialog first (Google Play requirement).
+     *
+     * Flow: startTracking() → MainActivity.requestTrackingPermissions()
+     *       → disclosure dialog → OS permission → service starts
      */
     @JavascriptInterface
     fun startTracking() {
-        Log.d(TAG, "startTracking")
-        TrackingLocationService.startTracking(context)
+        Log.d(TAG, "startTracking - initiating permission flow")
+
+        // Check if we already have permission
+        val activity = context as? MainActivity
+        if (activity != null && activity.hasLocationPermission()) {
+            // Permission already granted - start directly
+            Log.d(TAG, "Permission already granted, starting service")
+            TrackingLocationService.startTracking(context)
+            return
+        }
+
+        // No permission yet - run disclosure flow on UI thread
+        (context as? Activity)?.runOnUiThread {
+            (context as? MainActivity)?.requestTrackingPermissions()
+        }
     }
 
     /**

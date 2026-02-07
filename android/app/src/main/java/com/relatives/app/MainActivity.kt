@@ -15,27 +15,44 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.relatives.app.tracking.PreferencesManager
 import com.relatives.app.webview.WebViewBridge
 
 /**
  * Main activity hosting the WebView with JavaScript bridge.
  *
- * Permission flow (Google Play Prominent Disclosure compliant):
- * 1. Show prominent disclosure dialog explaining WHY location is needed
- * 2. User accepts → request foreground location permission
- * 3. Foreground granted → show background location disclosure
- * 4. User accepts → request background location permission
- * 5. Request notification permission (Android 13+)
+ * GOOGLE PLAY PROMINENT DISCLOSURE COMPLIANCE:
+ *
+ * Permissions are NEVER requested automatically on app launch.
+ * The disclosure + permission flow is triggered ONLY when the user
+ * explicitly enables tracking (via the web UI toggle or native bridge).
+ *
+ * Flow:
+ * 1. User taps "Enable Location Sharing" in web UI
+ * 2. Web calls Android.startTracking() via bridge
+ * 3. Bridge calls MainActivity.requestTrackingPermissions()
+ * 4. Foreground disclosure dialog shown (blocking, non-cancelable)
+ * 5. User taps "Continue" → OS foreground location prompt
+ * 6. If granted → background disclosure dialog shown
+ * 7. User taps "Continue" → OS background location prompt
+ * 8. Notification permission requested (Android 13+)
+ * 9. Tracking service starts
+ *
+ * If user taps "Not Now" at any disclosure → no permission requested,
+ * no tracking started. App continues to work without location.
  */
 class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val BASE_URL = "https://relatives.app"
-        private const val PREF_DISCLOSURE_SHOWN = "disclosure_shown"
     }
 
     private lateinit var webView: WebView
     private lateinit var bridge: WebViewBridge
+    private lateinit var prefs: PreferencesManager
+
+    // Track if a disclosure dialog is currently showing
+    private var isDisclosureShowing = false
 
     // Permission request launchers
     private val locationPermissionLauncher = registerForActivityResult(
@@ -45,41 +62,36 @@ class MainActivity : AppCompatActivity() {
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
 
         if (fineGranted || coarseGranted) {
-            // Foreground granted - now show background location disclosure
+            // Foreground granted → show background disclosure (Android 10+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 showBackgroundLocationDisclosure()
             } else {
-                requestNotificationPermission()
+                // Pre-Q: no background permission needed, proceed
+                onPermissionFlowComplete(locationGranted = true)
             }
         } else {
-            Toast.makeText(this, "Location permission required for family tracking", Toast.LENGTH_LONG).show()
-            requestNotificationPermission()
+            // User denied foreground location - do NOT nag
+            notifyWebPermissionResult(granted = false)
         }
     }
 
     private val backgroundLocationLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (!granted) {
-            Toast.makeText(
-                this,
-                "Background location enables tracking when the app is closed. You can enable it later in Settings.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-        // Continue to notification permission regardless
-        requestNotificationPermission()
+        // Background granted or denied - either way, proceed
+        onPermissionFlowComplete(locationGranted = true)
     }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        // Notification permission result - tracking works without it
+    ) { _ ->
+        // Notification result doesn't affect tracking
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        prefs = PreferencesManager(this)
         webView = WebView(this)
         setContentView(webView)
 
@@ -88,9 +100,13 @@ class MainActivity : AppCompatActivity() {
         setupWebView()
         webView.loadUrl(BASE_URL)
 
-        // Start permission flow AFTER showing the UI
-        // Show prominent disclosure first (Google Play requirement)
-        checkAndRequestPermissions()
+        // NO permission requests here. Permissions are requested ONLY
+        // when the user explicitly enables tracking via the web UI.
+        // This is a Google Play Prominent Disclosure requirement.
+
+        // Request notification permission separately since it's low-friction
+        // and doesn't require location disclosure
+        requestNotificationPermissionIfNeeded()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -104,26 +120,17 @@ class MainActivity : AppCompatActivity() {
             setSupportZoom(false)
             builtInZoomControls = false
 
-            // Performance
             @Suppress("DEPRECATION")
             setRenderPriority(WebSettings.RenderPriority.HIGH)
 
-            // Geolocation
             setGeolocationEnabled(true)
         }
 
-        // Add JavaScript interface
         webView.addJavascriptInterface(bridge, WebViewBridge.INTERFACE_NAME)
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
-                // Keep navigation within the app
-                return if (url.startsWith(BASE_URL)) {
-                    false // Let WebView handle it
-                } else {
-                    // Open external links in browser
-                    true
-                }
+                return !url.startsWith(BASE_URL)
             }
         }
 
@@ -132,7 +139,6 @@ class MainActivity : AppCompatActivity() {
                 origin: String?,
                 callback: GeolocationPermissions.Callback?
             ) {
-                // Auto-grant geolocation to our own domain if Android permission granted
                 val hasPermission = ContextCompat.checkSelfPermission(
                     this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION
                 ) == PackageManager.PERMISSION_GRANTED
@@ -142,19 +148,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ========== PERMISSION FLOW (Prominent Disclosure Compliant) ==========
+    // ========== PUBLIC API (called by WebViewBridge) ==========
 
     /**
-     * Check permissions and show disclosure if needed.
-     * This is the entry point for the Google Play compliant permission flow.
+     * Called by WebViewBridge.startTracking() when user explicitly enables
+     * location sharing. This is the ONLY entry point for the permission flow.
+     *
+     * If permissions already granted, starts tracking immediately.
+     * If not, shows prominent disclosure first.
      */
-    private fun checkAndRequestPermissions() {
+    fun requestTrackingPermissions() {
         val hasLocation = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
         if (hasLocation) {
-            // Already have foreground location - check background
+            // Already have foreground - check background
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val hasBackground = ContextCompat.checkSelfPermission(
                     this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
@@ -165,92 +174,103 @@ class MainActivity : AppCompatActivity() {
                     return
                 }
             }
-            // All location permissions granted
-            requestNotificationPermission()
+            // All permissions already granted
+            onPermissionFlowComplete(locationGranted = true)
             return
         }
 
-        // No location permission yet - show prominent disclosure first
-        showLocationDisclosure()
+        // No location permission → show prominent disclosure FIRST
+        showForegroundLocationDisclosure()
     }
 
     /**
-     * PROMINENT DISCLOSURE (Required by Google Play)
-     *
-     * Must be shown BEFORE requesting location permission.
-     * Must clearly explain:
-     * - WHAT data is collected
-     * - WHY it's needed
-     * - HOW it's used
+     * Check if location permissions are granted.
      */
-    private fun showLocationDisclosure() {
-        AlertDialog.Builder(this)
-            .setTitle("Location Access Required")
+    fun hasLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    // ========== DISCLOSURE DIALOGS (Google Play Policy Compliant) ==========
+
+    /**
+     * FOREGROUND LOCATION DISCLOSURE
+     *
+     * Google Play requirement: shown BEFORE any location permission request.
+     * - Non-cancelable (no back button dismiss, no outside tap dismiss)
+     * - Clearly states WHAT data, WHY, WHEN (background), and OFF switch
+     * - Only appears when user initiates tracking (not auto on launch)
+     */
+    private fun showForegroundLocationDisclosure() {
+        if (isDisclosureShowing) return
+        isDisclosureShowing = true
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Location Sharing")
             .setMessage(
-                "Relatives needs access to your location to:\n\n" +
-                "- Share your location with your family group so they can see where you are\n" +
-                "- Show nearby family members on the map\n" +
-                "- Send alerts when family members arrive at or leave places\n\n" +
-                "Your location is only shared with members of your family group. " +
-                "You can disable location sharing at any time from the tracking settings.\n\n" +
-                "Location data is collected even when the app is closed or not in use, " +
-                "to keep your family updated on your whereabouts."
+                "Relatives uses your device location to share your live position " +
+                "with your trusted family members for safety.\n\n" +
+                "Your location is shared only within your family group and is " +
+                "collected in the background to keep your family updated.\n\n" +
+                "You can turn off location sharing at any time in the app's " +
+                "tracking settings."
             )
             .setPositiveButton("Continue") { _, _ ->
-                // User acknowledged disclosure - now request permission
-                requestForegroundLocation()
+                isDisclosureShowing = false
+                requestForegroundLocationPermission()
             }
             .setNegativeButton("Not Now") { dialog, _ ->
+                isDisclosureShowing = false
                 dialog.dismiss()
-                Toast.makeText(
-                    this,
-                    "You can enable location sharing later from tracking settings",
-                    Toast.LENGTH_LONG
-                ).show()
+                notifyWebPermissionResult(granted = false)
             }
             .setCancelable(false)
-            .show()
+            .create()
+
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.show()
     }
 
     /**
-     * BACKGROUND LOCATION DISCLOSURE (Required by Google Play for Android 10+)
+     * BACKGROUND LOCATION DISCLOSURE
      *
-     * Separate disclosure explaining why background/always-on location is needed.
+     * Separate disclosure required for "Allow all the time" permission.
+     * Shown only after foreground location is granted.
      */
     private fun showBackgroundLocationDisclosure() {
-        AlertDialog.Builder(this)
-            .setTitle("Always-On Location Needed")
+        if (isDisclosureShowing) return
+        isDisclosureShowing = true
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Background Location")
             .setMessage(
-                "To keep your family updated even when the app is closed, " +
-                "Relatives needs the \"Allow all the time\" location permission.\n\n" +
-                "This enables:\n" +
-                "- Continuous location sharing with your family\n" +
-                "- Arrival and departure alerts for saved places\n" +
-                "- Location updates when you're driving or on the move\n\n" +
-                "Battery impact is minimal - the app only tracks when you're moving " +
-                "and uses low-power mode when you're stationary.\n\n" +
-                "Please select \"Allow all the time\" on the next screen."
+                "Background location is used to keep your live position " +
+                "updated with your family even when the app is closed.\n\n" +
+                "You can turn this off at any time in your device Settings " +
+                "or in the app's tracking settings.\n\n" +
+                "On the next screen, please select \"Allow all the time\"."
             )
             .setPositiveButton("Continue") { _, _ ->
-                requestBackgroundLocation()
+                isDisclosureShowing = false
+                requestBackgroundLocationPermission()
             }
             .setNegativeButton("Skip") { dialog, _ ->
+                isDisclosureShowing = false
                 dialog.dismiss()
-                Toast.makeText(
-                    this,
-                    "Tracking will only work while the app is open. You can change this in Settings.",
-                    Toast.LENGTH_LONG
-                ).show()
-                requestNotificationPermission()
+                // Still proceed - tracking works foreground-only
+                onPermissionFlowComplete(locationGranted = true)
             }
             .setCancelable(false)
-            .show()
+            .create()
+
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.show()
     }
 
-    /**
-     * Request foreground location permission (after disclosure shown).
-     */
-    private fun requestForegroundLocation() {
+    // ========== PERMISSION REQUESTS ==========
+
+    private fun requestForegroundLocationPermission() {
         locationPermissionLauncher.launch(
             arrayOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -259,31 +279,48 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    /**
-     * Request background location permission (after background disclosure shown).
-     */
-    private fun requestBackgroundLocation() {
+    private fun requestBackgroundLocationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-            } else {
-                requestNotificationPermission()
-            }
+            backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
         }
     }
 
-    /**
-     * Request notification permission (Android 13+).
-     */
-    private fun requestNotificationPermission() {
+    private fun requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED
             ) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
+        }
+    }
+
+    // ========== FLOW COMPLETION ==========
+
+    /**
+     * Called when the entire permission flow finishes.
+     * Notifies the web layer and starts tracking if granted.
+     */
+    private fun onPermissionFlowComplete(locationGranted: Boolean) {
+        if (locationGranted) {
+            // Permission granted - the bridge's startTracking() will
+            // proceed to actually start the TrackingLocationService
+            notifyWebPermissionResult(granted = true)
+        } else {
+            notifyWebPermissionResult(granted = false)
+        }
+    }
+
+    /**
+     * Notify the WebView about permission result so the UI can update.
+     */
+    private fun notifyWebPermissionResult(granted: Boolean) {
+        runOnUiThread {
+            webView.evaluateJavascript(
+                "if(window.NativeBridge && window.NativeBridge.onPermissionResult) { " +
+                "window.NativeBridge.onPermissionResult($granted); }",
+                null
+            )
         }
     }
 
