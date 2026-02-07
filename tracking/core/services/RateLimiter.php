@@ -1,102 +1,42 @@
 <?php
-/**
- * Rate Limiter
- *
- * Prevents too frequent location uploads.
- */
+declare(strict_types=1);
 
+/**
+ * Rate limiter for location uploads
+ * Prevents too-frequent uploads to save bandwidth and battery
+ */
 class RateLimiter
 {
     private TrackingCache $cache;
-    private SettingsRepo $settingsRepo;
+    private int $minInterval;
 
-    public function __construct(TrackingCache $cache, SettingsRepo $settingsRepo)
+    public function __construct(TrackingCache $cache, int $minIntervalSeconds = 5)
     {
         $this->cache = $cache;
-        $this->settingsRepo = $settingsRepo;
+        $this->minInterval = $minIntervalSeconds;
     }
 
     /**
-     * Check if request should be rate limited.
-     *
-     * @param int $userId
-     * @param int $familyId
-     * @return array ['allowed' => bool, 'reason' => string, 'retry_after' => int]
+     * Check if a location upload is allowed.
+     * Returns ['allowed' => true] or ['allowed' => false, 'retry_after' => int]
      */
-    public function check(int $userId, int $familyId): array
+    public function check(int $userId): array
     {
-        $settings = $this->settingsRepo->get($familyId);
-        $limitSeconds = $settings['rate_limit_seconds'];
+        $lastTs = $this->cache->getRateLimit($userId);
+        $now = time();
 
-        // No rate limiting configured
-        if ($limitSeconds <= 0) {
-            return ['allowed' => true];
+        if ($lastTs !== null) {
+            $elapsed = $now - $lastTs;
+            if ($elapsed < $this->minInterval) {
+                return [
+                    'allowed' => false,
+                    'retry_after' => $this->minInterval - $elapsed,
+                ];
+            }
         }
 
-        $data = $this->cache->getRateLimit($userId);
-
-        if ($data === null) {
-            // First request, allow and set
-            $this->cache->setRateLimit($userId, [
-                'last_accepted_at' => time(),
-                'count_in_window' => 1
-            ]);
-            return ['allowed' => true];
-        }
-
-        $lastAccepted = $data['last_accepted_at'] ?? 0;
-        $elapsed = time() - $lastAccepted;
-
-        if ($elapsed < $limitSeconds) {
-            return [
-                'allowed' => false,
-                'reason' => 'rate_limited',
-                'message' => "Too frequent. Try again in " . ($limitSeconds - $elapsed) . " seconds.",
-                'retry_after' => $limitSeconds - $elapsed
-            ];
-        }
-
-        // Enough time passed, allow and update
-        $this->cache->setRateLimit($userId, [
-            'last_accepted_at' => time(),
-            'count_in_window' => ($data['count_in_window'] ?? 0) + 1
-        ]);
+        $this->cache->setRateLimit($userId, $now, $this->minInterval * 2);
 
         return ['allowed' => true];
-    }
-
-    /**
-     * Record a successful request (if not using check()).
-     */
-    public function record(int $userId): void
-    {
-        $data = $this->cache->getRateLimit($userId);
-
-        $this->cache->setRateLimit($userId, [
-            'last_accepted_at' => time(),
-            'count_in_window' => ($data['count_in_window'] ?? 0) + 1
-        ]);
-    }
-
-    /**
-     * Get current rate limit state for debugging.
-     */
-    public function getState(int $userId): array
-    {
-        $data = $this->cache->getRateLimit($userId);
-
-        if (!$data) {
-            return [
-                'last_accepted_at' => null,
-                'count_in_window' => 0,
-                'seconds_since_last' => null
-            ];
-        }
-
-        return [
-            'last_accepted_at' => $data['last_accepted_at'],
-            'count_in_window' => $data['count_in_window'],
-            'seconds_since_last' => time() - $data['last_accepted_at']
-        ];
     }
 }

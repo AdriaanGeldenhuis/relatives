@@ -1,150 +1,222 @@
 /**
- * Browser Location Tracking Module
+ * Tracking App - Browser-Based Location Tracking
  *
- * Enables web browser-based location tracking as a fallback
- * when native app tracking is not available.
+ * Uses the Geolocation API (navigator.geolocation.watchPosition) to track
+ * the user's location from a desktop or mobile browser. Locations are
+ * buffered and batch-uploaded every 30 seconds to avoid excessive API calls.
  *
- * Features:
- * - Requests geolocation permission on init
- * - Uploads current user's location every 30 seconds
- * - Stops when tab is hidden, resumes when visible
- * - Skips if native Android app is tracking
+ * A dead-reckoning filter skips uploads when the device has not moved more
+ * than 20 metres from the last submitted position, reducing bandwidth and
+ * storage costs.
+ *
+ * Mode behaviour:
+ *   - Mode 1 (session-based): only sends locations when sessionActive is true.
+ *   - Mode 2 (always-on): sends locations whenever the watcher is running.
+ *
+ * Requires: Tracking.api, Tracking.getState
+ *
+ * Usage:
+ *   Tracking.browserTracking.start();
+ *   Tracking.browserTracking.stop();
  */
+window.Tracking = window.Tracking || {};
 
-window.BrowserTracking = {
-    watchId: null,
-    lastUploadTime: 0,
-    UPLOAD_INTERVAL_MS: 30000, // 30 seconds
-    MAX_ACCURACY_M: 500, // Only upload if accuracy better than 500m
+(function () {
+    'use strict';
 
-    init() {
-        // Only run in browser context
-        if (!navigator.geolocation) {
-            console.log('Browser geolocation not supported');
-            return;
-        }
+    // -----------------------------------------------------------------------
+    // Configuration
+    // -----------------------------------------------------------------------
 
-        // Skip if native app is handling tracking
-        // Check NativeBridge first, then legacy interfaces
-        if (window.NativeBridge && window.NativeBridge.isNativeApp && window.NativeBridge.isTrackingEnabled()) {
-            console.log('Native app tracking active - skipping browser geolocation');
-            return;
-        }
+    var BATCH_INTERVAL_MS  = 30000; // Flush buffer every 30 s
+    var MIN_DISTANCE_M     = 20;    // Minimum movement to record a new point
 
-        // Legacy check for TrackingBridge or Android interface
-        const nativeInterface = window.TrackingBridge || window.Android;
-        if (nativeInterface?.isTrackingEnabled && nativeInterface.isTrackingEnabled()) {
-            console.log('Native app tracking active (legacy) - skipping browser geolocation');
-            return;
-        }
+    /** @type {number|null} watchPosition id. */
+    var watchId = null;
 
-        // Start tracking when map is ready
-        window.addEventListener('map:ready', () => this.start());
+    /** @type {number|null} Batch upload interval id. */
+    var batchTimer = null;
 
-        // Handle visibility changes
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                this.stop();
-            } else {
-                this.start();
-            }
-        });
-    },
+    /**
+     * Buffer of locations waiting to be uploaded.
+     * Each entry: { latitude, longitude, accuracy, speed, heading, altitude, timestamp }
+     * @type {Object[]}
+     */
+    var buffer = [];
 
-    start() {
-        if (this.watchId !== null) return;
+    /**
+     * Last successfully submitted position (for distance filtering).
+     * @type {{ latitude: number, longitude: number }|null}
+     */
+    var lastSent = null;
 
-        console.log('Starting browser location tracking...');
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
 
-        // Get initial position
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                console.log('Browser geolocation permission granted');
-                this.uploadLocation(position);
-                this.startWatch();
-            },
-            (error) => {
-                console.warn('Browser geolocation error:', error.message);
-                if (error.code === error.PERMISSION_DENIED) {
-                    Toast.show('Enable location to see yourself on map', 'info');
-                }
-            },
-            {
-                enableHighAccuracy: true,
-                timeout: 15000,
-                maximumAge: 60000
-            }
-        );
-    },
+    /**
+     * Check whether the Geolocation API is available.
+     * @returns {boolean}
+     */
+    function isSupported() {
+        return !!(navigator.geolocation);
+    }
 
-    startWatch() {
-        if (this.watchId !== null) return;
+    /**
+     * Haversine distance between two lat/lng points in metres.
+     *
+     * @param {number} lat1
+     * @param {number} lng1
+     * @param {number} lat2
+     * @param {number} lng2
+     * @returns {number} Distance in metres.
+     */
+    function haversine(lat1, lng1, lat2, lng2) {
+        var R = 6371000;
+        var toRad = Math.PI / 180;
+        var dLat = (lat2 - lat1) * toRad;
+        var dLng = (lng2 - lng1) * toRad;
+        var a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
 
-        this.watchId = navigator.geolocation.watchPosition(
-            (position) => {
-                const now = Date.now();
-                if (now - this.lastUploadTime >= this.UPLOAD_INTERVAL_MS) {
-                    this.uploadLocation(position);
-                }
-            },
-            (error) => {
-                console.warn('Browser location watch error:', error.message);
-            },
-            {
-                enableHighAccuracy: true,
-                timeout: 30000,
-                maximumAge: 30000
-            }
-        );
+    // -----------------------------------------------------------------------
+    // Position watcher
+    // -----------------------------------------------------------------------
 
-        console.log('Browser location watch started');
-    },
-
-    stop() {
-        if (this.watchId !== null) {
-            navigator.geolocation.clearWatch(this.watchId);
-            this.watchId = null;
-            console.log('Browser location watch stopped');
-        }
-    },
-
-    async uploadLocation(position) {
-        const accuracy = Math.round(position.coords.accuracy) || 9999;
-
-        // Skip if accuracy is too poor
-        if (accuracy > this.MAX_ACCURACY_M) {
-            console.log(`Browser location skipped: accuracy ${accuracy}m > ${this.MAX_ACCURACY_M}m threshold`);
-            return;
-        }
-
-        this.lastUploadTime = Date.now();
-
-        const locationData = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy_m: Math.round(position.coords.accuracy) || 50,
-            speed_mps: position.coords.speed || 0,
-            bearing_deg: position.coords.heading || null,
-            altitude_m: position.coords.altitude ? Math.round(position.coords.altitude) : null,
-            device_id: 'web-browser-' + (window.TRACKING_CONFIG?.userId || 'unknown'),
-            platform: 'web',
-            app_version: 'web-1.0',
-            recorded_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+    /**
+     * Callback for successful geolocation position.
+     * @param {GeolocationPosition} position
+     */
+    function onPosition(position) {
+        var coords = position.coords;
+        var loc = {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            accuracy: coords.accuracy,
+            speed: coords.speed,
+            heading: coords.heading,
+            altitude: coords.altitude,
+            timestamp: new Date(position.timestamp).toISOString(),
         };
 
-        try {
-            const response = await TrackingAPI.sendLocation(locationData);
-
-            if (response.success) {
-                console.log(`Browser location uploaded: ${locationData.lat.toFixed(5)}, ${locationData.lng.toFixed(5)} (±${locationData.accuracy_m}m)`);
-            } else {
-                console.warn('Location upload rejected:', response.message || response.error);
-            }
-        } catch (error) {
-            // Don't spam errors - network issues are expected sometimes
-            if (error.status !== 429) { // Ignore rate limit errors
-                console.error('Failed to upload browser location:', error.message || error);
+        // Distance filter: skip if we haven't moved far enough.
+        if (lastSent) {
+            var dist = haversine(
+                lastSent.latitude, lastSent.longitude,
+                loc.latitude, loc.longitude
+            );
+            if (dist < MIN_DISTANCE_M) {
+                return;
             }
         }
+
+        buffer.push(loc);
     }
-};
+
+    /**
+     * Callback for geolocation errors.
+     * @param {GeolocationPositionError} err
+     */
+    function onError(err) {
+        console.warn('[BrowserTracking] Geolocation error:', err.message);
+    }
+
+    // -----------------------------------------------------------------------
+    // Batch upload
+    // -----------------------------------------------------------------------
+
+    /**
+     * Flush the location buffer to the server.
+     * Respects mode settings: in Mode 1, only sends while sessionActive.
+     */
+    function flush() {
+        if (buffer.length === 0) return;
+
+        // Mode 1 check: only send when session is active.
+        var settings = Tracking.getState('settings') || {};
+        var mode = settings.tracking_mode || 2;
+        if (mode === 1 && !Tracking.getState('sessionActive')) {
+            return;
+        }
+
+        var batch = buffer.slice();
+        buffer = [];
+
+        Tracking.api.batchUpload(batch)
+            .then(function () {
+                // Record the last sent position for distance filtering.
+                lastSent = {
+                    latitude: batch[batch.length - 1].latitude,
+                    longitude: batch[batch.length - 1].longitude,
+                };
+            })
+            .catch(function (err) {
+                console.error('[BrowserTracking] Batch upload failed:', err);
+                // Put the failed batch back into the buffer for retry.
+                buffer = batch.concat(buffer);
+            });
+    }
+
+    // -----------------------------------------------------------------------
+    // Start / Stop
+    // -----------------------------------------------------------------------
+
+    /**
+     * Start watching the user's position and schedule batch uploads.
+     */
+    function start() {
+        if (!isSupported()) {
+            console.warn('[BrowserTracking] Geolocation not supported.');
+            return;
+        }
+
+        if (watchId !== null) {
+            // Already watching.
+            return;
+        }
+
+        watchId = navigator.geolocation.watchPosition(onPosition, onError, {
+            enableHighAccuracy: true,
+            maximumAge: 10000,
+            timeout: 30000,
+        });
+
+        batchTimer = setInterval(flush, BATCH_INTERVAL_MS);
+
+        console.info('[BrowserTracking] Started.');
+    }
+
+    /**
+     * Stop watching position and flush any remaining buffered locations.
+     */
+    function stop() {
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
+
+        if (batchTimer !== null) {
+            clearInterval(batchTimer);
+            batchTimer = null;
+        }
+
+        // Final flush.
+        flush();
+
+        console.info('[BrowserTracking] Stopped.');
+    }
+
+    // -----------------------------------------------------------------------
+    // Public interface
+    // -----------------------------------------------------------------------
+
+    Tracking.browserTracking = {
+        isSupported: isSupported,
+        start: start,
+        stop: stop,
+    };
+})();

@@ -1,27 +1,16 @@
 <?php
-/**
- * GET /tracking/api/alerts_rules_get.php
- *
- * Get alert rules and status for the family.
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-header('Content-Type: application/json');
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    Response::error('method_not_allowed', 405);
+}
 
-// Auth required
-$user = requireAuth();
-$familyId = $user['family_id'];
+$ctx = SiteContext::require($db);
 
-// Initialize services
-$alertsRepo = new AlertsRepo($db, $trackingCache);
-$eventsRepo = new EventsRepo($db);
-$alertsEngine = new AlertsEngine($alertsRepo, $eventsRepo);
+$repo = new AlertsRepo($db);
 
-// Get summary
-$summary = $alertsEngine->getSummary($familyId);
+$rules = $repo->get($ctx->familyId);
 
-// Add edit permission
-$summary['can_edit'] = in_array($user['role'], ['owner', 'admin']);
-
-jsonSuccess($summary);
+Response::success($rules);

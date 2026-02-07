@@ -1,132 +1,111 @@
 <?php
-/**
- * POST /tracking/api/batch.php
- *
- * Submit multiple location updates at once.
- * Useful for uploading buffered locations.
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-header('Content-Type: application/json');
-
-// Only POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    jsonError('method_not_allowed', 'POST required', 405);
+    Response::error('method_not_allowed', 405);
 }
 
-// Auth required
-$user = requireAuth();
-$userId = $user['id'];
-$familyId = $user['family_id'];
+$ctx = SiteContext::require($db);
+$ctx->requireLocationSharing();
 
-// Check if user has location sharing enabled
-if (!$siteContext->hasLocationSharing()) {
-    jsonError('location_sharing_disabled', 'Location sharing is disabled', 403);
+$body = json_decode(file_get_contents('php://input'), true);
+$locations = $body['locations'] ?? $body ?? [];
+
+if (!is_array($locations) || empty($locations)) {
+    Response::error('locations array is required', 422);
 }
 
-// Parse input
-$input = json_decode(file_get_contents('php://input'), true);
-if (!$input || !isset($input['locations'])) {
-    jsonError('invalid_json', 'Invalid JSON body or missing locations array', 400);
+// Cap batch size to prevent abuse
+$maxBatch = 100;
+if (count($locations) > $maxBatch) {
+    $locations = array_slice($locations, 0, $maxBatch);
 }
-
-// Validate batch
-$validation = TrackingValidator::validateBatch($input['locations']);
-if (!$validation['valid']) {
-    jsonError('validation_failed', implode('; ', $validation['errors']), 400);
-}
-
-$locations = $validation['cleaned'];
-
-// Sort by recorded_at (oldest first)
-usort($locations, function($a, $b) {
-    return strtotime($a['recorded_at']) <=> strtotime($b['recorded_at']);
-});
 
 // Initialize services
+$trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
-$sessionsRepo = new SessionsRepo($db, $trackingCache);
+$settings = $settingsRepo->get($ctx->familyId);
 $locationRepo = new LocationRepo($db, $trackingCache);
 $eventsRepo = new EventsRepo($db);
-$alertsRepo = new AlertsRepo($db, $trackingCache);
+$alertsRepo = new AlertsRepo($db);
+$alertsEngine = new AlertsEngine($db, $trackingCache, $alertsRepo);
 $geofenceRepo = new GeofenceRepo($db, $trackingCache);
+$placesRepo = new PlacesRepo($db, $trackingCache);
+$geofenceEngine = new GeofenceEngine($db, $trackingCache, $geofenceRepo, $placesRepo, $eventsRepo, $alertsEngine);
 
-$sessionGate = new SessionGate($sessionsRepo, $settingsRepo);
-$motionGate = new MotionGate($settingsRepo, $locationRepo);
-$dedupe = new Dedupe($trackingCache, $settingsRepo);
-$alertsEngine = new AlertsEngine($alertsRepo, $eventsRepo);
-$geofenceEngine = new GeofenceEngine($geofenceRepo, $eventsRepo, $alertsEngine);
+$minAccuracy = (float) ($settings['min_accuracy_m'] ?? 100);
+$dedupe = new Dedupe(
+    $trackingCache,
+    (int) ($settings['dedupe_radius_m'] ?? 10),
+    (int) ($settings['dedupe_time_seconds'] ?? 60)
+);
+$motionGate = new MotionGate(
+    (float) ($settings['speed_threshold_mps'] ?? 1.0),
+    (float) ($settings['distance_threshold_m'] ?? 50)
+);
 
-// Get settings
-$settings = $settingsRepo->get($familyId);
-
-// Session gate check (Mode 1)
-$sessionCheck = $sessionGate->check($familyId);
-if (!$sessionCheck['allowed']) {
-    jsonError('session_off', $sessionCheck['message'], 409);
-}
-
-// Process each location
+$validator = new TrackingValidator();
 $results = [];
-$accepted = 0;
-$rejected = 0;
-$lastLocation = null;
+$storedCount = 0;
 
-foreach ($locations as $location) {
-    $result = ['recorded_at' => $location['recorded_at']];
+foreach ($locations as $i => $input) {
+    $loc = $validator->validateLocation($input);
+
+    if ($loc === null) {
+        $results[] = ['index' => $i, 'status' => 'error', 'error' => implode('; ', $validator->getErrors())];
+        // Reset validator errors for next iteration
+        $validator = new TrackingValidator();
+        continue;
+    }
 
     // Accuracy check
-    if (isset($location['accuracy_m']) && $location['accuracy_m'] > $settings['min_accuracy_m']) {
-        $result['status'] = 'rejected';
-        $result['reason'] = 'poor_accuracy';
-        $rejected++;
-        $results[] = $result;
+    if ($loc['accuracy_m'] !== null && $loc['accuracy_m'] > $minAccuracy) {
+        $results[] = ['index' => $i, 'status' => 'skipped', 'reason' => 'accuracy_too_low'];
         continue;
     }
 
     // Dedupe check
-    $dedupeCheck = $dedupe->check($userId, $familyId, $location);
-    if ($dedupeCheck['is_duplicate']) {
-        $result['status'] = 'rejected';
-        $result['reason'] = 'duplicate';
-        $rejected++;
-        $results[] = $result;
+    if ($dedupe->isDuplicate($ctx->userId, $loc['lat'], $loc['lng'], $loc['recorded_at'])) {
+        $results[] = ['index' => $i, 'status' => 'skipped', 'reason' => 'deduplicated'];
         continue;
     }
 
-    // Motion analysis
-    $motionResult = $motionGate->evaluate($familyId, $userId, $location);
-    $location['motion_state'] = $motionResult['motion_state'];
+    // Determine motion state
+    $prev = $locationRepo->getCurrent($ctx->userId);
+    $motion = $motionGate->evaluate($loc, $prev);
 
-    // Store
-    $locationRepo->upsertCurrent($userId, $familyId, $location);
+    // Upsert current location
+    $locationRepo->upsertCurrent($ctx->userId, $ctx->familyId, $loc, $motion['motion_state']);
 
-    if ($motionResult['store_history']) {
-        $historyId = $locationRepo->insertHistory($userId, $familyId, $location);
-        $result['history_id'] = $historyId;
+    // Store history if motion gate says to
+    if ($motion['store_history']) {
+        $locationRepo->insertHistory($ctx->familyId, $ctx->userId, $loc, $motion['motion_state']);
     }
 
-    // Process geofences (only for latest to reduce DB load)
-    $lastLocation = $location;
+    // Process geofences on last item only to avoid excessive event processing
+    if ($i === array_key_last($locations)) {
+        $geofenceEngine->process($ctx->familyId, $ctx->userId, $loc['lat'], $loc['lng'], $ctx->name);
+    }
 
-    $result['status'] = 'accepted';
-    $result['motion_state'] = $motionResult['motion_state'];
-    $result['stored_history'] = $motionResult['store_history'];
-    $accepted++;
-    $results[] = $result;
+    $storedCount++;
+    $results[] = [
+        'index' => $i,
+        'status' => 'stored',
+        'motion_state' => $motion['motion_state'],
+        'stored_history' => $motion['store_history'],
+    ];
 }
 
-// Process geofences for final location only
-$geofenceEvents = [];
-if ($lastLocation) {
-    $geofenceEvents = $geofenceEngine->process($familyId, $userId, $lastLocation['lat'], $lastLocation['lng']);
-}
-
-jsonSuccess([
-    'total' => count($locations),
-    'accepted' => $accepted,
-    'rejected' => $rejected,
+Response::success([
+    'processed' => count($locations),
+    'stored' => $storedCount,
     'results' => $results,
-    'geofence_events' => $geofenceEvents
+    'server_settings' => [
+        'mode' => (int) ($settings['mode'] ?? 1),
+        'moving_interval' => (int) ($settings['moving_interval_seconds'] ?? 30),
+        'idle_interval' => (int) ($settings['idle_interval_seconds'] ?? 300),
+        'min_accuracy_m' => (int) ($settings['min_accuracy_m'] ?? 100),
+    ],
 ]);

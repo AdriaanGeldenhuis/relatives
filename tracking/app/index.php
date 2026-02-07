@@ -1,322 +1,545 @@
 <?php
+/**
+ * ============================================
+ * FAMILY TRACKING - MAIN DASHBOARD
+ * Fullscreen map with family member panel
+ * ============================================
+ */
 declare(strict_types=1);
 
-/**
- * Tracking Dashboard
- *
- * Fullscreen Mapbox map with family member locations.
- */
-
-// Start session first
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Quick session check
-if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
-    header('Location: /login.php', true, 302);
-    exit;
-}
-
-// Load bootstrap
 require_once __DIR__ . '/../../core/bootstrap.php';
 
-// Validate session with database
-try {
-    $auth = new Auth($db);
-    $user = $auth->getCurrentUser();
-
-    if (!$user) {
-        header('Location: /login.php?session_expired=1', true, 302);
-        exit;
-    }
-
-} catch (Exception $e) {
-    error_log('Tracking page error: ' . $e->getMessage());
-    header('Location: /login.php?error=1', true, 302);
+$session = new Session($db);
+$user = $session->validate();
+if (!$user) {
+    header('Location: /login.php');
     exit;
 }
 
-// Check subscription
-require_once __DIR__ . '/../../core/SubscriptionManager.php';
-$subscriptionManager = new SubscriptionManager($db);
+// Load tracking settings for the family
+require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-if ($subscriptionManager->isFamilyLocked($user['family_id'])) {
-    header('Location: /subscription/locked.php', true, 302);
-    exit;
-}
+$trackingCache = new TrackingCache($db);
+$settingsRepo = new SettingsRepo($db, $trackingCache);
+$familyId = (int)$user['family_id'];
+$settings = $settingsRepo->get($familyId);
 
-// Get Mapbox token
+// Load alert rules
+$alertsRepo = new AlertsRepo($db);
+$alertRules = $alertsRepo->get($familyId);
+
+// Mapbox token from environment
 $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 
-// Get family members for initial render
-$stmt = $db->prepare("
-    SELECT id, full_name as name, avatar_color, has_avatar
-    FROM users
-    WHERE family_id = ? AND status = 'active' AND location_sharing = 1
-    ORDER BY full_name
-");
-$stmt->execute([$user['family_id']]);
-$members = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Add avatar paths for members
-foreach ($members as &$member) {
-    $member['avatar_url'] = '/saves/' . $member['id'] . '/avatar/avatar.webp';
-}
-unset($member);
-
-// Set up page variables for global header
 $pageTitle = 'Family Tracking';
 $pageCSS = ['/tracking/app/assets/css/tracking.css'];
-
-// Include global header
 require_once __DIR__ . '/../../shared/components/header.php';
-
-// Override cache version for tracking app AFTER header (header sets 12.0.0)
-// Use unique version to bust Cloudflare CDN cache
-$cacheVersion = '12.3.6';
 ?>
 
-<!-- Add body class for tracking map page (replaces CSS :has() for browser compatibility) -->
-<script>document.body.classList.add('tracking-map-page');</script>
-
-<!-- PWA Manifest for Native App Shell Support -->
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
 <link rel="manifest" href="/tracking/app/manifest.json">
-<meta name="format-detection" content="telephone=no">
 
-<!-- Mapbox GL JS -->
-<link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
-<script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+<div class="tracking-app">
 
-<!-- Tracking Page Wrapper -->
-<div class="tracking-page-wrapper">
+    <!-- Top Bar -->
+    <div class="tracking-topbar">
+        <div class="tracking-topbar-title">Family Tracking</div>
+        <div class="tracking-topbar-actions">
+            <a href="/tracking/app/events.php" class="tracking-topbar-btn" title="Events">
+                <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            </a>
+            <a href="/tracking/app/geofences.php" class="tracking-topbar-btn" title="Geofences">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+            </a>
+            <a href="/tracking/app/settings.php" class="tracking-topbar-btn" title="Settings">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </a>
+        </div>
+    </div>
+
     <!-- Map Container -->
-    <div id="map"></div>
+    <div id="trackingMap"></div>
 
-    <!-- Session Indicator / Wake Button -->
-    <button id="session-indicator" class="session-indicator session-sleeping" title="Click to wake tracking devices">
-        <div class="session-dot"></div>
-        <span class="session-text">Wake Devices</span>
+    <!-- Family Members Panel -->
+    <div class="family-panel" id="familyPanel">
+        <div class="family-panel-header" id="familyPanelHeader">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span class="family-panel-title">Family</span>
+                <span class="family-panel-badge" id="memberCount">0</span>
+            </div>
+            <button class="family-panel-toggle" id="familyPanelToggle" title="Toggle panel">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+        </div>
+        <div class="family-panel-body" id="memberList">
+            <!-- Members loaded dynamically -->
+            <div class="member-empty" id="memberEmpty">
+                <div class="member-empty-icon"></div>
+                <div class="member-empty-text">No members online</div>
+                <div class="member-empty-sub">Waiting for family members to share location</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wake / Location Share Button (FAB) -->
+    <button class="wake-fab" id="wakeFab" title="Share your location / Wake devices">
+        <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
     </button>
 
-    <!-- Family Panel (popup) -->
-    <div id="family-panel" class="family-panel">
-        <div class="family-panel-header">
-            <span>Family</span>
-            <button class="family-panel-close" id="family-panel-close">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M18 6L6 18M6 6l12 12"/>
-                </svg>
-            </button>
-        </div>
-        <div class="family-panel-content">
-            <div id="family-list" class="family-list">
-                <!-- Members populated by JS -->
+    <!-- Directions Info Bar -->
+    <div class="directions-bar" id="directionsBar">
+        <div class="directions-info">
+            <div class="directions-stat">
+                <div class="directions-stat-value" id="directionsDistance">--</div>
+                <div class="directions-stat-label">Distance</div>
+            </div>
+            <div class="directions-divider"></div>
+            <div class="directions-stat">
+                <div class="directions-stat-value" id="directionsDuration">--</div>
+                <div class="directions-stat-label">Duration</div>
             </div>
         </div>
-    </div>
-
-    <!-- Controls -->
-    <div class="map-controls">
-        <button id="btn-family" class="control-btn" title="Family members">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-        </button>
-        <button id="btn-center-all" class="control-btn" title="Fit all members">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-            </svg>
-        </button>
-        <button id="btn-my-location" class="control-btn" title="My location">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
-            </svg>
-        </button>
-        <button id="btn-map-theme" class="control-btn" title="Map style">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
-                <line x1="8" y1="2" x2="8" y2="18"/>
-                <line x1="16" y1="6" x2="16" y2="22"/>
-            </svg>
-        </button>
-        <button id="btn-geofences" class="control-btn" title="Geofences">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <circle cx="12" cy="12" r="4"/>
-            </svg>
-        </button>
-        <button id="btn-events" class="control-btn" title="Events">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 8v4l3 3"/>
-                <circle cx="12" cy="12" r="10"/>
-            </svg>
-        </button>
-        <button id="btn-settings" class="control-btn" title="Settings">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
+        <button class="directions-close" id="directionsClose" title="Close directions">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
     </div>
 
-    <!-- Theme Picker -->
-    <div id="theme-picker" class="theme-picker hidden">
-        <div class="theme-picker-title">Map Style</div>
-        <div class="theme-options">
-            <button class="theme-option" data-theme="dark">
-                <div class="theme-preview theme-dark"></div>
-                <span>Dark</span>
-            </button>
-            <button class="theme-option" data-theme="light">
-                <div class="theme-preview theme-light"></div>
-                <span>Light</span>
-            </button>
-            <button class="theme-option" data-theme="satellite">
-                <div class="theme-preview theme-satellite"></div>
-                <span>Satellite</span>
-            </button>
+</div><!-- .tracking-app -->
+
+<!-- Consent Dialog -->
+<div class="consent-overlay" id="consentOverlay">
+    <div class="consent-card">
+        <div class="consent-header">
+            <div class="consent-icon"></div>
+            <h2 class="consent-title">Enable Location Sharing</h2>
+            <p class="consent-subtitle">Share your location with family members so everyone can stay connected and safe.</p>
+        </div>
+        <div class="consent-toggles">
+            <div class="consent-toggle-row">
+                <div>
+                    <div class="consent-toggle-label">Location Sharing</div>
+                    <div class="consent-toggle-desc">Share your real-time position with family</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="consentLocation" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="consent-toggle-row">
+                <div>
+                    <div class="consent-toggle-label">Background Tracking</div>
+                    <div class="consent-toggle-desc">Continue tracking when app is in background</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="consentBackground" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="consent-toggle-row">
+                <div>
+                    <div class="consent-toggle-label">Geofence Alerts</div>
+                    <div class="consent-toggle-desc">Notify when members enter or leave zones</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="consentGeofence" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+        <div class="consent-actions">
+            <button class="consent-btn consent-btn-secondary" id="consentDecline">Not Now</button>
+            <button class="consent-btn consent-btn-primary" id="consentAccept">Enable Sharing</button>
         </div>
     </div>
-
-    <!-- Member Popup (for directions etc) -->
-    <div id="member-popup" class="member-popup hidden">
-        <div class="popup-header">
-            <div class="popup-avatar" id="popup-avatar"></div>
-            <div class="popup-info">
-                <div class="popup-name" id="popup-name"></div>
-                <div class="popup-status" id="popup-status"></div>
-            </div>
-            <button class="popup-close" id="popup-close">&times;</button>
-        </div>
-
-        <!-- Member Details -->
-        <div class="popup-details" id="popup-details">
-            <div class="detail-row" id="detail-speed">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M12 6v6l4 2"/>
-                </svg>
-                <span class="detail-label">Speed</span>
-                <span class="detail-value" id="popup-speed">--</span>
-            </div>
-            <div class="detail-row" id="detail-bearing">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-                </svg>
-                <span class="detail-label">Direction</span>
-                <span class="detail-value" id="popup-bearing">--</span>
-            </div>
-            <div class="detail-row" id="detail-accuracy">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <circle cx="12" cy="12" r="6"/>
-                    <circle cx="12" cy="12" r="2"/>
-                </svg>
-                <span class="detail-label">Accuracy</span>
-                <span class="detail-value" id="popup-accuracy">--</span>
-            </div>
-            <div class="detail-row" id="detail-updated">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12 6 12 12 16 14"/>
-                </svg>
-                <span class="detail-label">Updated</span>
-                <span class="detail-value" id="popup-updated">--</span>
-            </div>
-            <div class="detail-row" id="detail-coordinates">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                    <circle cx="12" cy="10" r="3"/>
-                </svg>
-                <span class="detail-label">Address</span>
-                <span class="detail-value" id="popup-coordinates">--</span>
-            </div>
-        </div>
-
-        <div class="popup-actions">
-            <button class="popup-btn" id="btn-follow">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                </svg>
-                Follow
-            </button>
-            <button class="popup-btn" id="btn-directions">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 11l19-9-9 19-2-8-8-2z"/>
-                </svg>
-                Directions
-            </button>
-        </div>
-    </div>
-
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="loading-overlay">
-        <div class="loading-spinner"></div>
-    </div>
-
-    <!-- Toast Container -->
-    <div id="toast-container" class="toast-container"></div>
 </div>
 
-<!-- Config -->
+<!-- Notification Permission Prompt -->
+<div class="notification-prompt" id="notifPrompt">
+    <div class="notification-prompt-text">
+        Enable notifications to get alerts when family members arrive or leave places.
+    </div>
+    <div class="notification-prompt-actions">
+        <button class="notification-prompt-btn notification-prompt-allow" id="notifAllow">Allow</button>
+        <button class="notification-prompt-btn notification-prompt-dismiss" id="notifDismiss">Later</button>
+    </div>
+</div>
+
+<!-- Initial Data -->
 <script>
-    window.TRACKING_CONFIG = {
-        mapboxToken: '<?= htmlspecialchars($mapboxToken) ?>',
-        userId: <?= (int)$user['id'] ?>,
-        familyId: <?= (int)$user['family_id'] ?>,
-        userName: '<?= htmlspecialchars($user['name']) ?>',
-        members: <?= json_encode($members) ?>,
+    window.TrackingConfig = {
+        mapboxToken: <?php echo json_encode($mapboxToken); ?>,
+        userId: <?php echo (int)$user['id']; ?>,
+        familyId: <?php echo $familyId; ?>,
+        userName: <?php echo json_encode($user['name'] ?? $user['full_name'] ?? 'User'); ?>,
+        userRole: <?php echo json_encode($user['role']); ?>,
+        avatarColor: <?php echo json_encode($user['avatar_color'] ?? '#667eea'); ?>,
+        settings: <?php echo json_encode($settings); ?>,
+        alertRules: <?php echo json_encode($alertRules); ?>,
         apiBase: '/tracking/api',
-        defaultCenter: [-26.2041, 28.0473], // Johannesburg
-        defaultZoom: 12
+        isAdmin: <?php echo json_encode(in_array($user['role'], ['owner', 'admin'])); ?>
     };
 </script>
 
-<!-- Tracking JS -->
-<script src="/tracking/app/assets/js/format.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/api.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/state.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/native-bridge.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/map.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/family-panel.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/ui-controls.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/follow.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/directions.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/polling.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/browser-tracking.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="/tracking/app/assets/js/bootstrap.js?v=<?php echo $cacheVersion; ?>"></script>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
 
-<!-- Service Worker Registration -->
+<?php
+$pageJS = [
+    '/tracking/app/assets/js/state.js',
+];
+require_once __DIR__ . '/../../shared/components/footer.php';
+?>
+
 <script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/tracking/app/sw.js', {
-                scope: '/tracking/'
-            }).then((registration) => {
-                console.log('[SW] Registered:', registration.scope);
+(function() {
+    'use strict';
 
-                // Check for updates
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing;
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            // New content available, show refresh prompt
-                            if (window.Toast) {
-                                Toast.show('Update available. Refresh for latest version.', 'info');
-                            }
-                        }
-                    });
-                });
-            }).catch((error) => {
-                console.warn('[SW] Registration failed:', error);
-            });
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/tracking/app/sw.js').catch(function(err) {
+            console.warn('[SW] Registration failed:', err);
         });
     }
-</script>
 
-<?php require_once __DIR__ . '/../../shared/components/footer.php'; ?>
+    // Add tracking-page class to body
+    document.body.classList.add('tracking-page');
+
+    // Initialize Mapbox
+    if (!window.TrackingConfig.mapboxToken) {
+        console.error('[Tracking] No Mapbox token configured');
+        return;
+    }
+
+    mapboxgl.accessToken = window.TrackingConfig.mapboxToken;
+
+    var mapStyle = 'mapbox://styles/mapbox/dark-v11';
+    var savedStyle = window.TrackingConfig.settings.map_style;
+    if (savedStyle === 'streets') mapStyle = 'mapbox://styles/mapbox/streets-v12';
+    else if (savedStyle === 'satellite') mapStyle = 'mapbox://styles/mapbox/satellite-streets-v12';
+    else if (savedStyle === 'light') mapStyle = 'mapbox://styles/mapbox/light-v11';
+
+    var map = new mapboxgl.Map({
+        container: 'trackingMap',
+        style: mapStyle,
+        center: [28.0473, -26.2041], // Default: Johannesburg
+        zoom: 12,
+        attributionControl: false
+    });
+
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.addControl(new mapboxgl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: true,
+        showUserHeading: true
+    }), 'top-right');
+
+    Tracking.setState('mapReady', true);
+    window.trackingMap = map;
+
+    // Markers storage
+    var markers = {};
+
+    // Fetch family members periodically
+    function fetchMembers() {
+        fetch(window.TrackingConfig.apiBase + '/current.php', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && data.members) {
+                    Tracking.setState('members', data.members);
+                    renderMembers(data.members);
+                    updateMarkers(data.members);
+                }
+            })
+            .catch(function(err) {
+                console.error('[Tracking] Fetch error:', err);
+            });
+    }
+
+    function renderMembers(members) {
+        var list = document.getElementById('memberList');
+        var empty = document.getElementById('memberEmpty');
+        var badge = document.getElementById('memberCount');
+
+        if (!members || members.length === 0) {
+            empty.style.display = '';
+            badge.textContent = '0';
+            return;
+        }
+
+        empty.style.display = 'none';
+        badge.textContent = members.length;
+
+        var html = '';
+        members.forEach(function(m) {
+            var initial = (m.name || 'U').charAt(0).toUpperCase();
+            var statusClass = getStatusClass(m);
+            var timeAgo = formatTimeAgo(m.recorded_at || m.updated_at);
+            var speed = formatSpeed(m.speed_mps);
+
+            html += '<div class="member-item" data-user-id="' + m.user_id + '" onclick="flyToMember(' + m.user_id + ')">';
+            html += '  <div class="member-avatar" style="background:' + (m.avatar_color || '#667eea') + '">';
+            html += '    <span>' + initial + '</span>';
+            html += '    <span class="member-status-dot ' + statusClass + '"></span>';
+            html += '  </div>';
+            html += '  <div class="member-info">';
+            html += '    <div class="member-name">' + escapeHtml(m.name || 'Unknown') + '</div>';
+            html += '    <div class="member-meta">';
+            html += '      <span class="member-time">' + timeAgo + '</span>';
+            if (speed) {
+                html += '      <span class="member-speed' + (parseFloat(m.speed_mps) > 1 ? ' moving' : '') + '">' + speed + '</span>';
+            }
+            html += '    </div>';
+            html += '  </div>';
+            html += '  <div class="member-actions">';
+            html += '    <button class="member-action-btn" onclick="event.stopPropagation(); getDirections(' + m.user_id + ')" title="Directions">';
+            html += '      <svg viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>';
+            html += '    </button>';
+            html += '  </div>';
+            html += '</div>';
+        });
+
+        // Preserve scroll position
+        var scrollTop = list.scrollTop;
+        list.innerHTML = html;
+        list.scrollTop = scrollTop;
+    }
+
+    function updateMarkers(members) {
+        var activeIds = {};
+        members.forEach(function(m) {
+            activeIds[m.user_id] = true;
+            var lngLat = [parseFloat(m.lng), parseFloat(m.lat)];
+            if (markers[m.user_id]) {
+                markers[m.user_id].setLngLat(lngLat);
+            } else {
+                var el = document.createElement('div');
+                el.className = 'map-marker';
+                var initial = (m.name || 'U').charAt(0).toUpperCase();
+                el.innerHTML = '<div class="map-marker-inner" style="background:' + (m.avatar_color || '#667eea') + '">' + initial + '</div>';
+                markers[m.user_id] = new mapboxgl.Marker({ element: el })
+                    .setLngLat(lngLat)
+                    .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(
+                        '<strong>' + escapeHtml(m.name || 'Unknown') + '</strong><br>' +
+                        '<span style="font-size:12px;opacity:0.7">' + formatTimeAgo(m.recorded_at || m.updated_at) + '</span>'
+                    ))
+                    .addTo(map);
+            }
+        });
+
+        // Remove stale markers
+        Object.keys(markers).forEach(function(uid) {
+            if (!activeIds[uid]) {
+                markers[uid].remove();
+                delete markers[uid];
+            }
+        });
+    }
+
+    function getStatusClass(m) {
+        var ts = new Date(m.recorded_at || m.updated_at).getTime();
+        var now = Date.now();
+        var diffMin = (now - ts) / 60000;
+        if (diffMin < 5) return 'online';
+        if (diffMin < 30) return 'idle';
+        return 'offline';
+    }
+
+    function formatTimeAgo(dateStr) {
+        if (!dateStr) return 'unknown';
+        var diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+        if (diff < 60) return 'just now';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+        return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    function formatSpeed(mps) {
+        var val = parseFloat(mps);
+        if (!val || val < 0.5) return '';
+        var units = window.TrackingConfig.settings.units || 'metric';
+        if (units === 'imperial') {
+            return (val * 2.237).toFixed(0) + ' mph';
+        }
+        return (val * 3.6).toFixed(0) + ' km/h';
+    }
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
+
+    // Fly to member
+    window.flyToMember = function(userId) {
+        var members = Tracking.getState('members') || [];
+        var m = members.find(function(x) { return x.user_id == userId; });
+        if (m) {
+            map.flyTo({ center: [parseFloat(m.lng), parseFloat(m.lat)], zoom: 16, duration: 1500 });
+            Tracking.setState('selectedMember', userId);
+
+            // Highlight active member
+            document.querySelectorAll('.member-item').forEach(function(el) {
+                el.classList.toggle('active', el.dataset.userId == userId);
+            });
+
+            // Open popup
+            if (markers[userId]) {
+                markers[userId].togglePopup();
+            }
+        }
+    };
+
+    // Get directions to member
+    window.getDirections = function(userId) {
+        if (!navigator.geolocation) return;
+        var members = Tracking.getState('members') || [];
+        var m = members.find(function(x) { return x.user_id == userId; });
+        if (!m) return;
+
+        navigator.geolocation.getCurrentPosition(function(pos) {
+            var url = window.TrackingConfig.apiBase + '/directions.php' +
+                '?from_lat=' + pos.coords.latitude +
+                '&from_lng=' + pos.coords.longitude +
+                '&to_lat=' + m.lat +
+                '&to_lng=' + m.lng;
+
+            fetch(url, { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok && data.route) {
+                        showDirections(data.route);
+                    }
+                })
+                .catch(function(err) {
+                    console.error('[Directions] Error:', err);
+                });
+        });
+    };
+
+    function showDirections(route) {
+        var bar = document.getElementById('directionsBar');
+        document.getElementById('directionsDistance').textContent = route.distance_text || '--';
+        document.getElementById('directionsDuration').textContent = route.duration_text || '--';
+        bar.classList.add('active');
+
+        // Draw route on map if geometry available
+        if (route.geometry) {
+            if (map.getSource('route')) {
+                map.getSource('route').setData({ type: 'Feature', geometry: route.geometry });
+            } else {
+                map.addSource('route', {
+                    type: 'geojson',
+                    data: { type: 'Feature', geometry: route.geometry }
+                });
+                map.addLayer({
+                    id: 'route',
+                    type: 'line',
+                    source: 'route',
+                    layout: { 'line-join': 'round', 'line-cap': 'round' },
+                    paint: { 'line-color': '#667eea', 'line-width': 4, 'line-opacity': 0.8 }
+                });
+            }
+        }
+    }
+
+    document.getElementById('directionsClose').addEventListener('click', function() {
+        document.getElementById('directionsBar').classList.remove('active');
+        if (map.getLayer('route')) map.removeLayer('route');
+        if (map.getSource('route')) map.removeSource('route');
+    });
+
+    // Panel toggle
+    var panel = document.getElementById('familyPanel');
+    var panelToggle = document.getElementById('familyPanelToggle');
+    var panelHeader = document.getElementById('familyPanelHeader');
+    var isMobile = window.innerWidth <= 768;
+
+    panelToggle.addEventListener('click', function() {
+        if (isMobile) {
+            panel.classList.toggle('expanded');
+        } else {
+            panel.classList.toggle('collapsed');
+        }
+    });
+
+    if (isMobile) {
+        panelHeader.addEventListener('click', function(e) {
+            if (e.target === panelHeader || e.target.classList.contains('family-panel-title')) {
+                panel.classList.toggle('expanded');
+            }
+        });
+    }
+
+    // Wake FAB
+    var wakeFab = document.getElementById('wakeFab');
+    wakeFab.addEventListener('click', function() {
+        fetch(window.TrackingConfig.apiBase + '/wake_devices.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ family_id: window.TrackingConfig.familyId })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                wakeFab.classList.add('tracking-active');
+                setTimeout(function() { wakeFab.classList.remove('tracking-active'); }, 5000);
+            }
+        })
+        .catch(function() {});
+    });
+
+    // Consent dialog logic
+    var consentOverlay = document.getElementById('consentOverlay');
+    var hasConsent = localStorage.getItem('tracking_consent');
+
+    if (!hasConsent) {
+        setTimeout(function() {
+            consentOverlay.classList.add('active');
+        }, 1500);
+    } else {
+        Tracking.setState('consentGiven', true);
+    }
+
+    document.getElementById('consentAccept').addEventListener('click', function() {
+        localStorage.setItem('tracking_consent', '1');
+        Tracking.setState('consentGiven', true);
+        consentOverlay.classList.remove('active');
+        requestNotificationPermission();
+    });
+
+    document.getElementById('consentDecline').addEventListener('click', function() {
+        localStorage.setItem('tracking_consent', '0');
+        consentOverlay.classList.remove('active');
+    });
+
+    // Notification permission
+    function requestNotificationPermission() {
+        if ('Notification' in window && Notification.permission === 'default') {
+            setTimeout(function() {
+                document.getElementById('notifPrompt').classList.add('active');
+            }, 2000);
+        }
+    }
+
+    document.getElementById('notifAllow').addEventListener('click', function() {
+        Notification.requestPermission();
+        document.getElementById('notifPrompt').classList.remove('active');
+    });
+
+    document.getElementById('notifDismiss').addEventListener('click', function() {
+        document.getElementById('notifPrompt').classList.remove('active');
+    });
+
+    if (hasConsent === '1' && 'Notification' in window && Notification.permission === 'default') {
+        requestNotificationPermission();
+    }
+
+    // Initial fetch then poll
+    map.on('load', function() {
+        fetchMembers();
+        var pollInterval = (window.TrackingConfig.settings.keepalive_interval_seconds || 30) * 1000;
+        setInterval(fetchMembers, Math.max(pollInterval, 10000));
+    });
+
+})();
+</script>

@@ -1,489 +1,517 @@
 /**
- * Map Module
+ * Tracking App - Mapbox Map Integration
+ *
+ * Manages the Mapbox GL JS map instance, member markers with custom HTML
+ * avatars, geofence overlays, and route lines.
+ *
+ * Requires:
+ *   - Mapbox GL JS v3 loaded globally (mapboxgl)
+ *   - window.MAPBOX_TOKEN set before init()
+ *   - Tracking.format (for popups)
+ *
+ * Usage:
+ *   Tracking.map.init('map-container');
+ *   Tracking.map.updateMemberMarkers(members);
  */
+window.Tracking = window.Tracking || {};
 
-window.TrackingMap = {
-    map: null,
-    markers: {},
-    geofenceCircles: {},
-    directionsLayer: null,
-    currentTheme: 'dark',
+(function () {
+    'use strict';
 
-    // Map style URLs
-    themes: {
-        dark: 'mapbox://styles/mapbox/dark-v11',
-        light: 'mapbox://styles/mapbox/light-v11',
-        satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
-    },
+    // Default map centre: South Africa
+    var DEFAULT_CENTER = [25.5, -28.5]; // [lng, lat]
+    var DEFAULT_ZOOM = 5;
+
+    /** @type {mapboxgl.Map|null} */
+    var map = null;
 
     /**
-     * Initialize map
+     * Marker store keyed by member id.
+     * @type {Object.<string|number, mapboxgl.Marker>}
      */
-    init() {
-        const config = window.TRACKING_CONFIG;
+    var markers = {};
 
-        mapboxgl.accessToken = config.mapboxToken;
+    /** Geofence source/layer names for easy cleanup. */
+    var GEOFENCE_SOURCE = 'geofences-source';
+    var GEOFENCE_FILL_LAYER = 'geofences-fill';
+    var GEOFENCE_LINE_LAYER = 'geofences-line';
 
-        // Load saved theme from localStorage
-        const savedTheme = localStorage.getItem('tracking_map_theme');
-        if (savedTheme && this.themes[savedTheme]) {
-            this.currentTheme = savedTheme;
+    /** Route source/layer names. */
+    var ROUTE_SOURCE = 'route-source';
+    var ROUTE_LAYER = 'route-layer';
+
+    // -----------------------------------------------------------------------
+    // Initialisation
+    // -----------------------------------------------------------------------
+
+    /**
+     * Create and attach the Mapbox GL map.
+     *
+     * @param {string} containerId - DOM element id for the map container.
+     * @returns {mapboxgl.Map} The map instance.
+     */
+    function init(containerId) {
+        if (map) {
+            console.warn('[Map] Already initialised.');
+            return map;
         }
 
-        this.map = new mapboxgl.Map({
-            container: 'map',
-            style: this.themes[this.currentTheme],
-            center: [config.defaultCenter[1], config.defaultCenter[0]], // lng, lat
-            zoom: config.defaultZoom,
-            attributionControl: false
+        mapboxgl.accessToken = window.MAPBOX_TOKEN;
+
+        map = new mapboxgl.Map({
+            container: containerId,
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: DEFAULT_CENTER,
+            zoom: DEFAULT_ZOOM,
+            attributionControl: true,
         });
 
-        // Add controls
-        this.map.addControl(new mapboxgl.AttributionControl({
-            compact: true
-        }), 'bottom-left');
+        // Navigation controls (zoom, compass).
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-        // Map loaded
-        this.map.on('load', () => {
-            this.onMapLoaded();
+        // Geolocation control.
+        map.addControl(
+            new mapboxgl.GeolocateControl({
+                positionOptions: { enableHighAccuracy: true },
+                trackUserLocation: true,
+                showUserHeading: true,
+            }),
+            'top-right'
+        );
+
+        map.on('load', function () {
+            Tracking.setState('mapReady', true);
+            addGeofenceSourceAndLayers();
+            addRouteSourceAndLayer();
         });
 
-        // Listen for state changes
-        TrackingState.on('members:updated', (members) => this.updateMarkers(members));
-        TrackingState.on('geofences:toggled', (show) => this.toggleGeofences(show));
-        TrackingState.on('directions:updated', (route) => this.showDirections(route));
-        TrackingState.on('directions:cleared', () => this.clearDirections());
-    },
+        return map;
+    }
 
     /**
-     * Map loaded callback
+     * Return the underlying mapboxgl.Map instance (or null).
+     * @returns {mapboxgl.Map|null}
      */
-    onMapLoaded() {
-        // Add directions source/layer
-        this.map.addSource('directions', {
-            type: 'geojson',
-            data: { type: 'FeatureCollection', features: [] }
-        });
+    function getMap() {
+        return map;
+    }
 
-        this.map.addLayer({
-            id: 'directions-line',
-            type: 'line',
-            source: 'directions',
-            layout: {
-                'line-join': 'round',
-                'line-cap': 'round'
-            },
-            paint: {
-                'line-color': '#667eea',
-                'line-width': 4,
-                'line-opacity': 0.8
-            }
-        });
-
-        // Load initial data
-        window.dispatchEvent(new Event('map:ready'));
-    },
+    // -----------------------------------------------------------------------
+    // Member markers
+    // -----------------------------------------------------------------------
 
     /**
-     * Update member markers
+     * Derive a consistent colour from a member's name or id.
+     *
+     * @param {Object} member
+     * @returns {string} A hex colour.
      */
-    updateMarkers(members) {
-        const existingIds = new Set(Object.keys(this.markers));
-        const currentIds = new Set(members.map(m => String(m.user_id)));
-
-        // Remove markers for members no longer present
-        existingIds.forEach(id => {
-            if (!currentIds.has(id)) {
-                this.markers[id].remove();
-                delete this.markers[id];
-            }
-        });
-
-        // Add/update markers
-        members.forEach(member => {
-            const id = String(member.user_id);
-
-            if (this.markers[id]) {
-                // Update existing
-                this.updateMarker(id, member);
-            } else {
-                // Create new
-                this.createMarker(member);
-            }
-        });
-
-        // If following, pan to member
-        if (TrackingState.followingMember) {
-            const member = members.find(m => m.user_id === TrackingState.followingMember);
-            if (member) {
-                this.panTo(member.lat, member.lng);
-            }
+    function memberColor(member) {
+        if (member.color) {
+            return member.color;
         }
-    },
-
-    /**
-     * Create marker for member
-     */
-    createMarker(member) {
-        const el = document.createElement('div');
-        el.className = 'marker';
-        el.innerHTML = `
-            <div class="marker-pin" style="--pin-color: ${member.avatar_color}">
-                <div class="marker-avatar">
-                    <img src="${member.avatar_url}"
-                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                         alt="${member.name}">
-                    <span class="marker-fallback">${Format.initials(member.name)}</span>
-                </div>
-                <div class="marker-point"></div>
-            </div>
-            <div class="marker-pulse"></div>
-        `;
-
-        // Update class based on status
-        this.updateMarkerClass(el, member);
-
-        // Click handler
-        el.addEventListener('click', () => {
-            TrackingState.selectMember(member.user_id);
-            this.panTo(member.lat, member.lng);
-        });
-
-        const marker = new mapboxgl.Marker(el)
-            .setLngLat([member.lng, member.lat])
-            .addTo(this.map);
-
-        const markerId = String(member.user_id);
-        this.markers[markerId] = marker;
-        this.markers[markerId].element = el;
-        this.markers[markerId].data = member;
-    },
-
-    /**
-     * Update existing marker
-     */
-    updateMarker(id, member) {
-        const marker = this.markers[id];
-        marker.setLngLat([member.lng, member.lat]);
-        marker.data = member;
-        this.updateMarkerClass(marker.element, member);
-    },
-
-    /**
-     * Update marker CSS class based on status
-     */
-    updateMarkerClass(el, member) {
-        el.classList.remove('moving', 'stale', 'offline');
-
-        if (member.status === 'offline') {
-            el.classList.add('offline');
-        } else if (member.status === 'stale') {
-            el.classList.add('stale');
-        } else if (member.motion_state === 'moving') {
-            el.classList.add('moving');
+        var COLORS = [
+            '#ef4444', '#3b82f6', '#22c55e', '#a855f7',
+            '#f97316', '#06b6d4', '#ec4899', '#14b8a6',
+        ];
+        var hash = 0;
+        var str = String(member.id || member.name || '');
+        for (var i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
         }
-    },
+        return COLORS[Math.abs(hash) % COLORS.length];
+    }
 
     /**
-     * Pan to location
+     * Build the custom HTML element for a member marker.
+     *
+     * @param {Object} member
+     * @returns {HTMLElement}
      */
-    panTo(lat, lng, zoom = null) {
-        const options = {
-            center: [lng, lat],
-            duration: 500
-        };
-        if (zoom) options.zoom = zoom;
+    function buildMarkerElement(member) {
+        var color = memberColor(member);
+        var initial = (member.name || '?').charAt(0).toUpperCase();
 
-        this.map.easeTo(options);
-    },
+        var el = document.createElement('div');
+        el.className = 'tracking-marker';
+        el.style.cssText =
+            'width:36px;height:36px;border-radius:50%;background:' + color +
+            ';color:#fff;display:flex;align-items:center;justify-content:center;' +
+            'font-weight:700;font-size:16px;border:3px solid #fff;' +
+            'box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer;';
+        el.textContent = initial;
+        el.title = member.name || 'Member';
+
+        return el;
+    }
 
     /**
-     * Fit all members in view
+     * Build popup HTML for a member marker.
+     *
+     * @param {Object} member
+     * @returns {string}
      */
-    fitAll() {
-        const members = TrackingState.members;
-        if (members.length === 0) return;
+    function buildPopupHTML(member) {
+        var fmt = Tracking.format || {};
+        var speedText = fmt.speed ? fmt.speed(member.speed) : (member.speed || '--');
+        var agoText = fmt.timeAgo ? fmt.timeAgo(member.updated_at) : (member.updated_at || '--');
+        var icon = fmt.motionIcon ? fmt.motionIcon(member.motion_state) : '';
 
-        if (members.length === 1) {
-            this.panTo(members[0].lat, members[0].lng, 14);
+        return '<div style="min-width:140px">' +
+            '<strong>' + escapeHtml(member.name || 'Unknown') + '</strong>' +
+            '<div style="font-size:13px;margin-top:4px;">' +
+                icon + ' ' + escapeHtml(speedText) +
+            '</div>' +
+            '<div style="font-size:12px;color:#666;margin-top:2px;">' +
+                'Updated: ' + escapeHtml(agoText) +
+            '</div>' +
+        '</div>';
+    }
+
+    /**
+     * Escape HTML entities in a string for safe insertion.
+     * @param {string} str
+     * @returns {string}
+     */
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(String(str)));
+        return div.innerHTML;
+    }
+
+    /**
+     * Add or update a marker for a single family member.
+     *
+     * @param {Object} member - Must include id, name, latitude, longitude.
+     */
+    function addMemberMarker(member) {
+        if (!map || member.latitude == null || member.longitude == null) {
             return;
         }
 
-        const bounds = new mapboxgl.LngLatBounds();
-        members.forEach(m => bounds.extend([m.lng, m.lat]));
+        var lngLat = [parseFloat(member.longitude), parseFloat(member.latitude)];
 
-        this.map.fitBounds(bounds, {
-            padding: 80,
-            maxZoom: 15,
-            duration: 500
-        });
-    },
-
-    /**
-     * Toggle geofences visibility
-     */
-    toggleGeofences(show) {
-        if (show) {
-            this.showGeofences();
-        } else {
-            this.hideGeofences();
-        }
-    },
-
-    /**
-     * Show geofences on map
-     */
-    async showGeofences() {
-        try {
-            const response = await TrackingAPI.getGeofences();
-            const geofences = response.data.geofences;
-
-            geofences.forEach(geo => {
-                if (geo.type === 'circle' && !this.geofenceCircles[geo.id]) {
-                    this.addGeofenceCircle(geo);
-                }
-            });
-        } catch (err) {
-            console.error('Failed to load geofences:', err);
-        }
-    },
-
-    /**
-     * Add geofence circle to map
-     */
-    addGeofenceCircle(geofence) {
-        // Create circle as GeoJSON source
-        const sourceId = `geofence-${geofence.id}`;
-
-        if (!this.map.getSource(sourceId)) {
-            this.map.addSource(sourceId, {
-                type: 'geojson',
-                data: this.createCircleGeoJSON(
-                    geofence.center_lat,
-                    geofence.center_lng,
-                    geofence.radius_m
-                )
-            });
-
-            this.map.addLayer({
-                id: `${sourceId}-fill`,
-                type: 'fill',
-                source: sourceId,
-                paint: {
-                    'fill-color': '#667eea',
-                    'fill-opacity': 0.15
-                }
-            });
-
-            this.map.addLayer({
-                id: `${sourceId}-line`,
-                type: 'line',
-                source: sourceId,
-                paint: {
-                    'line-color': '#667eea',
-                    'line-width': 2,
-                    'line-opacity': 0.6
-                }
-            });
+        if (markers[member.id]) {
+            // Update existing marker position and popup.
+            markers[member.id].setLngLat(lngLat);
+            markers[member.id].getPopup().setHTML(buildPopupHTML(member));
+            return;
         }
 
-        // Add label marker
-        const labelEl = document.createElement('div');
-        labelEl.className = 'geofence-label';
-        labelEl.textContent = geofence.name;
+        // Create new marker.
+        var el = buildMarkerElement(member);
+        var popup = new mapboxgl.Popup({ offset: 20, closeButton: false })
+            .setHTML(buildPopupHTML(member));
 
-        const marker = new mapboxgl.Marker(labelEl)
-            .setLngLat([geofence.center_lng, geofence.center_lat])
-            .addTo(this.map);
+        var marker = new mapboxgl.Marker({ element: el })
+            .setLngLat(lngLat)
+            .setPopup(popup)
+            .addTo(map);
 
-        this.geofenceCircles[geofence.id] = { sourceId, marker };
-    },
+        markers[member.id] = marker;
+    }
 
     /**
-     * Create circle GeoJSON (approximation using polygon)
+     * Update all member markers from a members array.
+     * Removes markers for members no longer present.
+     *
+     * @param {Object[]} members
      */
-    createCircleGeoJSON(lat, lng, radiusM) {
-        const points = 64;
-        const coords = [];
-
-        for (let i = 0; i <= points; i++) {
-            const angle = (i / points) * 2 * Math.PI;
-            const dx = radiusM * Math.cos(angle);
-            const dy = radiusM * Math.sin(angle);
-
-            // Convert to lat/lng offset
-            const latOffset = dy / 111320;
-            const lngOffset = dx / (111320 * Math.cos(lat * Math.PI / 180));
-
-            coords.push([lng + lngOffset, lat + latOffset]);
+    function updateMemberMarkers(members) {
+        if (!map) {
+            return;
         }
 
-        return {
-            type: 'Feature',
-            geometry: {
-                type: 'Polygon',
-                coordinates: [coords]
+        var activeIds = {};
+        for (var i = 0; i < members.length; i++) {
+            addMemberMarker(members[i]);
+            activeIds[members[i].id] = true;
+        }
+
+        // Remove stale markers.
+        var ids = Object.keys(markers);
+        for (var j = 0; j < ids.length; j++) {
+            if (!activeIds[ids[j]]) {
+                markers[ids[j]].remove();
+                delete markers[ids[j]];
             }
-        };
-    },
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Geofences
+    // -----------------------------------------------------------------------
 
     /**
-     * Hide geofences
+     * Pre-create the GeoJSON source and layers for geofences.
+     * Called once after map load.
      */
-    hideGeofences() {
-        Object.keys(this.geofenceCircles).forEach(id => {
-            const geo = this.geofenceCircles[id];
+    function addGeofenceSourceAndLayers() {
+        if (!map) return;
 
-            if (this.map.getLayer(`${geo.sourceId}-fill`)) {
-                this.map.removeLayer(`${geo.sourceId}-fill`);
-            }
-            if (this.map.getLayer(`${geo.sourceId}-line`)) {
-                this.map.removeLayer(`${geo.sourceId}-line`);
-            }
-            if (this.map.getSource(geo.sourceId)) {
-                this.map.removeSource(geo.sourceId);
-            }
-
-            geo.marker.remove();
+        map.addSource(GEOFENCE_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
         });
 
-        this.geofenceCircles = {};
-    },
-
-    /**
-     * Show directions route
-     */
-    showDirections(route) {
-        if (!route || !route.geometry) return;
-
-        this.map.getSource('directions').setData(route.geometry);
-
-        // Fit route in view
-        const coords = route.geometry.coordinates;
-        const bounds = coords.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coords[0], coords[0]));
-
-        this.map.fitBounds(bounds, {
-            padding: 80,
-            duration: 500
-        });
-    },
-
-    /**
-     * Clear directions route
-     */
-    clearDirections() {
-        this.map.getSource('directions').setData({
-            type: 'FeatureCollection',
-            features: []
-        });
-    },
-
-    /**
-     * Set map theme/style
-     */
-    setTheme(theme) {
-        if (!this.themes[theme]) return;
-
-        this.currentTheme = theme;
-        localStorage.setItem('tracking_map_theme', theme);
-
-        // Change map style
-        this.map.setStyle(this.themes[theme]);
-
-        // Re-add directions layer after style change
-        this.map.once('style.load', () => {
-            // Re-add directions source/layer
-            if (!this.map.getSource('directions')) {
-                this.map.addSource('directions', {
-                    type: 'geojson',
-                    data: { type: 'FeatureCollection', features: [] }
-                });
-
-                this.map.addLayer({
-                    id: 'directions-line',
-                    type: 'line',
-                    source: 'directions',
-                    layout: {
-                        'line-join': 'round',
-                        'line-cap': 'round'
-                    },
-                    paint: {
-                        'line-color': '#667eea',
-                        'line-width': 4,
-                        'line-opacity': 0.8
-                    }
-                });
-            }
-
-            // Re-add geofences if they were showing
-            if (TrackingState.showGeofences) {
-                this.geofenceCircles = {};
-                this.showGeofences();
-            }
+        map.addLayer({
+            id: GEOFENCE_FILL_LAYER,
+            type: 'fill',
+            source: GEOFENCE_SOURCE,
+            paint: {
+                'fill-color': '#3b82f6',
+                'fill-opacity': 0.12,
+            },
         });
 
-        // Dispatch theme changed event
-        window.dispatchEvent(new CustomEvent('map:themeChanged', { detail: { theme } }));
-    },
-
-    /**
-     * Get current theme
-     */
-    getTheme() {
-        return this.currentTheme;
-    },
-
-    /**
-     * Get user's current location
-     * Returns a promise that resolves with {lat, lng, accuracy} or rejects with an error
-     */
-    getCurrentLocation: function() {
-        return new Promise(function(resolve, reject) {
-            if (!navigator.geolocation) {
-                reject(new Error('Geolocation not supported by your browser'));
-                return;
-            }
-
-            // Check if HTTPS (required for geolocation in modern browsers)
-            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                reject(new Error('Secure connection (HTTPS) required for location access'));
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(
-                function(pos) {
-                    resolve({
-                        lat: pos.coords.latitude,
-                        lng: pos.coords.longitude,
-                        accuracy: pos.coords.accuracy
-                    });
-                },
-                function(err) {
-                    // Provide user-friendly error messages based on error code
-                    var message;
-                    switch (err.code) {
-                        case 1: // PERMISSION_DENIED
-                            message = 'Location permission denied';
-                            break;
-                        case 2: // POSITION_UNAVAILABLE
-                            message = 'Location information unavailable';
-                            break;
-                        case 3: // TIMEOUT
-                            message = 'Location request timed out';
-                            break;
-                        default:
-                            message = err.message || 'Could not get location';
-                    }
-                    var error = new Error(message);
-                    error.code = err.code;
-                    reject(error);
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 15000,        // 15 seconds timeout
-                    maximumAge: 60000      // Accept cached position up to 1 minute old
-                }
-            );
+        map.addLayer({
+            id: GEOFENCE_LINE_LAYER,
+            type: 'line',
+            source: GEOFENCE_SOURCE,
+            paint: {
+                'line-color': '#3b82f6',
+                'line-width': 2,
+                'line-dasharray': [2, 2],
+            },
         });
     }
-};
+
+    /**
+     * Convert a circle geofence into a GeoJSON polygon (64-sided).
+     *
+     * @param {number} centerLng
+     * @param {number} centerLat
+     * @param {number} radiusMeters
+     * @returns {number[][]} Ring of [lng, lat] pairs.
+     */
+    function circleToPolygon(centerLng, centerLat, radiusMeters) {
+        var STEPS = 64;
+        var coords = [];
+        for (var i = 0; i <= STEPS; i++) {
+            var angle = (i / STEPS) * 2 * Math.PI;
+            var dx = radiusMeters * Math.cos(angle);
+            var dy = radiusMeters * Math.sin(angle);
+            // Approximate metres to degrees.
+            var lng = centerLng + (dx / (111320 * Math.cos((centerLat * Math.PI) / 180)));
+            var lat = centerLat + (dy / 110540);
+            coords.push([lng, lat]);
+        }
+        return coords;
+    }
+
+    /**
+     * Build a GeoJSON Feature for a geofence.
+     *
+     * @param {Object} geofence - { id, type:'circle'|'polygon', center, radius, polygon }
+     * @returns {Object|null} GeoJSON Feature or null.
+     */
+    function geofenceToFeature(geofence) {
+        if (geofence.type === 'circle' && geofence.center && geofence.radius) {
+            var ring = circleToPolygon(
+                parseFloat(geofence.center.lng || geofence.center.longitude),
+                parseFloat(geofence.center.lat || geofence.center.latitude),
+                parseFloat(geofence.radius)
+            );
+            return {
+                type: 'Feature',
+                properties: { id: geofence.id, name: geofence.name || '' },
+                geometry: { type: 'Polygon', coordinates: [ring] },
+            };
+        }
+
+        if (geofence.type === 'polygon' && geofence.polygon) {
+            return {
+                type: 'Feature',
+                properties: { id: geofence.id, name: geofence.name || '' },
+                geometry: { type: 'Polygon', coordinates: geofence.polygon },
+            };
+        }
+
+        return null;
+    }
+
+    /**
+     * Draw a single geofence on the map (additive).
+     *
+     * @param {Object} geofence
+     */
+    function drawGeofence(geofence) {
+        if (!map || !map.getSource(GEOFENCE_SOURCE)) return;
+
+        var source = map.getSource(GEOFENCE_SOURCE);
+        var data = source._data || { type: 'FeatureCollection', features: [] };
+        var feature = geofenceToFeature(geofence);
+        if (feature) {
+            data.features.push(feature);
+            source.setData(data);
+        }
+    }
+
+    /**
+     * Remove all geofences from the map.
+     */
+    function clearGeofences() {
+        if (!map || !map.getSource(GEOFENCE_SOURCE)) return;
+        map.getSource(GEOFENCE_SOURCE).setData({
+            type: 'FeatureCollection',
+            features: [],
+        });
+    }
+
+    /**
+     * Draw a list of geofences, replacing any existing ones.
+     *
+     * @param {Object[]} list
+     */
+    function drawAllGeofences(list) {
+        if (!map || !map.getSource(GEOFENCE_SOURCE)) return;
+
+        var features = [];
+        for (var i = 0; i < list.length; i++) {
+            var feat = geofenceToFeature(list[i]);
+            if (feat) features.push(feat);
+        }
+
+        map.getSource(GEOFENCE_SOURCE).setData({
+            type: 'FeatureCollection',
+            features: features,
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Route
+    // -----------------------------------------------------------------------
+
+    /**
+     * Pre-create the GeoJSON source and layer for the route line.
+     */
+    function addRouteSourceAndLayer() {
+        if (!map) return;
+
+        map.addSource(ROUTE_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+        });
+
+        map.addLayer({
+            id: ROUTE_LAYER,
+            type: 'line',
+            source: ROUTE_SOURCE,
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round',
+            },
+            paint: {
+                'line-color': '#6366f1',
+                'line-width': 5,
+                'line-opacity': 0.8,
+            },
+        });
+    }
+
+    /**
+     * Draw a GeoJSON LineString or full geometry on the map.
+     *
+     * @param {Object} geometry - A GeoJSON geometry (LineString) or a full
+     *                            GeoJSON Feature/FeatureCollection.
+     */
+    function drawRoute(geometry) {
+        if (!map || !map.getSource(ROUTE_SOURCE)) return;
+
+        var geojson;
+        if (geometry.type === 'FeatureCollection') {
+            geojson = geometry;
+        } else if (geometry.type === 'Feature') {
+            geojson = { type: 'FeatureCollection', features: [geometry] };
+        } else {
+            // Assume raw geometry (LineString, etc.)
+            geojson = {
+                type: 'FeatureCollection',
+                features: [{
+                    type: 'Feature',
+                    properties: {},
+                    geometry: geometry,
+                }],
+            };
+        }
+
+        map.getSource(ROUTE_SOURCE).setData(geojson);
+    }
+
+    /**
+     * Remove the route line from the map.
+     */
+    function clearRoute() {
+        if (!map || !map.getSource(ROUTE_SOURCE)) return;
+        map.getSource(ROUTE_SOURCE).setData({
+            type: 'FeatureCollection',
+            features: [],
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Camera helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Fit the map viewport to show all current member markers.
+     */
+    function fitToMembers() {
+        if (!map) return;
+
+        var ids = Object.keys(markers);
+        if (ids.length === 0) return;
+
+        var bounds = new mapboxgl.LngLatBounds();
+        for (var i = 0; i < ids.length; i++) {
+            bounds.extend(markers[ids[i]].getLngLat());
+        }
+
+        map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+    }
+
+    /**
+     * Fly the camera to a specific location.
+     *
+     * @param {number} lat
+     * @param {number} lng
+     * @param {number} [zoom=14]
+     */
+    function flyToMember(lat, lng, zoom) {
+        if (!map) return;
+        map.flyTo({
+            center: [lng, lat],
+            zoom: zoom || 14,
+            essential: true,
+        });
+    }
+
+    /**
+     * Change the map style (e.g. to a dark mode style).
+     *
+     * @param {string} styleUrl - Full Mapbox style URL.
+     */
+    function setStyle(styleUrl) {
+        if (!map) return;
+        map.setStyle(styleUrl);
+    }
+
+    // -----------------------------------------------------------------------
+    // Public interface
+    // -----------------------------------------------------------------------
+
+    Tracking.map = {
+        init: init,
+        getMap: getMap,
+        addMemberMarker: addMemberMarker,
+        updateMemberMarkers: updateMemberMarkers,
+        drawGeofence: drawGeofence,
+        clearGeofences: clearGeofences,
+        drawAllGeofences: drawAllGeofences,
+        drawRoute: drawRoute,
+        clearRoute: clearRoute,
+        fitToMembers: fitToMembers,
+        flyToMember: flyToMember,
+        setStyle: setStyle,
+    };
+})();

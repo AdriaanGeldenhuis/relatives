@@ -2,119 +2,132 @@ package za.co.relatives.app.utils
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.core.content.edit
 import org.json.JSONObject
 import java.util.UUID
 
-object PreferencesManager {
-    private const val PREF_NAME = "relatives_prefs"
-    private const val KEY_DEVICE_UUID = "device_uuid"
-    private const val KEY_TRACKING_ENABLED = "tracking_enabled"
-    private const val KEY_UPDATE_INTERVAL = "update_interval"
-    private const val KEY_LAST_NOTIF_COUNT = "last_notif_count"
-    const val KEY_SESSION_TOKEN = "session_token"
-    const val KEY_IDLE_HEARTBEAT_SECONDS = "idle_heartbeat_seconds"
-    const val KEY_OFFLINE_THRESHOLD_SECONDS = "offline_threshold_seconds"
-    const val KEY_STALE_THRESHOLD_SECONDS = "stale_threshold_seconds"
-    private const val KEY_BATTERY_DIALOG_DISMISSED_AT = "battery_dialog_dismissed_at"
-    private const val KEY_LAST_UPLOAD_TIME = "last_upload_time"
-    private const val BATTERY_DIALOG_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000L  // 7 days
+/**
+ * Centralised SharedPreferences wrapper for all persistent app settings.
+ *
+ * Thread-safety note: every write uses [SharedPreferences.Editor.apply] which is
+ * asynchronous but safe to call from any thread.
+ */
+class PreferencesManager(context: Context) {
 
-    private lateinit var prefs: SharedPreferences
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    fun init(context: Context) {
-        prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        // Ensure UUID exists
-        if (!prefs.contains(KEY_DEVICE_UUID)) {
-            val newUuid = UUID.randomUUID().toString()
-            prefs.edit().putString(KEY_DEVICE_UUID, newUuid).apply()
-        }
+    // ── Companion constants ────────────────────────────────────────────────
+
+    companion object {
+        private const val PREFS_NAME = "relatives_prefs"
+
+        // Keys
+        private const val KEY_DEVICE_UUID = "device_uuid"
+        private const val KEY_TRACKING_ENABLED = "tracking_enabled"
+        private const val KEY_UPDATE_INTERVAL = "update_interval"
+        private const val KEY_IDLE_HEARTBEAT_SECONDS = "idle_heartbeat_seconds"
+        private const val KEY_BURST_INTERVAL = "burst_interval"
+        private const val KEY_SESSION_TOKEN = "session_token"
+        private const val KEY_NOTIFICATION_COUNT = "notification_count"
+        private const val KEY_LAST_UPLOAD_TIME = "last_upload_time"
+        private const val KEY_FCM_TOKEN = "fcm_token"
+
+        // Defaults
+        private const val DEFAULT_UPDATE_INTERVAL = 30        // seconds (MOVING mode)
+        private const val DEFAULT_IDLE_HEARTBEAT = 300         // seconds (IDLE mode)
+        private const val DEFAULT_BURST_INTERVAL = 5           // seconds (BURST mode)
     }
 
+    // ── Device identity ────────────────────────────────────────────────────
+
+    /** Stable UUID generated once on first access and persisted forever. */
+    val deviceUuid: String
+        get() {
+            val existing = prefs.getString(KEY_DEVICE_UUID, null)
+            if (existing != null) return existing
+            val generated = UUID.randomUUID().toString()
+            prefs.edit().putString(KEY_DEVICE_UUID, generated).apply()
+            return generated
+        }
+
+    // ── Tracking configuration ─────────────────────────────────────────────
+
+    var trackingEnabled: Boolean
+        get() = prefs.getBoolean(KEY_TRACKING_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_TRACKING_ENABLED, value).apply()
+
+    /** Interval (in seconds) for the MOVING tracking mode. */
+    var updateInterval: Int
+        get() = prefs.getInt(KEY_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        set(value) = prefs.edit().putInt(KEY_UPDATE_INTERVAL, value).apply()
+
+    /** Heartbeat interval (in seconds) for the IDLE tracking mode. */
+    var idleHeartbeatSeconds: Int
+        get() = prefs.getInt(KEY_IDLE_HEARTBEAT_SECONDS, DEFAULT_IDLE_HEARTBEAT)
+        set(value) = prefs.edit().putInt(KEY_IDLE_HEARTBEAT_SECONDS, value).apply()
+
+    /** Interval (in seconds) for the BURST tracking mode. */
+    var burstInterval: Int
+        get() = prefs.getInt(KEY_BURST_INTERVAL, DEFAULT_BURST_INTERVAL)
+        set(value) = prefs.edit().putInt(KEY_BURST_INTERVAL, value).apply()
+
+    // ── Session / auth ─────────────────────────────────────────────────────
+
+    /** Session token extracted from WebView cookies, used for native API calls. */
     var sessionToken: String?
         get() = prefs.getString(KEY_SESSION_TOKEN, null)
-        set(value) = prefs.edit { putString(KEY_SESSION_TOKEN, value) }
+        set(value) = prefs.edit().putString(KEY_SESSION_TOKEN, value).apply()
 
-    var idleHeartbeatSeconds: Int
-        get() = prefs.getInt(KEY_IDLE_HEARTBEAT_SECONDS, 300)  // Default 5 min
-        set(value) = prefs.edit { putInt(KEY_IDLE_HEARTBEAT_SECONDS, value) }
+    // ── Notification bookkeeping ───────────────────────────────────────────
 
-    var offlineThresholdSeconds: Int
-        get() = prefs.getInt(KEY_OFFLINE_THRESHOLD_SECONDS, 660)  // Default 11 min (2x heartbeat + buffer)
-        set(value) = prefs.edit { putInt(KEY_OFFLINE_THRESHOLD_SECONDS, value) }
+    var notificationCount: Int
+        get() = prefs.getInt(KEY_NOTIFICATION_COUNT, 0)
+        set(value) = prefs.edit().putInt(KEY_NOTIFICATION_COUNT, value).apply()
 
-    var staleThresholdSeconds: Int
-        get() = prefs.getInt(KEY_STALE_THRESHOLD_SECONDS, 3600)  // Default 60 min
-        set(value) = prefs.edit { putInt(KEY_STALE_THRESHOLD_SECONDS, value) }
-
-
-    fun getDeviceUuid(): String {
-        return prefs.getString(KEY_DEVICE_UUID, "") ?: ""
+    fun incrementNotificationCount() {
+        notificationCount += 1
     }
 
-    fun setTrackingEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_TRACKING_ENABLED, enabled).apply()
-    }
+    // ── Upload bookkeeping ─────────────────────────────────────────────────
 
-    fun isTrackingEnabled(): Boolean {
-        // Default to TRUE so tracking works out of the box once permissions are granted
-        return prefs.getBoolean(KEY_TRACKING_ENABLED, true)
-    }
-
-    fun setUpdateInterval(seconds: Int) {
-        prefs.edit().putInt(KEY_UPDATE_INTERVAL, seconds).apply()
-    }
-
-    fun getUpdateInterval(): Int {
-        // Default to 30 seconds
-        return prefs.getInt(KEY_UPDATE_INTERVAL, 30)
-    }
-
-    fun setLastNotificationCount(count: Int) {
-        prefs.edit().putInt(KEY_LAST_NOTIF_COUNT, count).apply()
-    }
-
-    fun getLastNotificationCount(): Int {
-        return prefs.getInt(KEY_LAST_NOTIF_COUNT, 0)
-    }
-
-    fun setBatteryDialogDismissed() {
-        prefs.edit { putLong(KEY_BATTERY_DIALOG_DISMISSED_AT, System.currentTimeMillis()) }
-    }
-
-    fun shouldShowBatteryDialog(): Boolean {
-        val dismissedAt = prefs.getLong(KEY_BATTERY_DIALOG_DISMISSED_AT, 0L)
-        if (dismissedAt == 0L) return true  // Never dismissed
-        val elapsed = System.currentTimeMillis() - dismissedAt
-        return elapsed > BATTERY_DIALOG_SNOOZE_MS  // Show again after snooze period
-    }
-
+    /** Epoch millis of the last successful location batch upload. */
     var lastUploadTime: Long
         get() = prefs.getLong(KEY_LAST_UPLOAD_TIME, 0L)
-        set(value) = prefs.edit { putLong(KEY_LAST_UPLOAD_TIME, value) }
+        set(value) = prefs.edit().putLong(KEY_LAST_UPLOAD_TIME, value).apply()
+
+    // ── Firebase Cloud Messaging ───────────────────────────────────────────
+
+    var fcmToken: String?
+        get() = prefs.getString(KEY_FCM_TOKEN, null)
+        set(value) = prefs.edit().putString(KEY_FCM_TOKEN, value).apply()
+
+    // ── Server-driven configuration ────────────────────────────────────────
 
     /**
-     * Apply server settings from JSON response.
-     * Returns true if update_interval_seconds changed (caller may need to react).
+     * Apply interval overrides received from the server.
+     *
+     * Expected JSON keys (all optional):
+     * - `update_interval`        -> MOVING interval in seconds
+     * - `idle_heartbeat_seconds` -> IDLE heartbeat in seconds
+     * - `burst_interval`         -> BURST interval in seconds
      */
-    fun applyServerSettings(settings: JSONObject?): Boolean {
-        settings ?: return false
-        var intervalChanged = false
-        settings.optInt("update_interval_seconds", 0).takeIf { it > 0 }?.let { newInterval ->
-            if (newInterval != getUpdateInterval()) {
-                intervalChanged = true
-            }
-            setUpdateInterval(newInterval)
+    fun applyServerSettings(json: JSONObject) {
+        val editor = prefs.edit()
+        if (json.has("update_interval")) {
+            editor.putInt(KEY_UPDATE_INTERVAL, json.getInt("update_interval"))
         }
-        settings.optInt("idle_heartbeat_seconds", 0).takeIf { it > 0 }?.let {
-            idleHeartbeatSeconds = it
+        if (json.has("idle_heartbeat_seconds")) {
+            editor.putInt(KEY_IDLE_HEARTBEAT_SECONDS, json.getInt("idle_heartbeat_seconds"))
         }
-        settings.optInt("offline_threshold_seconds", 0).takeIf { it > 0 }?.let {
-            offlineThresholdSeconds = it
+        if (json.has("burst_interval")) {
+            editor.putInt(KEY_BURST_INTERVAL, json.getInt("burst_interval"))
         }
-        settings.optInt("stale_threshold_seconds", 0).takeIf { it > 0 }?.let {
-            staleThresholdSeconds = it
-        }
-        return intervalChanged
+        editor.apply()
+    }
+
+    // ── Cleanup ────────────────────────────────────────────────────────────
+
+    fun clearSession() {
+        prefs.edit().remove(KEY_SESSION_TOKEN).apply()
     }
 }

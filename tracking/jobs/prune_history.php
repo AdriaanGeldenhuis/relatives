@@ -1,75 +1,72 @@
 <?php
 /**
- * Prune Location History Job
+ * ============================================
+ * CRON JOB: PRUNE OLD LOCATION HISTORY
  *
- * Run via cron: 0 3 * * * php /path/to/tracking/jobs/prune_history.php
+ * Deletes location history records older than each
+ * family's configured history_retention_days setting.
  *
- * Deletes location history older than retention period.
- * Processes in batches to avoid locking tables.
+ * Recommended schedule: daily (e.g. 3:15 AM)
+ *   15 3 * * * php /path/to/tracking/jobs/prune_history.php
+ * ============================================
  */
+declare(strict_types=1);
 
-// CLI only
+// Prevent web access
 if (php_sapi_name() !== 'cli') {
-    die('CLI only');
+    http_response_code(403);
+    exit('CLI only');
 }
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-echo "=== Prune Location History ===\n";
-echo "Started: " . date('Y-m-d H:i:s') . "\n\n";
+$startTime = microtime(true);
+$totalDeleted = 0;
 
-$settingsRepo = new SettingsRepo($db, $trackingCache);
-$locationRepo = new LocationRepo($db, $trackingCache);
-
-// Get all families
-$stmt = $db->query("SELECT id FROM families WHERE subscription_status NOT IN ('expired', 'cancelled')");
-$families = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-$totalPruned = 0;
-
-foreach ($families as $familyId) {
-    // Get family settings
-    $settings = $settingsRepo->get($familyId);
-    $retentionDays = $settings['history_retention_days'];
-
-    // Calculate cutoff
-    $cutoff = date('Y-m-d H:i:s', strtotime("-{$retentionDays} days"));
-
-    // Count records to delete
+try {
+    // Get all families with their history_retention_days setting
     $stmt = $db->prepare("
-        SELECT COUNT(*) FROM tracking_locations
-        WHERE family_id = ? AND created_at < ?
+        SELECT family_id, history_retention_days
+        FROM tracking_family_settings
+        WHERE history_retention_days > 0
     ");
-    $stmt->execute([$familyId, $cutoff]);
-    $count = $stmt->fetchColumn();
+    $stmt->execute();
+    $families = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    if ($count > 0) {
-        echo "Family {$familyId}: {$count} records older than {$retentionDays} days\n";
+    if (empty($families)) {
+        // Use global default if no family settings exist
+        $defaultRetention = SettingsRepo::getDefaults()['history_retention_days'];
+        $trackingCache = new TrackingCache($db);
+        $locationRepo = new LocationRepo($db, $trackingCache);
+        $deleted = $locationRepo->pruneHistory($defaultRetention);
+        $totalDeleted += $deleted;
+        echo "[prune_history] Default retention {$defaultRetention}d: deleted {$deleted} rows\n";
+    } else {
+        foreach ($families as $family) {
+            $retention = (int)$family['history_retention_days'];
+            $familyId = (int)$family['family_id'];
 
-        // Delete in batches of 5000
-        $deleted = 0;
-        while ($deleted < $count) {
+            // Delete location history for this specific family older than retention period
             $stmt = $db->prepare("
                 DELETE FROM tracking_locations
-                WHERE family_id = ? AND created_at < ?
-                LIMIT 5000
+                WHERE family_id = ?
+                  AND created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
             ");
-            $stmt->execute([$familyId, $cutoff]);
-            $batchDeleted = $stmt->rowCount();
+            $stmt->execute([$familyId, $retention]);
+            $deleted = $stmt->rowCount();
+            $totalDeleted += $deleted;
 
-            if ($batchDeleted === 0) break;
-
-            $deleted += $batchDeleted;
-            echo "  Deleted batch: {$batchDeleted} (total: {$deleted})\n";
-
-            // Small delay to reduce DB load
-            usleep(100000); // 100ms
+            if ($deleted > 0) {
+                echo "[prune_history] Family {$familyId} (retention {$retention}d): deleted {$deleted} rows\n";
+            }
         }
-
-        $totalPruned += $deleted;
     }
-}
 
-echo "\n=== Summary ===\n";
-echo "Total records pruned: {$totalPruned}\n";
-echo "Completed: " . date('Y-m-d H:i:s') . "\n";
+    $elapsed = round(microtime(true) - $startTime, 3);
+    echo "[prune_history] Complete. Total deleted: {$totalDeleted}. Time: {$elapsed}s\n";
+
+} catch (Exception $e) {
+    error_log('[prune_history] ERROR: ' . $e->getMessage());
+    echo "[prune_history] ERROR: " . $e->getMessage() . "\n";
+    exit(1);
+}

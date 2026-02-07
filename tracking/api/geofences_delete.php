@@ -1,58 +1,28 @@
 <?php
-/**
- * DELETE /tracking/api/geofences_delete.php
- *
- * Delete a geofence.
- *
- * Parameters:
- * - id: geofence ID
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-header('Content-Type: application/json');
-
-// Only DELETE or POST with _method=DELETE
 if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST' || ($_POST['_method'] ?? '') !== 'DELETE') {
-        jsonError('method_not_allowed', 'DELETE required', 405);
-    }
+    Response::error('method_not_allowed', 405);
 }
 
-// Auth required
-$user = requireAuth();
-$familyId = $user['family_id'];
+$ctx = SiteContext::require($db);
 
-// Get geofence ID
-$id = isset($_GET['id']) ? (int)$_GET['id'] : null;
-if (!$id) {
-    // Try from body
-    $input = json_decode(file_get_contents('php://input'), true);
-    $id = isset($input['id']) ? (int)$input['id'] : null;
+$input = json_decode(file_get_contents('php://input'), true) ?? [];
+$id = (int) ($input['id'] ?? $_GET['id'] ?? 0);
+
+if ($id <= 0) {
+    Response::error('id is required', 422);
 }
 
-if (!$id) {
-    jsonError('missing_id', 'Geofence ID is required', 400);
-}
+$trackingCache = new TrackingCache($cache);
+$repo = new GeofenceRepo($db, $trackingCache);
 
-// Initialize services
-$geofenceRepo = new GeofenceRepo($db, $trackingCache);
-
-// Check geofence exists
-$geofence = $geofenceRepo->get($id, $familyId);
-if (!$geofence) {
-    jsonError('not_found', 'Geofence not found', 404);
-}
-
-// Delete
-$deleted = $geofenceRepo->delete($id, $familyId);
+$deleted = $repo->delete($ctx->familyId, $id);
 
 if (!$deleted) {
-    jsonError('delete_failed', 'Failed to delete geofence', 500);
+    Response::error('geofence_not_found', 404);
 }
 
-jsonSuccess([
-    'deleted' => true,
-    'id' => $id,
-    'message' => 'Geofence deleted successfully'
-]);
+Response::success(null, 'Geofence deleted');

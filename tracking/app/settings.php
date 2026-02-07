@@ -1,253 +1,452 @@
 <?php
+/**
+ * ============================================
+ * FAMILY TRACKING - SETTINGS
+ * Configure tracking behavior, alert rules,
+ * map preferences, and data retention.
+ * ============================================
+ */
 declare(strict_types=1);
 
-/**
- * Tracking Settings Page
- */
-
-// Start session first
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Quick session check
-if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
-    header('Location: /login.php', true, 302);
-    exit;
-}
-
-// Load bootstrap
 require_once __DIR__ . '/../../core/bootstrap.php';
 
-// Validate session with database
-try {
-    $auth = new Auth($db);
-    $user = $auth->getCurrentUser();
-
-    if (!$user) {
-        header('Location: /login.php?session_expired=1', true, 302);
-        exit;
-    }
-
-} catch (Exception $e) {
-    error_log('Tracking settings error: ' . $e->getMessage());
-    header('Location: /login.php?error=1', true, 302);
+$session = new Session($db);
+$user = $session->validate();
+if (!$user) {
+    header('Location: /login.php');
     exit;
 }
 
+require_once __DIR__ . '/../core/bootstrap_tracking.php';
+
+$trackingCache = new TrackingCache($db);
+$familyId = (int)$user['family_id'];
+$isAdmin = in_array($user['role'], ['owner', 'admin']);
+
+// Load settings and alert rules
+$settingsRepo = new SettingsRepo($db, $trackingCache);
+$settings = $settingsRepo->get($familyId);
+
+$alertsRepo = new AlertsRepo($db);
+$alertRules = $alertsRepo->get($familyId);
+
 $pageTitle = 'Tracking Settings';
-$canEdit = in_array($user['role'], ['owner', 'admin']);
-$cacheVersion = '12.3.6';
+$pageCSS = ['/tracking/app/assets/css/tracking.css'];
+require_once __DIR__ . '/../../shared/components/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle) ?> - Relatives</title>
-    <link rel="stylesheet" href="assets/css/tracking.css?v=<?php echo $cacheVersion; ?>">
-</head>
-<body class="settings-page">
-    <!-- Top Bar -->
-    <div class="tracking-topbar">
-        <a href="index.php" class="back-btn">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-        </a>
-        <div class="topbar-title">Tracking Settings</div>
-        <div class="topbar-actions"></div>
+
+<div class="settings-container">
+
+    <a href="/tracking/app/" class="tracking-back">Back to Map</a>
+
+    <div class="tracking-content-header">
+        <div>
+            <h1 class="tracking-content-title">Settings</h1>
+            <p class="tracking-content-subtitle">Configure tracking behavior for your family.</p>
+        </div>
     </div>
 
-    <div class="settings-container">
-        <!-- Tracking Intervals -->
-        <div class="settings-section">
-            <h2>Tracking Intervals</h2>
-            <div class="setting-row">
-                <div>
-                    <h3 class="setting-label">Moving Interval</h3>
-                    <div class="setting-description">Upload frequency when moving</div>
-                </div>
-                <select id="setting-moving-interval" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
-                    <option value="15">15 seconds</option>
-                    <option value="30">30 seconds</option>
-                    <option value="60">1 minute</option>
-                    <option value="120">2 minutes</option>
-                </select>
-            </div>
-            <div class="setting-row">
-                <div>
-                    <h3 class="setting-label">Idle Interval</h3>
-                    <div class="setting-description">Heartbeat frequency when stationary</div>
-                </div>
-                <select id="setting-idle-interval" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
-                    <option value="300">5 minutes</option>
-                    <option value="600">10 minutes</option>
-                    <option value="900">15 minutes</option>
-                    <option value="1800">30 minutes</option>
-                </select>
-            </div>
-            <div class="setting-row">
-                <div>
-                    <h3 class="setting-label">Speed Threshold</h3>
-                    <div class="setting-description">Speed to consider as "moving"</div>
-                </div>
-                <select id="setting-speed-threshold" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
-                    <option value="0.5">0.5 m/s (walking)</option>
-                    <option value="1.0">1.0 m/s (fast walk)</option>
-                    <option value="2.0">2.0 m/s (jogging)</option>
-                    <option value="5.0">5.0 m/s (cycling)</option>
+    <?php if (!$isAdmin): ?>
+    <div class="settings-readonly-notice">
+        Only family owners and admins can modify tracking settings. You are viewing read-only.
+    </div>
+    <?php endif; ?>
+
+    <form id="settingsForm" autocomplete="off">
+
+        <!-- Tracking Mode -->
+        <div class="settings-card">
+            <h3 class="settings-card-title">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                Tracking Mode
+            </h3>
+
+            <div class="form-group">
+                <label class="form-label">Mode
+                    <span class="form-label-desc">Controls how aggressively the app tracks location</span>
+                </label>
+                <select class="form-select" name="mode" id="settingMode" <?php echo $isAdmin ? '' : 'disabled'; ?>>
+                    <option value="0" <?php echo $settings['mode'] == 0 ? 'selected' : ''; ?>>Off - No tracking</option>
+                    <option value="1" <?php echo $settings['mode'] == 1 ? 'selected' : ''; ?>>Normal - Balanced battery/accuracy</option>
+                    <option value="2" <?php echo $settings['mode'] == 2 ? 'selected' : ''; ?>>Active - Higher frequency updates</option>
                 </select>
             </div>
         </div>
 
-        <!-- Quality Settings -->
-        <div class="settings-section">
-            <h2>Quality Settings</h2>
-            <div class="setting-row">
-                <div>
-                    <h3 class="setting-label">Minimum Accuracy</h3>
-                    <div class="setting-description">Reject locations worse than this</div>
+        <!-- Intervals & Thresholds -->
+        <div class="settings-card">
+            <h3 class="settings-card-title">
+                <svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                Intervals &amp; Thresholds
+            </h3>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Moving Interval (sec)
+                        <span class="form-label-desc">Update frequency when moving</span>
+                    </label>
+                    <input type="number" class="form-input" name="moving_interval_seconds"
+                           value="<?php echo (int)$settings['moving_interval_seconds']; ?>"
+                           min="5" max="600" <?php echo $isAdmin ? '' : 'readonly'; ?>>
                 </div>
-                <select id="setting-min-accuracy" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
-                    <option value="50">50 meters (high)</option>
-                    <option value="100">100 meters (normal)</option>
-                    <option value="200">200 meters (low)</option>
-                    <option value="500">500 meters (very low)</option>
-                </select>
+                <div class="form-group">
+                    <label class="form-label">Idle Interval (sec)
+                        <span class="form-label-desc">Update frequency when stationary</span>
+                    </label>
+                    <input type="number" class="form-input" name="idle_interval_seconds"
+                           value="<?php echo (int)$settings['idle_interval_seconds']; ?>"
+                           min="30" max="3600" <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
             </div>
-            <div class="setting-row">
-                <div>
-                    <h3 class="setting-label">Dedupe Radius</h3>
-                    <div class="setting-description">Skip points closer than this</div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Speed Threshold (m/s)
+                        <span class="form-label-desc">Minimum speed to consider "moving"</span>
+                    </label>
+                    <input type="number" class="form-input" name="speed_threshold_mps"
+                           value="<?php echo (float)$settings['speed_threshold_mps']; ?>"
+                           min="0.1" max="10" step="0.1" <?php echo $isAdmin ? '' : 'readonly'; ?>>
                 </div>
-                <input type="number" id="setting-dedupe-radius" class="setting-input"
-                       min="0" max="100" <?= $canEdit ? '' : 'disabled' ?>>
+                <div class="form-group">
+                    <label class="form-label">Distance Threshold (m)
+                        <span class="form-label-desc">Minimum distance change to record</span>
+                    </label>
+                    <input type="number" class="form-input" name="distance_threshold_m"
+                           value="<?php echo (int)$settings['distance_threshold_m']; ?>"
+                           min="5" max="500" <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Min Accuracy (m)
+                        <span class="form-label-desc">Reject readings less accurate than this</span>
+                    </label>
+                    <input type="number" class="form-input" name="min_accuracy_m"
+                           value="<?php echo (int)$settings['min_accuracy_m']; ?>"
+                           min="10" max="500" <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Rate Limit (sec)
+                        <span class="form-label-desc">Minimum time between API calls</span>
+                    </label>
+                    <input type="number" class="form-input" name="rate_limit_seconds"
+                           value="<?php echo (int)$settings['rate_limit_seconds']; ?>"
+                           min="1" max="60" <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Session TTL (sec)
+                        <span class="form-label-desc">How long before a session expires</span>
+                    </label>
+                    <input type="number" class="form-input" name="session_ttl_seconds"
+                           value="<?php echo (int)$settings['session_ttl_seconds']; ?>"
+                           min="60" max="3600" <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Keepalive Interval (sec)
+                        <span class="form-label-desc">Ping frequency to maintain session</span>
+                    </label>
+                    <input type="number" class="form-input" name="keepalive_interval_seconds"
+                           value="<?php echo (int)$settings['keepalive_interval_seconds']; ?>"
+                           min="10" max="300" <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Dedupe Radius (m)
+                        <span class="form-label-desc">Ignore points within this distance</span>
+                    </label>
+                    <input type="number" class="form-input" name="dedupe_radius_m"
+                           value="<?php echo (int)$settings['dedupe_radius_m']; ?>"
+                           min="1" max="100" <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Dedupe Time (sec)
+                        <span class="form-label-desc">Ignore points within this time window</span>
+                    </label>
+                    <input type="number" class="form-input" name="dedupe_time_seconds"
+                           value="<?php echo (int)$settings['dedupe_time_seconds']; ?>"
+                           min="5" max="300" <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
             </div>
         </div>
 
-        <!-- Display Settings -->
-        <div class="settings-section">
-            <h2>Display Settings</h2>
-            <div class="setting-row">
-                <div>
-                    <h3 class="setting-label">Units</h3>
+        <!-- Display Preferences -->
+        <div class="settings-card">
+            <h3 class="settings-card-title">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                Display Preferences
+            </h3>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Units</label>
+                    <select class="form-select" name="units" <?php echo $isAdmin ? '' : 'disabled'; ?>>
+                        <option value="metric" <?php echo $settings['units'] === 'metric' ? 'selected' : ''; ?>>Metric (km, m/s)</option>
+                        <option value="imperial" <?php echo $settings['units'] === 'imperial' ? 'selected' : ''; ?>>Imperial (mi, mph)</option>
+                    </select>
                 </div>
-                <select id="setting-units" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
-                    <option value="metric">Metric (km)</option>
-                    <option value="imperial">Imperial (mi)</option>
-                </select>
+                <div class="form-group">
+                    <label class="form-label">Map Style</label>
+                    <select class="form-select" name="map_style" <?php echo $isAdmin ? '' : 'disabled'; ?>>
+                        <option value="streets" <?php echo $settings['map_style'] === 'streets' ? 'selected' : ''; ?>>Streets</option>
+                        <option value="dark" <?php echo $settings['map_style'] === 'dark' ? 'selected' : ''; ?>>Dark</option>
+                        <option value="satellite" <?php echo $settings['map_style'] === 'satellite' ? 'selected' : ''; ?>>Satellite</option>
+                        <option value="light" <?php echo $settings['map_style'] === 'light' ? 'selected' : ''; ?>>Light</option>
+                    </select>
+                </div>
             </div>
         </div>
 
-        <!-- Retention Settings -->
-        <div class="settings-section">
-            <h2>Data Retention</h2>
-            <div class="setting-row">
-                <div>
-                    <h3 class="setting-label">History Retention</h3>
-                    <div class="setting-description">How long to keep location history</div>
+        <!-- Data Retention -->
+        <div class="settings-card">
+            <h3 class="settings-card-title">
+                <svg viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 9 8 12 2 12"></polyline><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>
+                Data Retention
+            </h3>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Location History (days)
+                        <span class="form-label-desc">How long to keep location trail data</span>
+                    </label>
+                    <input type="number" class="form-input" name="history_retention_days"
+                           value="<?php echo (int)$settings['history_retention_days']; ?>"
+                           min="1" max="365" <?php echo $isAdmin ? '' : 'readonly'; ?>>
                 </div>
-                <select id="setting-history-retention" class="setting-select" <?= $canEdit ? '' : 'disabled' ?>>
-                    <option value="7">7 days</option>
-                    <option value="14">14 days</option>
-                    <option value="30">30 days</option>
-                    <option value="90">90 days</option>
-                </select>
+                <div class="form-group">
+                    <label class="form-label">Events Retention (days)
+                        <span class="form-label-desc">How long to keep event logs</span>
+                    </label>
+                    <input type="number" class="form-input" name="events_retention_days"
+                           value="<?php echo (int)$settings['events_retention_days']; ?>"
+                           min="1" max="365" <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
             </div>
         </div>
 
-        <?php if ($canEdit): ?>
-        <button id="btn-save" class="popup-btn primary" style="width: 100%; margin-top: 20px;">
-            Save Settings
-        </button>
-        <?php else: ?>
-        <p style="text-align: center; color: var(--gray-500); margin-top: 20px;">
-            Only family admins can change settings
-        </p>
+        <!-- Alert Rules -->
+        <div class="settings-card">
+            <h3 class="settings-card-title">
+                <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                Alert Rules
+            </h3>
+
+            <div class="form-toggle-row">
+                <div>
+                    <div class="form-toggle-label">Alerts Enabled</div>
+                    <div class="form-toggle-desc">Master switch for all tracking alerts</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" name="alert_enabled" <?php echo $alertRules['enabled'] ? 'checked' : ''; ?> <?php echo $isAdmin ? '' : 'disabled'; ?>>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="form-toggle-row">
+                <div>
+                    <div class="form-toggle-label">Arrive at Place</div>
+                    <div class="form-toggle-desc">Notify when a member arrives at a saved place</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" name="arrive_place_enabled" <?php echo $alertRules['arrive_place_enabled'] ? 'checked' : ''; ?> <?php echo $isAdmin ? '' : 'disabled'; ?>>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="form-toggle-row">
+                <div>
+                    <div class="form-toggle-label">Leave Place</div>
+                    <div class="form-toggle-desc">Notify when a member leaves a saved place</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" name="leave_place_enabled" <?php echo $alertRules['leave_place_enabled'] ? 'checked' : ''; ?> <?php echo $isAdmin ? '' : 'disabled'; ?>>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="form-toggle-row">
+                <div>
+                    <div class="form-toggle-label">Enter Geofence</div>
+                    <div class="form-toggle-desc">Notify when a member enters a geofence zone</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" name="enter_geofence_enabled" <?php echo $alertRules['enter_geofence_enabled'] ? 'checked' : ''; ?> <?php echo $isAdmin ? '' : 'disabled'; ?>>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="form-toggle-row">
+                <div>
+                    <div class="form-toggle-label">Exit Geofence</div>
+                    <div class="form-toggle-desc">Notify when a member exits a geofence zone</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" name="exit_geofence_enabled" <?php echo $alertRules['exit_geofence_enabled'] ? 'checked' : ''; ?> <?php echo $isAdmin ? '' : 'disabled'; ?>>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="form-group" style="margin-top:16px">
+                <label class="form-label">Alert Cooldown (seconds)
+                    <span class="form-label-desc">Minimum time between repeated alerts for the same rule</span>
+                </label>
+                <input type="number" class="form-input" name="cooldown_seconds"
+                       value="<?php echo (int)$alertRules['cooldown_seconds']; ?>"
+                       min="0" max="86400" <?php echo $isAdmin ? '' : 'readonly'; ?>>
+            </div>
+
+            <div class="form-row" style="margin-top:16px">
+                <div class="form-group">
+                    <label class="form-label">Quiet Hours Start
+                        <span class="form-label-desc">No alerts after this time</span>
+                    </label>
+                    <input type="time" class="form-input" name="quiet_hours_start"
+                           value="<?php echo e($alertRules['quiet_hours_start'] ?? ''); ?>"
+                           <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Quiet Hours End
+                        <span class="form-label-desc">Resume alerts after this time</span>
+                    </label>
+                    <input type="time" class="form-input" name="quiet_hours_end"
+                           value="<?php echo e($alertRules['quiet_hours_end'] ?? ''); ?>"
+                           <?php echo $isAdmin ? '' : 'readonly'; ?>>
+                </div>
+            </div>
+        </div>
+
+        <!-- Save Button -->
+        <?php if ($isAdmin): ?>
+        <button type="submit" class="settings-save-btn" id="saveSettingsBtn">Save Settings</button>
         <?php endif; ?>
-    </div>
 
-    <div id="toast-container" class="toast-container"></div>
+    </form>
 
-    <script>
-        const canEdit = <?= $canEdit ? 'true' : 'false' ?>;
-    </script>
-    <script src="assets/js/format.js?v=<?php echo $cacheVersion; ?>"></script>
-    <script src="assets/js/api.js?v=<?php echo $cacheVersion; ?>"></script>
-    <script src="assets/js/native-bridge.js?v=<?php echo $cacheVersion; ?>"></script>
-    <script>if (window.NativeBridge) NativeBridge.init();</script>
-    <script>
-        // Toast helper
-        const Toast = {
-            container: document.getElementById('toast-container'),
-            show(message, type = 'info') {
-                const toast = document.createElement('div');
-                toast.className = `toast ${type}`;
-                toast.textContent = message;
-                this.container.appendChild(toast);
-                setTimeout(() => toast.remove(), 3000);
+</div>
+
+<script>
+    window.TrackingConfig = window.TrackingConfig || {};
+    window.TrackingConfig.apiBase = '/tracking/api';
+    window.TrackingConfig.familyId = <?php echo $familyId; ?>;
+    window.TrackingConfig.isAdmin = <?php echo json_encode($isAdmin); ?>;
+</script>
+
+<?php
+$pageJS = [
+    '/tracking/app/assets/js/state.js',
+];
+require_once __DIR__ . '/../../shared/components/footer.php';
+?>
+
+<script>
+(function() {
+    'use strict';
+
+    var form = document.getElementById('settingsForm');
+    var saveBtn = document.getElementById('saveSettingsBtn');
+
+    if (!form || !saveBtn) return;
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (!window.TrackingConfig.isAdmin) return;
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+
+        // Collect settings values
+        var settingsPayload = {};
+        var settingsFields = [
+            'mode', 'moving_interval_seconds', 'idle_interval_seconds',
+            'speed_threshold_mps', 'distance_threshold_m', 'min_accuracy_m',
+            'rate_limit_seconds', 'session_ttl_seconds', 'keepalive_interval_seconds',
+            'dedupe_radius_m', 'dedupe_time_seconds',
+            'units', 'map_style',
+            'history_retention_days', 'events_retention_days'
+        ];
+
+        settingsFields.forEach(function(field) {
+            var el = form.querySelector('[name="' + field + '"]');
+            if (el) {
+                var val = el.value;
+                if (el.type === 'number') val = parseFloat(val);
+                settingsPayload[field] = val;
             }
+        });
+
+        // Collect alert rules
+        var alertsPayload = {
+            enabled: form.querySelector('[name="alert_enabled"]').checked ? 1 : 0,
+            arrive_place_enabled: form.querySelector('[name="arrive_place_enabled"]').checked ? 1 : 0,
+            leave_place_enabled: form.querySelector('[name="leave_place_enabled"]').checked ? 1 : 0,
+            enter_geofence_enabled: form.querySelector('[name="enter_geofence_enabled"]').checked ? 1 : 0,
+            exit_geofence_enabled: form.querySelector('[name="exit_geofence_enabled"]').checked ? 1 : 0,
+            cooldown_seconds: parseInt(form.querySelector('[name="cooldown_seconds"]').value) || 900,
+            quiet_hours_start: form.querySelector('[name="quiet_hours_start"]').value || null,
+            quiet_hours_end: form.querySelector('[name="quiet_hours_end"]').value || null
         };
 
-        // Load settings
-        async function loadSettings() {
-            try {
-                const response = await TrackingAPI.getSettings();
-                if (response.success) {
-                    populateForm(response.data);
-                }
-            } catch (err) {
-                Toast.show('Failed to load settings', 'error');
+        // Save both in parallel
+        var base = window.TrackingConfig.apiBase;
+
+        Promise.all([
+            fetch(base + '/settings_save.php', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settingsPayload)
+            }).then(function(r) { return r.json(); }),
+
+            fetch(base + '/alerts_rules_save.php', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(alertsPayload)
+            }).then(function(r) { return r.json(); })
+        ])
+        .then(function(results) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Settings';
+
+            var allOk = results.every(function(r) { return r.ok; });
+            if (allOk) {
+                showToast('Settings saved successfully', 'success');
+            } else {
+                var errors = results.filter(function(r) { return !r.ok; }).map(function(r) { return r.error || 'Unknown error'; });
+                showToast('Error: ' + errors.join(', '), 'error');
             }
-        }
+        })
+        .catch(function(err) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Settings';
+            showToast('Network error. Please try again.', 'error');
+        });
+    });
 
-        function populateForm(settings) {
-            document.getElementById('setting-moving-interval').value = settings.moving_interval_seconds;
-            document.getElementById('setting-idle-interval').value = settings.idle_interval_seconds;
-            document.getElementById('setting-speed-threshold').value = settings.speed_threshold_mps.toFixed(1);
-            document.getElementById('setting-min-accuracy').value = settings.min_accuracy_m;
-            document.getElementById('setting-dedupe-radius').value = settings.dedupe_radius_m;
-            document.getElementById('setting-units').value = settings.units;
-            document.getElementById('setting-history-retention').value = settings.history_retention_days;
-        }
+    function showToast(message, type) {
+        var existing = document.querySelector('.tracking-toast');
+        if (existing) existing.remove();
 
-        // Save
-        if (canEdit) {
-            document.getElementById('btn-save').addEventListener('click', async () => {
-                const settings = {
-                    mode: 2,
-                    session_ttl_seconds: 600,
-                    moving_interval_seconds: parseInt(document.getElementById('setting-moving-interval').value),
-                    idle_interval_seconds: parseInt(document.getElementById('setting-idle-interval').value),
-                    speed_threshold_mps: parseFloat(document.getElementById('setting-speed-threshold').value),
-                    min_accuracy_m: parseInt(document.getElementById('setting-min-accuracy').value),
-                    dedupe_radius_m: parseInt(document.getElementById('setting-dedupe-radius').value),
-                    units: document.getElementById('setting-units').value,
-                    history_retention_days: parseInt(document.getElementById('setting-history-retention').value)
-                };
+        var toast = document.createElement('div');
+        toast.className = 'tracking-toast ' + (type || 'info');
+        toast.textContent = message;
+        document.body.appendChild(toast);
 
-                try {
-                    const response = await TrackingAPI.saveSettings(settings);
-                    if (response.success) {
-                        Toast.show('Settings saved', 'success');
+        requestAnimationFrame(function() {
+            toast.classList.add('show');
+        });
 
-                        // Push settings to native app if running inside WebView
-                        if (window.NativeBridge && window.NativeBridge.isNativeApp) {
-                            var highAccuracy = settings.min_accuracy_m <= 50;
-                            window.NativeBridge.updateTrackingSettings(
-                                settings.moving_interval_seconds,
-                                highAccuracy
-                            );
-                        }
-                    }
-                } catch (err) {
-                    Toast.show(err.message || 'Failed to save', 'error');
-                }
-            });
-        }
+        setTimeout(function() {
+            toast.classList.remove('show');
+            setTimeout(function() { toast.remove(); }, 400);
+        }, 3000);
+    }
 
-        loadSettings();
-    </script>
-</body>
-</html>
+})();
+</script>

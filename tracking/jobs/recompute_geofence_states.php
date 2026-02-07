@@ -1,104 +1,99 @@
 <?php
 /**
- * Recompute Geofence States Job
+ * ============================================
+ * CRON JOB: RECOMPUTE GEOFENCE STATES
  *
- * Run manually when needed: php /path/to/tracking/jobs/recompute_geofence_states.php
+ * Safety net that re-evaluates all active users'
+ * current positions against all active geofences
+ * and places. Corrects any stale or missed state
+ * transitions.
  *
- * Repair tool: Recalculates all geofence states based on current user locations.
- * Useful after creating/modifying geofences or fixing data issues.
+ * Recommended schedule: every 15 minutes
+ *   0,15,30,45 * * * * php /path/to/tracking/jobs/recompute_geofence_states.php
+ * ============================================
  */
+declare(strict_types=1);
 
-// CLI only
+// Prevent web access
 if (php_sapi_name() !== 'cli') {
-    die('CLI only');
+    http_response_code(403);
+    exit('CLI only');
 }
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-echo "=== Recompute Geofence States ===\n";
-echo "Started: " . date('Y-m-d H:i:s') . "\n\n";
+$startTime = microtime(true);
+$processed = 0;
+$transitions = 0;
 
-$geofenceRepo = new GeofenceRepo($db, $trackingCache);
+try {
+    $trackingCache = new TrackingCache($db);
+    $geoRepo = new GeofenceRepo($db, $trackingCache);
+    $placesRepo = new PlacesRepo($db);
+    $eventsRepo = new EventsRepo($db);
+    $alertsRepo = new AlertsRepo($db);
+    $alertsEngine = new AlertsEngine($db, $alertsRepo);
+    $geofenceEngine = new GeofenceEngine(
+        $db, $trackingCache, $geoRepo, $placesRepo, $eventsRepo, $alertsEngine
+    );
+    $locationRepo = new LocationRepo($db, $trackingCache);
 
-// Get all families with geofences
-$stmt = $db->query("
-    SELECT DISTINCT family_id FROM tracking_geofences WHERE active = 1
-");
-$families = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    // Get all families that have active geofences or places
+    $stmt = $db->prepare("
+        SELECT DISTINCT family_id
+        FROM tracking_geofences
+        WHERE active = 1
+        UNION
+        SELECT DISTINCT family_id
+        FROM tracking_places
+    ");
+    $stmt->execute();
+    $familyIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-$totalProcessed = 0;
-$totalUpdated = 0;
-
-foreach ($families as $familyId) {
-    echo "Processing family {$familyId}...\n";
-
-    // Get active geofences
-    $geofences = $geofenceRepo->getActive($familyId);
-    if (empty($geofences)) {
-        echo "  No active geofences, skipping\n";
-        continue;
+    if (empty($familyIds)) {
+        echo "[recompute_geofence_states] No families with active geofences/places. Skipping.\n";
+        exit(0);
     }
 
-    // Get users with current locations
-    $stmt = $db->prepare("
-        SELECT tc.user_id, tc.lat, tc.lng
-        FROM tracking_current tc
-        JOIN users u ON tc.user_id = u.id
-        WHERE tc.family_id = ?
-          AND u.status = 'active'
-          AND u.location_sharing = 1
-    ");
-    $stmt->execute([$familyId]);
-    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($familyIds as $familyId) {
+        $familyId = (int)$familyId;
 
-    foreach ($users as $user) {
-        foreach ($geofences as $geofence) {
-            $isInside = $geofenceRepo->isPointInside(
-                $user['lat'],
-                $user['lng'],
-                $geofence
-            );
+        // Get current locations for all active members in this family
+        $members = $locationRepo->getFamilyCurrentLocations($familyId);
 
-            // Get current state
-            $stmt2 = $db->prepare("
-                SELECT is_inside FROM tracking_geofence_state
-                WHERE geofence_id = ? AND user_id = ?
-            ");
-            $stmt2->execute([$geofence['id'], $user['user_id']]);
-            $currentState = $stmt2->fetchColumn();
-
-            $needsUpdate = ($currentState === false) || ((bool)$currentState !== $isInside);
-
-            if ($needsUpdate) {
-                // Upsert state
-                $stmt3 = $db->prepare("
-                    INSERT INTO tracking_geofence_state (
-                        family_id, geofence_id, user_id, is_inside, updated_at
-                    ) VALUES (?, ?, ?, ?, NOW())
-                    ON DUPLICATE KEY UPDATE
-                        is_inside = VALUES(is_inside),
-                        updated_at = NOW()
-                ");
-                $stmt3->execute([
-                    $familyId,
-                    $geofence['id'],
-                    $user['user_id'],
-                    $isInside ? 1 : 0
-                ]);
-
-                echo "  User {$user['user_id']}: geofence '{$geofence['name']}' -> " . ($isInside ? 'inside' : 'outside') . "\n";
-                $totalUpdated++;
-            }
-
-            $totalProcessed++;
+        if (empty($members)) {
+            continue;
         }
 
-        // Clear user's geofence state cache
-        $trackingCache->deleteGeofenceState($user['user_id']);
-    }
-}
+        foreach ($members as $member) {
+            $userId = (int)$member['user_id'];
+            $lat = (float)$member['lat'];
+            $lng = (float)$member['lng'];
+            $name = $member['name'] ?? 'User';
 
-echo "\n=== Summary ===\n";
-echo "States processed: {$totalProcessed}\n";
-echo "States updated: {$totalUpdated}\n";
-echo "Completed: " . date('Y-m-d H:i:s') . "\n";
+            // Skip if location is too stale (older than 1 hour)
+            $recordedAt = strtotime($member['recorded_at'] ?? $member['updated_at'] ?? '');
+            if ($recordedAt && (time() - $recordedAt) > 3600) {
+                continue;
+            }
+
+            // Re-process through the geofence engine
+            // The engine handles state comparison internally and only fires
+            // events/alerts on actual transitions
+            $geofenceEngine->process($familyId, $userId, $lat, $lng, $name);
+            $processed++;
+        }
+
+        // Clear family's cached geofence data to force fresh reads on next tick
+        $trackingCache->deleteGeofences($familyId);
+    }
+
+    $elapsed = round(microtime(true) - $startTime, 3);
+    echo "[recompute_geofence_states] Complete. Processed {$processed} member(s) across " .
+         count($familyIds) . " family(ies). Time: {$elapsed}s\n";
+
+} catch (Exception $e) {
+    error_log('[recompute_geofence_states] ERROR: ' . $e->getMessage());
+    echo "[recompute_geofence_states] ERROR: " . $e->getMessage() . "\n";
+    exit(1);
+}

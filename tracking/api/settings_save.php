@@ -1,63 +1,34 @@
 <?php
-/**
- * POST /tracking/api/settings_save.php
- *
- * Save family tracking settings.
- * Requires admin or owner role.
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-header('Content-Type: application/json');
-
-// Only POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    jsonError('method_not_allowed', 'POST required', 405);
+    Response::error('method_not_allowed', 405);
 }
 
-// Auth required
-$user = requireAuth();
-$familyId = $user['family_id'];
+$ctx = SiteContext::require($db);
 
-// Require admin role
-if (!in_array($user['role'], ['owner', 'admin'])) {
-    jsonError('forbidden', 'Admin access required', 403);
+if (!$ctx->isAdmin()) {
+    Response::error('admin_required', 403);
 }
 
-// Parse input
-$input = json_decode(file_get_contents('php://input'), true);
-if (!$input) {
-    jsonError('invalid_json', 'Invalid JSON body', 400);
+$input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
+
+if (empty($input)) {
+    Response::error('no_data_provided', 422);
 }
 
-// Validate
-$validation = TrackingValidator::validateSettings($input);
-$data = $validation['cleaned'];
-
-if (empty($data)) {
-    jsonError('no_changes', 'No valid settings to update', 400);
-}
-
-// Initialize services
+$trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
-$eventsRepo = new EventsRepo($db);
 
-// Get current for comparison
-$current = $settingsRepo->get($familyId);
+$saved = $settingsRepo->save($ctx->familyId, $input);
 
-// Save
-$updated = $settingsRepo->save($familyId, $data);
-
-// Log change event
-$changedFields = array_keys(array_filter($data, function($v, $k) use ($current) {
-    return $current[$k] != $v;
-}, ARRAY_FILTER_USE_BOTH));
-
-if (!empty($changedFields)) {
-    $eventsRepo->logSettingsChange($familyId, $user['id'], array_flip($changedFields));
+if (!$saved) {
+    Response::error('no_valid_settings_provided', 422);
 }
 
-jsonSuccess([
-    'settings' => $updated,
-    'changed_fields' => $changedFields
-]);
+// Return updated settings
+$settings = $settingsRepo->get($ctx->familyId);
+
+Response::success($settings, 'Settings saved');

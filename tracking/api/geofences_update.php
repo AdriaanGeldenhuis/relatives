@@ -1,76 +1,40 @@
 <?php
-/**
- * PUT /tracking/api/geofences_update.php
- *
- * Update an existing geofence.
- *
- * Parameters:
- * - id: geofence ID
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-header('Content-Type: application/json');
-
-// Only PUT or POST
-if (!in_array($_SERVER['REQUEST_METHOD'], ['PUT', 'POST'])) {
-    jsonError('method_not_allowed', 'PUT or POST required', 405);
+if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
+    Response::error('method_not_allowed', 405);
 }
 
-// Auth required
-$user = requireAuth();
-$familyId = $user['family_id'];
+$ctx = SiteContext::require($db);
 
-// Get geofence ID
-$id = isset($_GET['id']) ? (int)$_GET['id'] : null;
-
-// Parse input
 $input = json_decode(file_get_contents('php://input'), true);
-if (!$input) {
-    jsonError('invalid_json', 'Invalid JSON body', 400);
+
+if (empty($input) || empty($input['id'])) {
+    Response::error('id is required', 422);
 }
 
-// ID can also be in body
-if (!$id && isset($input['id'])) {
-    $id = (int)$input['id'];
+$id = (int) $input['id'];
+
+$validator = new TrackingValidator();
+$data = $validator->validateGeofence($input);
+
+if ($data === null) {
+    Response::error(implode('; ', $validator->getErrors()), 422);
 }
 
-if (!$id) {
-    jsonError('missing_id', 'Geofence ID is required', 400);
+if (isset($input['active'])) {
+    $data['active'] = (int) (bool) $input['active'];
 }
 
-// Validate
-$validation = TrackingValidator::validateGeofence($input, true);
-if (!$validation['valid']) {
-    jsonError('validation_failed', implode(', ', $validation['errors']), 400);
-}
+$trackingCache = new TrackingCache($cache);
+$repo = new GeofenceRepo($db, $trackingCache);
 
-$data = $validation['cleaned'];
-
-if (empty($data)) {
-    jsonError('no_changes', 'No valid fields to update', 400);
-}
-
-// Initialize services
-$geofenceRepo = new GeofenceRepo($db, $trackingCache);
-
-// Check geofence exists
-$existing = $geofenceRepo->get($id, $familyId);
-if (!$existing) {
-    jsonError('not_found', 'Geofence not found', 404);
-}
-
-// Update
-$updated = $geofenceRepo->update($id, $familyId, $data);
+$updated = $repo->update($ctx->familyId, $id, $data);
 
 if (!$updated) {
-    jsonError('update_failed', 'No changes made', 400);
+    Response::error('geofence_not_found', 404);
 }
 
-// Get updated geofence
-$geofence = $geofenceRepo->get($id, $familyId);
-
-jsonSuccess([
-    'geofence' => $geofence,
-    'message' => 'Geofence updated successfully'
-]);
+Response::success(['id' => $id], 'Geofence updated');

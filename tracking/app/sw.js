@@ -1,230 +1,210 @@
 /**
- * Service Worker for Family Tracking App
- *
- * Provides:
- * - Asset caching for faster loads
- * - Offline awareness (shows message when offline)
- * - Background sync for location uploads (when supported)
+ * ============================================
+ * FAMILY TRACKING - SERVICE WORKER
+ * Cache app shell, network-first for API,
+ * cache-first for static assets, offline fallback.
+ * ============================================
  */
 
-const CACHE_NAME = 'tracking-v6';
-const OFFLINE_URL = '/tracking/app/offline.html';
+const CACHE_VERSION = 'tracking-v1.0.0';
+const STATIC_CACHE = 'tracking-static-' + CACHE_VERSION;
+const API_CACHE = 'tracking-api-' + CACHE_VERSION;
 
-// Assets to cache on install
-const PRECACHE_ASSETS = [
+/**
+ * App shell files to pre-cache on install.
+ */
+const APP_SHELL = [
+    '/tracking/app/',
+    '/tracking/app/index.php',
+    '/tracking/app/geofences.php',
+    '/tracking/app/events.php',
+    '/tracking/app/settings.php',
+    '/tracking/app/offline.html',
     '/tracking/app/assets/css/tracking.css',
-    '/tracking/app/assets/js/api.js',
-    '/tracking/app/assets/js/bootstrap.js',
-    '/tracking/app/assets/js/browser-tracking.js',
-    '/tracking/app/assets/js/directions.js',
-    '/tracking/app/assets/js/family-panel.js',
-    '/tracking/app/assets/js/follow.js',
-    '/tracking/app/assets/js/format.js',
-    '/tracking/app/assets/js/map.js',
-    '/tracking/app/assets/js/native-bridge.js',
-    '/tracking/app/assets/js/polling.js',
     '/tracking/app/assets/js/state.js',
-    '/tracking/app/assets/js/ui-controls.js',
-    OFFLINE_URL
+    '/tracking/app/manifest.json',
+    '/icon-192.png',
+    '/icon-512.png'
 ];
 
-// External resources to cache on first use
-const CACHE_ON_USE = [
-    'https://api.mapbox.com/mapbox-gl-js/',
-    'https://fonts.googleapis.com/',
-    'https://fonts.gstatic.com/'
+/**
+ * Static asset URL patterns (cache-first).
+ */
+const STATIC_PATTERNS = [
+    /\.css(\?|$)/,
+    /\.js(\?|$)/,
+    /\.png(\?|$)/,
+    /\.jpg(\?|$)/,
+    /\.jpeg(\?|$)/,
+    /\.webp(\?|$)/,
+    /\.svg(\?|$)/,
+    /\.woff2?(\?|$)/,
+    /fonts\.googleapis\.com/,
+    /fonts\.gstatic\.com/,
+    /api\.mapbox\.com\/mapbox-gl-js/
 ];
 
-// Install event - cache core assets
-self.addEventListener('install', (event) => {
+/**
+ * API URL patterns (network-first).
+ */
+const API_PATTERNS = [
+    /\/tracking\/api\//,
+    /\/api\//
+];
+
+// ============================================
+// INSTALL
+// ============================================
+self.addEventListener('install', function (event) {
     event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then((cache) => {
-                console.log('[SW] Precaching assets');
-                return cache.addAll(PRECACHE_ASSETS);
-            })
-            .then(() => self.skipWaiting())
+        caches.open(STATIC_CACHE).then(function (cache) {
+            return cache.addAll(APP_SHELL).catch(function (err) {
+                console.warn('[SW] Pre-cache partial failure:', err);
+            });
+        })
     );
+    self.skipWaiting();
 });
 
-// Activate event - clean old caches
-self.addEventListener('activate', (event) => {
+// ============================================
+// ACTIVATE - clean old caches
+// ============================================
+self.addEventListener('activate', function (event) {
     event.waitUntil(
-        caches.keys()
-            .then((cacheNames) => {
-                return Promise.all(
-                    cacheNames
-                        .filter((name) => name !== CACHE_NAME)
-                        .map((name) => {
-                            console.log('[SW] Deleting old cache:', name);
-                            return caches.delete(name);
-                        })
-                );
-            })
-            .then(() => self.clients.claim())
+        caches.keys().then(function (keys) {
+            return Promise.all(
+                keys
+                    .filter(function (key) {
+                        return key !== STATIC_CACHE && key !== API_CACHE;
+                    })
+                    .map(function (key) {
+                        return caches.delete(key);
+                    })
+            );
+        })
     );
+    self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
-self.addEventListener('fetch', (event) => {
-    const { request } = event;
-    const url = new URL(request.url);
+// ============================================
+// FETCH
+// ============================================
+self.addEventListener('fetch', function (event) {
+    var request = event.request;
 
     // Skip non-GET requests
     if (request.method !== 'GET') {
         return;
     }
 
-    // API requests - network only, queue if offline
-    if (url.pathname.startsWith('/tracking/api/')) {
-        event.respondWith(
-            fetch(request)
-                .catch(() => {
-                    // Return error response for API calls when offline
-                    return new Response(
-                        JSON.stringify({
-                            success: false,
-                            error: 'offline',
-                            message: 'You are offline. Changes will sync when reconnected.'
-                        }),
-                        {
-                            status: 503,
-                            headers: { 'Content-Type': 'application/json' }
-                        }
-                    );
-                })
-        );
+    var url = request.url;
+
+    // API calls: network-first with cache fallback
+    if (isApiRequest(url)) {
+        event.respondWith(networkFirst(request, API_CACHE));
         return;
     }
 
-    // Static assets - cache first, then network
-    if (shouldCacheFirst(url)) {
-        event.respondWith(
-            caches.match(request)
-                .then((cached) => {
-                    if (cached) {
-                        // Return cached, but update in background
-                        event.waitUntil(updateCache(request));
-                        return cached;
-                    }
-                    return fetchAndCache(request);
-                })
-        );
+    // Static assets: cache-first with network fallback
+    if (isStaticAsset(url)) {
+        event.respondWith(cacheFirst(request, STATIC_CACHE));
         return;
     }
 
-    // HTML pages - network first, fallback to offline page
-    var acceptHeader = request.headers.get('Accept');
-    if (acceptHeader && acceptHeader.includes('text/html')) {
-        event.respondWith(
-            fetch(request)
-                .catch(() => caches.match(OFFLINE_URL))
-        );
+    // Navigation requests: network-first with offline fallback
+    if (request.mode === 'navigate') {
+        event.respondWith(navigationHandler(request));
         return;
     }
 
-    // Default - network with cache fallback
-    event.respondWith(
-        fetch(request)
-            .then((response) => {
-                // Cache external resources on use
-                if (shouldCacheOnUse(url)) {
-                    const responseClone = response.clone();
-                    caches.open(CACHE_NAME)
-                        .then((cache) => cache.put(request, responseClone));
-                }
-                return response;
-            })
-            .catch(() => caches.match(request))
-    );
+    // Default: network with cache fallback
+    event.respondWith(networkFirst(request, STATIC_CACHE));
 });
 
-// Helper: should use cache-first strategy
-function shouldCacheFirst(url) {
-    return url.pathname.match(/\.(js|css|png|jpg|svg|woff2?)$/i) ||
-           PRECACHE_ASSETS.some(asset => url.pathname.endsWith(asset));
-}
+// ============================================
+// STRATEGIES
+// ============================================
 
-// Helper: should cache on first use
-function shouldCacheOnUse(url) {
-    return CACHE_ON_USE.some(prefix => url.href.startsWith(prefix));
-}
-
-// Helper: fetch and add to cache
-async function fetchAndCache(request) {
-    const response = await fetch(request);
-    if (response.ok) {
-        const cache = await caches.open(CACHE_NAME);
-        cache.put(request, response.clone());
-    }
-    return response;
-}
-
-// Helper: update cached resource in background
-async function updateCache(request) {
-    try {
-        const response = await fetch(request);
-        if (response.ok) {
-            const cache = await caches.open(CACHE_NAME);
-            await cache.put(request, response);
-        }
-    } catch (e) {
-        // Ignore errors - we have cached version
-    }
-}
-
-// Background sync for location uploads
-self.addEventListener('sync', (event) => {
-    if (event.tag === 'location-sync') {
-        event.waitUntil(syncLocations());
-    }
-});
-
-async function syncLocations() {
-    // Get queued locations from IndexedDB
-    const db = await openLocationDB();
-    const tx = db.transaction('pending', 'readonly');
-    const store = tx.objectStore('pending');
-    const locations = await store.getAll();
-
-    if (locations.length === 0) return;
-
-    try {
-        const response = await fetch('/tracking/api/batch.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ locations }),
-            credentials: 'same-origin'
-        });
-
-        if (response.ok) {
-            // Clear synced locations
-            const clearTx = db.transaction('pending', 'readwrite');
-            await clearTx.objectStore('pending').clear();
-            console.log('[SW] Synced', locations.length, 'locations');
-        }
-    } catch (e) {
-        console.error('[SW] Location sync failed:', e);
-    }
-}
-
-function openLocationDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open('tracking-offline', 1);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-        request.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains('pending')) {
-                db.createObjectStore('pending', { keyPath: 'id', autoIncrement: true });
+/**
+ * Network-first: try network, fall back to cache.
+ */
+function networkFirst(request, cacheName) {
+    return fetch(request)
+        .then(function (response) {
+            if (response && response.status === 200) {
+                var clone = response.clone();
+                caches.open(cacheName).then(function (cache) {
+                    cache.put(request, clone);
+                });
             }
-        };
+            return response;
+        })
+        .catch(function () {
+            return caches.match(request);
+        });
+}
+
+/**
+ * Cache-first: try cache, fall back to network.
+ */
+function cacheFirst(request, cacheName) {
+    return caches.match(request).then(function (cached) {
+        if (cached) {
+            // Refresh cache in background
+            fetch(request).then(function (response) {
+                if (response && response.status === 200) {
+                    caches.open(cacheName).then(function (cache) {
+                        cache.put(request, response);
+                    });
+                }
+            }).catch(function () {});
+            return cached;
+        }
+        return fetch(request).then(function (response) {
+            if (response && response.status === 200) {
+                var clone = response.clone();
+                caches.open(cacheName).then(function (cache) {
+                    cache.put(request, clone);
+                });
+            }
+            return response;
+        });
     });
 }
 
-// Message handler for client communication
-self.addEventListener('message', (event) => {
-    if (event.data.type === 'SKIP_WAITING') {
-        self.skipWaiting();
-    }
-});
+/**
+ * Navigation handler: network-first with offline fallback page.
+ */
+function navigationHandler(request) {
+    return fetch(request)
+        .then(function (response) {
+            if (response && response.status === 200) {
+                var clone = response.clone();
+                caches.open(STATIC_CACHE).then(function (cache) {
+                    cache.put(request, clone);
+                });
+            }
+            return response;
+        })
+        .catch(function () {
+            return caches.match(request).then(function (cached) {
+                return cached || caches.match('/tracking/app/offline.html');
+            });
+        });
+}
+
+// ============================================
+// HELPERS
+// ============================================
+
+function isStaticAsset(url) {
+    return STATIC_PATTERNS.some(function (pattern) {
+        return pattern.test(url);
+    });
+}
+
+function isApiRequest(url) {
+    return API_PATTERNS.some(function (pattern) {
+        return pattern.test(url);
+    });
+}

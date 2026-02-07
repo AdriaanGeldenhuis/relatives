@@ -1,186 +1,230 @@
 package za.co.relatives.app.services
 
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import android.content.Intent
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import za.co.relatives.app.MainActivity
-import za.co.relatives.app.utils.NotificationHelper
-import za.co.relatives.app.utils.PreferencesManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import za.co.relatives.app.R
+import za.co.relatives.app.network.ApiClient
 
 /**
- * Firebase Cloud Messaging Service
- * Handles incoming push notifications and routes them to correct screens
+ * Firebase Cloud Messaging service for the Relatives app.
+ *
+ * Handles incoming push notifications of various types and manages FCM token
+ * registration with the backend.
+ *
+ * Supported notification types:
+ * - `message`, `shopping`, `calendar`, `schedule`, `tracking`, `weather`,
+ *   `note`, `system` -- displayed as a visible notification with optional deep link.
+ * - `wake_tracking` -- silently triggers BURST mode on [TrackingLocationService]
+ *   without showing any notification to the user.
  */
 class RelativesFirebaseService : FirebaseMessagingService() {
 
     companion object {
-        private const val TAG = "FCMService"
+        private const val TAG = "RelativesFCM"
 
-        // Notification types matching server
-        const val TYPE_MESSAGE = "message"
-        const val TYPE_SHOPPING = "shopping"
-        const val TYPE_CALENDAR = "calendar"
-        const val TYPE_SCHEDULE = "schedule"
-        const val TYPE_TRACKING = "tracking"
-        const val TYPE_WAKE_TRACKING = "wake_tracking"
-        const val TYPE_WEATHER = "weather"
-        const val TYPE_NOTE = "note"
-        const val TYPE_SYSTEM = "system"
+        private const val CHANNEL_ALERTS = "relatives_alerts"
+        private const val CHANNEL_TRACKING = "relatives_tracking"
+
+        private const val PREF_NAME = "relatives_prefs"
+        private const val PREF_FCM_TOKEN = "fcm_token"
     }
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // ------------------------------------------------------------------ //
+    //  Token management
+    // ------------------------------------------------------------------ //
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "New FCM token: $token")
-        // Token will be registered when user logs in
-        // Store it for later registration
-        PreferencesManager.init(applicationContext)
-        getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
+        Log.d(TAG, "New FCM token received")
+
+        // Persist locally.
+        getSharedPreferences(PREF_NAME, MODE_PRIVATE)
             .edit()
-            .putString("fcm_token", token)
-            .putBoolean("token_needs_sync", true)
+            .putString(PREF_FCM_TOKEN, token)
             .apply()
+
+        // Register with backend.
+        serviceScope.launch {
+            try {
+                val api = ApiClient(applicationContext)
+                api.registerFcmToken(token)
+                Log.d(TAG, "FCM token registered with backend")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to register FCM token", e)
+            }
+        }
     }
+
+    // ------------------------------------------------------------------ //
+    //  Message handling
+    // ------------------------------------------------------------------ //
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        Log.d(TAG, "FCM message received from: ${message.from}")
-
-        // Get data payload
         val data = message.data
-        val notification = message.notification
+        val type = data["type"] ?: "system"
 
-        // Extract notification details
-        val title = notification?.title ?: data["title"] ?: "New Notification"
-        val body = notification?.body ?: data["body"] ?: data["message"] ?: ""
-        val type = data["type"] ?: TYPE_SYSTEM
-        val actionUrl = data["action_url"] ?: getDefaultUrlForType(type)
-        val notificationId = data["notification_id"]?.toIntOrNull() ?: System.currentTimeMillis().toInt()
+        Log.d(TAG, "Message received: type=$type data=$data")
 
-        Log.d(TAG, "Notification - Type: $type, Title: $title, ActionUrl: $actionUrl")
-
-        // Handle wake_tracking silently - wake the tracking service without showing notification
-        if (type == TYPE_WAKE_TRACKING) {
-            Log.d(TAG, "Wake tracking push received - triggering BURST mode")
-            PreferencesManager.init(applicationContext)
-            if (PreferencesManager.isTrackingEnabled()) {
-                val wakeIntent = Intent(this, TrackingLocationService::class.java).apply {
-                    action = TrackingLocationService.ACTION_WAKE_TRACKING
-                }
-                try {
-                    androidx.core.content.ContextCompat.startForegroundService(this, wakeIntent)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to wake tracking service", e)
-                }
-            }
-            return  // Don't show notification for wake_tracking
+        when (type) {
+            "wake_tracking" -> handleWakeTracking()
+            else -> handleVisibleNotification(type, data, message.notification)
         }
-
-        // Show the notification with correct deep link
-        showNotification(notificationId, title, body, type, actionUrl, data)
     }
 
-    private fun showNotification(
-        notificationId: Int,
-        title: String,
-        body: String,
+    // ------------------------------------------------------------------ //
+    //  Wake tracking (silent)
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Silently trigger a BURST location fix without showing any notification.
+     * Used when another family member taps "Find Device" or similar.
+     */
+    private fun handleWakeTracking() {
+        Log.d(TAG, "Wake tracking: triggering BURST mode")
+        val intent = Intent(this, TrackingLocationService::class.java).apply {
+            action = TrackingLocationService.ACTION_BURST
+        }
+        try {
+            startForegroundService(intent)
+        } catch (e: Exception) {
+            // Service might not be running; start it first.
+            TrackingLocationService.start(this)
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Visible notifications
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Show a user-visible notification for all types except `wake_tracking`.
+     */
+    private fun handleVisibleNotification(
         type: String,
-        actionUrl: String,
-        data: Map<String, String>
+        data: Map<String, String>,
+        remoteNotification: RemoteMessage.Notification?
     ) {
-        // Create notification channel if needed
-        NotificationHelper.createNotificationChannel(this)
+        val title = data["title"]
+            ?: remoteNotification?.title
+            ?: getNotificationTitle(type)
+        val body = data["body"]
+            ?: remoteNotification?.body
+            ?: ""
+        val actionUrl = data["action_url"]
 
-        // Build full URL
-        val fullUrl = if (actionUrl.startsWith("http")) {
-            actionUrl
+        ensureNotificationChannels()
+
+        val channelId = if (type == "tracking") CHANNEL_TRACKING else CHANNEL_ALERTS
+        val notificationId = (type.hashCode() + System.currentTimeMillis().toInt())
+
+        val builder = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+
+        // Deep link via action_url.
+        val contentIntent = buildContentIntent(actionUrl, type, data)
+        if (contentIntent != null) {
+            builder.setContentIntent(contentIntent)
+        }
+
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.notify(notificationId, builder.build())
+    }
+
+    /**
+     * Build a [PendingIntent] that deep-links into the app.
+     *
+     * If [actionUrl] is provided it is used as a VIEW intent URI; otherwise
+     * the app's main activity is opened with extras describing the
+     * notification type.
+     */
+    private fun buildContentIntent(
+        actionUrl: String?,
+        type: String,
+        data: Map<String, String>
+    ): PendingIntent? {
+        val intent = if (!actionUrl.isNullOrBlank()) {
+            Intent(Intent.ACTION_VIEW, Uri.parse(actionUrl)).apply {
+                setPackage(packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra("notification_type", type)
+                data.forEach { (k, v) -> putExtra(k, v) }
+            }
         } else {
-            "https://www.relatives.co.za${actionUrl}"
-        }
+            packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra("notification_type", type)
+                data.forEach { (k, v) -> putExtra(k, v) }
+            }
+        } ?: return null
 
-        // Intent to open MainActivity with the correct URL
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("open_url", fullUrl)
-            putExtra("notification_type", type)
-            putExtra("notification_id", notificationId.toString())
-        }
-
-        val pendingIntent = PendingIntent.getActivity(
+        return PendingIntent.getActivity(
             this,
-            notificationId, // Unique request code per notification
+            type.hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
-        // Get appropriate icon for type
-        val icon = getIconForType(type)
-
-        // Build notification
-        val notification = NotificationCompat.Builder(this, NotificationHelper.CHANNEL_ALERTS)
-            .setSmallIcon(icon)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(getCategoryForType(type))
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setGroup(type) // Group by notification type
-            .build()
-
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(notificationId, notification)
     }
 
-    /**
-     * Get default URL for notification type
-     */
-    private fun getDefaultUrlForType(type: String): String {
-        return when (type) {
-            TYPE_MESSAGE -> "/messages/"
-            TYPE_SHOPPING -> "/shopping/"
-            TYPE_CALENDAR -> "/calendar/"
-            TYPE_SCHEDULE -> "/schedule/"
-            TYPE_TRACKING -> "/tracking/"
-            TYPE_WEATHER -> "/weather/"
-            TYPE_NOTE -> "/notes/"
-            TYPE_SYSTEM -> "/notifications/"
-            else -> "/notifications/"
+    // ------------------------------------------------------------------ //
+    //  Helpers
+    // ------------------------------------------------------------------ //
+
+    private fun getNotificationTitle(type: String): String = when (type) {
+        "message"   -> "New Message"
+        "shopping"  -> "Shopping List"
+        "calendar"  -> "Calendar Event"
+        "schedule"  -> "Schedule Update"
+        "tracking"  -> "Location Update"
+        "weather"   -> "Weather Alert"
+        "note"      -> "New Note"
+        "system"    -> "Relatives"
+        else        -> "Relatives"
+    }
+
+    private fun ensureNotificationChannels() {
+        val nm = getSystemService(NotificationManager::class.java)
+
+        if (nm.getNotificationChannel(CHANNEL_ALERTS) == null) {
+            val channel = NotificationChannel(
+                CHANNEL_ALERTS,
+                "Alerts & Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Family messages, shopping lists, calendar events, and more"
+            }
+            nm.createNotificationChannel(channel)
         }
-    }
 
-    /**
-     * Get icon for notification type
-     */
-    private fun getIconForType(type: String): Int {
-        return when (type) {
-            TYPE_MESSAGE -> android.R.drawable.ic_dialog_email
-            TYPE_SHOPPING -> android.R.drawable.ic_menu_agenda
-            TYPE_CALENDAR -> android.R.drawable.ic_menu_my_calendar
-            TYPE_SCHEDULE -> android.R.drawable.ic_menu_recent_history
-            TYPE_TRACKING -> android.R.drawable.ic_menu_mylocation
-            TYPE_WEATHER -> android.R.drawable.ic_menu_compass
-            TYPE_NOTE -> android.R.drawable.ic_menu_edit
-            else -> android.R.drawable.ic_dialog_info
-        }
-    }
-
-    /**
-     * Get notification category for type
-     */
-    private fun getCategoryForType(type: String): String {
-        return when (type) {
-            TYPE_MESSAGE -> NotificationCompat.CATEGORY_MESSAGE
-            TYPE_CALENDAR, TYPE_SCHEDULE -> NotificationCompat.CATEGORY_EVENT
-            TYPE_TRACKING -> NotificationCompat.CATEGORY_NAVIGATION
-            TYPE_WEATHER -> NotificationCompat.CATEGORY_STATUS
-            else -> NotificationCompat.CATEGORY_SOCIAL
+        if (nm.getNotificationChannel(CHANNEL_TRACKING) == null) {
+            val channel = NotificationChannel(
+                CHANNEL_TRACKING,
+                "Tracking Notifications",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Location tracking status and updates"
+                setShowBadge(false)
+            }
+            nm.createNotificationChannel(channel)
         }
     }
 }

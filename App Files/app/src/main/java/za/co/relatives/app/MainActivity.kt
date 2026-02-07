@@ -1,638 +1,659 @@
 package za.co.relatives.app
 
 import android.Manifest
-import android.app.Activity
-import android.app.AlertDialog
 import android.annotation.SuppressLint
+import android.app.AlertDialog
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
-import android.view.ViewGroup
-import android.webkit.*
+import android.view.Gravity
+import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.webkit.CookieManager
+import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import java.lang.ref.WeakReference
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import androidx.activity.compose.rememberLauncherForActivityResult
-import za.co.relatives.app.services.TrackingLocationService
+import com.android.billingclient.api.BillingClient
+import com.android.billingclient.api.BillingClientStateListener
+import com.android.billingclient.api.BillingResult
+import com.android.billingclient.api.PendingPurchasesParams
+import com.android.billingclient.api.Purchase
+import com.android.billingclient.api.QueryPurchasesParams
 import za.co.relatives.app.ui.TrackingJsInterface
-import za.co.relatives.app.ui.SubscriptionActivity
-import za.co.relatives.app.network.ApiClient
-import za.co.relatives.app.ui.theme.RelativesTheme
 import za.co.relatives.app.utils.PreferencesManager
+import java.net.CookieHandler
+import java.net.HttpCookie
+import java.net.URI
+import java.net.CookieManager as JavaNetCookieManager
 
 /**
- * Main activity hosting the WebView with JavaScript bridge.
+ * Single-activity host for the Relatives hybrid WebView app.
  *
- * GOOGLE PLAY PROMINENT DISCLOSURE COMPLIANCE:
- *
- * Permissions are NEVER requested automatically on app launch.
- * The disclosure + permission flow is triggered ONLY when the user
- * explicitly enables tracking (via the web UI toggle or native bridge).
- *
- * Flow:
- * 1. User taps "Enable Location Sharing" in web UI
- * 2. Web calls TrackingBridge.startTracking() via bridge
- * 3. Bridge calls MainActivity.requestTrackingPermissions()
- * 4. Foreground disclosure dialog shown (blocking, non-cancelable)
- * 5. User taps "Continue" -> OS foreground location prompt
- * 6. If granted -> background disclosure dialog shown
- * 7. User taps "Continue" -> OS background location prompt
- * 8. Notification permission requested (Android 13+)
- * 9. Tracking service starts
- *
- * If user taps "Not Now" at any disclosure -> no permission requested,
- * no tracking started. App continues to work without location.
+ * Responsibilities:
+ * - Loads the web app in a full-screen WebView
+ * - Manages runtime permission flows (location, notifications, microphone)
+ * - Registers the [TrackingJsInterface] as `window.TrackingBridge`
+ * - Handles deep-link navigation via `action_url` intent extras
+ * - Syncs cookies between the WebView and native HTTP stacks
+ * - Checks subscription status and displays a trial upgrade banner
  */
 class MainActivity : ComponentActivity() {
 
+    // ── Constants ──────────────────────────────────────────────────────────
+
     companion object {
-        private const val TAG = "MainActivity"
-        private var activityRef: WeakReference<MainActivity>? = null
+        private const val WEB_URL = "https://www.relatives.co.za"
 
-        /** Get the current MainActivity instance (if alive). Used by TrackingJsInterface. */
-        fun getInstance(): MainActivity? = activityRef?.get()
+        // Fully-qualified class names for components created in other files.
+        // Using strings avoids a compile-time dependency so these 5 files are
+        // self-contained; intents resolve at runtime once the classes exist.
+        private const val TRACKING_SERVICE_CLASS =
+            "za.co.relatives.app.services.TrackingLocationService"
+        private const val SUBSCRIPTION_ACTIVITY_CLASS =
+            "za.co.relatives.app.ui.SubscriptionActivity"
+
+        // Intent actions understood by TrackingLocationService
+        const val ACTION_START_TRACKING = "za.co.relatives.app.ACTION_START_TRACKING"
+        const val ACTION_STOP_TRACKING = "za.co.relatives.app.ACTION_STOP_TRACKING"
+        const val ACTION_BOOST = "za.co.relatives.app.ACTION_BOOST"
+        const val ACTION_REVERT_BOOST = "za.co.relatives.app.ACTION_REVERT_BOOST"
+        const val ACTION_WAKE_ALL = "za.co.relatives.app.ACTION_WAKE_ALL"
+        const val EXTRA_BOOST_SECONDS = "boost_seconds"
     }
 
-    // State for Subscription Banner
-    private var showTrialBanner by mutableStateOf(false)
-    private var trialEndDate by mutableStateOf("")
+    // ── Fields ─────────────────────────────────────────────────────────────
 
-    // WebView reference for navigation from notifications
-    private var webViewRef: WebView? = null
-    private var pendingUrl by mutableStateOf<String?>(null)
+    private lateinit var webView: WebView
+    private lateinit var trialBanner: TextView
+    private lateinit var prefs: PreferencesManager
 
-    // Track if a disclosure dialog is currently showing
-    private var isDisclosureShowing = false
+    private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingMediaRequest: PermissionRequest? = null
 
-    // Pending WebView PermissionRequest for mic (to grant after OS permission)
-    private var pendingMicRequest: PermissionRequest? = null
+    private var billingClient: BillingClient? = null
+    private var hasActiveSubscription = false
 
-    // Permission request launchers
-    private val locationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+    // Activity-result launchers (must be registered before onStart)
+    private lateinit var fineLocationLauncher: ActivityResultLauncher<String>
+    private lateinit var backgroundLocationLauncher: ActivityResultLauncher<String>
+    private lateinit var notificationLauncher: ActivityResultLauncher<String>
+    private lateinit var microphoneLauncher: ActivityResultLauncher<String>
+    private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
 
-        if (fineGranted || coarseGranted) {
-            // Foreground granted -> show background disclosure (Android 10+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                showBackgroundLocationDisclosure()
+    // Back-press handling via the modern OnBackPressedDispatcher API
+    private val backCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+            if (::webView.isInitialized && webView.canGoBack()) {
+                webView.goBack()
             } else {
-                // Pre-Q: no background permission needed, proceed
-                onPermissionFlowComplete(locationGranted = true)
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
             }
-        } else {
-            // User denied foreground location - do NOT nag
-            notifyWebPermissionResult(granted = false)
         }
     }
 
-    private val backgroundLocationLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        // Background granted or denied - either way, proceed
-        onPermissionFlowComplete(locationGranted = true)
-    }
-
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { _ ->
-        // Notification result doesn't affect tracking
-    }
-
-    private val micPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        Log.d(TAG, "Mic permission result: granted=$granted")
-        if (granted) {
-            // Grant the pending WebView mic request
-            pendingMicRequest?.let { req ->
-                req.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
-                Log.d(TAG, "WebView mic request granted")
-            }
-            pendingMicRequest = null
-            // Notify web
-            runOnUiThread {
-                webViewRef?.evaluateJavascript(
-                    "if(window.NativeBridge && window.NativeBridge.onMicPermissionResult) { " +
-                    "window.NativeBridge.onMicPermissionResult(true); }",
-                    null
-                )
-            }
-        } else {
-            pendingMicRequest?.deny()
-            pendingMicRequest = null
-        }
-    }
+    // ── Lifecycle ──────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        activityRef = WeakReference(this)
-        Log.d(TAG, "onCreate - activityRef set")
+        prefs = (application as RelativesApplication).preferencesManager
 
-        // Enable Immersive Sticky Mode (Hide System Bars)
-        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
-        windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+        registerPermissionLaunchers()
+        buildLayout()
+        configureWebView()
+        onBackPressedDispatcher.addCallback(this, backCallback)
+        connectBillingClient()
+        enterImmersiveMode()
 
-        var initialUrl = "https://www.relatives.co.za"
-        // Check if opened from notification
-        intent.getStringExtra("open_url")?.let {
-            initialUrl = it
-        }
-
-        // NO permission requests here. Permissions are requested ONLY
-        // when the user explicitly enables tracking via the web UI.
-        // This is a Google Play Prominent Disclosure requirement.
-
-        // If permissions are already granted and tracking was enabled, restart service
-        if (hasLocationPermission() && PreferencesManager.isTrackingEnabled()) {
-            startTrackingService()
-        }
-
-        // Check Subscription Status
-        checkSubscription()
-
-        setContent {
-            RelativesTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            // Trial Banner
-                            AnimatedVisibility(visible = showTrialBanner) {
-                                TrialBanner(endDate = trialEndDate) {
-                                    // On Click Banner -> Go to Subscription Page to upgrade early
-                                    startActivity(Intent(this@MainActivity, SubscriptionActivity::class.java))
-                                }
-                            }
-
-                            // Main Web Content
-                            Box(modifier = Modifier.weight(1f)) {
-                                WebViewScreen(
-                                    initialUrl = pendingUrl ?: initialUrl,
-                                    onWebViewCreated = { webView ->
-                                        webViewRef = webView
-                                        // Clear pending URL after WebView is ready
-                                        pendingUrl = null
-                                    },
-                                    onPageTrackingCheck = { url ->
-                                        // Only auto-start if permissions already granted
-                                        if (url.contains("/tracking/") && hasLocationPermission()) {
-                                            startTrackingService()
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    override fun onDestroy() {
-        activityRef = null
-        super.onDestroy()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        checkSubscription()
+        // Load the deep-link URL if present, otherwise the default home page.
+        loadInitialUrl(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // Handle notification click when app is already open
-        intent.getStringExtra("open_url")?.let { url ->
-            if (webViewRef != null) {
-                webViewRef?.loadUrl(url)
-            } else {
-                pendingUrl = url
-            }
-        }
+        handleDeepLink(intent)
     }
 
-    private fun checkSubscription() {
-        val familyId = PreferencesManager.getDeviceUuid()
+    override fun onResume() {
+        super.onResume()
+        backCallback.isEnabled = true
+        enterImmersiveMode()
+        CookieManager.getInstance().flush()
+    }
 
-        ApiClient.getSubscriptionStatus(familyId) { status ->
-            runOnUiThread {
-                if (status != null) {
-                    when (status.status) {
-                        "locked", "expired", "cancelled" -> {
-                            val intent = Intent(this, SubscriptionActivity::class.java)
-                            startActivity(intent)
-                            finish()
-                        }
-                        "trial" -> {
-                            showTrialBanner = true
-                            trialEndDate = status.trial_ends_at ?: "soon"
-                        }
-                        "active" -> {
-                            showTrialBanner = false
-                        }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) enterImmersiveMode()
+    }
+
+    override fun onDestroy() {
+        billingClient?.endConnection()
+        webView.destroy()
+        super.onDestroy()
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  LAYOUT
+    // ════════════════════════════════════════════════════════════════════════
+
+    private fun buildLayout() {
+        val root = FrameLayout(this)
+
+        webView = WebView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            )
+        }
+        root.addView(webView)
+
+        trialBanner = TextView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM,
+            )
+            text = "You're on a free trial - Tap to upgrade"
+            textSize = 14f
+            setTextColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(0xFF667eea.toInt())
+            setPadding(32, 24, 32, 24)
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+            setOnClickListener { openSubscriptionScreen() }
+        }
+        root.addView(trialBanner)
+
+        setContentView(root)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  WEBVIEW
+    // ════════════════════════════════════════════════════════════════════════
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun configureWebView() {
+        CookieManager.getInstance().apply {
+            setAcceptCookie(true)
+            setAcceptThirdPartyCookies(webView, true)
+        }
+
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            databaseEnabled = true
+            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            allowFileAccess = true
+            allowContentAccess = true
+            mediaPlaybackRequiresUserGesture = false
+            javaScriptCanOpenWindowsAutomatically = true
+            setSupportMultipleWindows(false)
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            cacheMode = WebSettings.LOAD_DEFAULT
+        }
+
+        // Register the JavaScript bridge
+        webView.addJavascriptInterface(TrackingJsInterface(this), "TrackingBridge")
+
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                extractSessionToken()
+                syncCookiesToNative()
+            }
+
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?,
+            ): Boolean {
+                val url = request?.url?.toString() ?: return false
+                // Keep all relatives.co.za pages inside the WebView
+                if (url.contains("relatives.co.za")) return false
+                // Open external links in the default browser
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                return true
+            }
+        }
+
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                webView: WebView?,
+                callback: ValueCallback<Array<Uri>>?,
+                params: FileChooserParams?,
+            ): Boolean {
+                // Cancel any pending callback so the WebView does not hang
+                fileUploadCallback?.onReceiveValue(null)
+                fileUploadCallback = callback
+
+                val chooserIntent = params?.createIntent()
+                    ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
                     }
+                fileChooserLauncher.launch(chooserIntent)
+                return true
+            }
+
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                request ?: return
+                if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                    pendingMediaRequest = request
+                    handleMicrophonePermission()
+                } else {
+                    request.deny()
                 }
             }
         }
     }
 
-    // ========== PUBLIC API (called by TrackingJsInterface) ==========
+    // ── URL loading helpers ────────────────────────────────────────────────
+
+    private fun loadInitialUrl(intent: Intent?) {
+        val deepLink = intent?.getStringExtra("action_url")
+        if (!deepLink.isNullOrBlank()) {
+            webView.loadUrl(resolveUrl(deepLink))
+        } else {
+            webView.loadUrl(WEB_URL)
+        }
+    }
+
+    private fun handleDeepLink(intent: Intent?) {
+        val actionUrl = intent?.getStringExtra("action_url") ?: return
+        webView.loadUrl(resolveUrl(actionUrl))
+    }
+
+    /** Resolve a relative path or return an absolute URL as-is. */
+    private fun resolveUrl(path: String): String =
+        if (path.startsWith("http")) path else "$WEB_URL$path"
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  IMMERSIVE MODE
+    // ════════════════════════════════════════════════════════════════════════
+
+    private fun enterImmersiveMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false)
+            window.insetsController?.apply {
+                hide(WindowInsets.Type.systemBars())
+                systemBarsBehavior =
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                )
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  PERMISSION LAUNCHERS
+    // ════════════════════════════════════════════════════════════════════════
+
+    private fun registerPermissionLaunchers() {
+        fineLocationLauncher = registerForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            if (granted) {
+                requestBackgroundLocation()
+            }
+            // If declined the user can retry from the JS bridge later
+        }
+
+        backgroundLocationLauncher = registerForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { _ ->
+            // Foreground-only tracking is still useful if background is denied
+            startTrackingService()
+        }
+
+        notificationLauncher = registerForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { _ ->
+            // Result acknowledged; no further action required
+        }
+
+        microphoneLauncher = registerForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            val request = pendingMediaRequest
+            if (granted && request != null) {
+                request.grant(request.resources)
+            } else {
+                request?.deny()
+            }
+            pendingMediaRequest = null
+        }
+
+        fileChooserLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult(),
+        ) { result ->
+            val uris = if (result.resultCode == RESULT_OK && result.data != null) {
+                WebChromeClient.FileChooserParams.parseResult(
+                    result.resultCode,
+                    result.data!!,
+                )
+            } else {
+                null
+            }
+            fileUploadCallback?.onReceiveValue(uris)
+            fileUploadCallback = null
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  PERMISSION CONSENT FLOWS
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── Location ───────────────────────────────────────────────────────────
 
     /**
-     * Called by TrackingJsInterface.startTracking() when user explicitly enables
-     * location sharing. This is the ONLY entry point for the permission flow.
-     *
-     * If permissions already granted, starts tracking immediately.
-     * If not, shows prominent disclosure first.
+     * Public entry-point called from [TrackingJsInterface.startTracking].
+     * If permission is already granted the service is started immediately;
+     * otherwise the prominent disclosure dialog is shown first.
      */
-    fun requestTrackingPermissions() {
-        Log.d(TAG, "requestTrackingPermissions() called")
+    fun requestTrackingWithPermissions() {
         if (hasLocationPermission()) {
-            // Already have foreground - check background
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val hasBackground = ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED
-
-                if (!hasBackground) {
-                    showBackgroundLocationDisclosure()
-                    return
-                }
-            }
-            // All permissions already granted
-            onPermissionFlowComplete(locationGranted = true)
+            startTrackingService()
             return
         }
-
-        // No location permission -> show prominent disclosure FIRST
-        showForegroundLocationDisclosure()
+        showLocationDisclosure()
     }
 
     /**
-     * Check if location permissions are granted.
+     * Prominent disclosure dialog (required by Google Play policy).
+     * Explains *why* the app needs location before the system prompt appears.
      */
-    fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    // ========== DISCLOSURE DIALOGS (Google Play Policy Compliant) ==========
-
-    /**
-     * FOREGROUND LOCATION DISCLOSURE
-     *
-     * Google Play requirement: shown BEFORE any location permission request.
-     * - Non-cancelable (no back button dismiss, no outside tap dismiss)
-     * - Clearly states WHAT data, WHY, WHEN (background), and OFF switch
-     * - Only appears when user initiates tracking (not auto on launch)
-     */
-    private fun showForegroundLocationDisclosure() {
-        if (isDisclosureShowing) return
-        isDisclosureShowing = true
-
-        val dialog = AlertDialog.Builder(this)
+    private fun showLocationDisclosure() {
+        AlertDialog.Builder(this)
             .setTitle("Location Sharing")
             .setMessage(
-                "Relatives uses your device location to share your live " +
-                "location with trusted family members for safety.\n\n" +
-                "Location sharing is optional and can be turned off " +
-                "anytime in Tracking Settings."
+                "Relatives uses your location to show family members where you " +
+                    "are on the map. Your location is shared only with your " +
+                    "approved family group.\n\n" +
+                    "For continuous tracking, background location access is also " +
+                    "needed so your location updates even when the app is not open.",
             )
-            .setPositiveButton("Continue") { _, _ ->
-                isDisclosureShowing = false
-                requestForegroundLocationPermission()
+            .setPositiveButton("Enable Location") { _, _ ->
+                fineLocationLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
             }
-            .setNegativeButton("Not Now") { dialog, _ ->
-                isDisclosureShowing = false
-                dialog.dismiss()
-                notifyWebPermissionResult(granted = false)
-            }
-            .setCancelable(false)
-            .create()
-
-        dialog.setCanceledOnTouchOutside(false)
-        dialog.show()
+            .setNegativeButton("Not Now", null)
+            .setCancelable(true)
+            .show()
     }
 
     /**
-     * BACKGROUND LOCATION DISCLOSURE
-     *
-     * Separate disclosure required for "Allow all the time" permission.
-     * Shown only after foreground location is granted.
+     * After foreground location is granted, ask for background location
+     * with a separate explanation dialog (required by Play policy on
+     * Android 10+).
      */
-    private fun showBackgroundLocationDisclosure() {
-        if (isDisclosureShowing) return
-        isDisclosureShowing = true
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Background Location")
-            .setMessage(
-                "If you enable \"Allow all the time\", Relatives can keep " +
-                "live family location updated even when the app is closed.\n\n" +
-                "This is optional and you can turn it off anytime in " +
-                "device Settings or Tracking Settings."
-            )
-            .setPositiveButton("Continue") { _, _ ->
-                isDisclosureShowing = false
-                requestBackgroundLocationPermission()
-            }
-            .setNegativeButton("Skip") { dialog, _ ->
-                isDisclosureShowing = false
-                dialog.dismiss()
-                // Still proceed - tracking works foreground-only
-                onPermissionFlowComplete(locationGranted = true)
-            }
-            .setCancelable(false)
-            .create()
-
-        dialog.setCanceledOnTouchOutside(false)
-        dialog.show()
-    }
-
-    // ========== PERMISSION REQUESTS ==========
-
-    private fun requestForegroundLocationPermission() {
-        Log.d(TAG, "Requesting FOREGROUND location now")
-        locationPermissionLauncher.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-        )
-    }
-
-    private fun requestBackgroundLocationPermission() {
-        Log.d(TAG, "Requesting BACKGROUND location now")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-        }
-    }
-
-    private fun requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-    }
-
-    // ========== FLOW COMPLETION ==========
-
-    /**
-     * Called when the entire permission flow finishes.
-     * Notifies the web layer and starts tracking if granted.
-     */
-    private fun onPermissionFlowComplete(locationGranted: Boolean) {
-        if (locationGranted) {
-            // Permission granted - start tracking service
-            PreferencesManager.setTrackingEnabled(true)
+    private fun requestBackgroundLocation() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("Background Location")
+                .setMessage(
+                    "To keep sharing your location with family when the app is " +
+                        "in the background, please select \"Allow all the time\" " +
+                        "on the next screen.",
+                )
+                .setPositiveButton("Continue") { _, _ ->
+                    backgroundLocationLauncher.launch(
+                        Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                    )
+                }
+                .setNegativeButton("Skip") { _, _ ->
+                    // Foreground-only tracking still works
+                    startTrackingService()
+                }
+                .setCancelable(false)
+                .show()
+        } else {
             startTrackingService()
-            notifyWebPermissionResult(granted = true)
+        }
+    }
 
-            // Also request notification permission (low-friction, separate from location)
-            requestNotificationPermissionIfNeeded()
+    // ── Notifications ──────────────────────────────────────────────────────
+
+    /**
+     * Request POST_NOTIFICATIONS on Android 13+ with an explanation dialog.
+     * Called automatically after the tracking service starts so the user
+     * sees context for why notifications are needed.
+     */
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("Enable Notifications")
+                .setMessage(
+                    "Stay connected with your family! Enable notifications to " +
+                        "receive messages, alerts, and important updates from " +
+                        "your family group.",
+                )
+                .setPositiveButton("Enable") { _, _ ->
+                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                .setNegativeButton("Not Now", null)
+                .setCancelable(true)
+                .show()
+        }
+    }
+
+    // ── Microphone ─────────────────────────────────────────────────────────
+
+    private fun handleMicrophonePermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingMediaRequest?.grant(pendingMediaRequest?.resources)
+            pendingMediaRequest = null
         } else {
-            notifyWebPermissionResult(granted = false)
+            microphoneLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
-    /**
-     * Notify the WebView about permission result so the UI can update.
-     */
-    private fun notifyWebPermissionResult(granted: Boolean) {
-        runOnUiThread {
-            webViewRef?.evaluateJavascript(
-                "if(window.NativeBridge && window.NativeBridge.onPermissionResult) { " +
-                "window.NativeBridge.onPermissionResult($granted); }",
-                null
-            )
-        }
-    }
+    // ── Helpers ────────────────────────────────────────────────────────────
 
-    // ========== MIC PERMISSION (for voice features) ==========
-
-    /**
-     * Request mic permission with the pending WebView PermissionRequest.
-     * Called from WebChromeClient when web requests audio capture
-     * but RECORD_AUDIO is not yet granted.
-     */
-    fun requestMicPermission(webViewRequest: PermissionRequest?) {
-        Log.d(TAG, "requestMicPermission() called")
-        pendingMicRequest = webViewRequest
-        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-    }
-
-    fun hasMicPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this, Manifest.permission.RECORD_AUDIO
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION,
         ) == PackageManager.PERMISSION_GRANTED
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  TRACKING SERVICE CONTROL
+    // ════════════════════════════════════════════════════════════════════════
+
+    /** Readable state check consumed by [TrackingJsInterface]. */
+    fun isTrackingActive(): Boolean =
+        prefs.trackingEnabled && hasLocationPermission()
+
+    /**
+     * String representation of the tracking state for the JS bridge.
+     * Possible values: `"enabled"`, `"disabled"`, `"no_permission"`.
+     */
+    fun getTrackingMode(): String = when {
+        !hasLocationPermission() -> "no_permission"
+        prefs.trackingEnabled -> "enabled"
+        else -> "disabled"
     }
 
-    private fun startTrackingService() {
-        Log.d(TAG, "startTrackingService() called")
-        if (PreferencesManager.isTrackingEnabled() && hasLocationPermission()) {
-            TrackingLocationService.startTracking(this)
+    fun startTrackingService() {
+        prefs.trackingEnabled = true
+        val intent = trackingServiceIntent(ACTION_START_TRACKING)
+        ContextCompat.startForegroundService(this, intent)
+        // Prompt for notification permission after the service starts so the
+        // user understands why it is needed.
+        requestNotificationPermission()
+    }
+
+    fun stopTrackingService() {
+        prefs.trackingEnabled = false
+        sendServiceCommand(ACTION_STOP_TRACKING)
+    }
+
+    fun boostLocationUpdates() {
+        sendServiceCommand(ACTION_BOOST)
+    }
+
+    fun revertLocationUpdates() {
+        sendServiceCommand(ACTION_REVERT_BOOST)
+    }
+
+    fun requestLocationBoost(seconds: Int) {
+        val intent = trackingServiceIntent(ACTION_BOOST).apply {
+            putExtra(EXTRA_BOOST_SECONDS, seconds)
+        }
+        trySendServiceIntent(intent)
+    }
+
+    fun wakeAllDevices() {
+        sendServiceCommand(ACTION_WAKE_ALL)
+    }
+
+    // ── Private service helpers ────────────────────────────────────────────
+
+    private fun trackingServiceIntent(action: String): Intent =
+        Intent(action).apply {
+            component = ComponentName(this@MainActivity, TRACKING_SERVICE_CLASS)
+        }
+
+    private fun sendServiceCommand(action: String) {
+        trySendServiceIntent(trackingServiceIntent(action))
+    }
+
+    private fun trySendServiceIntent(intent: Intent) {
+        try {
+            startService(intent)
+        } catch (_: IllegalStateException) {
+            // The service is not running or the app is in a state where
+            // starting a service is not allowed; safe to ignore.
         }
     }
-}
 
-@Composable
-fun TrialBanner(endDate: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.tertiaryContainer)
-            .clickable(onClick = onClick)
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Free Trial Active",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onTertiaryContainer
-            )
-            Text(
-                text = "Ends: $endDate. Tap to upgrade.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onTertiaryContainer
-            )
-        }
-        Icon(
-            imageVector = Icons.Default.ArrowForward,
-            contentDescription = "Upgrade",
-            tint = MaterialTheme.colorScheme.onTertiaryContainer
-        )
-    }
-}
+    // ════════════════════════════════════════════════════════════════════════
+    //  COOKIE SYNC & SESSION TOKEN
+    // ════════════════════════════════════════════════════════════════════════
 
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-fun WebViewScreen(
-    initialUrl: String,
-    onWebViewCreated: (WebView) -> Unit = {},
-    onPageTrackingCheck: (String) -> Unit
-) {
-    val context = LocalContext.current
+    /**
+     * Copy cookies from the WebView [CookieManager] into
+     * [java.net.CookieManager] so that native [java.net.HttpURLConnection]
+     * requests include the same session cookies as the WebView.
+     */
+    private fun syncCookiesToNative() {
+        val raw = CookieManager.getInstance().getCookie(WEB_URL) ?: return
 
-    // State to hold the callback for file uploads
-    var uploadMessageCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+        val javaManager = (CookieHandler.getDefault() as? JavaNetCookieManager)
+            ?: JavaNetCookieManager().also { CookieHandler.setDefault(it) }
 
-    // Launcher for the file chooser intent
-    val fileChooserLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data = result.data
-            // Parse the result using WebChromeClient's utility
-            val results = WebChromeClient.FileChooserParams.parseResult(result.resultCode, data)
-            uploadMessageCallback?.onReceiveValue(results)
-        } else {
-            // User cancelled
-            uploadMessageCallback?.onReceiveValue(null)
-        }
-        uploadMessageCallback = null
-    }
-
-    AndroidView(factory = {
-        WebView(it).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-
-            val cookieManager = CookieManager.getInstance()
-            cookieManager.setAcceptCookie(true)
-            cookieManager.setAcceptThirdPartyCookies(this, true)
-
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-            settings.userAgentString += " RelativesAndroidApp"
-            settings.allowFileAccess = true
-            settings.allowContentAccess = true
-
-            // Fix: Use Application Context to prevent memory leaks in JS Interface
-            addJavascriptInterface(TrackingJsInterface(context.applicationContext), "TrackingBridge")
-
-            webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                    return false
+        val uri = URI.create(WEB_URL)
+        raw.split(";").forEach { segment ->
+            val trimmed = segment.trim()
+            if (trimmed.isNotEmpty()) {
+                runCatching {
+                    HttpCookie.parse("Set-Cookie: $trimmed").forEach { cookie ->
+                        javaManager.cookieStore.add(uri, cookie)
+                    }
                 }
+            }
+        }
+    }
 
-                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                    super.onPageStarted(view, url, favicon)
-                    url?.let { onPageTrackingCheck(it) }
+    /**
+     * Scan WebView cookies for well-known session token names and persist
+     * the value in [PreferencesManager] for use by native API calls.
+     */
+    private fun extractSessionToken() {
+        val raw = CookieManager.getInstance().getCookie(WEB_URL) ?: return
+        val targetNames = setOf("session_token", "phpsessid", "token")
+
+        raw.split(";").forEach { segment ->
+            val parts = segment.trim().split("=", limit = 2)
+            if (parts.size == 2 && parts[0].trim().lowercase() in targetNames) {
+                prefs.sessionToken = parts[1].trim()
+                return
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  BILLING / SUBSCRIPTION
+    // ════════════════════════════════════════════════════════════════════════
+
+    private fun connectBillingClient() {
+        billingClient = BillingClient.newBuilder(this)
+            .setListener { _, _ -> /* Purchase updates are handled via queryPurchasesAsync */ }
+            .enablePendingPurchases(
+                PendingPurchasesParams.newBuilder()
+                    .enableOneTimeProducts()
+                    .build(),
+            )
+            .build()
+
+        billingClient?.startConnection(object : BillingClientStateListener {
+            override fun onBillingSetupFinished(result: BillingResult) {
+                if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                    querySubscriptionStatus()
                 }
             }
 
-            webChromeClient = object : WebChromeClient() {
-                // Handle microphone permission requests from web content
-                override fun onPermissionRequest(request: PermissionRequest?) {
-                    request?.let { req ->
-                        val requestedResources = req.resources
-                        val grantedResources = mutableListOf<String>()
-                        var needsMicPermission = false
+            override fun onBillingServiceDisconnected() {
+                // Will reconnect automatically on next app cold-start
+            }
+        })
+    }
 
-                        for (resource in requestedResources) {
-                            when (resource) {
-                                PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
-                                    if (ContextCompat.checkSelfPermission(
-                                            context,
-                                            Manifest.permission.RECORD_AUDIO
-                                        ) == PackageManager.PERMISSION_GRANTED
-                                    ) {
-                                        grantedResources.add(resource)
-                                    } else {
-                                        needsMicPermission = true
-                                    }
-                                }
-                                PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
-                                    // Future: handle camera if needed
-                                }
-                            }
-                        }
+    private fun querySubscriptionStatus() {
+        val params = QueryPurchasesParams.newBuilder()
+            .setProductType(BillingClient.ProductType.SUBS)
+            .build()
 
-                        if (grantedResources.isNotEmpty()) {
-                            req.grant(grantedResources.toTypedArray())
-                        } else if (needsMicPermission) {
-                            // Route through MainActivity to request OS mic permission
-                            val activity = MainActivity.getInstance()
-                            if (activity != null) {
-                                activity.runOnUiThread {
-                                    activity.requestMicPermission(req)
-                                }
-                            } else {
-                                req.deny()
-                            }
-                        } else {
-                            req.deny()
-                        }
-                    }
+        billingClient?.queryPurchasesAsync(params) { result, purchases ->
+            if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                hasActiveSubscription = purchases.any { purchase ->
+                    purchase.purchaseState == Purchase.PurchaseState.PURCHASED
                 }
-
-                // Handle file upload requests (attachments)
-                override fun onShowFileChooser(
-                    webView: WebView?,
-                    filePathCallback: ValueCallback<Array<Uri>>?,
-                    fileChooserParams: FileChooserParams?
-                ): Boolean {
-                    // Cancel any pending callback
-                    if (uploadMessageCallback != null) {
-                        uploadMessageCallback?.onReceiveValue(null)
-                        uploadMessageCallback = null
-                    }
-                    uploadMessageCallback = filePathCallback
-
-                    val intent = fileChooserParams?.createIntent()
-                    if (intent != null) {
-                        try {
-                            fileChooserLauncher.launch(intent)
-                            return true
-                        } catch (_: Exception) {
-                            uploadMessageCallback = null
-                            return false
-                        }
-                    }
-                    return false
+                runOnUiThread {
+                    trialBanner.visibility =
+                        if (hasActiveSubscription) View.GONE else View.VISIBLE
                 }
             }
-
-            loadUrl(initialUrl)
-
-            // Notify parent that WebView is ready
-            onWebViewCreated(this)
         }
-    }, update = {})
+    }
+
+    private fun openSubscriptionScreen() {
+        val intent = Intent().apply {
+            component = ComponentName(this@MainActivity, SUBSCRIPTION_ACTIVITY_CLASS)
+        }
+        startActivity(intent)
+    }
 }

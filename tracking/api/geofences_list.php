@@ -1,26 +1,17 @@
 <?php
-/**
- * GET /tracking/api/geofences_list.php
- *
- * Get all geofences for the family.
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-header('Content-Type: application/json');
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    Response::error('method_not_allowed', 405);
+}
 
-// Auth required
-$user = requireAuth();
-$familyId = $user['family_id'];
+$ctx = SiteContext::require($db);
 
-// Initialize services
-$geofenceRepo = new GeofenceRepo($db, $trackingCache);
+$trackingCache = new TrackingCache($cache);
+$repo = new GeofenceRepo($db, $trackingCache);
 
-// Get geofences
-$activeOnly = isset($_GET['active_only']) && $_GET['active_only'] === '1';
-$geofences = $geofenceRepo->getAll($familyId, $activeOnly);
+$geofences = $repo->listAll($ctx->familyId);
 
-jsonSuccess([
-    'geofences' => $geofences,
-    'count' => count($geofences)
-]);
+Response::success($geofences);
