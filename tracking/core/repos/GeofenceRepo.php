@@ -1,119 +1,86 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Geofences repository
- */
-class GeofenceRepo
-{
+class GeofenceRepo {
     private PDO $db;
-    private TrackingCache $cache;
 
-    public function __construct(PDO $db, TrackingCache $cache)
-    {
+    public function __construct(PDO $db) {
         $this->db = $db;
-        $this->cache = $cache;
     }
 
-    /**
-     * List active geofences for a family
-     */
-    public function listActive(int $familyId): array
-    {
-        $cached = $this->cache->getGeofences($familyId);
-        if ($cached !== null) {
-            return $cached;
-        }
-
+    public function getForFamily(int $familyId): array {
         $stmt = $this->db->prepare("
-            SELECT id, name, type, center_lat, center_lng, radius_m, polygon_json, active,
-                   created_by_user_id, created_at
-            FROM tracking_geofences
-            WHERE family_id = ? AND active = 1
-            ORDER BY name ASC
-        ");
-        $stmt->execute([$familyId]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $this->cache->setGeofences($familyId, $rows);
-        return $rows;
-    }
-
-    /**
-     * List all geofences (including inactive)
-     */
-    public function listAll(int $familyId): array
-    {
-        $stmt = $this->db->prepare("
-            SELECT * FROM tracking_geofences WHERE family_id = ? ORDER BY name ASC
+            SELECT g.*, u.full_name as created_by_name
+            FROM tracking_geofences g
+            LEFT JOIN users u ON g.created_by = u.id
+            WHERE g.family_id = ?
+            ORDER BY g.created_at DESC
         ");
         $stmt->execute([$familyId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Create a geofence
-     */
-    public function create(int $familyId, int $userId, array $data): int
-    {
+    public function getById(int $id, int $familyId): ?array {
+        $stmt = $this->db->prepare("SELECT * FROM tracking_geofences WHERE id = ? AND family_id = ?");
+        $stmt->execute([$id, $familyId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function create(int $familyId, int $createdBy, array $data): int {
         $stmt = $this->db->prepare("
-            INSERT INTO tracking_geofences
-                (family_id, name, type, center_lat, center_lng, radius_m, polygon_json, created_by_user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tracking_geofences (family_id, created_by, name, type, lat, lng, radius_m, polygon_json, color, notify_enter, notify_exit)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
-            $familyId,
+            $familyId, $createdBy,
             $data['name'],
-            $data['type'],
-            $data['center_lat'],
-            $data['center_lng'],
-            $data['radius_m'],
-            $data['polygon_json'],
-            $userId,
+            $data['type'] ?? 'circle',
+            $data['lat'] ?? null,
+            $data['lng'] ?? null,
+            $data['radius_m'] ?? 200,
+            isset($data['polygon']) ? json_encode($data['polygon']) : null,
+            $data['color'] ?? '#667eea',
+            $data['notify_enter'] ?? 1,
+            $data['notify_exit'] ?? 1,
         ]);
-
-        $this->cache->deleteGeofences($familyId);
-        return (int) $this->db->lastInsertId();
+        return (int)$this->db->lastInsertId();
     }
 
-    /**
-     * Update a geofence
-     */
-    public function update(int $familyId, int $id, array $data): bool
-    {
-        $stmt = $this->db->prepare("
-            UPDATE tracking_geofences
-            SET name = ?, type = ?, center_lat = ?, center_lng = ?, radius_m = ?,
-                polygon_json = ?, active = ?
-            WHERE id = ? AND family_id = ?
-        ");
-        $result = $stmt->execute([
-            $data['name'],
-            $data['type'],
-            $data['center_lat'],
-            $data['center_lng'],
-            $data['radius_m'],
-            $data['polygon_json'],
-            $data['active'] ?? 1,
-            $id,
-            $familyId,
-        ]);
+    public function update(int $id, int $familyId, array $data): bool {
+        $allowed = ['name', 'type', 'lat', 'lng', 'radius_m', 'color', 'notify_enter', 'notify_exit', 'active'];
+        $sets = [];
+        $values = [];
 
-        $this->cache->deleteGeofences($familyId);
-        return $result;
+        foreach ($allowed as $key) {
+            if (array_key_exists($key, $data)) {
+                $sets[] = "$key = ?";
+                $values[] = $data[$key];
+            }
+        }
+
+        if (array_key_exists('polygon', $data)) {
+            $sets[] = "polygon_json = ?";
+            $values[] = json_encode($data['polygon']);
+        }
+
+        if (empty($sets)) return false;
+
+        $values[] = $id;
+        $values[] = $familyId;
+
+        $stmt = $this->db->prepare("UPDATE tracking_geofences SET " . implode(', ', $sets) . " WHERE id = ? AND family_id = ?");
+        $stmt->execute($values);
+        return $stmt->rowCount() > 0;
     }
 
-    /**
-     * Delete a geofence
-     */
-    public function delete(int $familyId, int $id): bool
-    {
-        $stmt = $this->db->prepare("
-            DELETE FROM tracking_geofences WHERE id = ? AND family_id = ?
-        ");
-        $result = $stmt->execute([$id, $familyId]);
+    public function delete(int $id, int $familyId): bool {
+        // Delete states first
+        $stmt = $this->db->prepare("DELETE FROM tracking_geofence_states WHERE geofence_id = ?");
+        $stmt->execute([$id]);
 
-        $this->cache->deleteGeofences($familyId);
-        return $result && $stmt->rowCount() > 0;
+        $stmt = $this->db->prepare("DELETE FROM tracking_geofences WHERE id = ? AND family_id = ?");
+        $stmt->execute([$id, $familyId]);
+        return $stmt->rowCount() > 0;
     }
 }

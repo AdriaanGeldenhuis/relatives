@@ -1,56 +1,40 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Tracking events repository
- */
-class EventsRepo
-{
+class EventsRepo {
     private PDO $db;
 
-    public function __construct(PDO $db)
-    {
+    public function __construct(PDO $db) {
         $this->db = $db;
     }
 
-    /**
-     * Insert a tracking event
-     */
-    public function insert(int $familyId, ?int $userId, string $eventType, array $meta = []): int
-    {
+    public function create(int $familyId, int $userId, string $eventType, string $title, ?string $description = null, ?float $lat = null, ?float $lng = null, ?array $meta = null): int {
         $stmt = $this->db->prepare("
-            INSERT INTO tracking_events (family_id, user_id, event_type, meta_json, occurred_at)
-            VALUES (?, ?, ?, ?, NOW())
+            INSERT INTO tracking_events (family_id, user_id, event_type, title, description, lat, lng, meta_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
-            $familyId,
-            $userId,
-            $eventType,
-            !empty($meta) ? json_encode($meta) : null,
+            $familyId, $userId, $eventType, $title, $description, $lat, $lng,
+            $meta ? json_encode($meta) : null,
         ]);
-
-        return (int) $this->db->lastInsertId();
+        return (int)$this->db->lastInsertId();
     }
 
-    /**
-     * List recent events for a family
-     */
-    public function list(int $familyId, int $limit = 50, int $offset = 0, ?string $eventType = null): array
-    {
+    public function getForFamily(int $familyId, int $limit = 50, int $offset = 0, ?string $type = null): array {
         $sql = "
-            SELECT te.*, u.full_name AS user_name, u.avatar_color
-            FROM tracking_events te
-            LEFT JOIN users u ON te.user_id = u.id
-            WHERE te.family_id = ?
+            SELECT e.*, u.full_name, u.avatar_color
+            FROM tracking_events e
+            LEFT JOIN users u ON e.user_id = u.id
+            WHERE e.family_id = ?
         ";
         $params = [$familyId];
 
-        if ($eventType) {
-            $sql .= " AND te.event_type = ?";
-            $params[] = $eventType;
+        if ($type) {
+            $sql .= " AND e.event_type = ?";
+            $params[] = $type;
         }
 
-        $sql .= " ORDER BY te.occurred_at DESC LIMIT ? OFFSET ?";
+        $sql .= " ORDER BY e.created_at DESC LIMIT ? OFFSET ?";
         $params[] = $limit;
         $params[] = $offset;
 
@@ -59,16 +43,9 @@ class EventsRepo
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Prune old events
-     */
-    public function prune(int $retentionDays): int
-    {
-        $stmt = $this->db->prepare("
-            DELETE FROM tracking_events
-            WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
-        ");
-        $stmt->execute([$retentionDays]);
+    public function pruneOld(int $days = 90): int {
+        $stmt = $this->db->prepare("DELETE FROM tracking_events WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)");
+        $stmt->execute([$days]);
         return $stmt->rowCount();
     }
 }

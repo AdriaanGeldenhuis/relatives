@@ -1,42 +1,31 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Rate limiter for location uploads
- * Prevents too-frequent uploads to save bandwidth and battery
- */
-class RateLimiter
-{
+class RateLimiter {
     private TrackingCache $cache;
-    private int $minInterval;
 
-    public function __construct(TrackingCache $cache, int $minIntervalSeconds = 5)
-    {
+    public function __construct(TrackingCache $cache) {
         $this->cache = $cache;
-        $this->minInterval = $minIntervalSeconds;
     }
 
     /**
-     * Check if a location upload is allowed.
-     * Returns ['allowed' => true] or ['allowed' => false, 'retry_after' => int]
+     * Check if action is rate limited
+     * @return bool true if allowed, false if rate limited
      */
-    public function check(int $userId): array
-    {
-        $lastTs = $this->cache->getRateLimit($userId);
-        $now = time();
+    public function allow(string $action, int $userId, int $maxPerMinute = 10): bool {
+        $key = $this->cache->rateKey($action, $userId);
+        $current = $this->cache->get($key);
 
-        if ($lastTs !== null) {
-            $elapsed = $now - $lastTs;
-            if ($elapsed < $this->minInterval) {
-                return [
-                    'allowed' => false,
-                    'retry_after' => $this->minInterval - $elapsed,
-                ];
-            }
+        if ($current === null) {
+            $this->cache->set($key, 1, 60);
+            return true;
         }
 
-        $this->cache->setRateLimit($userId, $now, $this->minInterval * 2);
+        if ((int)$current >= $maxPerMinute) {
+            return false;
+        }
 
-        return ['allowed' => true];
+        $this->cache->set($key, (int)$current + 1, 60);
+        return true;
     }
 }

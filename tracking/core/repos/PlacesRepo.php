@@ -1,77 +1,45 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Saved places repository
- */
-class PlacesRepo
-{
+class PlacesRepo {
     private PDO $db;
-    private TrackingCache $cache;
 
-    public function __construct(PDO $db, TrackingCache $cache)
-    {
+    public function __construct(PDO $db) {
         $this->db = $db;
-        $this->cache = $cache;
     }
 
-    /**
-     * List all places for a family
-     */
-    public function listAll(int $familyId): array
-    {
-        $cached = $this->cache->getPlaces($familyId);
-        if ($cached !== null) {
-            return $cached;
-        }
-
+    public function getForFamily(int $familyId): array {
         $stmt = $this->db->prepare("
-            SELECT id, label, category, lat, lng, radius_m, address, created_by_user_id, created_at
-            FROM tracking_places
-            WHERE family_id = ?
-            ORDER BY label ASC
+            SELECT p.*, u.full_name as created_by_name
+            FROM tracking_places p
+            LEFT JOIN users u ON p.created_by = u.id
+            WHERE p.family_id = ?
+            ORDER BY p.name ASC
         ");
         $stmt->execute([$familyId]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $this->cache->setPlaces($familyId, $rows);
-        return $rows;
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Create a place
-     */
-    public function create(int $familyId, int $userId, array $data): int
-    {
+    public function create(int $familyId, int $createdBy, array $data): int {
         $stmt = $this->db->prepare("
-            INSERT INTO tracking_places
-                (family_id, label, category, lat, lng, radius_m, address, created_by_user_id)
+            INSERT INTO tracking_places (family_id, created_by, name, icon, lat, lng, address, radius_m)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
-            $familyId,
-            $data['label'],
-            $data['category'],
+            $familyId, $createdBy,
+            $data['name'],
+            $data['icon'] ?? null,
             $data['lat'],
             $data['lng'],
-            $data['radius_m'],
-            $data['address'],
-            $userId,
+            $data['address'] ?? null,
+            $data['radius_m'] ?? 100,
         ]);
-
-        $this->cache->deletePlaces($familyId);
-        return (int) $this->db->lastInsertId();
+        return (int)$this->db->lastInsertId();
     }
 
-    /**
-     * Delete a place
-     */
-    public function delete(int $familyId, int $id): bool
-    {
+    public function delete(int $id, int $familyId): bool {
         $stmt = $this->db->prepare("DELETE FROM tracking_places WHERE id = ? AND family_id = ?");
-        $result = $stmt->execute([$id, $familyId]);
-
-        $this->cache->deletePlaces($familyId);
-        return $result && $stmt->rowCount() > 0;
+        $stmt->execute([$id, $familyId]);
+        return $stmt->rowCount() > 0;
     }
 }

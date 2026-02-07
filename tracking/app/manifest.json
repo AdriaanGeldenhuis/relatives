@@ -1,26 +1,22 @@
 {
-    "name": "Relatives Family Tracking",
+    "name": "Relatives - Family Tracking",
     "short_name": "Tracking",
-    "description": "Track your family members in real-time with geofence alerts and location sharing.",
+    "description": "Real-time family location tracking",
     "start_url": "/tracking/app/",
-    "scope": "/tracking/",
     "display": "standalone",
-    "orientation": "any",
+    "background_color": "#667eea",
     "theme_color": "#667eea",
-    "background_color": "#1a202c",
-    "categories": ["utilities", "lifestyle"],
+    "orientation": "portrait",
     "icons": [
         {
             "src": "/icon-192.png",
             "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "any maskable"
+            "type": "image/png"
         },
         {
             "src": "/icon-512.png",
             "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any maskable"
+            "type": "image/png"
         }
     ]
 }

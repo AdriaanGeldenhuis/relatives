@@ -1,50 +1,49 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Time utilities for tracking module
- */
-class Time
-{
+class TrackingTime {
     /**
-     * Current UTC timestamp in MySQL format
+     * Format a datetime string as relative time ("2 min ago", "3 hours ago", etc.)
      */
-    public static function now(): string
-    {
-        return gmdate('Y-m-d H:i:s');
+    public static function relative(string $datetime): string {
+        $ts = strtotime($datetime);
+        if ($ts === false) return $datetime;
+
+        $diff = time() - $ts;
+
+        if ($diff < 0) return 'just now';
+        if ($diff < 60) return 'just now';
+        if ($diff < 3600) return floor($diff / 60) . ' min ago';
+        if ($diff < 86400) return floor($diff / 3600) . 'h ago';
+        if ($diff < 604800) return floor($diff / 86400) . 'd ago';
+
+        return date('M j, Y', $ts);
     }
 
     /**
-     * Parse an ISO 8601 or MySQL timestamp into a Unix timestamp.
-     * Returns current time if input is invalid.
+     * Format datetime for display
      */
-    public static function parse(string $input): int
-    {
-        $ts = strtotime($input);
-        return $ts !== false ? $ts : time();
+    public static function format(string $datetime, string $format = 'M j, Y g:i A'): string {
+        $ts = strtotime($datetime);
+        return $ts !== false ? date($format, $ts) : $datetime;
     }
 
     /**
-     * Format a Unix timestamp as MySQL datetime
+     * Check if a datetime is within the last N seconds
      */
-    public static function format(int $ts): string
-    {
-        return gmdate('Y-m-d H:i:s', $ts);
+    public static function isRecent(string $datetime, int $seconds = 300): bool {
+        $ts = strtotime($datetime);
+        return $ts !== false && (time() - $ts) < $seconds;
     }
 
     /**
-     * Seconds elapsed since a MySQL datetime string
+     * Get duration string from seconds
      */
-    public static function elapsed(string $datetime): int
-    {
-        return max(0, time() - self::parse($datetime));
-    }
-
-    /**
-     * Check if a MySQL datetime is older than $seconds
-     */
-    public static function isOlderThan(string $datetime, int $seconds): bool
-    {
-        return self::elapsed($datetime) > $seconds;
+    public static function duration(int $seconds): string {
+        if ($seconds < 60) return $seconds . 's';
+        if ($seconds < 3600) return floor($seconds / 60) . 'm ' . ($seconds % 60) . 's';
+        $h = floor($seconds / 3600);
+        $m = floor(($seconds % 3600) / 60);
+        return $h . 'h ' . $m . 'm';
     }
 }

@@ -1,97 +1,55 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Mode 1: Live Session Gate
- * Manages family tracking sessions. Devices should only upload
- * locations when an active session exists.
- */
-class SessionGate
-{
+class SessionGate {
     private TrackingCache $cache;
-    private SessionsRepo $repo;
-    private int $ttlSeconds;
+    private PDO $db;
 
-    public function __construct(TrackingCache $cache, SessionsRepo $repo, int $ttlSeconds = 300)
-    {
+    public function __construct(TrackingCache $cache, PDO $db) {
         $this->cache = $cache;
-        $this->repo = $repo;
-        $this->ttlSeconds = $ttlSeconds;
+        $this->db = $db;
     }
 
     /**
-     * Check if a live session is active for this family.
+     * Check if user has an active live session
      */
-    public function isActive(int $familyId): bool
-    {
+    public function isActive(int $userId): bool {
         // Check cache first
-        $cached = $this->cache->getSession($familyId);
-        if ($cached !== null && ($cached['active'] ?? false)) {
-            return true;
+        $key = $this->cache->sessionKey($userId);
+        $cached = $this->cache->get($key);
+        if ($cached !== null) {
+            return (bool)$cached;
         }
 
-        // Fallback to DB
-        $session = $this->repo->getActive($familyId);
-        if ($session) {
-            $this->cache->setSession($familyId, ['active' => true], $this->ttlSeconds);
-            return true;
-        }
+        // Fall back to DB
+        $stmt = $this->db->prepare("
+            SELECT id FROM tracking_sessions
+            WHERE user_id = ? AND status = 'active' AND (expires_at IS NULL OR expires_at > NOW())
+            LIMIT 1
+        ");
+        $stmt->execute([$userId]);
+        $active = (bool)$stmt->fetch();
 
-        return false;
+        $this->cache->set($key, $active ? '1' : '0', 120);
+        return $active;
     }
 
     /**
-     * Start or extend a live session (called by keepalive)
+     * Keepalive - extend session
      */
-    public function keepalive(int $familyId, int $userId): array
-    {
-        $session = $this->repo->getActive($familyId);
+    public function keepalive(int $userId): void {
+        $key = $this->cache->sessionKey($userId);
+        $this->cache->set($key, '1', 120);
 
-        if ($session) {
-            $this->repo->ping($session['id'], $this->ttlSeconds);
-        } else {
-            $session = $this->repo->create($familyId, $userId, $this->ttlSeconds);
+        try {
+            $stmt = $this->db->prepare("
+                UPDATE tracking_sessions
+                SET last_keepalive = NOW()
+                WHERE user_id = ? AND status = 'active'
+            ");
+            $stmt->execute([$userId]);
+        } catch (\Exception $e) {
+            error_log('SessionGate::keepalive error: ' . $e->getMessage());
         }
-
-        $this->cache->setSession($familyId, ['active' => true], $this->ttlSeconds);
-
-        return [
-            'active' => true,
-            'expires_in' => $this->ttlSeconds,
-        ];
-    }
-
-    /**
-     * End a live session
-     */
-    public function end(int $familyId): void
-    {
-        $this->repo->deactivateAll($familyId);
-        $this->cache->deleteSession($familyId);
-    }
-
-    /**
-     * Get session status for a family
-     */
-    public function getStatus(int $familyId, array $settings): array
-    {
-        $mode = (int) ($settings['mode'] ?? 1);
-
-        if ($mode === 2) {
-            return [
-                'mode' => 2,
-                'should_track' => true,
-                'moving_interval' => (int) ($settings['moving_interval_seconds'] ?? 30),
-                'idle_interval' => (int) ($settings['idle_interval_seconds'] ?? 300),
-            ];
-        }
-
-        $active = $this->isActive($familyId);
-        return [
-            'mode' => 1,
-            'should_track' => $active,
-            'keepalive_interval' => (int) ($settings['keepalive_interval_seconds'] ?? 30),
-            'session_ttl' => (int) ($settings['session_ttl_seconds'] ?? 300),
-        ];
     }
 }

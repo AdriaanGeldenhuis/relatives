@@ -1,30 +1,27 @@
 <?php
 declare(strict_types=1);
-
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('method_not_allowed', 405);
-}
 
 $ctx = SiteContext::require($db);
 
-$userId = isset($_GET['user_id']) ? (int) $_GET['user_id'] : $ctx->userId;
+$userId = TrackingValidator::positiveInt($_GET['user_id'] ?? null);
+if (!$userId) {
+    Response::error('user_id required', 400);
+}
 
-// Default time range: last 24 hours
-$now = time();
-$from = isset($_GET['from']) ? gmdate('Y-m-d H:i:s', strtotime($_GET['from'])) : gmdate('Y-m-d H:i:s', $now - 86400);
-$to = isset($_GET['to']) ? gmdate('Y-m-d H:i:s', strtotime($_GET['to'])) : gmdate('Y-m-d H:i:s', $now);
+// Verify user is in same family
+$stmt = $db->prepare("SELECT id FROM users WHERE id = ? AND family_id = ?");
+$stmt->execute([$userId, $ctx->familyId]);
+if (!$stmt->fetch()) {
+    Response::error('not_found', 404);
+}
+
+$from = $_GET['from'] ?? date('Y-m-d 00:00:00');
+$to = $_GET['to'] ?? date('Y-m-d 23:59:59');
+$limit = min((int)($_GET['limit'] ?? 500), 2000);
 
 $trackingCache = new TrackingCache($cache);
 $locationRepo = new LocationRepo($db, $trackingCache);
+$history = $locationRepo->getHistory($userId, $ctx->familyId, $from, $to, $limit);
 
-$points = $locationRepo->getHistory($ctx->familyId, $userId, $from, $to);
-
-Response::success([
-    'user_id' => $userId,
-    'from' => $from,
-    'to' => $to,
-    'count' => count($points),
-    'points' => $points,
-]);
+Response::success($history);

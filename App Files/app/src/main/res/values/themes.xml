@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style name="Theme.Relatives" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Relatives" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#667eea</item>
+        <item name="colorPrimaryVariant">#764ba2</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#f093fb</item>
+        <item name="colorSecondaryVariant">#f5576c</item>
+        <item name="colorOnSecondary">#FFFFFF</item>
+        <item name="android:statusBarColor">#667eea</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowBackground">#000000</item>
+    </style>
 </resources>

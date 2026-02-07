@@ -1,105 +1,69 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Family tracking settings repository
- */
-class SettingsRepo
-{
+class SettingsRepo {
     private PDO $db;
-    private TrackingCache $cache;
 
-    private const DEFAULTS = [
-        'mode' => 1,
-        'session_ttl_seconds' => 300,
-        'keepalive_interval_seconds' => 30,
-        'moving_interval_seconds' => 30,
-        'idle_interval_seconds' => 300,
-        'speed_threshold_mps' => 1.0,
-        'distance_threshold_m' => 50,
-        'min_accuracy_m' => 100,
-        'dedupe_radius_m' => 10,
-        'dedupe_time_seconds' => 60,
-        'rate_limit_seconds' => 5,
-        'units' => 'metric',
-        'map_style' => 'streets',
-        'history_retention_days' => 30,
-        'events_retention_days' => 90,
-    ];
-
-    public function __construct(PDO $db, TrackingCache $cache)
-    {
+    public function __construct(PDO $db) {
         $this->db = $db;
-        $this->cache = $cache;
     }
 
-    /**
-     * Get settings for a family, creating defaults if not exists
-     */
-    public function get(int $familyId): array
-    {
-        $cached = $this->cache->getSettings($familyId);
-        if ($cached !== null) {
-            return array_merge(self::DEFAULTS, $cached);
-        }
-
-        $stmt = $this->db->prepare("SELECT * FROM tracking_family_settings WHERE family_id = ?");
+    public function getForFamily(int $familyId): array {
+        $stmt = $this->db->prepare("SELECT * FROM tracking_settings WHERE family_id = ? LIMIT 1");
         $stmt->execute([$familyId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $settings = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$row) {
-            $this->createDefaults($familyId);
-            $settings = array_merge(self::DEFAULTS, ['family_id' => $familyId]);
-        } else {
-            $settings = array_merge(self::DEFAULTS, $row);
+        if (!$settings) {
+            // Return defaults
+            return [
+                'family_id' => $familyId,
+                'update_interval' => 30,
+                'history_retention_days' => 30,
+                'distance_unit' => 'km',
+                'map_style' => 'streets',
+                'show_speed' => 1,
+                'show_battery' => 1,
+                'show_accuracy' => 0,
+                'geofence_notifications' => 1,
+                'low_battery_alert' => 1,
+                'low_battery_threshold' => 15,
+            ];
         }
 
-        $this->cache->setSettings($familyId, $settings);
         return $settings;
     }
 
-    /**
-     * Update settings for a family
-     */
-    public function save(int $familyId, array $data): bool
-    {
-        $allowed = array_keys(self::DEFAULTS);
+    public function save(int $familyId, array $data): bool {
+        $allowed = ['update_interval', 'history_retention_days', 'distance_unit', 'map_style',
+                     'show_speed', 'show_battery', 'show_accuracy', 'geofence_notifications',
+                     'low_battery_alert', 'low_battery_threshold'];
+
+        $filtered = array_intersect_key($data, array_flip($allowed));
+        if (empty($filtered)) return false;
+
         $sets = [];
-        $params = [];
-
-        foreach ($data as $key => $value) {
-            if (in_array($key, $allowed, true)) {
-                $sets[] = "{$key} = ?";
-                $params[] = $value;
-            }
+        $values = [];
+        foreach ($filtered as $key => $value) {
+            $sets[] = "$key = ?";
+            $values[] = $value;
         }
 
-        if (empty($sets)) {
-            return false;
+        $setStr = implode(', ', $sets);
+        $values[] = $familyId;
+
+        // Try update first
+        $stmt = $this->db->prepare("UPDATE tracking_settings SET $setStr WHERE family_id = ?");
+        $stmt->execute($values);
+
+        if ($stmt->rowCount() === 0) {
+            // Insert new
+            $filtered['family_id'] = $familyId;
+            $cols = implode(', ', array_keys($filtered));
+            $placeholders = implode(', ', array_fill(0, count($filtered), '?'));
+            $stmt = $this->db->prepare("INSERT INTO tracking_settings ($cols) VALUES ($placeholders)");
+            $stmt->execute(array_values($filtered));
         }
 
-        $params[] = $familyId;
-        $sql = "UPDATE tracking_family_settings SET " . implode(', ', $sets) . " WHERE family_id = ?";
-        $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute($params);
-
-        if ($result) {
-            $this->cache->deleteSettings($familyId);
-        }
-
-        return $result;
-    }
-
-    private function createDefaults(int $familyId): void
-    {
-        $stmt = $this->db->prepare("
-            INSERT IGNORE INTO tracking_family_settings (family_id) VALUES (?)
-        ");
-        $stmt->execute([$familyId]);
-    }
-
-    public static function getDefaults(): array
-    {
-        return self::DEFAULTS;
+        return true;
     }
 }
