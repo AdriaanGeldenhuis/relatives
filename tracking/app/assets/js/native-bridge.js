@@ -269,6 +269,23 @@ window.NativeBridge = {
     },
 
     /**
+     * Wake all family devices - triggers LIVE mode on this device
+     * and notifies other devices via FCM
+     */
+    wakeAllDevices: function() {
+        if (this.isAndroid && window.Android && window.Android.wakeAllDevices) {
+            window.Android.wakeAllDevices();
+            return true;
+        } else if (this.isIOS && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tracking) {
+            window.webkit.messageHandlers.tracking.postMessage({
+                action: 'wakeAllDevices'
+            });
+            return true;
+        }
+        return false;
+    },
+
+    /**
      * Get FCM token for push notifications
      */
     getFCMToken: function() {

@@ -210,10 +210,10 @@ window.Polling = {
     },
 
     async handleWakeClick() {
-        const indicator = document.getElementById('session-indicator');
-        const text = indicator.querySelector('.session-text');
-        const originalText = text.textContent;
-        const wasWaking = indicator.classList.contains('session-waking');
+        var indicator = document.getElementById('session-indicator');
+        var text = indicator.querySelector('.session-text');
+        var originalText = text.textContent;
+        var wasWaking = indicator.classList.contains('session-waking');
 
         // Don't double-click while waking
         if (wasWaking) {
@@ -223,26 +223,47 @@ window.Polling = {
         // Show refreshing state
         indicator.classList.remove('session-sleeping', 'session-active', 'session-stale');
         indicator.classList.add('session-waking');
-        text.textContent = 'Refreshing...';
+        text.textContent = 'Waking devices...';
 
         try {
-            // Send keepalive to wake/extend session
+            // 1. Wake THIS device's native tracking (if running in native app)
+            if (window.NativeBridge && window.NativeBridge.isNativeApp) {
+                if (window.Android && window.Android.wakeAllDevices) {
+                    window.Android.wakeAllDevices();
+                }
+            }
+
+            // 2. Call wake_devices API to send FCM push to ALL family devices
+            var wakeResponse = await TrackingAPI.request('wake_devices.php', {
+                method: 'POST'
+            });
+
+            var devicesNotified = 0;
+            if (wakeResponse && wakeResponse.success && wakeResponse.data) {
+                devicesNotified = wakeResponse.data.devices_notified || 0;
+            }
+
+            // 3. Also send keepalive to extend session
             await this.sendKeepalive();
 
-            // Immediately fetch fresh locations
+            // 4. Immediately fetch fresh locations
             await this.fetchLocations();
 
-            // Start polling if not already running
+            // 5. Start polling if not already running
             if (!this.isRunning) {
                 this.start();
             }
 
-            // Show success toast
+            // Show success toast with device count
             if (window.Toast) {
-                Toast.show('Devices notified - waiting for updates', 'success');
+                if (devicesNotified > 0) {
+                    Toast.show(devicesNotified + ' device' + (devicesNotified > 1 ? 's' : '') + ' notified - waiting for updates', 'success');
+                } else {
+                    Toast.show('Session active - waiting for updates', 'success');
+                }
             }
         } catch (err) {
-            console.error('Failed to refresh:', err);
+            console.error('Failed to wake devices:', err);
 
             // Revert to previous state
             indicator.classList.remove('session-waking');
@@ -250,7 +271,7 @@ window.Polling = {
             text.textContent = originalText;
 
             if (window.Toast) {
-                Toast.show('Could not refresh. Try again.', 'error');
+                Toast.show('Could not wake devices. Try again.', 'error');
             }
         }
     }

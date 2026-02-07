@@ -207,6 +207,8 @@ $cacheVersion = '12.3.6';
     </script>
     <script src="assets/js/format.js?v=<?php echo $cacheVersion; ?>"></script>
     <script src="assets/js/api.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script src="assets/js/native-bridge.js?v=<?php echo $cacheVersion; ?>"></script>
+    <script>if (window.NativeBridge) NativeBridge.init();</script>
     <script>
         // Toast helper
         const Toast = {
@@ -275,6 +277,15 @@ $cacheVersion = '12.3.6';
                     const response = await TrackingAPI.saveSettings(settings);
                     if (response.success) {
                         Toast.show('Settings saved', 'success');
+
+                        // Push settings to native app if running inside WebView
+                        if (window.NativeBridge && window.NativeBridge.isNativeApp) {
+                            var highAccuracy = settings.min_accuracy_m <= 50;
+                            window.NativeBridge.updateTrackingSettings(
+                                settings.moving_interval_seconds,
+                                highAccuracy
+                            );
+                        }
                     }
                 } catch (err) {
                     Toast.show(err.message || 'Failed to save', 'error');

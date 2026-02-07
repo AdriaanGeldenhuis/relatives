@@ -2,6 +2,7 @@ package com.relatives.app.webview
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.util.Log
 import android.webkit.JavascriptInterface
 import com.relatives.app.tracking.PreferencesManager
@@ -35,11 +36,7 @@ class WebViewBridge(private val context: Context) {
     @JavascriptInterface
     fun onTrackingScreenVisible() {
         Log.d(TAG, "onTrackingScreenVisible")
-
-        val intent = Intent(context, TrackingLocationService::class.java).apply {
-            action = TrackingLocationService.ACTION_VIEWER_VISIBLE
-        }
-        context.startService(intent)
+        sendServiceIntent(TrackingLocationService.ACTION_VIEWER_VISIBLE)
     }
 
     /**
@@ -49,11 +46,18 @@ class WebViewBridge(private val context: Context) {
     @JavascriptInterface
     fun onTrackingScreenHidden() {
         Log.d(TAG, "onTrackingScreenHidden")
+        sendServiceIntent(TrackingLocationService.ACTION_VIEWER_HIDDEN)
+    }
 
-        val intent = Intent(context, TrackingLocationService::class.java).apply {
-            action = TrackingLocationService.ACTION_VIEWER_HIDDEN
-        }
-        context.startService(intent)
+    /**
+     * Wake all family devices - triggers LIVE mode on this device
+     * and the web app calls the wake_devices.php API to send FCM
+     * push notifications to all other family devices.
+     */
+    @JavascriptInterface
+    fun wakeAllDevices() {
+        Log.d(TAG, "wakeAllDevices")
+        sendServiceIntent(TrackingLocationService.ACTION_WAKE_TRACKING)
     }
 
     // ============ SETTINGS ============
@@ -68,12 +72,17 @@ class WebViewBridge(private val context: Context) {
     fun updateTrackingSettings(intervalSeconds: Int, highAccuracyMode: Boolean) {
         Log.d(TAG, "updateTrackingSettings: interval=$intervalSeconds, highAccuracy=$highAccuracyMode")
 
+        // Persist to preferences
+        prefs.movingIntervalSeconds = intervalSeconds
+        prefs.highAccuracyMode = highAccuracyMode
+
+        // Push to running service
         val intent = Intent(context, TrackingLocationService::class.java).apply {
             action = TrackingLocationService.ACTION_UPDATE_SETTINGS
             putExtra(TrackingLocationService.EXTRA_INTERVAL_SECONDS, intervalSeconds)
             putExtra(TrackingLocationService.EXTRA_HIGH_ACCURACY, highAccuracyMode)
         }
-        context.startService(intent)
+        sendServiceIntent(intent)
     }
 
     /**
@@ -175,5 +184,37 @@ class WebViewBridge(private val context: Context) {
     @JavascriptInterface
     fun logFromJS(tag: String, message: String) {
         Log.d("JS:$tag", message)
+    }
+
+    /**
+     * Get current tracking mode (live/moving/idle/off).
+     */
+    @JavascriptInterface
+    fun getTrackingMode(): String {
+        return if (prefs.isTrackingEnabled) "active" else "off"
+    }
+
+    // ============ INTERNAL HELPERS ============
+
+    /**
+     * Send intent to tracking service, using startForegroundService on Android O+.
+     */
+    private fun sendServiceIntent(action: String) {
+        val intent = Intent(context, TrackingLocationService::class.java).apply {
+            this.action = action
+        }
+        sendServiceIntent(intent)
+    }
+
+    private fun sendServiceIntent(intent: Intent) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send service intent: ${intent.action}", e)
+        }
     }
 }

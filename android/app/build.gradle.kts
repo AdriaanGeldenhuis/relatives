@@ -45,8 +45,11 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
 
-    // Google Play Services - Location
+    // Google Play Services - Location & Activity Recognition
     implementation("com.google.android.gms:play-services-location:21.1.0")
+
+    // Google Play Billing Library v7+ (required by Google Play policy)
+    implementation("com.android.billingclient:billing-ktx:7.1.1")
 
     // OkHttp for network requests
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
