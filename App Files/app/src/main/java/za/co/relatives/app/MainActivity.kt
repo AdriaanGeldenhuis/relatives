@@ -10,11 +10,13 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.*
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import java.lang.ref.WeakReference
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -65,6 +67,14 @@ import za.co.relatives.app.utils.PreferencesManager
  */
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        private const val TAG = "MainActivity"
+        private var activityRef: WeakReference<MainActivity>? = null
+
+        /** Get the current MainActivity instance (if alive). Used by TrackingJsInterface. */
+        fun getInstance(): MainActivity? = activityRef?.get()
+    }
+
     // State for Subscription Banner
     private var showTrialBanner by mutableStateOf(false)
     private var trialEndDate by mutableStateOf("")
@@ -75,6 +85,9 @@ class MainActivity : ComponentActivity() {
 
     // Track if a disclosure dialog is currently showing
     private var isDisclosureShowing = false
+
+    // Pending WebView PermissionRequest for mic (to grant after OS permission)
+    private var pendingMicRequest: PermissionRequest? = null
 
     // Permission request launchers
     private val locationPermissionLauncher = registerForActivityResult(
@@ -110,8 +123,35 @@ class MainActivity : ComponentActivity() {
         // Notification result doesn't affect tracking
     }
 
+    private val micPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        Log.d(TAG, "Mic permission result: granted=$granted")
+        if (granted) {
+            // Grant the pending WebView mic request
+            pendingMicRequest?.let { req ->
+                req.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                Log.d(TAG, "WebView mic request granted")
+            }
+            pendingMicRequest = null
+            // Notify web
+            runOnUiThread {
+                webViewRef?.evaluateJavascript(
+                    "if(window.NativeBridge && window.NativeBridge.onMicPermissionResult) { " +
+                    "window.NativeBridge.onMicPermissionResult(true); }",
+                    null
+                )
+            }
+        } else {
+            pendingMicRequest?.deny()
+            pendingMicRequest = null
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        activityRef = WeakReference(this)
+        Log.d(TAG, "onCreate - activityRef set")
 
         // Enable Immersive Sticky Mode (Hide System Bars)
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
@@ -176,6 +216,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        activityRef = null
+        super.onDestroy()
+    }
+
     override fun onResume() {
         super.onResume()
         checkSubscription()
@@ -228,6 +273,7 @@ class MainActivity : ComponentActivity() {
      * If not, shows prominent disclosure first.
      */
     fun requestTrackingPermissions() {
+        Log.d(TAG, "requestTrackingPermissions() called")
         if (hasLocationPermission()) {
             // Already have foreground - check background
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -334,6 +380,7 @@ class MainActivity : ComponentActivity() {
     // ========== PERMISSION REQUESTS ==========
 
     private fun requestForegroundLocationPermission() {
+        Log.d(TAG, "Requesting FOREGROUND location now")
         locationPermissionLauncher.launch(
             arrayOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -343,6 +390,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestBackgroundLocationPermission() {
+        Log.d(TAG, "Requesting BACKGROUND location now")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
         }
@@ -391,7 +439,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ========== MIC PERMISSION (for voice features) ==========
+
+    /**
+     * Request mic permission with the pending WebView PermissionRequest.
+     * Called from WebChromeClient when web requests audio capture
+     * but RECORD_AUDIO is not yet granted.
+     */
+    fun requestMicPermission(webViewRequest: PermissionRequest?) {
+        Log.d(TAG, "requestMicPermission() called")
+        pendingMicRequest = webViewRequest
+        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    fun hasMicPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     private fun startTrackingService() {
+        Log.d(TAG, "startTrackingService() called")
         if (PreferencesManager.isTrackingEnabled() && hasLocationPermission()) {
             TrackingLocationService.startTracking(this)
         }
@@ -495,17 +563,19 @@ fun WebViewScreen(
                     request?.let { req ->
                         val requestedResources = req.resources
                         val grantedResources = mutableListOf<String>()
+                        var needsMicPermission = false
 
                         for (resource in requestedResources) {
                             when (resource) {
                                 PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
-                                    // Check if app has RECORD_AUDIO permission
                                     if (ContextCompat.checkSelfPermission(
                                             context,
                                             Manifest.permission.RECORD_AUDIO
                                         ) == PackageManager.PERMISSION_GRANTED
                                     ) {
                                         grantedResources.add(resource)
+                                    } else {
+                                        needsMicPermission = true
                                     }
                                 }
                                 PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
@@ -516,6 +586,16 @@ fun WebViewScreen(
 
                         if (grantedResources.isNotEmpty()) {
                             req.grant(grantedResources.toTypedArray())
+                        } else if (needsMicPermission) {
+                            // Route through MainActivity to request OS mic permission
+                            val activity = MainActivity.getInstance()
+                            if (activity != null) {
+                                activity.runOnUiThread {
+                                    activity.requestMicPermission(req)
+                                }
+                            } else {
+                                req.deny()
+                            }
                         } else {
                             req.deny()
                         }
