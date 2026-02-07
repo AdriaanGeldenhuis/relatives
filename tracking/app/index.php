@@ -19,7 +19,7 @@ if (!$user) {
 // Load tracking settings for the family
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-$trackingCache = new TrackingCache($db);
+$trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 $familyId = (int)$user['family_id'];
 $settings = $settingsRepo->get($familyId);

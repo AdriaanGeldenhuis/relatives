@@ -36,7 +36,7 @@ try {
     if (empty($families)) {
         // Use global default if no family settings exist
         $defaultRetention = SettingsRepo::getDefaults()['history_retention_days'];
-        $trackingCache = new TrackingCache($db);
+        $trackingCache = new TrackingCache($cache);
         $locationRepo = new LocationRepo($db, $trackingCache);
         $deleted = $locationRepo->pruneHistory($defaultRetention);
         $totalDeleted += $deleted;

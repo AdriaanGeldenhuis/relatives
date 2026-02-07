@@ -19,7 +19,7 @@ if (!$user) {
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
-$trackingCache = new TrackingCache($db);
+$trackingCache = new TrackingCache($cache);
 $familyId = (int)$user['family_id'];
 $isAdmin = in_array($user['role'], ['owner', 'admin']);
 

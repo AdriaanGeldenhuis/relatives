@@ -27,12 +27,12 @@ $processed = 0;
 $transitions = 0;
 
 try {
-    $trackingCache = new TrackingCache($db);
+    $trackingCache = new TrackingCache($cache);
     $geoRepo = new GeofenceRepo($db, $trackingCache);
-    $placesRepo = new PlacesRepo($db);
+    $placesRepo = new PlacesRepo($db, $trackingCache);
     $eventsRepo = new EventsRepo($db);
     $alertsRepo = new AlertsRepo($db);
-    $alertsEngine = new AlertsEngine($db, $alertsRepo);
+    $alertsEngine = new AlertsEngine($db, $trackingCache, $alertsRepo);
     $geofenceEngine = new GeofenceEngine(
         $db, $trackingCache, $geoRepo, $placesRepo, $eventsRepo, $alertsEngine
     );
