@@ -25,6 +25,7 @@ abstract class LocationDatabase : RoomDatabase() {
     }
 }
 
+@androidx.room.Dao
 interface LocationDao {
     @androidx.room.Insert
     fun insert(location: LocationEntity)
