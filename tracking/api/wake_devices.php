@@ -111,14 +111,9 @@ if (!empty($invalidTokens)) {
 }
 
 // Log the wake event
-$eventsRepo->insert([
-    'user_id' => $userId,
-    'family_id' => $familyId,
-    'event_type' => 'wake_devices',
-    'payload_json' => json_encode([
-        'notified' => $notified,
-        'failed' => $failed
-    ])
+$eventsRepo->log($familyId, $userId, 'wake_devices', [
+    'notified' => $notified,
+    'failed' => $failed
 ]);
 
 jsonSuccess([
