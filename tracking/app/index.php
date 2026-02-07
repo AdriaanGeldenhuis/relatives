@@ -39,12 +39,27 @@ $alertRules = $alertsRepo->get($familyId);
 $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 
 $pageTitle = 'Family Tracking';
-$pageCSS = ['/tracking/app/assets/css/tracking.css'];
+$pageCSS = [
+    'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
+    '/tracking/app/assets/css/tracking.css',
+];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 
-<link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
 <link rel="manifest" href="/tracking/app/manifest.json">
+
+<style>
+/* Critical inline styles - guarantee map fills viewport regardless of external CSS load order */
+body.tracking-page { overflow: hidden !important; padding-bottom: 0 !important; margin: 0 !important; }
+body.tracking-page .footer-container,
+body.tracking-page .bottom-nav,
+body.tracking-page .plus-menu-overlay,
+body.tracking-page .plus-menu-container,
+body.tracking-page .app-loader { display: none !important; }
+.tracking-app { position: fixed; inset: 0; z-index: 10000; }
+#trackingMap { position: absolute; inset: 0; width: 100%; height: 100%; }
+</style>
+<script>document.body.classList.add('tracking-page');</script>
 
 <div class="tracking-app">
 
@@ -209,9 +224,6 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         });
     }
 
-    // Add tracking-page class to body
-    document.body.classList.add('tracking-page');
-
     // Initialize Mapbox
     if (!window.TrackingConfig || !window.TrackingConfig.mapboxToken) {
         console.error('[Tracking] No Mapbox token configured');
@@ -242,6 +254,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }), 'top-right');
 
     window.trackingMap = map;
+
+    // Force resize after layout settles
+    setTimeout(function() { map.resize(); }, 100);
+    setTimeout(function() { map.resize(); }, 500);
 
     // Markers storage
     var markers = {};
