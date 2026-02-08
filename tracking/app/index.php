@@ -38,36 +38,6 @@ $alertRules = $alertsRepo->get($familyId);
 // Mapbox token from environment
 $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 
-// Auto-seed test location data if tracking_current is empty for this family
-$locationRepo = new LocationRepo($db, $trackingCache);
-$currentLocations = $locationRepo->getFamilyCurrentLocations($familyId);
-if (empty($currentLocations)) {
-    // Seed test data for all active family members
-    $stmtMembers = $db->prepare("SELECT id FROM users WHERE family_id = ? AND status = 'active' AND location_sharing = 1");
-    $stmtMembers->execute([$familyId]);
-    $memberIds = $stmtMembers->fetchAll(PDO::FETCH_COLUMN);
-
-    $testCoords = [
-        ['lat' => -26.2041, 'lng' => 28.0473],
-        ['lat' => -26.1076, 'lng' => 28.0567],
-        ['lat' => -26.1496, 'lng' => 28.0080],
-        ['lat' => -26.1929, 'lng' => 28.1137],
-        ['lat' => -26.2650, 'lng' => 28.1310],
-    ];
-    $now = date('Y-m-d H:i:s');
-    foreach ($memberIds as $i => $memberId) {
-        $c = $testCoords[$i % count($testCoords)];
-        $locationRepo->upsertCurrent((int)$memberId, $familyId, [
-            'lat' => $c['lat'], 'lng' => $c['lng'],
-            'accuracy_m' => 5.0, 'speed_mps' => 0.0,
-            'bearing_deg' => null, 'altitude_m' => 1600.0,
-            'recorded_at' => $now,
-            'device_id' => 'seed-test', 'platform' => 'web', 'app_version' => '1.0.0',
-        ], 'idle');
-    }
-    $trackingCache->deleteFamilySnapshot($familyId);
-}
-
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
@@ -628,6 +598,50 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var pollInterval = ((window.TrackingConfig.settings || {}).keepalive_interval_seconds || 30) * 1000;
         setInterval(fetchMembers, Math.max(pollInterval, 10000));
     });
+
+    // ── BROWSER GEOLOCATION TRACKING ─────────────────────────────
+    // Request browser location permission and upload real position
+    function uploadPosition(pos) {
+        var payload = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy_m: pos.coords.accuracy,
+            speed_mps: pos.coords.speed || 0,
+            bearing_deg: pos.coords.heading || null,
+            altitude_m: pos.coords.altitude || null,
+            recorded_at: new Date(pos.timestamp).toISOString().slice(0, 19).replace('T', ' ')
+        };
+        fetch(window.TrackingConfig.apiBase + '/location.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.success) {
+                console.log('[Tracking] Position uploaded:', payload.lat, payload.lng);
+                fetchMembers(); // Refresh markers immediately
+            }
+        }).catch(function(e) { console.warn('[Tracking] Upload failed:', e); });
+    }
+
+    function startBrowserTracking() {
+        if (!navigator.geolocation) return;
+
+        // Get initial position
+        navigator.geolocation.getCurrentPosition(uploadPosition, function(err) {
+            console.warn('[Tracking] Geolocation error:', err.message);
+        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+
+        // Watch for position changes
+        navigator.geolocation.watchPosition(uploadPosition, function(err) {
+            console.warn('[Tracking] Watch error:', err.message);
+        }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
+    }
+
+    // Request permission on page load
+    if (navigator.geolocation) {
+        startBrowserTracking();
+    }
 
 })();
 </script>
