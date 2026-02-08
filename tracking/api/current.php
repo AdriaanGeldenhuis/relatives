@@ -14,20 +14,22 @@ $locationRepo = new LocationRepo($db, $trackingCache);
 
 $locations = $locationRepo->getFamilyCurrentLocations($ctx->familyId);
 
-// Format response with user name and avatar_color already included from the query
+// Format response — includes ALL family members, even those without a position yet
 $members = [];
 foreach ($locations as $row) {
+    $hasLocation = $row['lat'] !== null;
     $members[] = [
         'user_id' => (int) $row['user_id'],
         'name' => $row['name'],
         'avatar_color' => $row['avatar_color'],
-        'lat' => (float) $row['lat'],
-        'lng' => (float) $row['lng'],
+        'has_location' => $hasLocation,
+        'lat' => $hasLocation ? (float) $row['lat'] : null,
+        'lng' => $hasLocation ? (float) $row['lng'] : null,
         'accuracy_m' => $row['accuracy_m'] !== null ? (float) $row['accuracy_m'] : null,
         'speed_mps' => $row['speed_mps'] !== null ? (float) $row['speed_mps'] : null,
         'bearing_deg' => $row['bearing_deg'] !== null ? (float) $row['bearing_deg'] : null,
         'altitude_m' => $row['altitude_m'] !== null ? (float) $row['altitude_m'] : null,
-        'motion_state' => $row['motion_state'],
+        'motion_state' => $row['motion_state'] ?? 'unknown',
         'recorded_at' => $row['recorded_at'],
         'updated_at' => $row['updated_at'],
     ];

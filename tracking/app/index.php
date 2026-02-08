@@ -315,18 +315,19 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var badge = document.getElementById('memberCount');
         var statusEl = document.getElementById('trackingStatus');
 
-        if (!list || !empty || !badge) return; // DOM not ready yet
+        if (!list || !empty || !badge) return;
 
         if (!members || members.length === 0) {
             empty.style.display = '';
             badge.textContent = '0';
-            if (statusEl) statusEl.textContent = 'No members online';
+            if (statusEl) statusEl.textContent = 'No members';
             return;
         }
 
         empty.style.display = 'none';
         badge.textContent = members.length;
         var online = members.filter(function(m) {
+            if (!m.has_location) return false;
             return (Date.now() - parseUTC(m.recorded_at || m.updated_at)) < 300000;
         }).length;
         if (statusEl) statusEl.textContent = online + ' online \u00b7 ' + members.length + ' total';
@@ -334,11 +335,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var html = '';
         members.forEach(function(m) {
             var initial = (m.name || 'U').charAt(0).toUpperCase();
-            var statusClass = getStatusClass(m);
-            var timeAgo = formatTimeAgo(m.recorded_at || m.updated_at);
-            var speed = formatSpeed(m.speed_mps);
+            var hasLoc = m.has_location && m.lat !== null;
+            var statusClass = hasLoc ? getStatusClass(m) : 'offline';
+            var timeAgo = hasLoc ? formatTimeAgo(m.recorded_at || m.updated_at) : 'No location';
+            var speed = hasLoc ? formatSpeed(m.speed_mps) : '';
 
-            html += '<div class="member-item" data-user-id="' + m.user_id + '" onclick="flyToMember(' + m.user_id + ')">';
+            html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
             html += '  <div class="member-avatar" style="background:' + (m.avatar_color || '#667eea') + '">';
             html += '    <span>' + initial + '</span>';
             html += '    <span class="member-status-dot ' + statusClass + '"></span>';
@@ -352,11 +354,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             }
             html += '    </div>';
             html += '  </div>';
-            html += '  <div class="member-actions">';
-            html += '    <button class="member-action-btn" onclick="event.stopPropagation(); getDirections(' + m.user_id + ')" title="Directions">';
-            html += '      <svg viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>';
-            html += '    </button>';
-            html += '  </div>';
+            if (hasLoc) {
+                html += '  <div class="member-actions">';
+                html += '    <button class="member-action-btn" onclick="event.stopPropagation(); getDirections(' + m.user_id + ')" title="Directions">';
+                html += '      <svg viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>';
+                html += '    </button>';
+                html += '  </div>';
+            }
             html += '</div>';
         });
 
@@ -368,6 +372,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     function updateMarkers(members) {
         var activeIds = {};
         members.forEach(function(m) {
+            // Skip members without a location
+            if (!m.has_location || m.lat === null || m.lng === null) return;
+
             activeIds[m.user_id] = true;
             var lngLat = [parseFloat(m.lng), parseFloat(m.lat)];
             if (markers[m.user_id]) {
