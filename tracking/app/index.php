@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=3.0',
+    '/tracking/app/assets/css/tracking.css?v=3.1',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -51,13 +51,25 @@ require_once __DIR__ . '/../../shared/components/header.php';
 <style>
 /* Critical inline styles - must be here, not just in CSS file */
 body.tracking-page { overflow: hidden !important; padding-bottom: 0 !important; margin: 0 !important; }
-body.tracking-page .global-header,
-body.tracking-page .global-footer,
 body.tracking-page .app-loader { display: none !important; }
-.tracking-app { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10; }
+.tracking-app { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; }
 #trackingMap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
 </style>
-<script>document.body.classList.add('tracking-page');</script>
+<script>
+document.body.classList.add('tracking-page');
+// Position tracking app below the global header
+requestAnimationFrame(function() {
+    var header = document.querySelector('.global-header');
+    var app = document.querySelector('.tracking-app');
+    if (header && app) {
+        app.style.top = header.offsetHeight + 'px';
+    } else if (app) {
+        app.style.top = '0';
+    }
+    // Resize map after layout settles
+    if (window.trackingMap) window.trackingMap.resize();
+});
+</script>
 
 <div class="tracking-app">
 
