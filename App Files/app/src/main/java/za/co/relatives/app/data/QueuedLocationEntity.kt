@@ -6,36 +6,24 @@ import androidx.room.PrimaryKey
 import java.util.UUID
 
 /**
- * Room entity representing a queued location update waiting to be uploaded.
- * Locations are stored locally first then batch-uploaded when connectivity allows.
+ * A location fix queued for upload to the server.
+ * Stored in Room so it survives process death and network outages.
  */
 @Entity(tableName = "queued_locations")
 data class QueuedLocationEntity(
-
     @PrimaryKey
     @ColumnInfo(name = "client_event_id")
     val clientEventId: String = UUID.randomUUID().toString(),
 
-    @ColumnInfo(name = "lat")
-    val lat: Double? = null,
-
-    @ColumnInfo(name = "lng")
-    val lng: Double? = null,
-
-    @ColumnInfo(name = "accuracy")
-    val accuracy: Double? = null,
-
-    @ColumnInfo(name = "altitude")
+    val lat: Double,
+    val lng: Double,
+    val accuracy: Float? = null,
     val altitude: Double? = null,
-
-    @ColumnInfo(name = "bearing")
-    val bearing: Double? = null,
-
-    @ColumnInfo(name = "speed")
-    val speed: Double? = null,
+    val bearing: Float? = null,
+    val speed: Float? = null,
 
     @ColumnInfo(name = "speed_kmh")
-    val speedKmh: Double? = null,
+    val speedKmh: Float? = null,
 
     @ColumnInfo(name = "is_moving")
     val isMoving: Boolean = false,
@@ -43,15 +31,10 @@ data class QueuedLocationEntity(
     @ColumnInfo(name = "battery_level")
     val batteryLevel: Int? = null,
 
-    @ColumnInfo(name = "timestamp")
     val timestamp: Long = System.currentTimeMillis(),
 
     @ColumnInfo(name = "retry_count")
     val retryCount: Int = 0,
 
-    @ColumnInfo(name = "sent")
     val sent: Boolean = false,
-
-    @ColumnInfo(name = "created_at")
-    val createdAt: Long = System.currentTimeMillis()
 )

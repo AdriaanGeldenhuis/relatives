@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css',
+    '/tracking/app/assets/css/tracking.css?v=3.3',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -49,23 +49,40 @@ require_once __DIR__ . '/../../shared/components/header.php';
 <link rel="manifest" href="/tracking/app/manifest.json">
 
 <style>
-/* Critical inline styles - guarantee map fills viewport regardless of external CSS load order */
+/* Critical inline styles - must be here, not just in CSS file */
 body.tracking-page { overflow: hidden !important; padding-bottom: 0 !important; margin: 0 !important; }
-body.tracking-page .footer-container,
-body.tracking-page .bottom-nav,
-body.tracking-page .plus-menu-overlay,
-body.tracking-page .plus-menu-container,
 body.tracking-page .app-loader { display: none !important; }
-.tracking-app { position: fixed; inset: 0; z-index: 10000; }
-#trackingMap { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tracking-app { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; }
+#trackingMap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
 </style>
-<script>document.body.classList.add('tracking-page');</script>
+<script>
+document.body.classList.add('tracking-page');
+// Position tracking app below the global header
+requestAnimationFrame(function() {
+    var header = document.querySelector('.global-header');
+    var app = document.querySelector('.tracking-app');
+    if (header && app) {
+        app.style.top = header.offsetHeight + 'px';
+    } else if (app) {
+        app.style.top = '0';
+    }
+    // Map resize handled in map.on('load') below - not here (map not yet created)
+});
+</script>
 
 <div class="tracking-app">
 
     <!-- Top Bar -->
     <div class="tracking-topbar">
-        <div class="tracking-topbar-title">Family Tracking</div>
+        <div class="tracking-topbar-left">
+            <a href="/home/" class="tracking-topbar-back" title="Back to Home">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </a>
+            <div>
+                <div class="tracking-topbar-title">Family Tracking</div>
+                <div class="tracking-topbar-subtitle" id="trackingStatus">Connecting...</div>
+            </div>
+        </div>
         <div class="tracking-topbar-actions">
             <a href="/tracking/app/events.php" class="tracking-topbar-btn" title="Events">
                 <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
@@ -76,6 +93,9 @@ body.tracking-page .app-loader { display: none !important; }
             <a href="/tracking/app/settings.php" class="tracking-topbar-btn" title="Settings">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             </a>
+            <div class="tracking-topbar-user" style="background:<?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>" title="<?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?>">
+                <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? 'U', 0, 1)); ?>
+            </div>
         </div>
     </div>
 
@@ -103,10 +123,21 @@ body.tracking-page .app-loader { display: none !important; }
         </div>
     </div>
 
-    <!-- Wake / Location Share Button (FAB) -->
-    <button class="wake-fab" id="wakeFab" title="Share your location / Wake devices">
-        <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-    </button>
+    <!-- Bottom Toolbar -->
+    <div class="tracking-toolbar" id="trackingToolbar">
+        <a href="/home/" class="tracking-toolbar-btn home-btn" title="Home">
+            <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            <span>Home</span>
+        </a>
+        <button class="tracking-toolbar-btn wake-btn" id="wakeFab" title="Wake all devices">
+            <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            <span>Wake</span>
+        </button>
+        <button class="tracking-toolbar-btn" id="panelToggleBtn" title="Toggle family panel">
+            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            <span>Family</span>
+        </button>
+    </div>
 
     <!-- Directions Info Bar -->
     <div class="directions-bar" id="directionsBar">
@@ -282,24 +313,34 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var list = document.getElementById('memberList');
         var empty = document.getElementById('memberEmpty');
         var badge = document.getElementById('memberCount');
+        var statusEl = document.getElementById('trackingStatus');
+
+        if (!list || !empty || !badge) return;
 
         if (!members || members.length === 0) {
             empty.style.display = '';
             badge.textContent = '0';
+            if (statusEl) statusEl.textContent = 'No members';
             return;
         }
 
         empty.style.display = 'none';
         badge.textContent = members.length;
+        var online = members.filter(function(m) {
+            if (!m.has_location) return false;
+            return (Date.now() - parseUTC(m.recorded_at || m.updated_at)) < 300000;
+        }).length;
+        if (statusEl) statusEl.textContent = online + ' online \u00b7 ' + members.length + ' total';
 
         var html = '';
         members.forEach(function(m) {
             var initial = (m.name || 'U').charAt(0).toUpperCase();
-            var statusClass = getStatusClass(m);
-            var timeAgo = formatTimeAgo(m.recorded_at || m.updated_at);
-            var speed = formatSpeed(m.speed_mps);
+            var hasLoc = m.has_location && m.lat !== null;
+            var statusClass = hasLoc ? getStatusClass(m) : 'offline';
+            var timeAgo = hasLoc ? formatTimeAgo(m.recorded_at || m.updated_at) : 'No location';
+            var speed = hasLoc ? formatSpeed(m.speed_mps) : '';
 
-            html += '<div class="member-item" data-user-id="' + m.user_id + '" onclick="flyToMember(' + m.user_id + ')">';
+            html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
             html += '  <div class="member-avatar" style="background:' + (m.avatar_color || '#667eea') + '">';
             html += '    <span>' + initial + '</span>';
             html += '    <span class="member-status-dot ' + statusClass + '"></span>';
@@ -313,11 +354,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             }
             html += '    </div>';
             html += '  </div>';
-            html += '  <div class="member-actions">';
-            html += '    <button class="member-action-btn" onclick="event.stopPropagation(); getDirections(' + m.user_id + ')" title="Directions">';
-            html += '      <svg viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>';
-            html += '    </button>';
-            html += '  </div>';
+            if (hasLoc) {
+                html += '  <div class="member-actions">';
+                html += '    <button class="member-action-btn" onclick="event.stopPropagation(); getDirections(' + m.user_id + ')" title="Directions">';
+                html += '      <svg viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>';
+                html += '    </button>';
+                html += '  </div>';
+            }
             html += '</div>';
         });
 
@@ -329,6 +372,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     function updateMarkers(members) {
         var activeIds = {};
         members.forEach(function(m) {
+            // Skip members without a location
+            if (!m.has_location || m.lat === null || m.lng === null) return;
+
             activeIds[m.user_id] = true;
             var lngLat = [parseFloat(m.lng), parseFloat(m.lat)];
             if (markers[m.user_id]) {
@@ -356,10 +402,15 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         });
     }
 
+    // Parse MySQL datetime as UTC (server stores all timestamps in UTC)
+    function parseUTC(dateStr) {
+        if (!dateStr) return 0;
+        return new Date(dateStr.replace(' ', 'T') + 'Z').getTime();
+    }
+
     function getStatusClass(m) {
-        var ts = new Date(m.recorded_at || m.updated_at).getTime();
-        var now = Date.now();
-        var diffMin = (now - ts) / 60000;
+        var ts = parseUTC(m.recorded_at || m.updated_at);
+        var diffMin = (Date.now() - ts) / 60000;
         if (diffMin < 5) return 'online';
         if (diffMin < 30) return 'idle';
         return 'offline';
@@ -367,7 +418,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     function formatTimeAgo(dateStr) {
         if (!dateStr) return 'unknown';
-        var diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+        var diff = (Date.now() - parseUTC(dateStr)) / 1000;
+        if (diff < 0) diff = 0;
         if (diff < 60) return 'just now';
         if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
         if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
@@ -468,16 +520,20 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Panel toggle
     var panel = document.getElementById('familyPanel');
     var panelToggle = document.getElementById('familyPanelToggle');
+    var panelToggleBtn = document.getElementById('panelToggleBtn');
     var panelHeader = document.getElementById('familyPanelHeader');
     var isMobile = window.innerWidth <= 768;
 
-    panelToggle.addEventListener('click', function() {
+    function togglePanel() {
         if (isMobile) {
             panel.classList.toggle('expanded');
         } else {
             panel.classList.toggle('collapsed');
         }
-    });
+    }
+
+    panelToggle.addEventListener('click', togglePanel);
+    if (panelToggleBtn) panelToggleBtn.addEventListener('click', togglePanel);
 
     if (isMobile) {
         panelHeader.addEventListener('click', function(e) {
@@ -551,10 +607,142 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // Initial fetch then poll
     map.on('load', function() {
+        map.resize();
         fetchMembers();
         var pollInterval = ((window.TrackingConfig.settings || {}).keepalive_interval_seconds || 30) * 1000;
         setInterval(fetchMembers, Math.max(pollInterval, 10000));
     });
+
+    // ── TRACKING INTEGRATION ─────────────────────────────────────
+    // Detect environment: Android app (TrackingBridge) vs regular browser
+    var isNativeApp = typeof window.TrackingBridge !== 'undefined';
+    console.log('[Tracking] Environment:', isNativeApp ? 'Android App (native bridge)' : 'Browser');
+
+    if (isNativeApp) {
+        // ── NATIVE ANDROID APP ──────────────────────────────────
+        console.log('[Tracking] Native bridge detected');
+
+        // Tell native side the tracking screen is visible (triggers fast polling)
+        try { window.TrackingBridge.onTrackingScreenVisible(); } catch(e) {}
+
+        // Check tracking mode
+        var mode = 'unknown';
+        try { mode = window.TrackingBridge.getTrackingMode(); } catch(e) {}
+        console.log('[Tracking] Native tracking mode:', mode);
+
+        if (mode === 'enabled') {
+            // Already tracking — browser geolocation will also work as backup
+            console.log('[Tracking] Native tracking already active');
+            if (navigator.geolocation) startBrowserTracking();
+        } else {
+            // Not tracking — show "Enable Location" button in the toolbar
+            console.log('[Tracking] Tracking not enabled, showing enable button');
+            showEnableLocationButton();
+        }
+
+        // Load cached family data immediately from native store
+        try {
+            var cachedJson = window.TrackingBridge.getCachedFamily();
+            if (cachedJson) {
+                var cached = JSON.parse(cachedJson);
+                if (cached && cached.length > 0) {
+                    console.log('[Tracking] Loaded', cached.length, 'cached members from native');
+                    _members = cached;
+                    renderMembers(_members);
+                    updateMarkers(_members);
+                }
+            }
+        } catch(e) { console.warn('[Tracking] Cache read error:', e); }
+
+        // Notify when leaving tracking screen
+        window.addEventListener('beforeunload', function() {
+            try { window.TrackingBridge.onTrackingScreenHidden(); } catch(e) {}
+        });
+    } else {
+        // ── REGULAR BROWSER ─────────────────────────────────────
+        if (navigator.geolocation) {
+            startBrowserTracking();
+        }
+    }
+
+    // Show an "Enable Live Location" button in the tracking toolbar
+    function showEnableLocationButton() {
+        var toolbar = document.querySelector('.tracking-toolbar');
+        if (!toolbar) return;
+        var btn = document.createElement('button');
+        btn.className = 'tracking-toolbar-btn enable-location-btn';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
+        btn.style.cssText = 'background:#667eea;color:#fff;border:none;padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;';
+        btn.onclick = function() {
+            try {
+                window.TrackingBridge.startTracking();
+                btn.textContent = 'Enabling...';
+                // After a short delay, check if it worked and start browser tracking
+                setTimeout(function() {
+                    try {
+                        var newMode = window.TrackingBridge.getTrackingMode();
+                        if (newMode === 'enabled') {
+                            btn.remove();
+                            if (navigator.geolocation) startBrowserTracking();
+                        } else {
+                            btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
+                        }
+                    } catch(e) {}
+                }, 3000);
+            } catch(e) {
+                console.warn('[Tracking] startTracking failed:', e);
+            }
+        };
+        toolbar.insertBefore(btn, toolbar.firstChild);
+    }
+
+    // ── BROWSER GEOLOCATION (works in both WebView and browser) ──
+    var lastUploadTime = 0;
+    var uploadPending = false;
+
+    function uploadPosition(pos) {
+        var now = Date.now();
+        if (now - lastUploadTime < 10000) {
+            if (!uploadPending) {
+                uploadPending = true;
+                setTimeout(function() { uploadPending = false; uploadPosition(pos); }, 10000 - (now - lastUploadTime));
+            }
+            return;
+        }
+        lastUploadTime = now;
+
+        var payload = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy_m: pos.coords.accuracy || null,
+            speed_mps: pos.coords.speed || 0,
+            bearing_deg: pos.coords.heading || null,
+            altitude_m: pos.coords.altitude || null,
+            recorded_at: new Date(pos.timestamp).toISOString().slice(0, 19).replace('T', ' '),
+            platform: isNativeApp ? 'android-webview' : 'web',
+            device_id: isNativeApp ? 'android' : 'browser'
+        };
+        fetch(window.TrackingConfig.apiBase + '/location.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.success) {
+                console.log('[Tracking] Position uploaded:', payload.lat, payload.lng, 'accuracy:', payload.accuracy_m + 'm');
+                fetchMembers();
+            } else {
+                console.warn('[Tracking] Server rejected:', data.error);
+            }
+        }).catch(function(e) { console.warn('[Tracking] Upload failed:', e); });
+    }
+
+    function startBrowserTracking() {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.watchPosition(uploadPosition, function(err) {
+            console.warn('[Tracking] Geolocation error:', err.message);
+        }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
+    }
 
 })();
 </script>

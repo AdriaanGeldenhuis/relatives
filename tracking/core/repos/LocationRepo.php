@@ -92,13 +92,13 @@ class LocationRepo
         }
 
         $stmt = $this->db->prepare("
-            SELECT tc.user_id, tc.lat, tc.lng, tc.accuracy_m, tc.speed_mps,
+            SELECT u.id AS user_id, u.full_name AS name, u.avatar_color,
+                   tc.lat, tc.lng, tc.accuracy_m, tc.speed_mps,
                    tc.bearing_deg, tc.altitude_m, tc.motion_state,
-                   tc.recorded_at, tc.updated_at, tc.device_id, tc.platform,
-                   u.full_name AS name, u.avatar_color, u.location_sharing
-            FROM tracking_current tc
-            JOIN users u ON tc.user_id = u.id
-            WHERE tc.family_id = ? AND u.status = 'active' AND u.location_sharing = 1
+                   tc.recorded_at, tc.updated_at, tc.device_id, tc.platform
+            FROM users u
+            LEFT JOIN tracking_current tc ON tc.user_id = u.id
+            WHERE u.family_id = ? AND u.status = 'active'
             ORDER BY tc.updated_at DESC
         ");
         $stmt->execute([$familyId]);

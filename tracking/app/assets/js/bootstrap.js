@@ -1,149 +1,168 @@
 /**
- * Tracking App - Bootstrap / Initialisation
- *
- * Orchestrates the startup sequence for the entire tracking application.
- * This file must be loaded LAST, after all other Tracking.* modules.
+ * Tracking App — Bootstrap
  *
  * Startup sequence:
- *   1. Check for tracking consent (show dialog if not given).
- *   2. Check notification permission (ask if not granted).
- *   3. Load settings from the API.
- *   4. Initialise the Mapbox map.
- *   5. Initialise the family panel.
- *   6. Detect native Android bridge.
- *   7. Start location polling.
- *   8. Start browser-based location tracking (if supported and not native).
- *   9. Set up visibility-change handler for adaptive polling.
- *  10. Initialise UI controls.
- *  11. Wire up the wake button.
+ *   1. Detect native bridge
+ *   2. Initialize Mapbox map (NO permission needed)
+ *   3. Show cached pins immediately (from TrackingStore via bridge)
+ *   4. Start polling (native cache or API)
+ *   5. Wire up tracking toggle (Enable/Disable live location)
+ *   6. Wire up wake button
+ *   7. Wire up visibility change for native bridge
  *
- * Usage (in HTML):
- *   <script src="state.js"></script>
- *   <script src="format.js"></script>
- *   ...all other modules...
- *   <script src="bootstrap.js"></script>
- *   <!-- DOMContentLoaded triggers Tracking.init() automatically -->
+ * The map loads and shows pins WITHOUT any permission.
+ * Permission is ONLY requested when user taps "Enable live location".
  */
 window.Tracking = window.Tracking || {};
 
 (function () {
     'use strict';
 
-    /**
-     * Main initialisation function.
-     * Runs the full startup sequence in order.
-     */
     function init() {
         console.info('[Bootstrap] Starting tracking app...');
 
-        // 1. Consent
-        Tracking.uiControls.showConsentDialog()
-            .then(function (consented) {
-                if (!consented) {
-                    console.warn('[Bootstrap] User declined tracking consent.');
-                    // Continue loading the UI but skip location submission.
+        // 1. Detect native bridge
+        if (Tracking.nativeBridge) {
+            Tracking.nativeBridge.detect();
+        }
+
+        // 2. Initialize map (no permission required)
+        if (Tracking.map) {
+            Tracking.map.init('map');
+            console.info('[Bootstrap] Map initialized (no permission needed).');
+        }
+
+        // 3. Show cached pins immediately
+        if (Tracking.nativeBridge && Tracking.nativeBridge.isNative()) {
+            var cached = Tracking.nativeBridge.getCachedFamily();
+            if (cached && cached.length > 0) {
+                Tracking.setState('members', cached);
+                if (Tracking.map) {
+                    Tracking.map.updateMembers(cached);
+                    Tracking.map.fitToMembers();
                 }
+                console.info('[Bootstrap] Rendered ' + cached.length + ' cached pins.');
+            }
+        }
 
-                // 2. Notification permission (fire-and-forget, non-blocking).
-                Tracking.uiControls.requestNotificationPermission()
-                    .then(function (result) {
-                        console.info('[Bootstrap] Notification permission:', result);
-                    })
-                    .catch(function () { /* swallow */ });
+        // 4. Start polling
+        if (Tracking.polling) {
+            Tracking.polling.start();
+            console.info('[Bootstrap] Polling started.');
+        }
 
-                // 3. Load settings
-                return Tracking.api.getSettings();
-            })
-            .then(function (res) {
-                var settings = (res && res.data) || {};
-                Tracking.setState('settings', settings);
-                console.info('[Bootstrap] Settings loaded.');
+        // 5. Update tracking toggle state
+        updateTrackingUI();
 
-                // Check session status for Mode 1.
-                return Tracking.api.getSessionStatus().catch(function () {
-                    return { data: { active: false } };
-                });
-            })
-            .then(function (res) {
-                var active = !!(res && res.data && res.data.active);
-                Tracking.setState('sessionActive', active);
-
-                // 4. Initialise map
-                Tracking.map.init('map');
-                console.info('[Bootstrap] Map initialised.');
-
-                // 5. Initialise family panel
-                Tracking.familyPanel.init('family-panel');
-                console.info('[Bootstrap] Family panel initialised.');
-
-                // 6. Detect native bridge
-                Tracking.nativeBridge.detect();
-
-                // 7. Start polling
-                Tracking.polling.start();
-                console.info('[Bootstrap] Polling started.');
-
-                // 8. Browser tracking (only if supported and not inside native app)
-                if (!Tracking.nativeBridge.isNative() &&
-                    Tracking.browserTracking.isSupported() &&
-                    Tracking.getState('consentGiven')) {
-                    Tracking.browserTracking.start();
-                    console.info('[Bootstrap] Browser tracking started.');
-                }
-
-                // 9. Visibility-change handler for native bridge hints
-                document.addEventListener('visibilitychange', function () {
-                    if (Tracking.nativeBridge.isNative()) {
-                        if (document.visibilityState === 'visible') {
-                            Tracking.nativeBridge.onScreenVisible();
-                        } else {
-                            Tracking.nativeBridge.onScreenHidden();
-                        }
-                    }
-                });
-
-                // 10. Initialise UI controls (wake button, settings toggle, etc.)
-                Tracking.uiControls.init();
-                console.info('[Bootstrap] UI controls initialised.');
-
-                // 11. Load geofences and draw them on the map
-                Tracking.api.getGeofences()
-                    .then(function (geoRes) {
-                        var geofences = (geoRes && geoRes.data) || [];
-                        Tracking.setState('geofences', geofences);
-
-                        // Wait for map to be ready before drawing.
-                        if (Tracking.getState('mapReady')) {
-                            Tracking.map.drawAllGeofences(geofences);
-                        } else {
-                            Tracking.onStateChange('mapReady', function (ready) {
-                                if (ready) {
-                                    Tracking.map.drawAllGeofences(
-                                        Tracking.getState('geofences') || []
-                                    );
-                                }
-                            });
-                        }
-                    })
-                    .catch(function (err) {
-                        console.warn('[Bootstrap] Could not load geofences:', err);
-                    });
-
-                console.info('[Bootstrap] Initialisation complete.');
-            })
-            .catch(function (err) {
-                console.error('[Bootstrap] Initialisation failed:', err);
+        // 6. Wire up tracking toggle button
+        var toggleBtn = document.getElementById('tracking-toggle');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function () {
+                onTrackingToggle();
             });
+        }
+
+        // 7. Wire up wake button
+        var wakeBtn = document.getElementById('wake-btn');
+        if (wakeBtn) {
+            wakeBtn.addEventListener('click', function () {
+                if (Tracking.nativeBridge && Tracking.nativeBridge.isNative()) {
+                    Tracking.nativeBridge.wakeAllDevices();
+                    showToast('Wake signal sent to all devices');
+                } else if (Tracking.api && Tracking.api.wakeDevices) {
+                    Tracking.api.wakeDevices()
+                        .then(function () { showToast('Wake signal sent'); })
+                        .catch(function () { showToast('Failed to send wake signal'); });
+                }
+            });
+        }
+
+        // 8. Visibility change → notify native
+        document.addEventListener('visibilitychange', function () {
+            if (!Tracking.nativeBridge || !Tracking.nativeBridge.isNative()) return;
+            if (document.visibilityState === 'visible') {
+                Tracking.nativeBridge.onScreenVisible();
+            } else {
+                Tracking.nativeBridge.onScreenHidden();
+            }
+        });
+
+        console.info('[Bootstrap] Initialization complete.');
     }
 
-    // Expose on the namespace.
-    Tracking.init = init;
+    // ── Tracking toggle ─────────────────────────────────────────────────
 
-    // Auto-start on DOMContentLoaded.
+    function onTrackingToggle() {
+        if (!Tracking.nativeBridge || !Tracking.nativeBridge.isNative()) {
+            console.warn('[Bootstrap] Tracking toggle only works in native app.');
+            return;
+        }
+
+        var mode = Tracking.nativeBridge.getTrackingMode();
+        if (mode === 'enabled') {
+            Tracking.nativeBridge.stopTracking();
+            Tracking.setState('trackingEnabled', false);
+        } else {
+            // This triggers PermissionGate → disclosure → permission → start
+            Tracking.nativeBridge.startTracking();
+            Tracking.setState('trackingEnabled', true);
+        }
+
+        // Update UI after a short delay to let native side process
+        setTimeout(updateTrackingUI, 500);
+    }
+
+    function updateTrackingUI() {
+        var toggleBtn = document.getElementById('tracking-toggle');
+        if (!toggleBtn) return;
+
+        if (!Tracking.nativeBridge || !Tracking.nativeBridge.isNative()) {
+            toggleBtn.textContent = 'Enable Live Location';
+            toggleBtn.className = 'tracking-btn tracking-btn-start';
+            return;
+        }
+
+        var mode = Tracking.nativeBridge.getTrackingMode();
+        Tracking.setState('trackingEnabled', mode === 'enabled');
+
+        if (mode === 'enabled') {
+            toggleBtn.textContent = 'Disable Live Location';
+            toggleBtn.className = 'tracking-btn tracking-btn-stop';
+        } else {
+            toggleBtn.textContent = 'Enable Live Location';
+            toggleBtn.className = 'tracking-btn tracking-btn-start';
+        }
+    }
+
+    // ── Toast helper ────────────────────────────────────────────────────
+
+    function showToast(message) {
+        var toast = document.getElementById('toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'toast';
+            toast.style.cssText =
+                'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);' +
+                'background:rgba(0,0,0,0.8);color:#fff;padding:10px 20px;' +
+                'border-radius:8px;font-size:14px;z-index:9999;' +
+                'transition:opacity 0.3s;';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.style.opacity = '1';
+        setTimeout(function () {
+            toast.style.opacity = '0';
+        }, 2500);
+    }
+
+    // ── Expose & auto-start ─────────────────────────────────────────────
+
+    Tracking.init = init;
+    Tracking.updateTrackingUI = updateTrackingUI;
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
-        // DOM already ready (script loaded with defer or at end of body).
         init();
     }
 })();

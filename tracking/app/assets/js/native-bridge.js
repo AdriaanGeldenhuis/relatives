@@ -1,54 +1,21 @@
 /**
- * Tracking App - Native Android Bridge
+ * Tracking App — Native Android Bridge
  *
- * Provides a safe interface to the Android WebView's TrackingBridge JS
- * interface. Every method checks for the presence of the native bridge
- * before invoking, so callers never need to guard against missing
- * native functionality themselves.
- *
- * Usage:
- *   if (Tracking.nativeBridge.isNative()) {
- *       Tracking.nativeBridge.startTracking();
- *   }
+ * Safe wrapper around `window.TrackingBridge` (injected by Android WebView).
+ * Every method checks for the bridge before invoking, so callers never
+ * need to guard against missing native functionality.
  */
 window.Tracking = window.Tracking || {};
 
 (function () {
     'use strict';
 
-    /**
-     * Detect whether the page is running inside the native Android WebView.
-     * The native app injects a `TrackingBridge` object on `window`.
-     *
-     * @returns {boolean}
-     */
     function isNative() {
         return !!(window.TrackingBridge);
     }
 
-    /**
-     * Run initial detection and update global state.
-     * Called once during app bootstrap.
-     */
-    function detect() {
-        var native = isNative();
-        Tracking.setState('isNative', native);
-
-        if (native) {
-            console.info('[NativeBridge] Running inside native Android WebView.');
-        }
-    }
-
-    /**
-     * Safely invoke a method on the native TrackingBridge.
-     *
-     * @param {string} method - Method name on TrackingBridge.
-     * @param {...*}   args   - Arguments forwarded to the native method.
-     * @returns {*} Return value from the native method, or undefined.
-     */
     function invoke(method) {
         if (!window.TrackingBridge || typeof window.TrackingBridge[method] !== 'function') {
-            console.warn('[NativeBridge] Method "' + method + '" is not available.');
             return undefined;
         }
         try {
@@ -60,63 +27,69 @@ window.Tracking = window.Tracking || {};
         }
     }
 
-    /**
-     * Tell the native app to start location tracking.
-     */
+    /** Run native detection and update global state. */
+    function detect() {
+        Tracking.setState('isNative', isNative());
+    }
+
+    /** Start tracking (goes through PermissionGate on native side). */
     function startTracking() {
         invoke('startTracking');
     }
 
-    /**
-     * Tell the native app to stop location tracking.
-     */
+    /** Stop tracking service. */
     function stopTracking() {
         invoke('stopTracking');
     }
 
     /**
-     * Ask the native app to send a wake push to all family devices.
+     * Get cached family locations from TrackingStore.
+     * Returns parsed JSON array or empty array.
      */
-    function wakeAllDevices() {
-        invoke('wakeAllDevices');
+    function getCachedFamily() {
+        var raw = invoke('getCachedFamily');
+        if (!raw) return [];
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            return [];
+        }
     }
 
-    /**
-     * Query the native app's current tracking mode.
-     *
-     * @returns {*} Mode value from native side (typically a number/string),
-     *              or undefined if not available.
-     */
+    /** Get tracking mode: "enabled" / "disabled" / "no_permission". */
     function getTrackingMode() {
         return invoke('getTrackingMode');
     }
 
-    /**
-     * Notify the native app that the WebView screen is now visible.
-     * Useful for adjusting polling/tracking intensity.
-     */
+    /** Check if tracking is currently enabled and permitted. */
+    function isTrackingEnabled() {
+        return invoke('isTrackingEnabled') === true;
+    }
+
+    /** Send wake push to all family devices. */
+    function wakeAllDevices() {
+        invoke('wakeAllDevices');
+    }
+
+    /** Notify native that tracking screen is visible (boost polling). */
     function onScreenVisible() {
-        invoke('onScreenVisible');
+        invoke('onTrackingScreenVisible');
     }
 
-    /**
-     * Notify the native app that the WebView screen is now hidden.
-     */
+    /** Notify native that tracking screen is hidden (reduce polling). */
     function onScreenHidden() {
-        invoke('onScreenHidden');
+        invoke('onTrackingScreenHidden');
     }
-
-    // -----------------------------------------------------------------------
-    // Public interface
-    // -----------------------------------------------------------------------
 
     Tracking.nativeBridge = {
         detect: detect,
         isNative: isNative,
         startTracking: startTracking,
         stopTracking: stopTracking,
-        wakeAllDevices: wakeAllDevices,
+        getCachedFamily: getCachedFamily,
         getTrackingMode: getTrackingMode,
+        isTrackingEnabled: isTrackingEnabled,
+        wakeAllDevices: wakeAllDevices,
         onScreenVisible: onScreenVisible,
         onScreenHidden: onScreenHidden,
     };

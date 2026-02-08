@@ -31,6 +31,9 @@ class PreferencesManager(context: Context) {
         private const val KEY_NOTIFICATION_COUNT = "notification_count"
         private const val KEY_LAST_UPLOAD_TIME = "last_upload_time"
         private const val KEY_FCM_TOKEN = "fcm_token"
+        private const val KEY_FAMILY_ID = "family_id"
+        private const val KEY_USER_ID = "user_id"
+        private const val KEY_USER_NAME = "user_name"
 
         // Defaults
         private const val DEFAULT_UPDATE_INTERVAL = 30        // seconds (MOVING mode)
@@ -77,6 +80,23 @@ class PreferencesManager(context: Context) {
     var sessionToken: String?
         get() = prefs.getString(KEY_SESSION_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_SESSION_TOKEN, value).apply()
+
+    // ── User / family identity ───────────────────────────────────────────
+
+    /** Family group ID from the backend. */
+    var familyId: String?
+        get() = prefs.getString(KEY_FAMILY_ID, null)
+        set(value) = prefs.edit().putString(KEY_FAMILY_ID, value).apply()
+
+    /** Logged-in user ID from the backend. */
+    var userId: String?
+        get() = prefs.getString(KEY_USER_ID, null)
+        set(value) = prefs.edit().putString(KEY_USER_ID, value).apply()
+
+    /** Logged-in user display name. */
+    var userName: String?
+        get() = prefs.getString(KEY_USER_NAME, null)
+        set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
 
     // ── Notification bookkeeping ───────────────────────────────────────────
 
@@ -128,6 +148,11 @@ class PreferencesManager(context: Context) {
     // ── Cleanup ────────────────────────────────────────────────────────────
 
     fun clearSession() {
-        prefs.edit().remove(KEY_SESSION_TOKEN).apply()
+        prefs.edit()
+            .remove(KEY_SESSION_TOKEN)
+            .remove(KEY_FAMILY_ID)
+            .remove(KEY_USER_ID)
+            .remove(KEY_USER_NAME)
+            .apply()
     }
 }

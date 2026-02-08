@@ -38,7 +38,7 @@ $alertsRepo = new AlertsRepo($db);
 $alertRules = $alertsRepo->get($familyId);
 
 $pageTitle = 'Tracking Settings';
-$pageCSS = ['/tracking/app/assets/css/tracking.css'];
+$pageCSS = ['/tracking/app/assets/css/tracking.css?v=3.2'];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 
@@ -421,11 +421,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             saveBtn.disabled = false;
             saveBtn.textContent = 'Save Settings';
 
-            var allOk = results.every(function(r) { return r.ok; });
+            var allOk = results.every(function(r) { return r.success; });
             if (allOk) {
                 showToast('Settings saved successfully', 'success');
             } else {
-                var errors = results.filter(function(r) { return !r.ok; }).map(function(r) { return r.error || 'Unknown error'; });
+                var errors = results.filter(function(r) { return !r.success; }).map(function(r) { return r.error || 'Unknown error'; });
                 showToast('Error: ' + errors.join(', '), 'error');
             }
         })
