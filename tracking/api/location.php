@@ -25,11 +25,13 @@ $trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 $settings = $settingsRepo->get($ctx->familyId);
 
-// Accuracy check - browser/web has lower accuracy, allow up to 5000m
+// Accuracy check - browser/web has lower accuracy, skip check entirely for web
 $isWeb = ($loc['platform'] ?? '') === 'web';
-$minAccuracy = $isWeb ? 5000 : (float) ($settings['min_accuracy_m'] ?? 100);
-if ($loc['accuracy_m'] !== null && $loc['accuracy_m'] > $minAccuracy) {
-    Response::error('accuracy_too_low', 422);
+if (!$isWeb && $loc['accuracy_m'] !== null) {
+    $minAccuracy = (float) ($settings['min_accuracy_m'] ?? 100);
+    if ($loc['accuracy_m'] > $minAccuracy) {
+        Response::error('accuracy_too_low: ' . $loc['accuracy_m'] . 'm > ' . $minAccuracy . 'm', 422);
+    }
 }
 
 // Rate limit check
