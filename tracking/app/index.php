@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css',
+    '/tracking/app/assets/css/tracking.css?v=3.0',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -49,11 +49,13 @@ require_once __DIR__ . '/../../shared/components/header.php';
 <link rel="manifest" href="/tracking/app/manifest.json">
 
 <style>
-/* Tracking page: fullscreen map, hide global header/footer since we have our own topbar + toolbar */
-body.tracking-page { overflow: hidden !important; padding-bottom: 0 !important; }
+/* Critical inline styles - must be here, not just in CSS file */
+body.tracking-page { overflow: hidden !important; padding-bottom: 0 !important; margin: 0 !important; }
 body.tracking-page .global-header,
 body.tracking-page .global-footer,
 body.tracking-page .app-loader { display: none !important; }
+.tracking-app { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10; }
+#trackingMap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
 </style>
 <script>document.body.classList.add('tracking-page');</script>
 
