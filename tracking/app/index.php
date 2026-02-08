@@ -49,15 +49,11 @@ require_once __DIR__ . '/../../shared/components/header.php';
 <link rel="manifest" href="/tracking/app/manifest.json">
 
 <style>
-/* Critical inline styles - guarantee map fills viewport regardless of external CSS load order */
-body.tracking-page { overflow: hidden !important; padding-bottom: 0 !important; margin: 0 !important; }
-body.tracking-page .footer-container,
-body.tracking-page .bottom-nav,
-body.tracking-page .plus-menu-overlay,
-body.tracking-page .plus-menu-container,
+/* Tracking page: fullscreen map, hide global header/footer since we have our own topbar + toolbar */
+body.tracking-page { overflow: hidden !important; padding-bottom: 0 !important; }
+body.tracking-page .global-header,
+body.tracking-page .global-footer,
 body.tracking-page .app-loader { display: none !important; }
-.tracking-app { position: fixed; inset: 0; z-index: 10000; }
-#trackingMap { position: absolute; inset: 0; width: 100%; height: 100%; }
 </style>
 <script>document.body.classList.add('tracking-page');</script>
 
@@ -65,7 +61,15 @@ body.tracking-page .app-loader { display: none !important; }
 
     <!-- Top Bar -->
     <div class="tracking-topbar">
-        <div class="tracking-topbar-title">Family Tracking</div>
+        <div class="tracking-topbar-left">
+            <a href="/home/" class="tracking-topbar-back" title="Back to Home">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </a>
+            <div>
+                <div class="tracking-topbar-title">Family Tracking</div>
+                <div class="tracking-topbar-subtitle" id="trackingStatus">Connecting...</div>
+            </div>
+        </div>
         <div class="tracking-topbar-actions">
             <a href="/tracking/app/events.php" class="tracking-topbar-btn" title="Events">
                 <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
@@ -76,6 +80,9 @@ body.tracking-page .app-loader { display: none !important; }
             <a href="/tracking/app/settings.php" class="tracking-topbar-btn" title="Settings">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             </a>
+            <div class="tracking-topbar-user" style="background:<?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>" title="<?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?>">
+                <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? 'U', 0, 1)); ?>
+            </div>
         </div>
     </div>
 
@@ -103,10 +110,21 @@ body.tracking-page .app-loader { display: none !important; }
         </div>
     </div>
 
-    <!-- Wake / Location Share Button (FAB) -->
-    <button class="wake-fab" id="wakeFab" title="Share your location / Wake devices">
-        <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-    </button>
+    <!-- Bottom Toolbar -->
+    <div class="tracking-toolbar" id="trackingToolbar">
+        <a href="/home/" class="tracking-toolbar-btn home-btn" title="Home">
+            <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            <span>Home</span>
+        </a>
+        <button class="tracking-toolbar-btn wake-btn" id="wakeFab" title="Wake all devices">
+            <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            <span>Wake</span>
+        </button>
+        <button class="tracking-toolbar-btn" id="panelToggleBtn" title="Toggle family panel">
+            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            <span>Family</span>
+        </button>
+    </div>
 
     <!-- Directions Info Bar -->
     <div class="directions-bar" id="directionsBar">
@@ -282,15 +300,22 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var list = document.getElementById('memberList');
         var empty = document.getElementById('memberEmpty');
         var badge = document.getElementById('memberCount');
+        var statusEl = document.getElementById('trackingStatus');
 
         if (!members || members.length === 0) {
             empty.style.display = '';
             badge.textContent = '0';
+            if (statusEl) statusEl.textContent = 'No members online';
             return;
         }
 
         empty.style.display = 'none';
         badge.textContent = members.length;
+        var online = members.filter(function(m) {
+            var ts = new Date(m.recorded_at || m.updated_at).getTime();
+            return (Date.now() - ts) < 300000;
+        }).length;
+        if (statusEl) statusEl.textContent = online + ' online \u00b7 ' + members.length + ' total';
 
         var html = '';
         members.forEach(function(m) {
@@ -468,16 +493,20 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Panel toggle
     var panel = document.getElementById('familyPanel');
     var panelToggle = document.getElementById('familyPanelToggle');
+    var panelToggleBtn = document.getElementById('panelToggleBtn');
     var panelHeader = document.getElementById('familyPanelHeader');
     var isMobile = window.innerWidth <= 768;
 
-    panelToggle.addEventListener('click', function() {
+    function togglePanel() {
         if (isMobile) {
             panel.classList.toggle('expanded');
         } else {
             panel.classList.toggle('collapsed');
         }
-    });
+    }
+
+    panelToggle.addEventListener('click', togglePanel);
+    if (panelToggleBtn) panelToggleBtn.addEventListener('click', togglePanel);
 
     if (isMobile) {
         panelHeader.addEventListener('click', function(e) {
