@@ -226,7 +226,7 @@ class MainActivity : ComponentActivity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM,
             )
-            text = "You're on a free trial - Tap to upgrade"
+            setText(R.string.trial_banner_text)
             textSize = 14f
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xFF667eea.toInt())

@@ -347,9 +347,11 @@ class TrackingService : Service() {
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
-            CHANNEL_ID, "Location Tracking", NotificationManager.IMPORTANCE_LOW,
+            CHANNEL_ID,
+            getString(R.string.channel_tracking_name),
+            NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Keeps location tracking running in the background"
+            description = getString(R.string.channel_tracking_desc)
             setShowBadge(false)
             setSound(null, null)
         }
@@ -366,19 +368,19 @@ class TrackingService : Service() {
         )
 
         val text = when (currentMode) {
-            Mode.IDLE -> "Monitoring location"
-            Mode.MOVING -> "Tracking movement"
-            Mode.WAKE -> "Getting precise location..."
+            Mode.IDLE -> getString(R.string.tracking_notif_idle)
+            Mode.MOVING -> getString(R.string.tracking_notif_moving)
+            Mode.WAKE -> getString(R.string.tracking_notif_wake)
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Relatives")
+            .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(0, "Stop", stopPending)
+            .addAction(0, getString(R.string.tracking_notif_stop), stopPending)
             .build()
     }
 

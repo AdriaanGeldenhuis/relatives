@@ -1,3 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Relatives</string>
+
+    <!-- Trial banner -->
+    <string name="trial_banner_text">You\'re on a free trial \u2014 Tap to upgrade</string>
+
+    <!-- Permission dialogs -->
+    <string name="location_dialog_title">Location Sharing</string>
+    <string name="location_dialog_message">Relatives uses your location to show family members where you are on the map. Your location is shared only with your approved family group.\n\nFor continuous tracking, background location access is also needed so your location updates even when the app is not open.</string>
+    <string name="location_dialog_enable">Enable Location</string>
+    <string name="background_dialog_title">Background Location</string>
+    <string name="background_dialog_message">To keep sharing your location with family when the app is in the background, please select \"Allow all the time\" on the next screen.</string>
+    <string name="notification_dialog_title">Enable Notifications</string>
+    <string name="notification_dialog_message">Stay connected with your family! Enable notifications to receive alerts and important updates.</string>
+    <string name="dialog_enable">Enable</string>
+    <string name="dialog_continue">Continue</string>
+    <string name="dialog_skip">Skip</string>
+    <string name="dialog_not_now">Not Now</string>
+
+    <!-- Tracking notification -->
+    <string name="tracking_notif_idle">Monitoring location</string>
+    <string name="tracking_notif_moving">Tracking movement</string>
+    <string name="tracking_notif_wake">Getting precise location\u2026</string>
+    <string name="tracking_notif_stop">Stop</string>
+
+    <!-- Notification channels -->
+    <string name="channel_tracking_name">Location Tracking</string>
+    <string name="channel_tracking_desc">Keeps location tracking running in the background</string>
+    <string name="channel_alerts_name">Alerts &amp; Messages</string>
+    <string name="channel_alerts_desc">Family messages, shopping lists, calendar events, and more</string>
+
+    <!-- Notification helper -->
+    <string name="notif_tracking_active">Sharing your location with family</string>
+    <string name="notif_tracking_paused">Location tracking paused</string>
+    <string name="notif_action_pause">Pause</string>
+    <string name="notif_action_resume">Resume</string>
+
+    <!-- FCM notification titles -->
+    <string name="notif_title_message">New Message</string>
+    <string name="notif_title_shopping">Shopping List</string>
+    <string name="notif_title_calendar">Calendar Event</string>
+    <string name="notif_title_schedule">Schedule Update</string>
+    <string name="notif_title_tracking">Location Update</string>
+    <string name="notif_title_weather">Weather Alert</string>
+    <string name="notif_title_note">New Note</string>
+    <string name="notif_title_system">Relatives</string>
 </resources>

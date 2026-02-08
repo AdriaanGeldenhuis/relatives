@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import za.co.relatives.app.R
 
 /**
  * PermissionGate — Google Play policy-compliant permission flow.
@@ -20,11 +21,6 @@ import androidx.core.content.ContextCompat
  *
  * The map loads without any permission. Permission is only requested
  * when the user explicitly taps "Enable live location".
- *
- * Usage:
- *   val gate = PermissionGate(activity)
- *   gate.registerLaunchers()  // call in onCreate, before onStart
- *   gate.requestTracking { granted -> if (granted) startService() }
  */
 class PermissionGate(private val activity: ComponentActivity) {
 
@@ -34,15 +30,11 @@ class PermissionGate(private val activity: ComponentActivity) {
     private lateinit var backgroundLocationLauncher: ActivityResultLauncher<String>
     private lateinit var notificationLauncher: ActivityResultLauncher<String>
 
-    // ── Registration (must be called before onStart) ────────────────────
-
     fun registerLaunchers() {
         fineLocationLauncher = activity.registerForActivityResult(
             ActivityResultContracts.RequestPermission(),
         ) { granted ->
-            if (granted) {
-                requestBackgroundLocation()
-            } else {
+            if (granted) requestBackgroundLocation() else {
                 onResult?.invoke(false)
                 onResult = null
             }
@@ -51,7 +43,6 @@ class PermissionGate(private val activity: ComponentActivity) {
         backgroundLocationLauncher = activity.registerForActivityResult(
             ActivityResultContracts.RequestPermission(),
         ) { _ ->
-            // Even if background is denied, foreground tracking still works.
             onResult?.invoke(hasForegroundLocation())
             onResult = null
             requestNotifications()
@@ -59,15 +50,9 @@ class PermissionGate(private val activity: ComponentActivity) {
 
         notificationLauncher = activity.registerForActivityResult(
             ActivityResultContracts.RequestPermission(),
-        ) { _ -> /* acknowledged, no action needed */ }
+        ) { _ -> }
     }
 
-    // ── Public entry point ──────────────────────────────────────────────
-
-    /**
-     * Request all tracking permissions through the proper disclosure flow.
-     * [callback] receives `true` if at least foreground location was granted.
-     */
     fun requestTracking(callback: (Boolean) -> Unit) {
         if (hasForegroundLocation()) {
             callback(true)
@@ -78,22 +63,14 @@ class PermissionGate(private val activity: ComponentActivity) {
         showProminentDisclosure()
     }
 
-    // ── Prominent disclosure (Google requirement) ───────────────────────
-
     private fun showProminentDisclosure() {
         AlertDialog.Builder(activity)
-            .setTitle("Location Sharing")
-            .setMessage(
-                "Relatives uses your location to show family members where you " +
-                    "are on the map. Your location is shared only with your " +
-                    "approved family group.\n\n" +
-                    "For continuous tracking, background location access is also " +
-                    "needed so your location updates even when the app is not open."
-            )
-            .setPositiveButton("Enable Location") { _, _ ->
+            .setTitle(R.string.location_dialog_title)
+            .setMessage(R.string.location_dialog_message)
+            .setPositiveButton(R.string.location_dialog_enable) { _, _ ->
                 fineLocationLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
             }
-            .setNegativeButton("Not Now") { _, _ ->
+            .setNegativeButton(R.string.dialog_not_now) { _, _ ->
                 onResult?.invoke(false)
                 onResult = null
             }
@@ -101,24 +78,18 @@ class PermissionGate(private val activity: ComponentActivity) {
             .show()
     }
 
-    // ── Background location (Android 10+) ───────────────────────────────
-
     private fun requestBackgroundLocation() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasBackgroundLocation()) {
             AlertDialog.Builder(activity)
-                .setTitle("Background Location")
-                .setMessage(
-                    "To keep sharing your location with family when the app " +
-                        "is in the background, please select \"Allow all the time\" " +
-                        "on the next screen."
-                )
-                .setPositiveButton("Continue") { _, _ ->
+                .setTitle(R.string.background_dialog_title)
+                .setMessage(R.string.background_dialog_message)
+                .setPositiveButton(R.string.dialog_continue) { _, _ ->
                     backgroundLocationLauncher.launch(
                         Manifest.permission.ACCESS_BACKGROUND_LOCATION,
                     )
                 }
-                .setNegativeButton("Skip") { _, _ ->
-                    onResult?.invoke(true) // foreground-only is fine
+                .setNegativeButton(R.string.dialog_skip) { _, _ ->
+                    onResult?.invoke(true)
                     onResult = null
                     requestNotifications()
                 }
@@ -131,26 +102,19 @@ class PermissionGate(private val activity: ComponentActivity) {
         }
     }
 
-    // ── Notifications (Android 13+) ─────────────────────────────────────
-
     private fun requestNotifications() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission()) {
             AlertDialog.Builder(activity)
-                .setTitle("Enable Notifications")
-                .setMessage(
-                    "Stay connected with your family! Enable notifications " +
-                        "to receive alerts and important updates."
-                )
-                .setPositiveButton("Enable") { _, _ ->
+                .setTitle(R.string.notification_dialog_title)
+                .setMessage(R.string.notification_dialog_message)
+                .setPositiveButton(R.string.dialog_enable) { _, _ ->
                     notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
-                .setNegativeButton("Not Now", null)
+                .setNegativeButton(R.string.dialog_not_now, null)
                 .setCancelable(true)
                 .show()
         }
     }
-
-    // ── Permission checks ───────────────────────────────────────────────
 
     fun hasForegroundLocation(): Boolean =
         ContextCompat.checkSelfPermission(
@@ -162,16 +126,12 @@ class PermissionGate(private val activity: ComponentActivity) {
             ContextCompat.checkSelfPermission(
                 activity, Manifest.permission.ACCESS_BACKGROUND_LOCATION,
             ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true // pre-Q doesn't need it
-        }
+        } else true
 
     private fun hasNotificationPermission(): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 activity, Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
+        } else true
 }
