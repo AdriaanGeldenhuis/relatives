@@ -6,7 +6,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,9 +47,11 @@ import androidx.lifecycle.lifecycleScope
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import kotlinx.coroutines.launch
+import za.co.relatives.app.RelativesApplication
 import za.co.relatives.app.billing.BillingManager
 import za.co.relatives.app.network.ApiClient
 import za.co.relatives.app.ui.theme.RelativesTheme
+import za.co.relatives.app.utils.PreferencesManager
 
 /**
  * Full-screen subscription screen shown when the user's trial has ended.
@@ -63,15 +64,15 @@ class SubscriptionActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "SubscriptionActivity"
-        private const val PREF_NAME = "relatives_prefs"
-        private const val PREF_FAMILY_ID = "family_id"
     }
 
     private lateinit var billingManager: BillingManager
     private lateinit var apiClient: ApiClient
+    private lateinit var prefs: PreferencesManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        prefs = (application as RelativesApplication).preferencesManager
         billingManager = BillingManager(this)
         apiClient = ApiClient(this)
 
@@ -122,8 +123,7 @@ class SubscriptionActivity : ComponentActivity() {
     private fun verifyOnBackend(purchase: Purchase) {
         lifecycleScope.launch {
             try {
-                val prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE)
-                val familyId = prefs.getString(PREF_FAMILY_ID, "") ?: ""
+                val familyId = prefs.familyId ?: ""
                 val productId = purchase.products.firstOrNull() ?: return@launch
                 val planCode = productIdToPlanCode(productId)
 
