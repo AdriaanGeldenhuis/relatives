@@ -38,7 +38,7 @@ if ($filter && !in_array($filter, $allowedTypes, true)) {
 $events = $eventsRepo->list($familyId, 30, 0, $filter);
 
 $pageTitle = 'Tracking Events';
-$pageCSS = ['/tracking/app/assets/css/tracking.css?v=3.1'];
+$pageCSS = ['/tracking/app/assets/css/tracking.css?v=3.2'];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 

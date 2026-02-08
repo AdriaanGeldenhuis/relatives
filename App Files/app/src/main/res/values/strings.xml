@@ -2,8 +2,11 @@
 <resources>
     <string name="app_name">Relatives</string>
 
-    <!-- Trial banner -->
-    <string name="trial_banner_text">You\'re on a free trial \u2014 Tap to upgrade</string>
+    <!-- Trial dialog -->
+    <string name="trial_dialog_title">Free Trial</string>
+    <string name="trial_dialog_message">You\'re currently on a free trial. Subscribe to unlock all features and keep your family connected.</string>
+    <string name="trial_dialog_subscribe">Subscribe</string>
+    <string name="trial_dialog_close">Close</string>
 
     <!-- Permission dialogs -->
     <string name="location_dialog_title">Location Sharing</string>

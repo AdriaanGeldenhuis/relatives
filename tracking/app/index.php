@@ -38,10 +38,40 @@ $alertRules = $alertsRepo->get($familyId);
 // Mapbox token from environment
 $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 
+// Auto-seed test location data if tracking_current is empty for this family
+$locationRepo = new LocationRepo($db, $trackingCache);
+$currentLocations = $locationRepo->getFamilyCurrentLocations($familyId);
+if (empty($currentLocations)) {
+    // Seed test data for all active family members
+    $stmtMembers = $db->prepare("SELECT id FROM users WHERE family_id = ? AND status = 'active' AND location_sharing = 1");
+    $stmtMembers->execute([$familyId]);
+    $memberIds = $stmtMembers->fetchAll(PDO::FETCH_COLUMN);
+
+    $testCoords = [
+        ['lat' => -26.2041, 'lng' => 28.0473],
+        ['lat' => -26.1076, 'lng' => 28.0567],
+        ['lat' => -26.1496, 'lng' => 28.0080],
+        ['lat' => -26.1929, 'lng' => 28.1137],
+        ['lat' => -26.2650, 'lng' => 28.1310],
+    ];
+    $now = date('Y-m-d H:i:s');
+    foreach ($memberIds as $i => $memberId) {
+        $c = $testCoords[$i % count($testCoords)];
+        $locationRepo->upsertCurrent((int)$memberId, $familyId, [
+            'lat' => $c['lat'], 'lng' => $c['lng'],
+            'accuracy_m' => 5.0, 'speed_mps' => 0.0,
+            'bearing_deg' => null, 'altitude_m' => 1600.0,
+            'recorded_at' => $now,
+            'device_id' => 'seed-test', 'platform' => 'web', 'app_version' => '1.0.0',
+        ], 'idle');
+    }
+    $trackingCache->deleteFamilySnapshot($familyId);
+}
+
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=3.1',
+    '/tracking/app/assets/css/tracking.css?v=3.2',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -66,8 +96,7 @@ requestAnimationFrame(function() {
     } else if (app) {
         app.style.top = '0';
     }
-    // Resize map after layout settles
-    if (window.trackingMap) window.trackingMap.resize();
+    // Map resize handled in map.on('load') below - not here (map not yet created)
 });
 </script>
 
@@ -594,6 +623,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // Initial fetch then poll
     map.on('load', function() {
+        map.resize();
         fetchMembers();
         var pollInterval = ((window.TrackingConfig.settings || {}).keepalive_interval_seconds || 30) * 1000;
         setInterval(fetchMembers, Math.max(pollInterval, 10000));

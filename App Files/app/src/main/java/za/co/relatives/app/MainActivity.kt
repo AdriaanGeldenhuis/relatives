@@ -2,13 +2,13 @@ package za.co.relatives.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -21,7 +21,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
@@ -75,7 +74,7 @@ class MainActivity : ComponentActivity() {
     // ── UI ───────────────────────────────────────────────────────────────
 
     private lateinit var webView: WebView
-    private lateinit var trialBanner: TextView
+    private var trialDialogShown = false
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var pendingMediaRequest: PermissionRequest? = null
@@ -219,23 +218,6 @@ class MainActivity : ComponentActivity() {
             )
         }
         root.addView(webView)
-
-        trialBanner = TextView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM,
-            )
-            setText(R.string.trial_banner_text)
-            textSize = 14f
-            setTextColor(0xFFFFFFFF.toInt())
-            setBackgroundColor(0xFF667eea.toInt())
-            setPadding(32, 24, 32, 24)
-            gravity = Gravity.CENTER
-            visibility = View.GONE
-            setOnClickListener { openSubscriptionScreen() }
-        }
-        root.addView(trialBanner)
 
         setContentView(root)
     }
@@ -465,12 +447,29 @@ class MainActivity : ComponentActivity() {
                 hasActiveSubscription = purchases.any { p ->
                     p.purchaseState == Purchase.PurchaseState.PURCHASED
                 }
-                runOnUiThread {
-                    trialBanner.visibility =
-                        if (hasActiveSubscription) View.GONE else View.VISIBLE
+                if (!hasActiveSubscription && !trialDialogShown) {
+                    runOnUiThread { showTrialDialog() }
                 }
             }
         }
+    }
+
+    private fun showTrialDialog() {
+        if (trialDialogShown || isFinishing) return
+        trialDialogShown = true
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.trial_dialog_title))
+            .setMessage(getString(R.string.trial_dialog_message))
+            .setPositiveButton(getString(R.string.trial_dialog_subscribe)) { dialog, _ ->
+                dialog.dismiss()
+                openSubscriptionScreen()
+            }
+            .setNegativeButton(getString(R.string.trial_dialog_close)) { dialog, _ ->
+                dialog.dismiss()
+            }
+            .setCancelable(true)
+            .show()
     }
 
     private fun openSubscriptionScreen() {
