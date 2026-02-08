@@ -16,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import za.co.relatives.app.R
 import za.co.relatives.app.network.ApiClient
+import za.co.relatives.app.tracking.TrackingService
 
 /**
  * Firebase Cloud Messaging service for the Relatives app.
@@ -95,15 +96,11 @@ class RelativesFirebaseService : FirebaseMessagingService() {
      * Used when another family member taps "Find Device" or similar.
      */
     private fun handleWakeTracking() {
-        Log.d(TAG, "Wake tracking: triggering BURST mode")
-        val intent = Intent(this, TrackingLocationService::class.java).apply {
-            action = TrackingLocationService.ACTION_BURST
-        }
+        Log.d(TAG, "Wake tracking: triggering WAKE mode")
         try {
-            startForegroundService(intent)
+            TrackingService.wake(this)
         } catch (e: Exception) {
-            // Service might not be running; start it first.
-            TrackingLocationService.start(this)
+            TrackingService.start(this)
         }
     }
 

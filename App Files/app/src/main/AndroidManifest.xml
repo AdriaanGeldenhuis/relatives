@@ -59,7 +59,7 @@
             android:theme="@style/Theme.Relatives" />
 
         <service
-            android:name=".services.TrackingLocationService"
+            android:name=".tracking.TrackingService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="location"
