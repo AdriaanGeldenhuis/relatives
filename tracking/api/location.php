@@ -25,8 +25,9 @@ $trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 $settings = $settingsRepo->get($ctx->familyId);
 
-// Accuracy check
-$minAccuracy = (float) ($settings['min_accuracy_m'] ?? 100);
+// Accuracy check - browser/web has lower accuracy, allow up to 5000m
+$isWeb = ($loc['platform'] ?? '') === 'web';
+$minAccuracy = $isWeb ? 5000 : (float) ($settings['min_accuracy_m'] ?? 100);
 if ($loc['accuracy_m'] !== null && $loc['accuracy_m'] > $minAccuracy) {
     Response::error('accuracy_too_low', 422);
 }

@@ -315,6 +315,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var badge = document.getElementById('memberCount');
         var statusEl = document.getElementById('trackingStatus');
 
+        if (!list || !empty || !badge) return; // DOM not ready yet
+
         if (!members || members.length === 0) {
             empty.style.display = '';
             badge.textContent = '0';
@@ -605,11 +607,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var payload = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-            accuracy_m: pos.coords.accuracy,
+            accuracy_m: pos.coords.accuracy || null,
             speed_mps: pos.coords.speed || 0,
             bearing_deg: pos.coords.heading || null,
             altitude_m: pos.coords.altitude || null,
-            recorded_at: new Date(pos.timestamp).toISOString().slice(0, 19).replace('T', ' ')
+            recorded_at: new Date(pos.timestamp).toISOString().slice(0, 19).replace('T', ' '),
+            platform: 'web',
+            device_id: 'browser'
         };
         fetch(window.TrackingConfig.apiBase + '/location.php', {
             method: 'POST',
@@ -618,8 +622,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             body: JSON.stringify(payload)
         }).then(function(r) { return r.json(); }).then(function(data) {
             if (data.success) {
-                console.log('[Tracking] Position uploaded:', payload.lat, payload.lng);
-                fetchMembers(); // Refresh markers immediately
+                console.log('[Tracking] Position uploaded:', payload.lat, payload.lng, 'accuracy:', payload.accuracy_m);
+                fetchMembers();
+            } else {
+                console.warn('[Tracking] Server rejected:', data.error);
             }
         }).catch(function(e) { console.warn('[Tracking] Upload failed:', e); });
     }
