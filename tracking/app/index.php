@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=3.2',
+    '/tracking/app/assets/css/tracking.css?v=3.3',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -327,8 +327,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         empty.style.display = 'none';
         badge.textContent = members.length;
         var online = members.filter(function(m) {
-            var ts = new Date(m.recorded_at || m.updated_at).getTime();
-            return (Date.now() - ts) < 300000;
+            return (Date.now() - parseUTC(m.recorded_at || m.updated_at)) < 300000;
         }).length;
         if (statusEl) statusEl.textContent = online + ' online \u00b7 ' + members.length + ' total';
 
@@ -396,10 +395,15 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         });
     }
 
+    // Parse MySQL datetime as UTC (server stores all timestamps in UTC)
+    function parseUTC(dateStr) {
+        if (!dateStr) return 0;
+        return new Date(dateStr.replace(' ', 'T') + 'Z').getTime();
+    }
+
     function getStatusClass(m) {
-        var ts = new Date(m.recorded_at || m.updated_at).getTime();
-        var now = Date.now();
-        var diffMin = (now - ts) / 60000;
+        var ts = parseUTC(m.recorded_at || m.updated_at);
+        var diffMin = (Date.now() - ts) / 60000;
         if (diffMin < 5) return 'online';
         if (diffMin < 30) return 'idle';
         return 'offline';
@@ -407,7 +411,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     function formatTimeAgo(dateStr) {
         if (!dateStr) return 'unknown';
-        var diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+        var diff = (Date.now() - parseUTC(dateStr)) / 1000;
+        if (diff < 0) diff = 0;
         if (diff < 60) return 'just now';
         if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
         if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';

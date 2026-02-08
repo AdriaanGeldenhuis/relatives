@@ -61,7 +61,12 @@ class TrackingValidator
 
         $recordedAt = $input['recorded_at'] ?? $input['timestamp'] ?? null;
         if ($recordedAt) {
-            $ts = strtotime($recordedAt);
+            // Treat input as UTC — append UTC if no timezone info present
+            $normalized = $recordedAt;
+            if (!preg_match('/[Z+\-]\d|UTC|GMT/i', $recordedAt)) {
+                $normalized .= ' UTC';
+            }
+            $ts = strtotime($normalized);
             $recordedAt = $ts ? gmdate('Y-m-d H:i:s', $ts) : gmdate('Y-m-d H:i:s');
         } else {
             $recordedAt = gmdate('Y-m-d H:i:s');
