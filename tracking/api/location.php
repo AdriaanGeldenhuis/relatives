@@ -25,9 +25,10 @@ $trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 $settings = $settingsRepo->get($ctx->familyId);
 
-// Accuracy check - browser/web has lower accuracy, skip check entirely for web
-$isWeb = ($loc['platform'] ?? '') === 'web';
-if (!$isWeb && $loc['accuracy_m'] !== null) {
+// Accuracy check - skip for browser/webview uploads (IP-based geolocation is inaccurate)
+$platform = $loc['platform'] ?? '';
+$isWebPlatform = in_array($platform, ['web', 'android-webview'], true);
+if (!$isWebPlatform && $loc['accuracy_m'] !== null) {
     $minAccuracy = (float) ($settings['min_accuracy_m'] ?? 100);
     if ($loc['accuracy_m'] > $minAccuracy) {
         Response::error('accuracy_too_low: ' . $loc['accuracy_m'] . 'm > ' . $minAccuracy . 'm', 422);

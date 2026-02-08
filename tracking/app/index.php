@@ -613,13 +613,68 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         setInterval(fetchMembers, Math.max(pollInterval, 10000));
     });
 
-    // ── BROWSER GEOLOCATION TRACKING ─────────────────────────────
-    // Request browser location permission and upload real position
+    // ── TRACKING INTEGRATION ─────────────────────────────────────
+    // Detect environment: Android app (TrackingBridge) vs regular browser
+    var isNativeApp = typeof window.TrackingBridge !== 'undefined';
+    console.log('[Tracking] Environment:', isNativeApp ? 'Android App (native bridge)' : 'Browser');
+
+    if (isNativeApp) {
+        // ── NATIVE ANDROID APP ──────────────────────────────────
+        // Use the native TrackingBridge for GPS (much better accuracy)
+        console.log('[Tracking] Native bridge detected');
+
+        // Tell native side the tracking screen is visible (triggers fast polling)
+        try { window.TrackingBridge.onTrackingScreenVisible(); } catch(e) {}
+
+        // Check tracking mode and start if needed
+        var mode = 'unknown';
+        try { mode = window.TrackingBridge.getTrackingMode(); } catch(e) {}
+        console.log('[Tracking] Native tracking mode:', mode);
+
+        if (mode === 'no_permission' || mode === 'disabled') {
+            // Auto-start native tracking (triggers PermissionGate → TrackingService)
+            console.log('[Tracking] Starting native tracking...');
+            try { window.TrackingBridge.startTracking(); } catch(e) {
+                console.warn('[Tracking] Failed to start native tracking:', e);
+            }
+        }
+
+        // Load cached family data immediately from native store
+        try {
+            var cachedJson = window.TrackingBridge.getCachedFamily();
+            if (cachedJson) {
+                var cached = JSON.parse(cachedJson);
+                if (cached && cached.length > 0) {
+                    console.log('[Tracking] Loaded', cached.length, 'cached members from native');
+                    _members = cached;
+                    renderMembers(_members);
+                    updateMarkers(_members);
+                }
+            }
+        } catch(e) { console.warn('[Tracking] Cache read error:', e); }
+
+        // Notify when leaving tracking screen
+        window.addEventListener('beforeunload', function() {
+            try { window.TrackingBridge.onTrackingScreenHidden(); } catch(e) {}
+        });
+
+        // Also use browser geolocation in WebView as backup upload
+        if (navigator.geolocation) {
+            startBrowserTracking();
+        }
+    } else {
+        // ── REGULAR BROWSER ─────────────────────────────────────
+        // Use browser geolocation API (lower accuracy on desktop)
+        if (navigator.geolocation) {
+            startBrowserTracking();
+        }
+    }
+
+    // ── BROWSER GEOLOCATION (works in both WebView and browser) ──
     var lastUploadTime = 0;
     var uploadPending = false;
 
     function uploadPosition(pos) {
-        // Throttle: don't upload more than once per 10 seconds
         var now = Date.now();
         if (now - lastUploadTime < 10000) {
             if (!uploadPending) {
@@ -638,8 +693,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             bearing_deg: pos.coords.heading || null,
             altitude_m: pos.coords.altitude || null,
             recorded_at: new Date(pos.timestamp).toISOString().slice(0, 19).replace('T', ' '),
-            platform: 'web',
-            device_id: 'browser'
+            platform: isNativeApp ? 'android-webview' : 'web',
+            device_id: isNativeApp ? 'android' : 'browser'
         };
         fetch(window.TrackingConfig.apiBase + '/location.php', {
             method: 'POST',
@@ -658,16 +713,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     function startBrowserTracking() {
         if (!navigator.geolocation) return;
-
-        // watchPosition already fires immediately with the first fix, no need for getCurrentPosition
         navigator.geolocation.watchPosition(uploadPosition, function(err) {
             console.warn('[Tracking] Geolocation error:', err.message);
         }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
-    }
-
-    // Start tracking on page load
-    if (navigator.geolocation) {
-        startBrowserTracking();
     }
 
 })();

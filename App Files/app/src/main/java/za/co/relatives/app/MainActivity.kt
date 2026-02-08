@@ -13,6 +13,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.webkit.CookieManager
+import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -237,6 +238,7 @@ class MainActivity : ComponentActivity() {
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
+            setGeolocationEnabled(true)
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             allowFileAccess = true
             allowContentAccess = true
@@ -284,6 +286,15 @@ class MainActivity : ComponentActivity() {
                     }
                 fileChooserLauncher.launch(chooserIntent)
                 return true
+            }
+
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String?,
+                callback: GeolocationPermissions.Callback?,
+            ) {
+                // Grant geolocation to our own domain (native permissions handled by PermissionGate)
+                val allowed = origin?.contains("relatives.co.za") == true
+                callback?.invoke(origin, allowed, false)
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {
