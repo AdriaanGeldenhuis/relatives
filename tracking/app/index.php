@@ -603,7 +603,21 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // ── BROWSER GEOLOCATION TRACKING ─────────────────────────────
     // Request browser location permission and upload real position
+    var lastUploadTime = 0;
+    var uploadPending = false;
+
     function uploadPosition(pos) {
+        // Throttle: don't upload more than once per 10 seconds
+        var now = Date.now();
+        if (now - lastUploadTime < 10000) {
+            if (!uploadPending) {
+                uploadPending = true;
+                setTimeout(function() { uploadPending = false; uploadPosition(pos); }, 10000 - (now - lastUploadTime));
+            }
+            return;
+        }
+        lastUploadTime = now;
+
         var payload = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
@@ -622,7 +636,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             body: JSON.stringify(payload)
         }).then(function(r) { return r.json(); }).then(function(data) {
             if (data.success) {
-                console.log('[Tracking] Position uploaded:', payload.lat, payload.lng, 'accuracy:', payload.accuracy_m);
+                console.log('[Tracking] Position uploaded:', payload.lat, payload.lng, 'accuracy:', payload.accuracy_m + 'm');
                 fetchMembers();
             } else {
                 console.warn('[Tracking] Server rejected:', data.error);
@@ -633,18 +647,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     function startBrowserTracking() {
         if (!navigator.geolocation) return;
 
-        // Get initial position
-        navigator.geolocation.getCurrentPosition(uploadPosition, function(err) {
-            console.warn('[Tracking] Geolocation error:', err.message);
-        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
-
-        // Watch for position changes
+        // watchPosition already fires immediately with the first fix, no need for getCurrentPosition
         navigator.geolocation.watchPosition(uploadPosition, function(err) {
-            console.warn('[Tracking] Watch error:', err.message);
+            console.warn('[Tracking] Geolocation error:', err.message);
         }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
     }
 
-    // Request permission on page load
+    // Start tracking on page load
     if (navigator.geolocation) {
         startBrowserTracking();
     }
