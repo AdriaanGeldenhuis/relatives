@@ -620,23 +620,24 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     if (isNativeApp) {
         // ── NATIVE ANDROID APP ──────────────────────────────────
-        // Use the native TrackingBridge for GPS (much better accuracy)
         console.log('[Tracking] Native bridge detected');
 
         // Tell native side the tracking screen is visible (triggers fast polling)
         try { window.TrackingBridge.onTrackingScreenVisible(); } catch(e) {}
 
-        // Check tracking mode and start if needed
+        // Check tracking mode
         var mode = 'unknown';
         try { mode = window.TrackingBridge.getTrackingMode(); } catch(e) {}
         console.log('[Tracking] Native tracking mode:', mode);
 
-        if (mode === 'no_permission' || mode === 'disabled') {
-            // Auto-start native tracking (triggers PermissionGate → TrackingService)
-            console.log('[Tracking] Starting native tracking...');
-            try { window.TrackingBridge.startTracking(); } catch(e) {
-                console.warn('[Tracking] Failed to start native tracking:', e);
-            }
+        if (mode === 'enabled') {
+            // Already tracking — browser geolocation will also work as backup
+            console.log('[Tracking] Native tracking already active');
+            if (navigator.geolocation) startBrowserTracking();
+        } else {
+            // Not tracking — show "Enable Location" button in the toolbar
+            console.log('[Tracking] Tracking not enabled, showing enable button');
+            showEnableLocationButton();
         }
 
         // Load cached family data immediately from native store
@@ -657,17 +658,42 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         window.addEventListener('beforeunload', function() {
             try { window.TrackingBridge.onTrackingScreenHidden(); } catch(e) {}
         });
-
-        // Also use browser geolocation in WebView as backup upload
-        if (navigator.geolocation) {
-            startBrowserTracking();
-        }
     } else {
         // ── REGULAR BROWSER ─────────────────────────────────────
-        // Use browser geolocation API (lower accuracy on desktop)
         if (navigator.geolocation) {
             startBrowserTracking();
         }
+    }
+
+    // Show an "Enable Live Location" button in the tracking toolbar
+    function showEnableLocationButton() {
+        var toolbar = document.querySelector('.tracking-toolbar');
+        if (!toolbar) return;
+        var btn = document.createElement('button');
+        btn.className = 'tracking-toolbar-btn enable-location-btn';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
+        btn.style.cssText = 'background:#667eea;color:#fff;border:none;padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;';
+        btn.onclick = function() {
+            try {
+                window.TrackingBridge.startTracking();
+                btn.textContent = 'Enabling...';
+                // After a short delay, check if it worked and start browser tracking
+                setTimeout(function() {
+                    try {
+                        var newMode = window.TrackingBridge.getTrackingMode();
+                        if (newMode === 'enabled') {
+                            btn.remove();
+                            if (navigator.geolocation) startBrowserTracking();
+                        } else {
+                            btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
+                        }
+                    } catch(e) {}
+                }, 3000);
+            } catch(e) {
+                console.warn('[Tracking] startTracking failed:', e);
+            }
+        };
+        toolbar.insertBefore(btn, toolbar.firstChild);
     }
 
     // ── BROWSER GEOLOCATION (works in both WebView and browser) ──

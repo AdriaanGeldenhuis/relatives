@@ -292,8 +292,11 @@ class MainActivity : ComponentActivity() {
                 origin: String?,
                 callback: GeolocationPermissions.Callback?,
             ) {
-                // Grant geolocation to our own domain (native permissions handled by PermissionGate)
-                val allowed = origin?.contains("relatives.co.za") == true
+                // Only grant WebView geolocation if system permission is already granted
+                val hasSystemPermission = ContextCompat.checkSelfPermission(
+                    this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION,
+                ) == PackageManager.PERMISSION_GRANTED
+                val allowed = hasSystemPermission && origin?.contains("relatives.co.za") == true
                 callback?.invoke(origin, allowed, false)
             }
 
