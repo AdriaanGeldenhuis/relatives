@@ -1,13 +1,6 @@
 package za.co.relatives.app.services
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -15,8 +8,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import za.co.relatives.app.R
+import za.co.relatives.app.RelativesApplication
 import za.co.relatives.app.network.ApiClient
 import za.co.relatives.app.tracking.TrackingService
+import za.co.relatives.app.utils.NotificationHelper
 
 /**
  * Firebase Cloud Messaging service for the Relatives app.
@@ -27,19 +22,13 @@ import za.co.relatives.app.tracking.TrackingService
  * Supported notification types:
  * - `message`, `shopping`, `calendar`, `schedule`, `tracking`, `weather`,
  *   `note`, `system` -- displayed as a visible notification with optional deep link.
- * - `wake_tracking` -- silently triggers BURST mode on [TrackingLocationService]
+ * - `wake_tracking` -- silently triggers WAKE mode on [TrackingService]
  *   without showing any notification to the user.
  */
 class RelativesFirebaseService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "RelativesFCM"
-
-        private const val CHANNEL_ALERTS = "relatives_alerts"
-        private const val CHANNEL_TRACKING = "relatives_tracking"
-
-        private const val PREF_NAME = "relatives_prefs"
-        private const val PREF_FCM_TOKEN = "fcm_token"
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -52,11 +41,9 @@ class RelativesFirebaseService : FirebaseMessagingService() {
         super.onNewToken(token)
         Log.d(TAG, "New FCM token received")
 
-        // Persist locally.
-        getSharedPreferences(PREF_NAME, MODE_PRIVATE)
-            .edit()
-            .putString(PREF_FCM_TOKEN, token)
-            .apply()
+        // Persist via PreferencesManager.
+        val prefs = (application as RelativesApplication).preferencesManager
+        prefs.fcmToken = token
 
         // Register with backend.
         serviceScope.launch {
@@ -92,7 +79,7 @@ class RelativesFirebaseService : FirebaseMessagingService() {
     // ------------------------------------------------------------------ //
 
     /**
-     * Silently trigger a BURST location fix without showing any notification.
+     * Silently trigger a WAKE location fix without showing any notification.
      * Used when another family member taps "Find Device" or similar.
      */
     private fun handleWakeTracking() {
@@ -114,7 +101,7 @@ class RelativesFirebaseService : FirebaseMessagingService() {
     private fun handleVisibleNotification(
         type: String,
         data: Map<String, String>,
-        remoteNotification: RemoteMessage.Notification?
+        remoteNotification: RemoteMessage.Notification?,
     ) {
         val title = data["title"]
             ?: remoteNotification?.title
@@ -124,61 +111,12 @@ class RelativesFirebaseService : FirebaseMessagingService() {
             ?: ""
         val actionUrl = data["action_url"]
 
-        ensureNotificationChannels()
-
-        val channelId = if (type == "tracking") CHANNEL_TRACKING else CHANNEL_ALERTS
-        val notificationId = (type.hashCode() + System.currentTimeMillis().toInt())
-
-        val builder = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-
-        // Deep link via action_url.
-        val contentIntent = buildContentIntent(actionUrl, type, data)
-        if (contentIntent != null) {
-            builder.setContentIntent(contentIntent)
-        }
-
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(notificationId, builder.build())
-    }
-
-    /**
-     * Build a [PendingIntent] that deep-links into the app.
-     *
-     * If [actionUrl] is provided it is used as a VIEW intent URI; otherwise
-     * the app's main activity is opened with extras describing the
-     * notification type.
-     */
-    private fun buildContentIntent(
-        actionUrl: String?,
-        type: String,
-        data: Map<String, String>
-    ): PendingIntent? {
-        val intent = if (!actionUrl.isNullOrBlank()) {
-            Intent(Intent.ACTION_VIEW, Uri.parse(actionUrl)).apply {
-                setPackage(packageName)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                putExtra("notification_type", type)
-                data.forEach { (k, v) -> putExtra(k, v) }
-            }
-        } else {
-            packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                putExtra("notification_type", type)
-                data.forEach { (k, v) -> putExtra(k, v) }
-            }
-        } ?: return null
-
-        return PendingIntent.getActivity(
-            this,
-            type.hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        // Use the centralised alert notification helper
+        NotificationHelper.showAlertNotification(
+            context = this,
+            title = title,
+            body = body,
+            actionUrl = actionUrl,
         )
     }
 
@@ -187,41 +125,14 @@ class RelativesFirebaseService : FirebaseMessagingService() {
     // ------------------------------------------------------------------ //
 
     private fun getNotificationTitle(type: String): String = when (type) {
-        "message"   -> "New Message"
-        "shopping"  -> "Shopping List"
-        "calendar"  -> "Calendar Event"
-        "schedule"  -> "Schedule Update"
-        "tracking"  -> "Location Update"
-        "weather"   -> "Weather Alert"
-        "note"      -> "New Note"
-        "system"    -> "Relatives"
-        else        -> "Relatives"
-    }
-
-    private fun ensureNotificationChannels() {
-        val nm = getSystemService(NotificationManager::class.java)
-
-        if (nm.getNotificationChannel(CHANNEL_ALERTS) == null) {
-            val channel = NotificationChannel(
-                CHANNEL_ALERTS,
-                "Alerts & Messages",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Family messages, shopping lists, calendar events, and more"
-            }
-            nm.createNotificationChannel(channel)
-        }
-
-        if (nm.getNotificationChannel(CHANNEL_TRACKING) == null) {
-            val channel = NotificationChannel(
-                CHANNEL_TRACKING,
-                "Tracking Notifications",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Location tracking status and updates"
-                setShowBadge(false)
-            }
-            nm.createNotificationChannel(channel)
-        }
+        "message"  -> getString(R.string.notif_title_message)
+        "shopping" -> getString(R.string.notif_title_shopping)
+        "calendar" -> getString(R.string.notif_title_calendar)
+        "schedule" -> getString(R.string.notif_title_schedule)
+        "tracking" -> getString(R.string.notif_title_tracking)
+        "weather"  -> getString(R.string.notif_title_weather)
+        "note"     -> getString(R.string.notif_title_note)
+        "system"   -> getString(R.string.notif_title_system)
+        else       -> getString(R.string.notif_title_system)
     }
 }
