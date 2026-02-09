@@ -17,23 +17,35 @@ require_once __DIR__ . '/../../core/bootstrap.php';
 
 try {
     $userId = $_SESSION['user_id'];
-    
+
     // Get user's family
     $stmt = $db->prepare("SELECT family_id, full_name FROM users WHERE id = ?");
     $stmt->execute([$userId]);
     $user = $stmt->fetch();
-    
+
     if (!$user) {
         throw new Exception('User not found');
     }
-    
+
     $familyId = $user['family_id'];
-    
+
+    // Ensure typing_indicators table exists
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS `typing_indicators` (
+            `id` bigint(20) NOT NULL AUTO_INCREMENT,
+            `family_id` bigint(20) UNSIGNED DEFAULT NULL,
+            `user_id` bigint(20) UNSIGNED DEFAULT NULL,
+            `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unique_family_user` (`family_id`,`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // SET TYPING STATUS
         $input = json_decode(file_get_contents('php://input'), true);
         $isTyping = !empty($input['typing']);
-        
+
         if ($isTyping) {
             // Insert or update typing indicator
             $stmt = $db->prepare("
@@ -45,24 +57,24 @@ try {
         } else {
             // Remove typing indicator
             $stmt = $db->prepare("
-                DELETE FROM typing_indicators 
+                DELETE FROM typing_indicators
                 WHERE family_id = ? AND user_id = ?
             ");
             $stmt->execute([$familyId, $userId]);
         }
-        
+
         echo json_encode(['success' => true]);
-        
+
     } else {
         // GET WHO IS TYPING
-        
+
         // Clean up old indicators (older than 5 seconds)
         $stmt = $db->prepare("
-            DELETE FROM typing_indicators 
+            DELETE FROM typing_indicators
             WHERE family_id = ? AND updated_at < DATE_SUB(NOW(), INTERVAL 5 SECOND)
         ");
         $stmt->execute([$familyId]);
-        
+
         // Get current typers (exclude self)
         $stmt = $db->prepare("
             SELECT u.id, u.full_name as name
@@ -73,17 +85,27 @@ try {
         ");
         $stmt->execute([$familyId, $userId]);
         $typing = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
+
         echo json_encode([
             'success' => true,
             'typing' => $typing
         ]);
     }
-    
+
 } catch (Exception $e) {
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'message' => $e->getMessage()
-    ]);
+    error_log('Typing API error: ' . $e->getMessage());
+
+    // Typing is non-critical - return graceful response instead of 500
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        echo json_encode([
+            'success' => true,
+            'typing' => []
+        ]);
+    } else {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => $e->getMessage()
+        ]);
+    }
 }

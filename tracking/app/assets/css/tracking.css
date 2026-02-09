@@ -210,6 +210,14 @@ body.tracking-page {
     cursor: pointer;
     border: 2px solid rgba(255, 255, 255, 0.3);
     transition: all var(--trk-transition);
+    overflow: hidden;
+}
+
+.tracking-topbar-user img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
 }
 
 .tracking-topbar-user:hover {
@@ -223,10 +231,11 @@ body.tracking-page {
 .family-panel {
     position: fixed;
     bottom: 85px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    margin-inline: auto;
     width: var(--trk-panel-width);
-    max-height: 55vh;
+    max-height: calc(100vh - 85px - var(--trk-topbar-height) - 24px);
     z-index: 1000;
     background: var(--trk-panel-bg);
     backdrop-filter: blur(40px) saturate(180%);
@@ -290,7 +299,9 @@ body.tracking-page {
     overflow-y: auto;
     overflow-x: hidden;
     padding: 8px;
-    max-height: 45vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
@@ -316,6 +327,7 @@ body.tracking-page {
     cursor: pointer;
     transition: all var(--trk-transition);
     margin-bottom: 6px;
+    width: 100%;
 }
 
 .member-item:last-child { margin-bottom: 0; }
@@ -344,6 +356,14 @@ body.tracking-page {
     flex-shrink: 0;
     position: relative;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+.member-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
 }
 
 .member-status-dot {
@@ -799,6 +819,8 @@ body.tracking-page {
     transition: transform 0.2s ease;
 }
 
+.map-marker-inner.map-marker-avatar { overflow: hidden; }
+.map-marker-inner img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .map-marker:hover .map-marker-inner { transform: scale(1.15); }
 
 .mapboxgl-popup-content {
@@ -1193,7 +1215,7 @@ body.tracking-page {
 
     .family-panel {
         width: calc(100% - 24px);
-        max-height: 50vh;
+        max-height: calc(100vh - 85px - 44px - 20px);
         z-index: 1005;
         bottom: 85px;
         border-radius: var(--trk-radius-lg);

@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=3.3',
+    '/tracking/app/assets/css/tracking.css?v=3.6',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -94,7 +94,12 @@ requestAnimationFrame(function() {
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             </a>
             <div class="tracking-topbar-user" style="background:<?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>" title="<?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?>">
-                <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? 'U', 0, 1)); ?>
+                <?php if (!empty($user['has_avatar'])): ?>
+                    <img src="/saves/<?php echo (int)$user['id']; ?>/avatar/avatar.webp" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''">
+                    <span style="display:none"><?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? 'U', 0, 1)); ?></span>
+                <?php else: ?>
+                    <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? 'U', 0, 1)); ?>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -219,8 +224,9 @@ requestAnimationFrame(function() {
 
 <!-- Initial Data -->
 <script>
+    window.MAPBOX_TOKEN = <?php echo json_encode($mapboxToken); ?>;
     window.TrackingConfig = {
-        mapboxToken: <?php echo json_encode($mapboxToken); ?>,
+        mapboxToken: window.MAPBOX_TOKEN,
         userId: <?php echo (int)$user['id']; ?>,
         familyId: <?php echo $familyId; ?>,
         userName: <?php echo json_encode($user['name'] ?? $user['full_name'] ?? 'User'); ?>,
@@ -240,7 +246,7 @@ $pageJS = [];
 require_once __DIR__ . '/../../shared/components/footer.php';
 ?>
 
-<script src="/tracking/app/assets/js/state.js"></script>
+<script src="/tracking/app/assets/js/state.js?v=3.3"></script>
 <script>
 (function() {
     'use strict';
@@ -342,7 +348,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
             html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
             html += '  <div class="member-avatar" style="background:' + (m.avatar_color || '#667eea') + '">';
-            html += '    <span>' + initial + '</span>';
+            if (m.has_avatar) {
+                html += '    <img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\'">';
+                html += '    <span style="display:none">' + initial + '</span>';
+            } else {
+                html += '    <span>' + initial + '</span>';
+            }
             html += '    <span class="member-status-dot ' + statusClass + '"></span>';
             html += '  </div>';
             html += '  <div class="member-info">';
@@ -383,7 +394,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 var el = document.createElement('div');
                 el.className = 'map-marker';
                 var initial = (m.name || 'U').charAt(0).toUpperCase();
-                el.innerHTML = '<div class="map-marker-inner" style="background:' + (m.avatar_color || '#667eea') + '">' + initial + '</div>';
+                if (m.has_avatar) {
+                    el.innerHTML = '<div class="map-marker-inner map-marker-avatar" style="background:' + (m.avatar_color || '#667eea') + '">' +
+                        '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + initial + '\'">' +
+                        '</div>';
+                } else {
+                    el.innerHTML = '<div class="map-marker-inner" style="background:' + (m.avatar_color || '#667eea') + '">' + initial + '</div>';
+                }
                 markers[m.user_id] = new mapboxgl.Marker({ element: el })
                     .setLngLat(lngLat)
                     .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(
@@ -535,6 +552,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Wake FAB
     var wakeFab = document.getElementById('wakeFab');
     wakeFab.addEventListener('click', function() {
+        if (wakeFab.disabled) return;
+        wakeFab.disabled = true;
+
         fetch(window.TrackingConfig.apiBase + '/wake_devices.php', {
             method: 'POST',
             credentials: 'same-origin',
@@ -544,11 +564,21 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.success) {
-                wakeFab.classList.add('tracking-active');
-                setTimeout(function() { wakeFab.classList.remove('tracking-active'); }, 5000);
+                wakeFab.classList.add('active');
+                Toast.success('Wake signal sent to your family');
+                setTimeout(function() {
+                    wakeFab.classList.remove('active');
+                    wakeFab.disabled = false;
+                }, 5000);
+            } else {
+                Toast.error('Failed to send wake signal');
+                wakeFab.disabled = false;
             }
         })
-        .catch(function() {});
+        .catch(function() {
+            Toast.error('Could not reach the server');
+            wakeFab.disabled = false;
+        });
     });
 
     // Consent dialog logic

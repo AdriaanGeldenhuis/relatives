@@ -23,6 +23,10 @@ console.log('📱 Device Info:', { isMobile, isNativeApp, isTouchDevice });
 class ParticleSystem {
     constructor(canvasId) {
         // Disabled - canvas hidden via CSS for performance
+        this.animationId = null;
+    }
+    animate() {
+        // No-op: particle system disabled for performance
     }
 }
 
