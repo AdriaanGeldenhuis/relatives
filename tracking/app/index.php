@@ -1139,31 +1139,20 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         toolbar.insertBefore(btn, toolbar.firstChild);
     }
 
-    // ── BROWSER GEOLOCATION (only for web browsers, NOT native app) ──
+    // ── BROWSER GEOLOCATION ──────────────────────────────────────
     var lastUploadTime = 0;
     var uploadPending = false;
 
     function uploadPosition(pos) {
         var now = Date.now();
-        // Use settings interval or default 30s for browser
-        var minInterval = ((window.TrackingConfig.settings || {}).moving_interval_seconds || 30) * 1000;
-        if (minInterval < 10000) minInterval = 10000; // floor at 10s
-
-        if (now - lastUploadTime < minInterval) {
+        if (now - lastUploadTime < 10000) {
             if (!uploadPending) {
                 uploadPending = true;
-                setTimeout(function() { uploadPending = false; uploadPosition(pos); }, minInterval - (now - lastUploadTime));
+                setTimeout(function() { uploadPending = false; uploadPosition(pos); }, 10000 - (now - lastUploadTime));
             }
             return;
         }
         lastUploadTime = now;
-
-        // Reject very inaccurate readings
-        var minAccuracy = (window.TrackingConfig.settings || {}).min_accuracy_m || 100;
-        if (pos.coords.accuracy > minAccuracy) {
-            console.log('[Tracking] Skipping inaccurate position:', pos.coords.accuracy + 'm >', minAccuracy + 'm');
-            return;
-        }
 
         var payload = {
             lat: pos.coords.latitude,
@@ -1173,8 +1162,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             bearing_deg: pos.coords.heading || null,
             altitude_m: pos.coords.altitude || null,
             recorded_at: new Date(pos.timestamp).toISOString().slice(0, 19).replace('T', ' '),
-            platform: 'web',
-            device_id: 'browser'
+            platform: isNativeApp ? 'android-webview' : 'web',
+            device_id: isNativeApp ? 'android' : 'browser'
         };
         fetch(window.TrackingConfig.apiBase + '/location.php', {
             method: 'POST',
@@ -1195,7 +1184,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (!navigator.geolocation) return;
         navigator.geolocation.watchPosition(uploadPosition, function(err) {
             console.warn('[Tracking] Geolocation error:', err.message);
-        }, { enableHighAccuracy: false, timeout: 60000, maximumAge: 15000 });
+        }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
         console.log('[Tracking] Browser geolocation started');
     }
 
