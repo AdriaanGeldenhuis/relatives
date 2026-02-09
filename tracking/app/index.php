@@ -102,27 +102,6 @@ requestAnimationFrame(function() {
     <!-- Map Container -->
     <div id="trackingMap"></div>
 
-    <!-- Family Members Panel -->
-    <div class="family-panel collapsed" id="familyPanel">
-        <div class="family-panel-header">
-            <div style="display:flex;align-items:center;gap:10px;">
-                <span class="family-panel-title">Family</span>
-                <span class="family-panel-badge" id="memberCount">0</span>
-            </div>
-            <button class="family-panel-close" id="familyPanelClose" title="Close panel">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-        </div>
-        <div class="family-panel-body" id="memberList">
-            <!-- Members loaded dynamically -->
-            <div class="member-empty" id="memberEmpty">
-                <div class="member-empty-icon"></div>
-                <div class="member-empty-text">No members online</div>
-                <div class="member-empty-sub">Waiting for family members to share location</div>
-            </div>
-        </div>
-    </div>
-
     <!-- Bottom Toolbar -->
     <div class="tracking-toolbar" id="trackingToolbar">
         <a href="/home/" class="tracking-toolbar-btn home-btn" title="Home">
@@ -158,6 +137,27 @@ requestAnimationFrame(function() {
     </div>
 
 </div><!-- .tracking-app -->
+
+<!-- Family Members Panel (outside tracking-app for correct z-index stacking) -->
+<div class="family-panel collapsed" id="familyPanel">
+    <div class="family-panel-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span class="family-panel-title">Family</span>
+            <span class="family-panel-badge" id="memberCount">0</span>
+        </div>
+        <button class="family-panel-close" id="familyPanelClose" title="Close panel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+    <div class="family-panel-body" id="memberList">
+        <!-- Members loaded dynamically -->
+        <div class="member-empty" id="memberEmpty">
+            <div class="member-empty-icon"></div>
+            <div class="member-empty-text">No members online</div>
+            <div class="member-empty-sub">Waiting for family members to share location</div>
+        </div>
+    </div>
+</div>
 
 <!-- Consent Dialog -->
 <div class="consent-overlay" id="consentOverlay">
@@ -522,11 +522,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var panelToggleBtn = document.getElementById('panelToggleBtn');
     var panelCloseBtn = document.getElementById('familyPanelClose');
     var toolbar = document.getElementById('trackingToolbar');
-    var isMobile = window.innerWidth <= 768;
+    function isMobile() { return window.innerWidth <= 768; }
 
     function togglePanel() {
         var isOpen;
-        if (isMobile) {
+        if (isMobile()) {
             panel.classList.toggle('expanded');
             isOpen = panel.classList.contains('expanded');
         } else {

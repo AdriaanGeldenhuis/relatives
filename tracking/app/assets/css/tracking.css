@@ -221,7 +221,7 @@ body.tracking-page {
    FAMILY PANEL
    ============================================ */
 .family-panel {
-    position: absolute;
+    position: fixed;
     bottom: 85px;
     left: 50%;
     transform: translateX(-50%);
