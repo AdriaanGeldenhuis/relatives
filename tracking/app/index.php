@@ -219,8 +219,9 @@ requestAnimationFrame(function() {
 
 <!-- Initial Data -->
 <script>
+    window.MAPBOX_TOKEN = <?php echo json_encode($mapboxToken); ?>;
     window.TrackingConfig = {
-        mapboxToken: <?php echo json_encode($mapboxToken); ?>,
+        mapboxToken: window.MAPBOX_TOKEN,
         userId: <?php echo (int)$user['id']; ?>,
         familyId: <?php echo $familyId; ?>,
         userName: <?php echo json_encode($user['name'] ?? $user['full_name'] ?? 'User'); ?>,
@@ -240,7 +241,7 @@ $pageJS = [];
 require_once __DIR__ . '/../../shared/components/footer.php';
 ?>
 
-<script src="/tracking/app/assets/js/state.js"></script>
+<script src="/tracking/app/assets/js/state.js?v=3.3"></script>
 <script>
 (function() {
     'use strict';
