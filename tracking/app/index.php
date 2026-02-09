@@ -321,22 +321,22 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (!container) return;
 
         var currentUserId = window.TrackingConfig.userId;
-        var online = (members || []).filter(function(m) {
+        var withLocation = (members || []).filter(function(m) {
             if (m.user_id == currentUserId) return false;
-            if (!m.has_location) return false;
-            return (Date.now() - parseUTC(m.recorded_at || m.updated_at)) < 300000;
+            return m.has_location && m.lat !== null;
         });
 
-        if (online.length === 0) {
+        if (withLocation.length === 0) {
             container.innerHTML = '';
             return;
         }
 
         var html = '';
-        online.forEach(function(m) {
+        withLocation.forEach(function(m) {
             var initial = (m.name || 'U').charAt(0).toUpperCase();
             var color = m.avatar_color || '#667eea';
-            html += '<div class="tracking-topbar-user tracking-topbar-user-online" style="background:' + color + '" title="' + escapeHtml(m.name || 'Unknown') + '"';
+            var status = getStatusClass(m);
+            html += '<div class="tracking-topbar-user tracking-topbar-user-online" style="background:' + color + '" title="' + escapeHtml(m.name || 'Unknown') + ' \u00b7 ' + formatTimeAgo(m.recorded_at || m.updated_at) + '"';
             html += ' onclick="flyToMember(' + m.user_id + ')">';
             if (m.has_avatar) {
                 html += '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\'">';
@@ -344,7 +344,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             } else {
                 html += initial;
             }
-            html += '<span class="topbar-user-dot"></span>';
+            html += '<span class="topbar-user-dot ' + status + '"></span>';
             html += '</div>';
         });
         container.innerHTML = html;
@@ -369,11 +369,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
         empty.style.display = 'none';
         if (badge) badge.textContent = members.length;
-        var online = members.filter(function(m) {
-            if (!m.has_location) return false;
-            return (Date.now() - parseUTC(m.recorded_at || m.updated_at)) < 300000;
+        var withLocation = members.filter(function(m) {
+            return m.has_location && m.lat !== null;
         }).length;
-        if (statusEl) statusEl.textContent = online + ' online \u00b7 ' + members.length + ' total';
+        if (statusEl) statusEl.textContent = withLocation + ' tracking \u00b7 ' + members.length + ' total';
 
         var html = '';
         members.forEach(function(m) {

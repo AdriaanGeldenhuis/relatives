@@ -257,9 +257,22 @@ body.tracking-page {
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: var(--trk-green);
+    background: #718096;
     border: 2px solid var(--trk-glass-bg);
+}
+
+.topbar-user-dot.online {
+    background: var(--trk-green);
     box-shadow: 0 0 4px rgba(67, 233, 123, 0.6);
+}
+
+.topbar-user-dot.idle {
+    background: var(--trk-yellow);
+    box-shadow: 0 0 4px rgba(249, 212, 35, 0.6);
+}
+
+.topbar-user-dot.offline {
+    background: #718096;
 }
 
 /* ============================================
