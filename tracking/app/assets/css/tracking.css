@@ -222,7 +222,7 @@ body.tracking-page {
    ============================================ */
 .family-panel {
     position: absolute;
-    bottom: 75px;
+    bottom: 85px;
     left: 50%;
     transform: translateX(-50%);
     width: var(--trk-panel-width);
@@ -1200,7 +1200,7 @@ body.tracking-page {
         width: calc(100% - 24px);
         max-height: 50vh;
         z-index: 1005;
-        bottom: 75px;
+        bottom: 85px;
         left: 50%;
         right: auto;
         transform: translateX(-50%) translateY(20px);

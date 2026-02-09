@@ -526,19 +526,16 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var isMobile = window.innerWidth <= 768;
 
     function togglePanel() {
+        var isOpen;
         if (isMobile) {
             panel.classList.toggle('expanded');
-            var isOpen = panel.classList.contains('expanded');
+            isOpen = panel.classList.contains('expanded');
         } else {
             panel.classList.toggle('collapsed');
-            var isOpen = !panel.classList.contains('collapsed');
+            isOpen = !panel.classList.contains('collapsed');
         }
-        // Hide toolbar when panel is open
-        if (isOpen) {
-            toolbar.classList.add('panel-open');
-        } else {
-            toolbar.classList.remove('panel-open');
-        }
+        // Hide toolbar when panel is open, show when closed
+        toolbar.classList.toggle('panel-open', isOpen);
     }
 
     panelToggle.addEventListener('click', togglePanel);
