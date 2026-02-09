@@ -276,8 +276,8 @@ body.tracking-page {
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: var(--trk-card-bg);
-    border: 1px solid var(--trk-card-border);
+    background: transparent;
+    border: none;
     color: var(--trk-text);
     cursor: pointer;
     display: flex;
