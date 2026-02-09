@@ -7,10 +7,23 @@ declare(strict_types=1);
 class AlertsRepo
 {
     private PDO $db;
+    private ?TrackingCache $cache;
 
-    public function __construct(PDO $db)
+    private const DEFAULTS = [
+        'enabled' => true,
+        'arrive_place_enabled' => true,
+        'leave_place_enabled' => true,
+        'enter_geofence_enabled' => true,
+        'exit_geofence_enabled' => true,
+        'cooldown_seconds' => 900,
+        'quiet_hours_start' => null,
+        'quiet_hours_end' => null,
+    ];
+
+    public function __construct(PDO $db, ?TrackingCache $cache = null)
     {
         $this->db = $db;
+        $this->cache = $cache;
     }
 
     /**
@@ -18,26 +31,29 @@ class AlertsRepo
      */
     public function get(int $familyId): array
     {
+        if ($this->cache) {
+            $cached = $this->cache->getAlertRules($familyId);
+            if ($cached !== null) {
+                return array_merge(self::DEFAULTS, $cached);
+            }
+        }
+
         $stmt = $this->db->prepare("SELECT * FROM tracking_alert_rules WHERE family_id = ?");
         $stmt->execute([$familyId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$row) {
             $this->createDefaults($familyId);
-            return [
-                'family_id' => $familyId,
-                'enabled' => true,
-                'arrive_place_enabled' => true,
-                'leave_place_enabled' => true,
-                'enter_geofence_enabled' => true,
-                'exit_geofence_enabled' => true,
-                'cooldown_seconds' => 900,
-                'quiet_hours_start' => null,
-                'quiet_hours_end' => null,
-            ];
+            $rules = array_merge(self::DEFAULTS, ['family_id' => $familyId]);
+        } else {
+            $rules = array_merge(self::DEFAULTS, $row);
         }
 
-        return $row;
+        if ($this->cache) {
+            $this->cache->setAlertRules($familyId, $rules);
+        }
+
+        return $rules;
     }
 
     /**
@@ -68,7 +84,13 @@ class AlertsRepo
         $params[] = $familyId;
         $sql = "UPDATE tracking_alert_rules SET " . implode(', ', $sets) . " WHERE family_id = ?";
         $stmt = $this->db->prepare($sql);
-        return $stmt->execute($params);
+        $result = $stmt->execute($params);
+
+        if ($result && $this->cache) {
+            $this->cache->deleteAlertRules($familyId);
+        }
+
+        return $result;
     }
 
     /**

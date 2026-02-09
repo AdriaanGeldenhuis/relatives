@@ -34,7 +34,7 @@ $isAdmin = in_array($user['role'], ['owner', 'admin']);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 $settings = $settingsRepo->get($familyId);
 
-$alertsRepo = new AlertsRepo($db);
+$alertsRepo = new AlertsRepo($db, $trackingCache);
 $alertRules = $alertsRepo->get($familyId);
 
 $pageTitle = 'Tracking Settings';

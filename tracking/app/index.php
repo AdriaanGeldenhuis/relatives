@@ -32,7 +32,7 @@ $familyId = (int)$user['family_id'];
 $settings = $settingsRepo->get($familyId);
 
 // Load alert rules
-$alertsRepo = new AlertsRepo($db);
+$alertsRepo = new AlertsRepo($db, $trackingCache);
 $alertRules = $alertsRepo->get($familyId);
 
 // Mapbox token from environment

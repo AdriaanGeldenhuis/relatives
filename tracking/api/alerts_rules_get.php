@@ -9,7 +9,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 $ctx = SiteContext::require($db);
 
-$repo = new AlertsRepo($db);
+$trackingCache = new TrackingCache($cache);
+$repo = new AlertsRepo($db, $trackingCache);
 
 $rules = $repo->get($ctx->familyId);
 

@@ -31,7 +31,7 @@ try {
     $geoRepo = new GeofenceRepo($db, $trackingCache);
     $placesRepo = new PlacesRepo($db, $trackingCache);
     $eventsRepo = new EventsRepo($db);
-    $alertsRepo = new AlertsRepo($db);
+    $alertsRepo = new AlertsRepo($db, $trackingCache);
     $alertsEngine = new AlertsEngine($db, $trackingCache, $alertsRepo);
     $geofenceEngine = new GeofenceEngine(
         $db, $trackingCache, $geoRepo, $placesRepo, $eventsRepo, $alertsEngine
