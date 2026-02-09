@@ -196,21 +196,46 @@ body.tracking-page {
     stroke-linejoin: round;
 }
 
-/* User avatar in topbar */
+/* User avatars group in topbar */
+.tracking-topbar-users {
+    display: flex;
+    align-items: center;
+    flex-direction: row-reverse;
+}
+
+.tracking-topbar-users .tracking-topbar-user {
+    margin-left: -8px;
+    transition: all var(--trk-transition);
+}
+
+.tracking-topbar-users .tracking-topbar-user:last-child {
+    margin-left: 0;
+}
+
+.tracking-topbar-users:hover .tracking-topbar-user {
+    margin-left: -4px;
+}
+
+.tracking-topbar-users:hover .tracking-topbar-user:last-child {
+    margin-left: 0;
+}
+
 .tracking-topbar-user {
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 800;
     color: white;
     cursor: pointer;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: 2px solid var(--trk-glass-bg);
     transition: all var(--trk-transition);
     overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
 }
 
 .tracking-topbar-user img {
@@ -222,7 +247,31 @@ body.tracking-page {
 
 .tracking-topbar-user:hover {
     border-color: rgba(255, 255, 255, 0.6);
-    transform: scale(1.08);
+    transform: scale(1.15);
+    z-index: 2;
+}
+
+.tracking-topbar-user-count {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--trk-text);
+    background: var(--trk-card-bg);
+    border: 2px solid var(--trk-glass-bg);
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: -8px;
+    transition: all var(--trk-transition);
+}
+
+.tracking-topbar-user-count:hover {
+    background: var(--trk-glass-heavy);
+    transform: scale(1.1);
 }
 
 /* ============================================
