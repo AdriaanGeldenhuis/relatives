@@ -829,7 +829,7 @@ body.tracking-page {
     backdrop-filter: blur(20px) !important;
     border: 1px solid var(--trk-card-border) !important;
     border-radius: var(--trk-radius-sm) !important;
-    padding: 10px 14px !important;
+    padding: 12px !important;
     color: var(--trk-text) !important;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
     font-size: 13px;
@@ -842,6 +842,103 @@ body.tracking-page {
     font-size: 16px !important;
     right: 6px !important;
     top: 6px !important;
+}
+
+/* Popup member card */
+.popup-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.popup-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 800;
+    color: white;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.popup-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.popup-name {
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.popup-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--trk-text-muted);
+    margin-top: 2px;
+}
+
+.popup-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.popup-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 0;
+    border-top: 1px solid var(--trk-card-border);
+    border-bottom: 1px solid var(--trk-card-border);
+    margin-bottom: 10px;
+}
+
+.popup-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+}
+
+.popup-label {
+    color: var(--trk-text-muted);
+}
+
+.popup-value {
+    font-weight: 600;
+}
+
+.popup-speed {
+    color: var(--trk-yellow);
+}
+
+.popup-nav-btn {
+    width: 100%;
+    padding: 7px 0;
+    background: linear-gradient(135deg, #f5a623, #f7931e);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.popup-nav-btn:hover {
+    opacity: 0.85;
 }
 
 /* ============================================

@@ -389,6 +389,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             var lngLat = [parseFloat(m.lng), parseFloat(m.lat)];
             if (markers[m.user_id]) {
                 markers[m.user_id].setLngLat(lngLat);
+                var popup = markers[m.user_id].getPopup();
+                if (popup) popup.setHTML(buildPopupHTML(m));
             } else {
                 var el = document.createElement('div');
                 el.className = 'map-marker';
@@ -402,10 +404,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 }
                 markers[m.user_id] = new mapboxgl.Marker({ element: el })
                     .setLngLat(lngLat)
-                    .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(
-                        '<strong>' + escapeHtml(m.name || 'Unknown') + '</strong><br>' +
-                        '<span style="font-size:12px;opacity:0.7">' + formatTimeAgo(m.updated_at || m.recorded_at) + '</span>'
-                    ))
+                    .setPopup(new mapboxgl.Popup({ offset: 25, maxWidth: '260px' }).setHTML(buildPopupHTML(m)))
                     .addTo(map);
             }
         });
@@ -440,6 +439,72 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
         if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
         return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    function buildPopupHTML(m) {
+        var status = getStatusClass(m);
+        var statusLabel = status === 'online' ? 'Online' : status === 'idle' ? 'Idle' : 'Offline';
+        var statusColor = status === 'online' ? 'var(--trk-green)' : status === 'idle' ? 'var(--trk-yellow)' : '#718096';
+        var timeAgo = formatTimeAgo(m.updated_at || m.recorded_at);
+        var speed = formatSpeed(m.speed_mps);
+        var motionState = m.motion_state || 'unknown';
+
+        var html = '<div class="popup-member">';
+
+        // Header: avatar + name + status
+        html += '<div class="popup-header">';
+        html += '<div class="popup-avatar" style="background:' + (m.avatar_color || '#667eea') + '">';
+        if (m.has_avatar) {
+            html += '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\'">';
+            html += '<span style="display:none">' + (m.name || 'U').charAt(0).toUpperCase() + '</span>';
+        } else {
+            html += (m.name || 'U').charAt(0).toUpperCase();
+        }
+        html += '</div>';
+        html += '<div class="popup-name-wrap">';
+        html += '<div class="popup-name">' + escapeHtml(m.name || 'Unknown') + '</div>';
+        html += '<div class="popup-status"><span class="popup-dot" style="background:' + statusColor + '"></span>' + statusLabel + ' \u00b7 ' + timeAgo + '</div>';
+        html += '</div>';
+        html += '</div>';
+
+        // Info rows
+        html += '<div class="popup-info">';
+
+        // Motion + Speed
+        if (speed) {
+            html += '<div class="popup-row"><span class="popup-label">Speed</span><span class="popup-value popup-speed">' + speed + '</span></div>';
+        }
+
+        var motionIcon = motionState === 'moving' ? '\u25B6' : motionState === 'idle' ? '\u23F8' : '\u2022';
+        var motionLabel = motionState.charAt(0).toUpperCase() + motionState.slice(1);
+        html += '<div class="popup-row"><span class="popup-label">State</span><span class="popup-value">' + motionIcon + ' ' + motionLabel + '</span></div>';
+
+        // Altitude
+        if (m.altitude_m !== null && m.altitude_m !== undefined) {
+            var units = (window.TrackingConfig.settings || {}).units || 'metric';
+            var alt = units === 'imperial' ? (m.altitude_m * 3.281).toFixed(0) + ' ft' : Math.round(m.altitude_m) + ' m';
+            html += '<div class="popup-row"><span class="popup-label">Altitude</span><span class="popup-value">' + alt + '</span></div>';
+        }
+
+        // Accuracy
+        if (m.accuracy_m !== null && m.accuracy_m !== undefined) {
+            html += '<div class="popup-row"><span class="popup-label">Accuracy</span><span class="popup-value">' + Math.round(m.accuracy_m) + ' m</span></div>';
+        }
+
+        // Bearing
+        if (m.bearing_deg !== null && m.bearing_deg !== undefined && parseFloat(m.speed_mps) > 0.5) {
+            var dirs = ['N','NE','E','SE','S','SW','W','NW'];
+            var dir = dirs[Math.round(m.bearing_deg / 45) % 8];
+            html += '<div class="popup-row"><span class="popup-label">Heading</span><span class="popup-value">' + dir + ' (' + Math.round(m.bearing_deg) + '\u00b0)</span></div>';
+        }
+
+        html += '</div>';
+
+        // Navigate button
+        html += '<button class="popup-nav-btn" onclick="getDirections(' + m.user_id + ')">Navigate</button>';
+
+        html += '</div>';
+        return html;
     }
 
     function formatSpeed(mps) {
