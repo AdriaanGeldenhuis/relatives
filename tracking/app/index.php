@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=3.7',
+    '/tracking/app/assets/css/tracking.css?v=3.8',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -419,7 +419,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 } else {
                     el.innerHTML = '<div class="map-marker-inner" style="background:' + (m.avatar_color || '#667eea') + '">' + initial + '</div>';
                 }
-                markers[m.user_id] = new mapboxgl.Marker({ element: el, anchor: 'center' })
+                markers[m.user_id] = new mapboxgl.Marker({ element: el, anchor: 'top-left' })
                     .setLngLat(lngLat)
                     .setPopup(new mapboxgl.Popup({ offset: 25, maxWidth: '260px' }).setHTML(buildPopupHTML(m)))
                     .addTo(map);

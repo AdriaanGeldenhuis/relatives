@@ -808,6 +808,7 @@ body.tracking-page {
     width: 36px;
     height: 36px;
     cursor: pointer;
+    transform: translate(-50%, -50%);
 }
 
 .map-marker-inner {
