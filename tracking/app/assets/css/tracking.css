@@ -227,7 +227,7 @@ body.tracking-page {
     transform: translateX(-50%);
     width: var(--trk-panel-width);
     max-height: 55vh;
-    z-index: 50;
+    z-index: 1000;
     background: var(--trk-panel-bg);
     backdrop-filter: blur(40px) saturate(180%);
     border: 1px solid var(--trk-card-border);
@@ -484,6 +484,7 @@ body.tracking-page {
     border: 1px solid var(--trk-card-border);
     border-radius: 32px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    transition: opacity var(--trk-transition), transform var(--trk-transition);
 }
 
 .tracking-toolbar-btn {
@@ -549,6 +550,13 @@ body.tracking-page {
 
 /* Legacy wake FAB - hidden by default, toolbar takes over */
 .wake-fab { display: none; }
+
+/* Hide toolbar when family panel is open */
+.tracking-toolbar.panel-open {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(10px);
+}
 
 /* ============================================
    CONSENT DIALOG

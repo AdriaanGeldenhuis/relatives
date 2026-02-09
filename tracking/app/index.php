@@ -522,13 +522,22 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var panelToggle = document.getElementById('familyPanelToggle');
     var panelToggleBtn = document.getElementById('panelToggleBtn');
     var panelHeader = document.getElementById('familyPanelHeader');
+    var toolbar = document.getElementById('trackingToolbar');
     var isMobile = window.innerWidth <= 768;
 
     function togglePanel() {
         if (isMobile) {
             panel.classList.toggle('expanded');
+            var isOpen = panel.classList.contains('expanded');
         } else {
             panel.classList.toggle('collapsed');
+            var isOpen = !panel.classList.contains('collapsed');
+        }
+        // Hide toolbar when panel is open
+        if (isOpen) {
+            toolbar.classList.add('panel-open');
+        } else {
+            toolbar.classList.remove('panel-open');
         }
     }
 
@@ -538,7 +547,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     if (isMobile) {
         panelHeader.addEventListener('click', function(e) {
             if (e.target === panelHeader || e.target.classList.contains('family-panel-title')) {
-                panel.classList.toggle('expanded');
+                togglePanel();
             }
         });
     }
