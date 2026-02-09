@@ -663,9 +663,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // Wake FAB
     var wakeFab = document.getElementById('wakeFab');
-    wakeFab.addEventListener('click', function() {
+    var wakeLabel = wakeFab ? wakeFab.querySelector('span') : null;
+    if (wakeFab) wakeFab.addEventListener('click', function() {
         if (wakeFab.disabled) return;
         wakeFab.disabled = true;
+        if (wakeLabel) wakeLabel.textContent = 'Sending...';
 
         fetch(window.TrackingConfig.apiBase + '/wake_devices.php', {
             method: 'POST',
@@ -673,23 +675,31 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ family_id: window.TrackingConfig.familyId })
         })
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+            if (!r.ok) throw new Error('Server ' + r.status);
+            return r.json();
+        })
         .then(function(data) {
             if (data.success) {
                 wakeFab.classList.add('active');
+                if (wakeLabel) wakeLabel.textContent = 'Sent!';
                 showToast('Wake signal sent to your family', 'success');
                 setTimeout(function() {
                     wakeFab.classList.remove('active');
                     wakeFab.disabled = false;
-                }, 5000);
+                    if (wakeLabel) wakeLabel.textContent = 'Wake';
+                }, 3000);
             } else {
-                showToast('Failed to send wake signal', 'error');
+                showToast('Failed: ' + (data.error || 'unknown'), 'error');
                 wakeFab.disabled = false;
+                if (wakeLabel) wakeLabel.textContent = 'Wake';
             }
         })
-        .catch(function() {
-            showToast('Could not reach the server', 'error');
+        .catch(function(err) {
+            console.error('[Wake] Error:', err);
+            showToast('Wake failed: ' + err.message, 'error');
             wakeFab.disabled = false;
+            if (wakeLabel) wakeLabel.textContent = 'Wake';
         });
     });
 
