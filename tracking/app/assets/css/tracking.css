@@ -210,6 +210,14 @@ body.tracking-page {
     cursor: pointer;
     border: 2px solid rgba(255, 255, 255, 0.3);
     transition: all var(--trk-transition);
+    overflow: hidden;
+}
+
+.tracking-topbar-user img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
 }
 
 .tracking-topbar-user:hover {
