@@ -1037,7 +1037,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         requestNotificationPermission();
     }
 
-    // Initial fetch then poll every 10s for real-time updates
+    // Initial fetch then poll
     map.on('load', function() {
         map.resize();
         fetchMembers();
@@ -1051,7 +1051,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     if (isNativeApp) {
         // ── NATIVE ANDROID APP ──────────────────────────────────
-        console.log('[Tracking] Native bridge detected');
+        // The native TrackingService handles GPS + upload via batch.php.
+        // WebView should NOT start its own geolocation — it conflicts
+        // with the native GPS lock and causes timeouts / low-accuracy fallback.
+        console.log('[Tracking] Native bridge detected — letting native handle GPS');
 
         // Tell native side the tracking screen is visible (triggers fast polling)
         try { window.TrackingBridge.onTrackingScreenVisible(); } catch(e) {}
@@ -1061,14 +1064,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         try { mode = window.TrackingBridge.getTrackingMode(); } catch(e) {}
         console.log('[Tracking] Native tracking mode:', mode);
 
-        if (mode === 'enabled') {
-            // Already tracking — browser geolocation will also work as backup
-            console.log('[Tracking] Native tracking already active');
-            if (navigator.geolocation) startBrowserTracking();
-        } else {
-            // Not tracking — show "Enable Location" button in the toolbar
+        if (mode !== 'enabled') {
             console.log('[Tracking] Tracking not enabled, showing enable button');
             showEnableLocationButton();
+        } else {
+            console.log('[Tracking] Native tracking active — no browser GPS needed');
         }
 
         // Load cached family data immediately from native store
@@ -1089,8 +1089,21 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         window.addEventListener('beforeunload', function() {
             try { window.TrackingBridge.onTrackingScreenHidden(); } catch(e) {}
         });
+
+        // Listen for visibility changes to toggle native polling speed
+        document.addEventListener('visibilitychange', function() {
+            try {
+                if (document.visibilityState === 'visible') {
+                    window.TrackingBridge.onTrackingScreenVisible();
+                } else {
+                    window.TrackingBridge.onTrackingScreenHidden();
+                }
+            } catch(e) {}
+        });
+
     } else {
         // ── REGULAR BROWSER ─────────────────────────────────────
+        // No native app — use browser geolocation for location tracking
         if (navigator.geolocation) {
             startBrowserTracking();
         }
@@ -1108,13 +1121,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             try {
                 window.TrackingBridge.startTracking();
                 btn.textContent = 'Enabling...';
-                // After a short delay, check if it worked and start browser tracking
                 setTimeout(function() {
                     try {
                         var newMode = window.TrackingBridge.getTrackingMode();
                         if (newMode === 'enabled') {
                             btn.remove();
-                            if (navigator.geolocation) startBrowserTracking();
+                            showToast('Live location enabled', 'success');
                         } else {
                             btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
                         }
@@ -1127,20 +1139,31 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         toolbar.insertBefore(btn, toolbar.firstChild);
     }
 
-    // ── BROWSER GEOLOCATION (works in both WebView and browser) ──
+    // ── BROWSER GEOLOCATION (only for web browsers, NOT native app) ──
     var lastUploadTime = 0;
     var uploadPending = false;
 
     function uploadPosition(pos) {
         var now = Date.now();
-        if (now - lastUploadTime < 10000) {
+        // Use settings interval or default 30s for browser
+        var minInterval = ((window.TrackingConfig.settings || {}).moving_interval_seconds || 30) * 1000;
+        if (minInterval < 10000) minInterval = 10000; // floor at 10s
+
+        if (now - lastUploadTime < minInterval) {
             if (!uploadPending) {
                 uploadPending = true;
-                setTimeout(function() { uploadPending = false; uploadPosition(pos); }, 10000 - (now - lastUploadTime));
+                setTimeout(function() { uploadPending = false; uploadPosition(pos); }, minInterval - (now - lastUploadTime));
             }
             return;
         }
         lastUploadTime = now;
+
+        // Reject very inaccurate readings
+        var minAccuracy = (window.TrackingConfig.settings || {}).min_accuracy_m || 100;
+        if (pos.coords.accuracy > minAccuracy) {
+            console.log('[Tracking] Skipping inaccurate position:', pos.coords.accuracy + 'm >', minAccuracy + 'm');
+            return;
+        }
 
         var payload = {
             lat: pos.coords.latitude,
@@ -1150,8 +1173,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             bearing_deg: pos.coords.heading || null,
             altitude_m: pos.coords.altitude || null,
             recorded_at: new Date(pos.timestamp).toISOString().slice(0, 19).replace('T', ' '),
-            platform: isNativeApp ? 'android-webview' : 'web',
-            device_id: isNativeApp ? 'android' : 'browser'
+            platform: 'web',
+            device_id: 'browser'
         };
         fetch(window.TrackingConfig.apiBase + '/location.php', {
             method: 'POST',
@@ -1172,7 +1195,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (!navigator.geolocation) return;
         navigator.geolocation.watchPosition(uploadPosition, function(err) {
             console.warn('[Tracking] Geolocation error:', err.message);
-        }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
+        }, { enableHighAccuracy: false, timeout: 60000, maximumAge: 15000 });
+        console.log('[Tracking] Browser geolocation started');
     }
 
 })();
