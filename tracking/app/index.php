@@ -402,7 +402,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 } else {
                     el.innerHTML = '<div class="map-marker-inner" style="background:' + (m.avatar_color || '#667eea') + '">' + initial + '</div>';
                 }
-                markers[m.user_id] = new mapboxgl.Marker({ element: el })
+                markers[m.user_id] = new mapboxgl.Marker({ element: el, anchor: 'center' })
                     .setLngLat(lngLat)
                     .setPopup(new mapboxgl.Popup({ offset: 25, maxWidth: '260px' }).setHTML(buildPopupHTML(m)))
                     .addTo(map);
