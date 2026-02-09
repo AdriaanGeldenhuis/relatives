@@ -336,7 +336,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             var initial = (m.name || 'U').charAt(0).toUpperCase();
             var color = m.avatar_color || '#667eea';
             var status = getStatusClass(m);
-            html += '<div class="tracking-topbar-user tracking-topbar-user-online" style="background:' + color + '" title="' + escapeHtml(m.name || 'Unknown') + ' \u00b7 ' + formatTimeAgo(m.recorded_at || m.updated_at) + '"';
+            html += '<div class="tracking-topbar-user tracking-topbar-user-online" style="background:' + color + '" title="' + escapeHtml(m.name || 'Unknown') + ' \u00b7 ' + formatTimeAgo(m.updated_at || m.recorded_at) + '"';
             html += ' onclick="flyToMember(' + m.user_id + ')">';
             if (m.has_avatar) {
                 html += '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\'">';
@@ -379,7 +379,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             var initial = (m.name || 'U').charAt(0).toUpperCase();
             var hasLoc = m.has_location && m.lat !== null;
             var statusClass = hasLoc ? getStatusClass(m) : 'offline';
-            var timeAgo = hasLoc ? formatTimeAgo(m.recorded_at || m.updated_at) : 'No location';
+            var timeAgo = hasLoc ? formatTimeAgo(m.updated_at || m.recorded_at) : 'No location';
             var speed = hasLoc ? formatSpeed(m.speed_mps) : '';
 
             html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
@@ -441,7 +441,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                     .setLngLat(lngLat)
                     .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(
                         '<strong>' + escapeHtml(m.name || 'Unknown') + '</strong><br>' +
-                        '<span style="font-size:12px;opacity:0.7">' + formatTimeAgo(m.recorded_at || m.updated_at) + '</span>'
+                        '<span style="font-size:12px;opacity:0.7">' + formatTimeAgo(m.updated_at || m.recorded_at) + '</span>'
                     ))
                     .addTo(map);
             }
@@ -462,7 +462,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function getStatusClass(m) {
-        var ts = parseUTC(m.recorded_at || m.updated_at);
+        var ts = parseUTC(m.updated_at || m.recorded_at);
         var diffMin = (Date.now() - ts) / 60000;
         if (diffMin < 5) return 'online';
         if (diffMin < 30) return 'idle';
