@@ -139,7 +139,7 @@ requestAnimationFrame(function() {
 </div><!-- .tracking-app -->
 
 <!-- Family Members Panel (outside tracking-app for correct z-index stacking) -->
-<div class="family-panel" id="familyPanel">
+<div class="family-panel" id="familyPanel" style="display:none">
     <div class="family-panel-header">
         <div style="display:flex;align-items:center;gap:10px;">
             <span class="family-panel-title">Family</span>
@@ -524,9 +524,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var toolbar = document.getElementById('trackingToolbar');
 
     function togglePanel() {
-        panel.classList.toggle('open');
-        var isOpen = panel.classList.contains('open');
-        toolbar.classList.toggle('panel-open', isOpen);
+        var isOpen = panel.style.display !== 'flex';
+        panel.style.display = isOpen ? 'flex' : 'none';
+        toolbar.style.display = isOpen ? 'none' : '';
     }
 
     if (panelToggleBtn) panelToggleBtn.addEventListener('click', togglePanel);
