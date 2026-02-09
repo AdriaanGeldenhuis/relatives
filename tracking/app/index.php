@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=4.0',
+    '/tracking/app/assets/css/tracking.css?v=4.1',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -123,7 +123,50 @@ requestAnimationFrame(function() {
         </button>
     </div>
 
-    <!-- Directions Info Bar -->
+    <!-- Navigation Header (next turn instruction) -->
+    <div class="nav-header" id="navHeader">
+        <div class="nav-header-icon" id="navIcon">
+            <svg viewBox="0 0 24 24"><polyline points="5 12 12 5 19 12"></polyline><line x1="12" y1="19" x2="12" y2="5"></line></svg>
+        </div>
+        <div class="nav-header-info">
+            <div class="nav-header-distance" id="navStepDist">--</div>
+            <div class="nav-header-instruction" id="navInstruction">Getting route...</div>
+        </div>
+    </div>
+
+    <!-- Navigation Bottom Bar (summary + controls) -->
+    <div class="nav-bottom" id="navBottom">
+        <div class="nav-bottom-stats">
+            <div class="nav-bottom-stat">
+                <span class="nav-bottom-value" id="navRemainDist">--</span>
+                <span class="nav-bottom-label">remaining</span>
+            </div>
+            <div class="nav-bottom-stat">
+                <span class="nav-bottom-value" id="navETA">--</span>
+                <span class="nav-bottom-label">ETA</span>
+            </div>
+        </div>
+        <div class="nav-bottom-actions">
+            <button class="nav-steps-btn" id="navStepsBtn" title="View all steps">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                Steps
+            </button>
+            <button class="nav-end-btn" id="navEndBtn" title="End navigation">End</button>
+        </div>
+    </div>
+
+    <!-- Steps List Panel -->
+    <div class="nav-steps-panel" id="navStepsPanel">
+        <div class="nav-steps-header">
+            <span class="nav-steps-title">Turn-by-turn</span>
+            <button class="nav-steps-close" id="navStepsClose">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div class="nav-steps-list" id="navStepsList"></div>
+    </div>
+
+    <!-- Directions Info Bar (route preview before starting nav) -->
     <div class="directions-bar" id="directionsBar">
         <div class="directions-info">
             <div class="directions-stat">
@@ -136,9 +179,9 @@ requestAnimationFrame(function() {
                 <div class="directions-stat-label">Duration</div>
             </div>
             <div class="directions-divider"></div>
-            <button class="directions-nav-btn" id="directionsRecenter" title="Re-center route">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
-                Focus
+            <button class="directions-nav-btn" id="directionsStartNav" title="Start navigation">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+                Start
             </button>
         </div>
         <button class="directions-close" id="directionsClose" title="Close directions">
@@ -577,8 +620,52 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         }
     };
 
-    // Get directions to member — uses your known position from tracking data
+    // ── NAVIGATION SYSTEM ─────────────────────────────────────
     var _routeBounds = null;
+    var _navActive = false;
+    var _navSteps = [];
+    var _navCurrentStep = 0;
+    var _navRoute = null;
+    var _navTargetName = '';
+    var _navWatchId = null;
+
+    // Format distance nicely
+    function fmtDist(m) {
+        if (m >= 1000) return (m / 1000).toFixed(1) + ' km';
+        return Math.round(m) + ' m';
+    }
+    function fmtDur(s) {
+        if (s >= 3600) return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+        return Math.max(1, Math.floor(s / 60)) + ' min';
+    }
+
+    // SVG icons for maneuver types
+    function maneuverIcon(maneuver) {
+        var m = maneuver || '';
+        if (m.indexOf('left') !== -1 && m.indexOf('slight') !== -1)
+            return '<svg viewBox="0 0 24 24"><polyline points="14 6 8 12 14 18"></polyline><line x1="20" y1="12" x2="8" y2="12"></line></svg>';
+        if (m.indexOf('left') !== -1)
+            return '<svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+        if (m.indexOf('right') !== -1 && m.indexOf('slight') !== -1)
+            return '<svg viewBox="0 0 24 24"><polyline points="10 6 16 12 10 18"></polyline><line x1="4" y1="12" x2="16" y2="12"></line></svg>';
+        if (m.indexOf('right') !== -1)
+            return '<svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+        if (m.indexOf('roundabout') !== -1)
+            return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><polyline points="12 2 12 8"></polyline></svg>';
+        if (m.indexOf('arrive') !== -1)
+            return '<svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>';
+        // Default: straight arrow
+        return '<svg viewBox="0 0 24 24"><polyline points="5 12 12 5 19 12"></polyline><line x1="12" y1="19" x2="12" y2="5"></line></svg>';
+    }
+
+    // Haversine distance in metres
+    function haversineDist(lat1, lng1, lat2, lng2) {
+        var R = 6371000, dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180;
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
 
     window.getDirections = function(userId) {
         var target = _members.find(function(x) { return x.user_id == userId; });
@@ -587,17 +674,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             return;
         }
 
-        // Get the logged-in user's position from _members
         var me = _members.find(function(x) { return x.user_id == window.TrackingConfig.userId; });
         if (!me || !me.lat || !me.lng) {
             showToast('Your location is not available yet', 'error');
             return;
         }
-
-        var fromLat = parseFloat(me.lat);
-        var fromLng = parseFloat(me.lng);
-        var toLat = parseFloat(target.lat);
-        var toLng = parseFloat(target.lng);
 
         // Close any open popup
         Object.keys(markers).forEach(function(uid) {
@@ -608,10 +689,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         showToast('Getting route to ' + (target.name || 'member') + '...', 'info');
 
         var url = window.TrackingConfig.apiBase + '/directions.php' +
-            '?from_lat=' + fromLat +
-            '&from_lng=' + fromLng +
-            '&to_lat=' + toLat +
-            '&to_lng=' + toLng;
+            '?from_lat=' + parseFloat(me.lat) +
+            '&from_lng=' + parseFloat(me.lng) +
+            '&to_lat=' + parseFloat(target.lat) +
+            '&to_lng=' + parseFloat(target.lng);
 
         fetch(url, { credentials: 'same-origin' })
             .then(function(r) {
@@ -620,7 +701,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             })
             .then(function(data) {
                 if (data.success && data.data) {
-                    showDirections(data.data, target.name);
+                    showRoutePreview(data.data, target.name);
                 } else {
                     showToast('No route found', 'error');
                 }
@@ -631,57 +712,195 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             });
     };
 
-    function showDirections(route, targetName) {
-        var bar = document.getElementById('directionsBar');
-        var distM = route.distance_m || 0;
-        var durS = route.duration_s || 0;
+    // Show route on map with preview bar (distance/duration + Start button)
+    function showRoutePreview(route, targetName) {
+        _navRoute = route;
+        _navTargetName = targetName;
+        _navSteps = route.steps || [];
 
-        document.getElementById('directionsDistance').textContent =
-            distM >= 1000 ? (distM / 1000).toFixed(1) + ' km' : Math.round(distM) + ' m';
-        document.getElementById('directionsDuration').textContent =
-            durS >= 3600 ? Math.floor(durS / 3600) + 'h ' + Math.floor((durS % 3600) / 60) + 'm' : Math.floor(durS / 60) + ' min';
+        var bar = document.getElementById('directionsBar');
+        document.getElementById('directionsDistance').textContent = fmtDist(route.distance_m || 0);
+        document.getElementById('directionsDuration').textContent = fmtDur(route.duration_s || 0);
         bar.classList.add('active');
 
-        if (route.geometry) {
-            // Remove old route
-            if (map.getLayer('route')) map.removeLayer('route');
-            if (map.getSource('route')) map.removeSource('route');
+        drawRouteOnMap(route.geometry);
+        showToast('Route to ' + (targetName || 'member'), 'success');
+    }
 
-            map.addSource('route', {
-                type: 'geojson',
-                data: { type: 'Feature', geometry: route.geometry }
-            });
-            map.addLayer({
-                id: 'route',
-                type: 'line',
-                source: 'route',
-                layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': '#667eea', 'line-width': 5, 'line-opacity': 0.85 }
-            });
+    function drawRouteOnMap(geometry) {
+        if (!geometry) return;
+        if (map.getLayer('route')) map.removeLayer('route');
+        if (map.getSource('route')) map.removeSource('route');
 
-            // Fit map to show entire route
-            _routeBounds = new mapboxgl.LngLatBounds();
-            route.geometry.coordinates.forEach(function(c) { _routeBounds.extend(c); });
-            map.fitBounds(_routeBounds, { padding: 80, duration: 1000 });
+        map.addSource('route', {
+            type: 'geojson',
+            data: { type: 'Feature', geometry: geometry }
+        });
+        map.addLayer({
+            id: 'route',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#667eea', 'line-width': 6, 'line-opacity': 0.9 }
+        });
+
+        _routeBounds = new mapboxgl.LngLatBounds();
+        geometry.coordinates.forEach(function(c) { _routeBounds.extend(c); });
+        map.fitBounds(_routeBounds, { padding: 80, duration: 1000 });
+    }
+
+    // ── START NAVIGATION ──
+    function startNavigation() {
+        if (!_navRoute || _navSteps.length === 0) {
+            showToast('No steps available', 'error');
+            return;
         }
 
-        showToast('Route to ' + (targetName || 'member'), 'success');
+        _navActive = true;
+        _navCurrentStep = 0;
+
+        // Hide route preview, show nav UI
+        document.getElementById('directionsBar').classList.remove('active');
+        document.getElementById('trackingToolbar').style.display = 'none';
+        document.getElementById('navHeader').classList.add('active');
+        document.getElementById('navBottom').classList.add('active');
+
+        updateNavStep();
+        updateNavRemaining();
+
+        // Start watching position for auto-advance
+        if (navigator.geolocation) {
+            _navWatchId = navigator.geolocation.watchPosition(onNavPosition, function(e) {
+                console.warn('[Nav] Geolocation error:', e.message);
+            }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 5000 });
+        }
+
+        // Zoom to first step area
+        if (_navSteps[0] && _navSteps[0].location) {
+            map.flyTo({
+                center: _navSteps[0].location,
+                zoom: 17,
+                pitch: 45,
+                duration: 1000
+            });
+        }
+    }
+
+    function updateNavStep() {
+        var step = _navSteps[_navCurrentStep];
+        if (!step) return;
+        document.getElementById('navIcon').innerHTML = maneuverIcon(step.maneuver);
+        document.getElementById('navStepDist').textContent = fmtDist(step.distance_m);
+        document.getElementById('navInstruction').textContent = step.instruction || 'Continue';
+    }
+
+    function updateNavRemaining() {
+        var remainDist = 0, remainDur = 0;
+        for (var i = _navCurrentStep; i < _navSteps.length; i++) {
+            remainDist += _navSteps[i].distance_m || 0;
+            remainDur += _navSteps[i].duration_s || 0;
+        }
+        document.getElementById('navRemainDist').textContent = fmtDist(remainDist);
+
+        // ETA
+        var eta = new Date(Date.now() + remainDur * 1000);
+        document.getElementById('navETA').textContent =
+            eta.getHours().toString().padStart(2, '0') + ':' + eta.getMinutes().toString().padStart(2, '0');
+    }
+
+    // Auto-advance: when user is within 40m of next step's maneuver point, move to next
+    function onNavPosition(pos) {
+        if (!_navActive) return;
+        var lat = pos.coords.latitude, lng = pos.coords.longitude;
+
+        // Center map on user during navigation
+        map.easeTo({ center: [lng, lat], duration: 500 });
+
+        // Check if we're close to the current step's maneuver point
+        var step = _navSteps[_navCurrentStep];
+        if (step && step.location) {
+            var dist = haversineDist(lat, lng, step.location[1], step.location[0]);
+            // Update distance display to show live distance to next maneuver
+            document.getElementById('navStepDist').textContent = fmtDist(dist);
+
+            if (dist < 40 && _navCurrentStep < _navSteps.length - 1) {
+                _navCurrentStep++;
+                updateNavStep();
+                updateNavRemaining();
+            }
+
+            // Check if arrived (last step and within 50m)
+            if (_navCurrentStep === _navSteps.length - 1 && dist < 50) {
+                showToast('You have arrived!', 'success');
+                endNavigation();
+            }
+        }
+    }
+
+    function endNavigation() {
+        _navActive = false;
+
+        if (_navWatchId !== null) {
+            navigator.geolocation.clearWatch(_navWatchId);
+            _navWatchId = null;
+        }
+
+        document.getElementById('navHeader').classList.remove('active');
+        document.getElementById('navBottom').classList.remove('active');
+        document.getElementById('navStepsPanel').classList.remove('active');
+        document.getElementById('trackingToolbar').style.display = '';
+
+        // Clean up route
+        if (map.getLayer('route')) map.removeLayer('route');
+        if (map.getSource('route')) map.removeSource('route');
+        _routeBounds = null;
+        _navRoute = null;
+        _navSteps = [];
+
+        map.easeTo({ pitch: 0, duration: 500 });
     }
 
     function clearDirections() {
         document.getElementById('directionsBar').classList.remove('active');
+        if (_navActive) endNavigation();
         if (map.getLayer('route')) map.removeLayer('route');
         if (map.getSource('route')) map.removeSource('route');
         _routeBounds = null;
     }
 
+    function renderStepsList() {
+        var html = '';
+        _navSteps.forEach(function(step, i) {
+            var isCurrent = i === _navCurrentStep;
+            html += '<div class="nav-step-item' + (isCurrent ? ' current' : '') + (i < _navCurrentStep ? ' done' : '') + '">';
+            html += '<div class="nav-step-icon">' + maneuverIcon(step.maneuver) + '</div>';
+            html += '<div class="nav-step-info">';
+            html += '<div class="nav-step-instruction">' + escapeHtml(step.instruction || 'Continue') + '</div>';
+            html += '<div class="nav-step-meta">' + fmtDist(step.distance_m) + (step.name ? ' · ' + escapeHtml(step.name) : '') + '</div>';
+            html += '</div></div>';
+        });
+        document.getElementById('navStepsList').innerHTML = html;
+    }
+
+    // Event listeners for navigation controls
     document.getElementById('directionsClose').addEventListener('click', clearDirections);
 
-    // Re-center/focus on the route
-    document.getElementById('directionsRecenter').addEventListener('click', function() {
-        if (_routeBounds) {
-            map.fitBounds(_routeBounds, { padding: 80, duration: 1000 });
-        }
+    document.getElementById('directionsStartNav').addEventListener('click', function() {
+        startNavigation();
+    });
+
+    document.getElementById('navEndBtn').addEventListener('click', function() {
+        endNavigation();
+        showToast('Navigation ended', 'info');
+    });
+
+    document.getElementById('navStepsBtn').addEventListener('click', function() {
+        renderStepsList();
+        document.getElementById('navStepsPanel').classList.add('active');
+    });
+
+    document.getElementById('navStepsClose').addEventListener('click', function() {
+        document.getElementById('navStepsPanel').classList.remove('active');
     });
 
     // Panel toggle

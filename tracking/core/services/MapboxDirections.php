@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Directions service — road-following routes
+ * Directions service — road-following routes with turn-by-turn steps
  * Tries Mapbox Directions API first, falls back to OSRM (free)
  * Caches successful results via TrackingCache
  */
@@ -18,7 +18,7 @@ class MapboxDirections
     }
 
     /**
-     * Get directions between two points.
+     * Get directions between two points with turn-by-turn steps.
      * Tries Mapbox first, falls back to OSRM if Mapbox fails.
      */
     public function getRoute(float $fromLat, float $fromLng, float $toLat, float $toLng, string $profile = 'driving'): ?array
@@ -59,7 +59,7 @@ class MapboxDirections
         $coords = "{$fromLng},{$fromLat};{$toLng},{$toLat}";
         $url = "https://api.mapbox.com/directions/v5/mapbox/{$profile}/{$coords}"
             . "?access_token=" . urlencode($this->token)
-            . "&geometries=geojson&overview=full&steps=false";
+            . "&geometries=geojson&overview=full&steps=true";
 
         $data = $this->curlGet($url, 'Mapbox');
         if ($data === null || empty($data['routes'][0])) {
@@ -71,11 +71,29 @@ class MapboxDirections
         }
 
         $route = $data['routes'][0];
+        $steps = [];
+        if (!empty($route['legs'])) {
+            foreach ($route['legs'] as $leg) {
+                foreach ($leg['steps'] ?? [] as $s) {
+                    $m = $s['maneuver'] ?? [];
+                    $steps[] = [
+                        'instruction' => $m['instruction'] ?? '',
+                        'distance_m'  => (float) ($s['distance'] ?? 0),
+                        'duration_s'  => (float) ($s['duration'] ?? 0),
+                        'maneuver'    => ($m['type'] ?? '') . (isset($m['modifier']) ? '-' . $m['modifier'] : ''),
+                        'name'        => $s['name'] ?? '',
+                        'location'    => $m['location'] ?? null,
+                    ];
+                }
+            }
+        }
+
         return [
             'distance_m' => (float) $route['distance'],
             'duration_s' => (float) $route['duration'],
             'geometry'   => $route['geometry'],
             'profile'    => $profile,
+            'steps'      => $steps,
         ];
     }
 
@@ -83,7 +101,7 @@ class MapboxDirections
     {
         $coords = "{$fromLng},{$fromLat};{$toLng},{$toLat}";
         $url = "https://router.project-osrm.org/route/v1/{$osrmProfile}/{$coords}"
-            . "?overview=full&geometries=geojson&steps=false";
+            . "?overview=full&geometries=geojson&steps=true";
 
         $data = $this->curlGet($url, 'OSRM');
         if ($data === null || ($data['code'] ?? '') !== 'Ok' || empty($data['routes'][0])) {
@@ -94,12 +112,70 @@ class MapboxDirections
         }
 
         $route = $data['routes'][0];
+        $steps = [];
+        if (!empty($route['legs'])) {
+            foreach ($route['legs'] as $leg) {
+                foreach ($leg['steps'] ?? [] as $s) {
+                    $m = $s['maneuver'] ?? [];
+                    $type = $m['type'] ?? '';
+                    $modifier = $m['modifier'] ?? '';
+                    $name = $s['name'] ?? '';
+
+                    $steps[] = [
+                        'instruction' => self::buildOSRMInstruction($type, $modifier, $name),
+                        'distance_m'  => (float) ($s['distance'] ?? 0),
+                        'duration_s'  => (float) ($s['duration'] ?? 0),
+                        'maneuver'    => $type . ($modifier ? '-' . $modifier : ''),
+                        'name'        => $name,
+                        'location'    => $m['location'] ?? null,
+                    ];
+                }
+            }
+        }
+
         return [
             'distance_m' => (float) $route['distance'],
             'duration_s' => (float) $route['duration'],
             'geometry'   => $route['geometry'],
             'profile'    => $originalProfile,
+            'steps'      => $steps,
         ];
+    }
+
+    private static function buildOSRMInstruction(string $type, string $modifier, string $name): string
+    {
+        $road = $name !== '' ? " onto {$name}" : '';
+
+        switch ($type) {
+            case 'depart':
+                return "Head" . ($modifier ? ' ' . $modifier : '') . $road;
+            case 'arrive':
+                return "Arrive at destination" . ($modifier === 'left' ? ' on the left' : ($modifier === 'right' ? ' on the right' : ''));
+            case 'turn':
+                return "Turn " . ($modifier ?: 'ahead') . $road;
+            case 'new name':
+            case 'continue':
+                return "Continue" . $road;
+            case 'merge':
+                return "Merge" . ($modifier ? ' ' . $modifier : '') . $road;
+            case 'on ramp':
+            case 'ramp':
+                return "Take the ramp" . ($modifier ? ' on the ' . $modifier : '') . $road;
+            case 'off ramp':
+                return "Take the exit" . $road;
+            case 'fork':
+                return "Keep " . ($modifier ?: 'ahead') . $road;
+            case 'end of road':
+                return "Turn " . ($modifier ?: 'ahead') . $road;
+            case 'roundabout':
+            case 'rotary':
+                return "Enter the roundabout and exit" . $road;
+            case 'exit roundabout':
+            case 'exit rotary':
+                return "Exit the roundabout" . $road;
+            default:
+                return ($modifier ? ucfirst($modifier) : 'Continue') . $road;
+        }
     }
 
     private function curlGet(string $url, string $label): ?array
