@@ -276,7 +276,7 @@ body.tracking-page {
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: transparent;
+    background: var(--trk-panel-bg);
     border: none;
     color: var(--trk-text);
     cursor: pointer;
