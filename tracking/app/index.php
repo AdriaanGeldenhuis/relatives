@@ -1057,10 +1057,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     if (isNativeApp) {
         // ── NATIVE ANDROID APP ──────────────────────────────────
-        // The native TrackingService handles GPS + upload via batch.php.
-        // WebView should NOT start its own geolocation — it conflicts
-        // with the native GPS lock and causes timeouts / low-accuracy fallback.
-        console.log('[Tracking] Native bridge detected — letting native handle GPS');
+        console.log('[Tracking] Native bridge detected');
 
         // Tell native side the tracking screen is visible (triggers fast polling)
         try { window.TrackingBridge.onTrackingScreenVisible(); } catch(e) {}
@@ -1071,10 +1068,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         console.log('[Tracking] Native tracking mode:', mode);
 
         if (mode !== 'enabled') {
-            console.log('[Tracking] Tracking not enabled, showing enable button');
             showEnableLocationButton();
-        } else {
-            console.log('[Tracking] Native tracking active — no browser GPS needed');
         }
 
         // Load cached family data immediately from native store
@@ -1106,13 +1100,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 }
             } catch(e) {}
         });
+    }
 
-    } else {
-        // ── REGULAR BROWSER ─────────────────────────────────────
-        // No native app — use browser geolocation for location tracking
-        if (navigator.geolocation) {
-            startBrowserTracking();
-        }
+    // ── BROWSER GEOLOCATION ─────────────────────────────────
+    // Always start when the tracking page is open — gives immediate
+    // position update on page load. Native service handles background.
+    if (navigator.geolocation) {
+        startBrowserTracking();
     }
 
     // Show an "Enable Live Location" button in the tracking toolbar
