@@ -287,10 +287,10 @@ body.tracking-page {
 }
 
 .family-panel-body {
-    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 8px;
+    max-height: 45vh;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
