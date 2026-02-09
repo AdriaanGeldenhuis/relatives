@@ -103,7 +103,7 @@ requestAnimationFrame(function() {
     <div id="trackingMap"></div>
 
     <!-- Family Members Panel -->
-    <div class="family-panel" id="familyPanel">
+    <div class="family-panel collapsed" id="familyPanel">
         <div class="family-panel-header" id="familyPanelHeader">
             <div style="display:flex;align-items:center;gap:10px;">
                 <span class="family-panel-title">Family</span>

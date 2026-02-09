@@ -222,11 +222,12 @@ body.tracking-page {
    ============================================ */
 .family-panel {
     position: absolute;
-    top: calc(var(--trk-topbar-height) + 12px);
-    left: 12px;
-    bottom: calc(var(--trk-footer-offset) + 12px);
+    bottom: 75px;
+    left: 50%;
+    transform: translateX(-50%);
     width: var(--trk-panel-width);
-    z-index: 40;
+    max-height: 55vh;
+    z-index: 50;
     background: var(--trk-panel-bg);
     backdrop-filter: blur(40px) saturate(180%);
     border: 1px solid var(--trk-card-border);
@@ -239,7 +240,7 @@ body.tracking-page {
 }
 
 .family-panel.collapsed {
-    transform: translateX(calc(-100% - 24px));
+    transform: translateX(-50%) translateY(20px);
     opacity: 0;
     pointer-events: none;
 }
@@ -1188,16 +1189,30 @@ body.tracking-page {
     }
 
     .family-panel {
-        top: auto; left: 0; right: 0; bottom: 0;
-        width: 100%; height: 45vh; max-height: 380px;
-        border-radius: var(--trk-radius-lg) var(--trk-radius-lg) 0 0;
-        transform: translateY(calc(100% - 60px));
-        transition: transform var(--trk-transition);
-        z-index: 1001;
+        width: calc(100% - 24px);
+        max-height: 50vh;
+        z-index: 1005;
+        bottom: 75px;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%) translateY(20px);
+        opacity: 0;
+        pointer-events: none;
+        transition: transform var(--trk-transition), opacity var(--trk-transition);
+        border-radius: var(--trk-radius-lg);
     }
 
-    .family-panel.collapsed { transform: translateY(calc(100% - 60px)); opacity: 1; pointer-events: auto; }
-    .family-panel.expanded { transform: translateY(0); }
+    .family-panel.collapsed {
+        transform: translateX(-50%) translateY(20px);
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .family-panel.expanded {
+        transform: translateX(-50%);
+        opacity: 1;
+        pointer-events: auto;
+    }
 
     .family-panel::before {
         content: '';
@@ -1208,8 +1223,7 @@ body.tracking-page {
         border-radius: 4px; z-index: 5;
     }
 
-    .family-panel-header { padding-top: 18px; cursor: grab; }
-    .family-panel-header:active { cursor: grabbing; }
+    .family-panel-header { padding-top: 18px; }
 
     .tracking-toolbar { bottom: 85px; padding: 6px 10px; gap: 8px; z-index: 1002; }
     .tracking-toolbar-btn { height: 38px; padding: 0 14px; font-size: 12px; }
