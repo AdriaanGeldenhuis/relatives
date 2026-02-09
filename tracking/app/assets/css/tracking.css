@@ -232,18 +232,14 @@ body.tracking-page {
     backdrop-filter: blur(40px) saturate(180%);
     border: 1px solid var(--trk-card-border);
     border-radius: var(--trk-radius-lg);
-    display: flex;
+    display: none;
     flex-direction: column;
     overflow: hidden;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
-    transition: transform var(--trk-transition), opacity var(--trk-transition);
 }
 
-.family-panel.collapsed {
-    transform: translateX(-50%) translateY(20px);
-    opacity: 0;
-    pointer-events: none;
-    visibility: hidden;
+.family-panel.open {
+    display: flex;
 }
 
 .family-panel-header {
@@ -1200,28 +1196,7 @@ body.tracking-page {
         max-height: 50vh;
         z-index: 1005;
         bottom: 85px;
-        left: 50%;
-        right: auto;
-        transform: translateX(-50%) translateY(20px);
-        opacity: 0;
-        pointer-events: none;
-        visibility: hidden;
-        transition: transform var(--trk-transition), opacity var(--trk-transition), visibility var(--trk-transition);
         border-radius: var(--trk-radius-lg);
-    }
-
-    .family-panel.collapsed {
-        transform: translateX(-50%) translateY(20px);
-        opacity: 0;
-        pointer-events: none;
-        visibility: hidden;
-    }
-
-    .family-panel.expanded {
-        transform: translateX(-50%);
-        opacity: 1;
-        pointer-events: auto;
-        visibility: visible;
     }
 
     .tracking-toolbar { bottom: 85px; padding: 6px 10px; gap: 8px; z-index: 1002; }

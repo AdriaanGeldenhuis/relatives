@@ -139,7 +139,7 @@ requestAnimationFrame(function() {
 </div><!-- .tracking-app -->
 
 <!-- Family Members Panel (outside tracking-app for correct z-index stacking) -->
-<div class="family-panel collapsed" id="familyPanel">
+<div class="family-panel" id="familyPanel">
     <div class="family-panel-header">
         <div style="display:flex;align-items:center;gap:10px;">
             <span class="family-panel-title">Family</span>
@@ -522,18 +522,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var panelToggleBtn = document.getElementById('panelToggleBtn');
     var panelCloseBtn = document.getElementById('familyPanelClose');
     var toolbar = document.getElementById('trackingToolbar');
-    function isMobile() { return window.innerWidth <= 768; }
 
     function togglePanel() {
-        var isOpen;
-        if (isMobile()) {
-            panel.classList.toggle('expanded');
-            isOpen = panel.classList.contains('expanded');
-        } else {
-            panel.classList.toggle('collapsed');
-            isOpen = !panel.classList.contains('collapsed');
-        }
-        // Hide toolbar when panel is open, show when closed
+        panel.classList.toggle('open');
+        var isOpen = panel.classList.contains('open');
         toolbar.classList.toggle('panel-open', isOpen);
     }
 
