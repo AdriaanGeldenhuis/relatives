@@ -882,7 +882,7 @@ body.tracking-page {
 /* Navigation bottom bar */
 .nav-bottom {
     position: absolute;
-    bottom: 0;
+    bottom: 85px;
     left: 0;
     right: 0;
     z-index: 55;
@@ -952,10 +952,10 @@ body.tracking-page {
 /* Steps list panel */
 .nav-steps-panel {
     position: fixed;
-    bottom: 0;
+    bottom: 85px;
     left: 0;
     right: 0;
-    max-height: 60vh;
+    max-height: 50vh;
     z-index: 1010;
     background: var(--trk-panel-bg);
     backdrop-filter: blur(40px);
