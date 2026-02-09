@@ -298,6 +298,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // Markers storage
     var markers = {};
+    var initialFitDone = false;
 
     // Fetch family members periodically
     function fetchMembers() {
@@ -308,11 +309,27 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                     _members = data.data;
                     renderMembers(_members);
                     updateMarkers(_members);
+                    if (!initialFitDone) {
+                        initialFitDone = true;
+                        fitMapToFamily(_members);
+                    }
                 }
             })
             .catch(function(err) {
                 console.error('[Tracking] Fetch error:', err);
             });
+    }
+
+    function fitMapToFamily(members) {
+        var pts = members.filter(function(m) { return m.has_location && m.lat !== null && m.lng !== null; });
+        if (pts.length === 0) return;
+        if (pts.length === 1) {
+            map.flyTo({ center: [parseFloat(pts[0].lng), parseFloat(pts[0].lat)], zoom: 15, duration: 1000 });
+            return;
+        }
+        var bounds = new mapboxgl.LngLatBounds();
+        pts.forEach(function(m) { bounds.extend([parseFloat(m.lng), parseFloat(m.lat)]); });
+        map.fitBounds(bounds, { padding: 80, maxZoom: 16, duration: 1000 });
     }
 
     function renderMembers(members) {
