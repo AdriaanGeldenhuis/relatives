@@ -226,8 +226,7 @@ body.tracking-page {
     left: 50%;
     transform: translateX(-50%);
     width: var(--trk-panel-width);
-    height: calc(100vh - 85px - var(--trk-topbar-height) - 24px);
-    max-height: 55vh;
+    max-height: calc(100vh - 85px - var(--trk-topbar-height) - 24px);
     z-index: 1000;
     background: var(--trk-panel-bg);
     backdrop-filter: blur(40px) saturate(180%);
@@ -291,8 +290,9 @@ body.tracking-page {
     overflow-y: auto;
     overflow-x: hidden;
     padding: 8px;
-    flex: 1;
-    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
@@ -318,6 +318,7 @@ body.tracking-page {
     cursor: pointer;
     transition: all var(--trk-transition);
     margin-bottom: 6px;
+    width: 100%;
 }
 
 .member-item:last-child { margin-bottom: 0; }
@@ -1195,8 +1196,7 @@ body.tracking-page {
 
     .family-panel {
         width: calc(100% - 24px);
-        height: calc(100vh - 85px - 44px - 20px);
-        max-height: 50vh;
+        max-height: calc(100vh - 85px - 44px - 20px);
         z-index: 1005;
         bottom: 85px;
         border-radius: var(--trk-radius-lg);
