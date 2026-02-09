@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=3.4',
+    '/tracking/app/assets/css/tracking.css?v=3.5',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -343,7 +343,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
             html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
             html += '  <div class="member-avatar" style="background:' + (m.avatar_color || '#667eea') + '">';
-            html += '    <span>' + initial + '</span>';
+            if (m.has_avatar) {
+                html += '    <img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\'">';
+                html += '    <span style="display:none">' + initial + '</span>';
+            } else {
+                html += '    <span>' + initial + '</span>';
+            }
             html += '    <span class="member-status-dot ' + statusClass + '"></span>';
             html += '  </div>';
             html += '  <div class="member-info">';
@@ -384,7 +389,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 var el = document.createElement('div');
                 el.className = 'map-marker';
                 var initial = (m.name || 'U').charAt(0).toUpperCase();
-                el.innerHTML = '<div class="map-marker-inner" style="background:' + (m.avatar_color || '#667eea') + '">' + initial + '</div>';
+                if (m.has_avatar) {
+                    el.innerHTML = '<div class="map-marker-inner map-marker-avatar" style="background:' + (m.avatar_color || '#667eea') + '">' +
+                        '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + initial + '\'">' +
+                        '</div>';
+                } else {
+                    el.innerHTML = '<div class="map-marker-inner" style="background:' + (m.avatar_color || '#667eea') + '">' + initial + '</div>';
+                }
                 markers[m.user_id] = new mapboxgl.Marker({ element: el })
                     .setLngLat(lngLat)
                     .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(

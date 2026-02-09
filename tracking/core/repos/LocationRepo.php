@@ -92,7 +92,7 @@ class LocationRepo
         }
 
         $stmt = $this->db->prepare("
-            SELECT u.id AS user_id, u.full_name AS name, u.avatar_color,
+            SELECT u.id AS user_id, u.full_name AS name, u.avatar_color, u.has_avatar,
                    tc.lat, tc.lng, tc.accuracy_m, tc.speed_mps,
                    tc.bearing_deg, tc.altitude_m, tc.motion_state,
                    tc.recorded_at, tc.updated_at, tc.device_id, tc.platform

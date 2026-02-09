@@ -348,6 +348,14 @@ body.tracking-page {
     flex-shrink: 0;
     position: relative;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+.member-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
 }
 
 .member-status-dot {
@@ -803,6 +811,8 @@ body.tracking-page {
     transition: transform 0.2s ease;
 }
 
+.map-marker-inner.map-marker-avatar { overflow: hidden; }
+.map-marker-inner img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .map-marker:hover .map-marker-inner { transform: scale(1.15); }
 
 .mapboxgl-popup-content {

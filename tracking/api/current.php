@@ -22,6 +22,7 @@ foreach ($locations as $row) {
         'user_id' => (int) $row['user_id'],
         'name' => $row['name'],
         'avatar_color' => $row['avatar_color'],
+        'has_avatar' => (bool) ($row['has_avatar'] ?? false),
         'has_location' => $hasLocation,
         'lat' => $hasLocation ? (float) $row['lat'] : null,
         'lng' => $hasLocation ? (float) $row['lng'] : null,
