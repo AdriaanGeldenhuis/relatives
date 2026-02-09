@@ -226,6 +226,7 @@ body.tracking-page {
     left: 50%;
     transform: translateX(-50%);
     width: var(--trk-panel-width);
+    height: 55vh;
     max-height: 55vh;
     z-index: 1000;
     background: var(--trk-panel-bg);
@@ -1194,6 +1195,7 @@ body.tracking-page {
 
     .family-panel {
         width: calc(100% - 24px);
+        height: 50vh;
         max-height: 50vh;
         z-index: 1005;
         bottom: 85px;
