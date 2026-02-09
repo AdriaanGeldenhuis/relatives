@@ -211,8 +211,6 @@ body.tracking-page {
     border: 2px solid rgba(255, 255, 255, 0.3);
     transition: all var(--trk-transition);
     overflow: hidden;
-    position: relative;
-    flex-shrink: 0;
 }
 
 .tracking-topbar-user img {
@@ -225,55 +223,8 @@ body.tracking-page {
 .tracking-topbar-user:hover {
     border-color: rgba(255, 255, 255, 0.6);
     transform: scale(1.08);
-    z-index: 2;
 }
 
-/* Online members avatar group */
-.tracking-topbar-users {
-    display: flex;
-    align-items: center;
-}
-
-.tracking-topbar-users:empty {
-    display: none;
-}
-
-.tracking-topbar-users .tracking-topbar-user {
-    width: 30px;
-    height: 30px;
-    font-size: 11px;
-    border-color: var(--trk-glass-bg);
-    margin-right: -6px;
-}
-
-.tracking-topbar-users .tracking-topbar-user:last-child {
-    margin-right: 4px;
-}
-
-.topbar-user-dot {
-    position: absolute;
-    bottom: -1px;
-    right: -1px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #718096;
-    border: 2px solid var(--trk-glass-bg);
-}
-
-.topbar-user-dot.online {
-    background: var(--trk-green);
-    box-shadow: 0 0 4px rgba(67, 233, 123, 0.6);
-}
-
-.topbar-user-dot.idle {
-    background: var(--trk-yellow);
-    box-shadow: 0 0 4px rgba(249, 212, 35, 0.6);
-}
-
-.topbar-user-dot.offline {
-    background: #718096;
-}
 
 /* ============================================
    FAMILY PANEL
