@@ -388,7 +388,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             activeIds[m.user_id] = true;
             var lngLat = [parseFloat(m.lng), parseFloat(m.lat)];
             if (markers[m.user_id]) {
-                markers[m.user_id].setLngLat(lngLat);
+                animateMarker(markers[m.user_id], lngLat);
                 var popup = markers[m.user_id].getPopup();
                 if (popup) popup.setHTML(buildPopupHTML(m));
             } else {
@@ -439,6 +439,22 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
         if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
         return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    function animateMarker(marker, targetLngLat) {
+        var start = marker.getLngLat();
+        var startLng = start.lng, startLat = start.lat;
+        var endLng = targetLngLat[0], endLat = targetLngLat[1];
+        if (Math.abs(startLng - endLng) < 0.000001 && Math.abs(startLat - endLat) < 0.000001) return;
+        var duration = 1000;
+        var startTime = performance.now();
+        function step(now) {
+            var t = Math.min((now - startTime) / duration, 1);
+            t = t * (2 - t); // ease-out
+            marker.setLngLat([startLng + (endLng - startLng) * t, startLat + (endLat - startLat) * t]);
+            if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
     }
 
     function buildPopupHTML(m) {
@@ -688,12 +704,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         requestNotificationPermission();
     }
 
-    // Initial fetch then poll
+    // Initial fetch then poll every 10s for real-time updates
     map.on('load', function() {
         map.resize();
         fetchMembers();
-        var pollInterval = ((window.TrackingConfig.settings || {}).keepalive_interval_seconds || 30) * 1000;
-        setInterval(fetchMembers, Math.max(pollInterval, 10000));
+        setInterval(fetchMembers, 10000);
     });
 
     // ── TRACKING INTEGRATION ─────────────────────────────────────
