@@ -646,6 +646,21 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     if (panelToggleBtn) panelToggleBtn.addEventListener('click', togglePanel);
     if (panelCloseBtn) panelCloseBtn.addEventListener('click', togglePanel);
 
+    // Toast helper
+    function showToast(message, type) {
+        var existing = document.querySelector('.tracking-toast');
+        if (existing) existing.remove();
+        var toast = document.createElement('div');
+        toast.className = 'tracking-toast ' + (type || 'info');
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        requestAnimationFrame(function() { toast.classList.add('show'); });
+        setTimeout(function() {
+            toast.classList.remove('show');
+            setTimeout(function() { toast.remove(); }, 400);
+        }, 3000);
+    }
+
     // Wake FAB
     var wakeFab = document.getElementById('wakeFab');
     wakeFab.addEventListener('click', function() {
@@ -662,18 +677,18 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         .then(function(data) {
             if (data.success) {
                 wakeFab.classList.add('active');
-                Toast.success('Wake signal sent to your family');
+                showToast('Wake signal sent to your family', 'success');
                 setTimeout(function() {
                     wakeFab.classList.remove('active');
                     wakeFab.disabled = false;
                 }, 5000);
             } else {
-                Toast.error('Failed to send wake signal');
+                showToast('Failed to send wake signal', 'error');
                 wakeFab.disabled = false;
             }
         })
         .catch(function() {
-            Toast.error('Could not reach the server');
+            showToast('Could not reach the server', 'error');
             wakeFab.disabled = false;
         });
     });
