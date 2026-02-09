@@ -290,7 +290,8 @@ body.tracking-page {
     overflow-y: auto;
     overflow-x: hidden;
     padding: 8px;
-    max-height: 45vh;
+    flex: 1;
+    min-height: 0;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
