@@ -223,8 +223,9 @@ body.tracking-page {
 .family-panel {
     position: fixed;
     bottom: 85px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    margin-inline: auto;
     width: var(--trk-panel-width);
     max-height: calc(100vh - 85px - var(--trk-topbar-height) - 24px);
     z-index: 1000;
