@@ -93,6 +93,7 @@ requestAnimationFrame(function() {
             <a href="/tracking/app/settings.php" class="tracking-topbar-btn" title="Settings">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             </a>
+            <div class="tracking-topbar-users" id="topbarUsers"></div>
             <div class="tracking-topbar-user" style="background:<?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>" title="<?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?>">
                 <?php if (!empty($user['has_avatar'])): ?>
                     <img src="/saves/<?php echo (int)$user['id']; ?>/avatar/avatar.webp" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''">
@@ -315,6 +316,40 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             });
     }
 
+    function renderTopbarOnline(members) {
+        var container = document.getElementById('topbarUsers');
+        if (!container) return;
+
+        var currentUserId = window.TrackingConfig.userId;
+        var online = (members || []).filter(function(m) {
+            if (m.user_id == currentUserId) return false;
+            if (!m.has_location) return false;
+            return (Date.now() - parseUTC(m.recorded_at || m.updated_at)) < 300000;
+        });
+
+        if (online.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+
+        var html = '';
+        online.forEach(function(m) {
+            var initial = (m.name || 'U').charAt(0).toUpperCase();
+            var color = m.avatar_color || '#667eea';
+            html += '<div class="tracking-topbar-user tracking-topbar-user-online" style="background:' + color + '" title="' + escapeHtml(m.name || 'Unknown') + '"';
+            html += ' onclick="flyToMember(' + m.user_id + ')">';
+            if (m.has_avatar) {
+                html += '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\'">';
+                html += '<span style="display:none">' + initial + '</span>';
+            } else {
+                html += initial;
+            }
+            html += '<span class="topbar-user-dot"></span>';
+            html += '</div>';
+        });
+        container.innerHTML = html;
+    }
+
     function renderMembers(members) {
         var list = document.getElementById('memberList');
         var empty = document.getElementById('memberEmpty');
@@ -322,6 +357,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var statusEl = document.getElementById('trackingStatus');
 
         if (!list || !empty) return;
+
+        renderTopbarOnline(members);
 
         if (!members || members.length === 0) {
             empty.style.display = '';
