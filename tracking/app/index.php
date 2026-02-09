@@ -102,27 +102,6 @@ requestAnimationFrame(function() {
     <!-- Map Container -->
     <div id="trackingMap"></div>
 
-    <!-- Family Members Panel -->
-    <div class="family-panel" id="familyPanel">
-        <div class="family-panel-header" id="familyPanelHeader">
-            <div style="display:flex;align-items:center;gap:10px;">
-                <span class="family-panel-title">Family</span>
-                <span class="family-panel-badge" id="memberCount">0</span>
-            </div>
-            <button class="family-panel-toggle" id="familyPanelToggle" title="Toggle panel">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
-        </div>
-        <div class="family-panel-body" id="memberList">
-            <!-- Members loaded dynamically -->
-            <div class="member-empty" id="memberEmpty">
-                <div class="member-empty-icon"></div>
-                <div class="member-empty-text">No members online</div>
-                <div class="member-empty-sub">Waiting for family members to share location</div>
-            </div>
-        </div>
-    </div>
-
     <!-- Bottom Toolbar -->
     <div class="tracking-toolbar" id="trackingToolbar">
         <a href="/home/" class="tracking-toolbar-btn home-btn" title="Home">
@@ -158,6 +137,27 @@ requestAnimationFrame(function() {
     </div>
 
 </div><!-- .tracking-app -->
+
+<!-- Family Members Panel (outside tracking-app for correct z-index stacking) -->
+<div class="family-panel" id="familyPanel" style="display:none">
+    <div class="family-panel-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span class="family-panel-title">Family</span>
+            <span class="family-panel-badge" id="memberCount">0</span>
+        </div>
+        <button class="family-panel-close" id="familyPanelClose" title="Close panel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+    <div class="family-panel-body" id="memberList">
+        <!-- Members loaded dynamically -->
+        <div class="member-empty" id="memberEmpty">
+            <div class="member-empty-icon"></div>
+            <div class="member-empty-text">No members online</div>
+            <div class="member-empty-sub">Waiting for family members to share location</div>
+        </div>
+    </div>
+</div>
 
 <!-- Consent Dialog -->
 <div class="consent-overlay" id="consentOverlay">
@@ -315,17 +315,17 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var badge = document.getElementById('memberCount');
         var statusEl = document.getElementById('trackingStatus');
 
-        if (!list || !empty || !badge) return;
+        if (!list || !empty) return;
 
         if (!members || members.length === 0) {
             empty.style.display = '';
-            badge.textContent = '0';
+            if (badge) badge.textContent = '0';
             if (statusEl) statusEl.textContent = 'No members';
             return;
         }
 
         empty.style.display = 'none';
-        badge.textContent = members.length;
+        if (badge) badge.textContent = members.length;
         var online = members.filter(function(m) {
             if (!m.has_location) return false;
             return (Date.now() - parseUTC(m.recorded_at || m.updated_at)) < 300000;
@@ -519,29 +519,18 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // Panel toggle
     var panel = document.getElementById('familyPanel');
-    var panelToggle = document.getElementById('familyPanelToggle');
     var panelToggleBtn = document.getElementById('panelToggleBtn');
-    var panelHeader = document.getElementById('familyPanelHeader');
-    var isMobile = window.innerWidth <= 768;
+    var panelCloseBtn = document.getElementById('familyPanelClose');
+    var toolbar = document.getElementById('trackingToolbar');
 
     function togglePanel() {
-        if (isMobile) {
-            panel.classList.toggle('expanded');
-        } else {
-            panel.classList.toggle('collapsed');
-        }
+        var isOpen = panel.style.display !== 'flex';
+        panel.style.display = isOpen ? 'flex' : 'none';
+        toolbar.style.display = isOpen ? 'none' : '';
     }
 
-    panelToggle.addEventListener('click', togglePanel);
     if (panelToggleBtn) panelToggleBtn.addEventListener('click', togglePanel);
-
-    if (isMobile) {
-        panelHeader.addEventListener('click', function(e) {
-            if (e.target === panelHeader || e.target.classList.contains('family-panel-title')) {
-                panel.classList.toggle('expanded');
-            }
-        });
-    }
+    if (panelCloseBtn) panelCloseBtn.addEventListener('click', togglePanel);
 
     // Wake FAB
     var wakeFab = document.getElementById('wakeFab');

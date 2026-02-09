@@ -221,27 +221,25 @@ body.tracking-page {
    FAMILY PANEL
    ============================================ */
 .family-panel {
-    position: absolute;
-    top: calc(var(--trk-topbar-height) + 12px);
-    left: 12px;
-    bottom: calc(var(--trk-footer-offset) + 12px);
+    position: fixed;
+    bottom: 85px;
+    left: 50%;
+    transform: translateX(-50%);
     width: var(--trk-panel-width);
-    z-index: 40;
+    max-height: 55vh;
+    z-index: 1000;
     background: var(--trk-panel-bg);
     backdrop-filter: blur(40px) saturate(180%);
     border: 1px solid var(--trk-card-border);
     border-radius: var(--trk-radius-lg);
-    display: flex;
+    display: none;
     flex-direction: column;
     overflow: hidden;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
-    transition: transform var(--trk-transition), opacity var(--trk-transition);
 }
 
-.family-panel.collapsed {
-    transform: translateX(calc(-100% - 24px));
-    opacity: 0;
-    pointer-events: none;
+.family-panel.open {
+    display: flex;
 }
 
 .family-panel-header {
@@ -270,12 +268,12 @@ body.tracking-page {
     text-align: center;
 }
 
-.family-panel-toggle {
+.family-panel-close {
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: var(--trk-card-bg);
-    border: 1px solid var(--trk-card-border);
+    background: var(--trk-panel-bg);
+    border: none;
     color: var(--trk-text);
     cursor: pointer;
     display: flex;
@@ -284,15 +282,15 @@ body.tracking-page {
     transition: all var(--trk-transition);
 }
 
-.family-panel-toggle:hover {
+.family-panel-close:hover {
     background: var(--trk-glass-heavy);
 }
 
 .family-panel-body {
-    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 8px;
+    max-height: 45vh;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
@@ -483,6 +481,7 @@ body.tracking-page {
     border: 1px solid var(--trk-card-border);
     border-radius: 32px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    transition: opacity var(--trk-transition), transform var(--trk-transition);
 }
 
 .tracking-toolbar-btn {
@@ -548,6 +547,11 @@ body.tracking-page {
 
 /* Legacy wake FAB - hidden by default, toolbar takes over */
 .wake-fab { display: none; }
+
+/* Hide toolbar when family panel is open */
+.tracking-toolbar.panel-open {
+    display: none;
+}
 
 /* ============================================
    CONSENT DIALOG
@@ -1188,28 +1192,12 @@ body.tracking-page {
     }
 
     .family-panel {
-        top: auto; left: 0; right: 0; bottom: 0;
-        width: 100%; height: 45vh; max-height: 380px;
-        border-radius: var(--trk-radius-lg) var(--trk-radius-lg) 0 0;
-        transform: translateY(calc(100% - 60px));
-        transition: transform var(--trk-transition);
-        z-index: 1001;
+        width: calc(100% - 24px);
+        max-height: 50vh;
+        z-index: 1005;
+        bottom: 85px;
+        border-radius: var(--trk-radius-lg);
     }
-
-    .family-panel.collapsed { transform: translateY(calc(100% - 60px)); opacity: 1; pointer-events: auto; }
-    .family-panel.expanded { transform: translateY(0); }
-
-    .family-panel::before {
-        content: '';
-        position: absolute; top: 8px; left: 50%;
-        transform: translateX(-50%);
-        width: 36px; height: 4px;
-        background: rgba(255, 255, 255, 0.3);
-        border-radius: 4px; z-index: 5;
-    }
-
-    .family-panel-header { padding-top: 18px; cursor: grab; }
-    .family-panel-header:active { cursor: grabbing; }
 
     .tracking-toolbar { bottom: 85px; padding: 6px 10px; gap: 8px; z-index: 1002; }
     .tracking-toolbar-btn { height: 38px; padding: 0 14px; font-size: 12px; }
