@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=4.2',
+    '/tracking/app/assets/css/tracking.css?v=4.3',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -93,14 +93,9 @@ requestAnimationFrame(function() {
             <a href="/tracking/app/settings.php" class="tracking-topbar-btn" title="Settings">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             </a>
-            <div class="tracking-topbar-user" style="background:<?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>" title="<?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?>">
-                <?php if (!empty($user['has_avatar'])): ?>
-                    <img src="/saves/<?php echo (int)$user['id']; ?>/avatar/avatar.webp" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''">
-                    <span style="display:none"><?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? 'U', 0, 1)); ?></span>
-                <?php else: ?>
-                    <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? 'U', 0, 1)); ?>
-                <?php endif; ?>
-            </div>
+            <button class="tracking-topbar-btn" id="mapStyleBtn" title="Change map view">
+                <svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+            </button>
         </div>
     </div>
 
@@ -317,11 +312,16 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     mapboxgl.accessToken = window.TrackingConfig.mapboxToken;
 
-    var mapStyle = 'mapbox://styles/mapbox/dark-v11';
-    var savedStyle = (window.TrackingConfig.settings || {}).map_style;
-    if (savedStyle === 'streets') mapStyle = 'mapbox://styles/mapbox/streets-v12';
-    else if (savedStyle === 'satellite') mapStyle = 'mapbox://styles/mapbox/satellite-streets-v12';
-    else if (savedStyle === 'light') mapStyle = 'mapbox://styles/mapbox/light-v11';
+    var mapStyles = {
+        dark:      'mapbox://styles/mapbox/dark-v11',
+        streets:   'mapbox://styles/mapbox/streets-v12',
+        satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
+        light:     'mapbox://styles/mapbox/light-v11'
+    };
+    var styleOrder = ['dark', 'streets', 'satellite', 'light'];
+    var currentStyleKey = (window.TrackingConfig.settings || {}).map_style || 'dark';
+    if (!mapStyles[currentStyleKey]) currentStyleKey = 'dark';
+    var mapStyle = mapStyles[currentStyleKey];
 
     var map = new mapboxgl.Map({
         container: 'trackingMap',
@@ -343,6 +343,25 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Force resize after layout settles
     setTimeout(function() { map.resize(); }, 100);
     setTimeout(function() { map.resize(); }, 500);
+
+    // Map style toggle
+    document.getElementById('mapStyleBtn').addEventListener('click', function() {
+        var idx = styleOrder.indexOf(currentStyleKey);
+        currentStyleKey = styleOrder[(idx + 1) % styleOrder.length];
+        map.setStyle(mapStyles[currentStyleKey]);
+        showToast('Map: ' + currentStyleKey.charAt(0).toUpperCase() + currentStyleKey.slice(1), 'info');
+        // Re-add markers after style change
+        map.once('style.load', function() {
+            var oldMarkers = markers;
+            markers = {};
+            Object.keys(oldMarkers).forEach(function(uid) { oldMarkers[uid].remove(); });
+            updateMarkers(_members);
+            // Re-draw route if active
+            if (_routeBounds && _navRoute && _navRoute.geometry) {
+                drawRouteOnMap(_navRoute.geometry);
+            }
+        });
+    });
 
     // Markers storage
     var markers = {};
