@@ -460,67 +460,67 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     function buildPopupHTML(m) {
         var status = getStatusClass(m);
         var statusLabel = status === 'online' ? 'Online' : status === 'idle' ? 'Idle' : 'Offline';
-        var statusColor = status === 'online' ? 'var(--trk-green)' : status === 'idle' ? 'var(--trk-yellow)' : '#718096';
+        var statusColor = status === 'online' ? '#43e97b' : status === 'idle' ? '#f9d423' : '#718096';
         var timeAgo = formatTimeAgo(m.updated_at || m.recorded_at);
         var speed = formatSpeed(m.speed_mps);
         var motionState = m.motion_state || 'unknown';
+        var initial = (m.name || 'U').charAt(0).toUpperCase();
 
-        var html = '<div class="popup-member">';
+        var s = '<div style="min-width:200px;font-family:inherit">';
 
-        // Header: avatar + name + status
-        html += '<div class="popup-header">';
-        html += '<div class="popup-avatar" style="background:' + (m.avatar_color || '#667eea') + '">';
+        // Header row: avatar + name + status
+        s += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
+        s += '<div style="width:36px;height:36px;min-width:36px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;background:' + (m.avatar_color || '#667eea') + '">';
         if (m.has_avatar) {
-            html += '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\'">';
-            html += '<span style="display:none">' + (m.name || 'U').charAt(0).toUpperCase() + '</span>';
+            s += '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" style="width:36px;height:36px;object-fit:cover;border-radius:50%;display:block" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
+            s += '<span style="display:none;width:100%;height:100%;align-items:center;justify-content:center">' + initial + '</span>';
         } else {
-            html += (m.name || 'U').charAt(0).toUpperCase();
+            s += initial;
         }
-        html += '</div>';
-        html += '<div class="popup-name-wrap">';
-        html += '<div class="popup-name">' + escapeHtml(m.name || 'Unknown') + '</div>';
-        html += '<div class="popup-status"><span class="popup-dot" style="background:' + statusColor + '"></span>' + statusLabel + ' \u00b7 ' + timeAgo + '</div>';
-        html += '</div>';
-        html += '</div>';
+        s += '</div>';
+        s += '<div style="flex:1;min-width:0">';
+        s += '<div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(m.name || 'Unknown') + '</div>';
+        s += '<div style="display:flex;align-items:center;gap:5px;font-size:11px;opacity:0.7;margin-top:1px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + statusColor + ';flex-shrink:0"></span>' + statusLabel + ' &middot; ' + timeAgo + '</div>';
+        s += '</div></div>';
 
         // Info rows
-        html += '<div class="popup-info">';
+        var rowStyle = 'display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0';
+        var labelStyle = 'opacity:0.6';
+        var valStyle = 'font-weight:600';
 
-        // Motion + Speed
+        s += '<div style="padding:6px 0;border-top:1px solid rgba(255,255,255,0.1);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:8px">';
+
         if (speed) {
-            html += '<div class="popup-row"><span class="popup-label">Speed</span><span class="popup-value popup-speed">' + speed + '</span></div>';
+            s += '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Speed</span><span style="' + valStyle + ';color:#f9d423">' + speed + '</span></div>';
         }
 
-        var motionIcon = motionState === 'moving' ? '\u25B6' : motionState === 'idle' ? '\u23F8' : '\u2022';
+        var motionIcon = motionState === 'moving' ? '&#9654;' : motionState === 'idle' ? '&#9208;' : '&#8226;';
         var motionLabel = motionState.charAt(0).toUpperCase() + motionState.slice(1);
-        html += '<div class="popup-row"><span class="popup-label">State</span><span class="popup-value">' + motionIcon + ' ' + motionLabel + '</span></div>';
+        s += '<div style="' + rowStyle + '"><span style="' + labelStyle + '">State</span><span style="' + valStyle + '">' + motionIcon + ' ' + motionLabel + '</span></div>';
 
-        // Altitude
         if (m.altitude_m !== null && m.altitude_m !== undefined) {
             var units = (window.TrackingConfig.settings || {}).units || 'metric';
             var alt = units === 'imperial' ? (m.altitude_m * 3.281).toFixed(0) + ' ft' : Math.round(m.altitude_m) + ' m';
-            html += '<div class="popup-row"><span class="popup-label">Altitude</span><span class="popup-value">' + alt + '</span></div>';
+            s += '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Altitude</span><span style="' + valStyle + '">' + alt + '</span></div>';
         }
 
-        // Accuracy
         if (m.accuracy_m !== null && m.accuracy_m !== undefined) {
-            html += '<div class="popup-row"><span class="popup-label">Accuracy</span><span class="popup-value">' + Math.round(m.accuracy_m) + ' m</span></div>';
+            s += '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Accuracy</span><span style="' + valStyle + '">' + Math.round(m.accuracy_m) + ' m</span></div>';
         }
 
-        // Bearing
         if (m.bearing_deg !== null && m.bearing_deg !== undefined && parseFloat(m.speed_mps) > 0.5) {
             var dirs = ['N','NE','E','SE','S','SW','W','NW'];
             var dir = dirs[Math.round(m.bearing_deg / 45) % 8];
-            html += '<div class="popup-row"><span class="popup-label">Heading</span><span class="popup-value">' + dir + ' (' + Math.round(m.bearing_deg) + '\u00b0)</span></div>';
+            s += '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Heading</span><span style="' + valStyle + '">' + dir + ' (' + Math.round(m.bearing_deg) + '&deg;)</span></div>';
         }
 
-        html += '</div>';
+        s += '</div>';
 
         // Navigate button
-        html += '<button class="popup-nav-btn" onclick="getDirections(' + m.user_id + ')">Navigate</button>';
+        s += '<button onclick="getDirections(' + m.user_id + ')" style="width:100%;padding:7px 0;background:linear-gradient(135deg,#f5a623,#f7931e);border:none;border-radius:8px;color:#fff;font-weight:700;font-size:12px;cursor:pointer">Navigate</button>';
 
-        html += '</div>';
-        return html;
+        s += '</div>';
+        return s;
     }
 
     function formatSpeed(mps) {
