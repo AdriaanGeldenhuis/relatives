@@ -801,6 +801,24 @@ body.tracking-page {
 
 .directions-close:hover { background: rgba(255, 71, 87, 0.2); color: var(--trk-red); }
 
+.directions-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all var(--trk-transition);
+}
+
+.directions-nav-btn:hover { opacity: 0.85; transform: scale(1.05); }
+
 /* ============================================
    MAP MARKERS
    ============================================ */

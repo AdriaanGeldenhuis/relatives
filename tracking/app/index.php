@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=3.8',
+    '/tracking/app/assets/css/tracking.css?v=3.9',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -135,6 +135,11 @@ requestAnimationFrame(function() {
                 <div class="directions-stat-value" id="directionsDuration">--</div>
                 <div class="directions-stat-label">Duration</div>
             </div>
+            <div class="directions-divider"></div>
+            <a class="directions-nav-btn" id="directionsOpenNav" href="#" target="_blank" title="Open in Maps">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+                Go
+            </a>
         </div>
         <button class="directions-close" id="directionsClose" title="Close directions">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -573,63 +578,119 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     };
 
     // Get directions to member
+    var _dirTarget = null;
     window.getDirections = function(userId) {
-        if (!navigator.geolocation) return;
+        if (!navigator.geolocation) {
+            showToast('Geolocation not supported', 'error');
+            return;
+        }
         var m = _members.find(function(x) { return x.user_id == userId; });
-        if (!m) return;
+        if (!m || !m.lat || !m.lng) {
+            showToast('No location for this member', 'error');
+            return;
+        }
+
+        _dirTarget = { lat: parseFloat(m.lat), lng: parseFloat(m.lng), name: m.name };
+        showToast('Getting your location...', 'info');
+
+        // Close any open popup
+        Object.keys(markers).forEach(function(uid) {
+            var popup = markers[uid].getPopup();
+            if (popup && popup.isOpen()) popup.remove();
+        });
 
         navigator.geolocation.getCurrentPosition(function(pos) {
+            var fromLat = pos.coords.latitude;
+            var fromLng = pos.coords.longitude;
+
+            // Set external nav link immediately
+            var navLink = document.getElementById('directionsOpenNav');
+            if (navLink) {
+                navLink.href = 'https://www.google.com/maps/dir/?api=1&origin=' + fromLat + ',' + fromLng + '&destination=' + _dirTarget.lat + ',' + _dirTarget.lng + '&travelmode=driving';
+            }
+
             var url = window.TrackingConfig.apiBase + '/directions.php' +
-                '?from_lat=' + pos.coords.latitude +
-                '&from_lng=' + pos.coords.longitude +
-                '&to_lat=' + m.lat +
-                '&to_lng=' + m.lng;
+                '?from_lat=' + fromLat +
+                '&from_lng=' + fromLng +
+                '&to_lat=' + _dirTarget.lat +
+                '&to_lng=' + _dirTarget.lng;
 
             fetch(url, { credentials: 'same-origin' })
-                .then(function(r) { return r.json(); })
+                .then(function(r) {
+                    if (!r.ok) throw new Error('Server ' + r.status);
+                    return r.json();
+                })
                 .then(function(data) {
                     if (data.success && data.data) {
-                        showDirections(data.data);
+                        showDirections(data.data, fromLat, fromLng);
+                    } else {
+                        showToast('No route found', 'error');
                     }
                 })
                 .catch(function(err) {
                     console.error('[Directions] Error:', err);
+                    showToast('Could not get directions: ' + err.message, 'error');
                 });
-        });
+        }, function(err) {
+            console.error('[Directions] Geolocation error:', err);
+            var msg = 'Location error';
+            if (err.code === 1) msg = 'Location permission denied';
+            else if (err.code === 2) msg = 'Location unavailable';
+            else if (err.code === 3) msg = 'Location request timed out';
+            showToast(msg, 'error');
+
+            // Fallback: open Google Maps without origin (it will use device location)
+            var fallbackUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + _dirTarget.lat + ',' + _dirTarget.lng + '&travelmode=driving';
+            window.open(fallbackUrl, '_blank');
+        }, { enableHighAccuracy: true, timeout: 10000 });
     };
 
-    function showDirections(route) {
+    function showDirections(route, fromLat, fromLng) {
         var bar = document.getElementById('directionsBar');
         var distM = route.distance_m || 0;
         var durS = route.duration_s || 0;
+
         document.getElementById('directionsDistance').textContent = distM >= 1000 ? (distM / 1000).toFixed(1) + ' km' : Math.round(distM) + ' m';
         document.getElementById('directionsDuration').textContent = durS >= 3600 ? Math.floor(durS / 3600) + 'h ' + Math.floor((durS % 3600) / 60) + 'm' : Math.floor(durS / 60) + ' min';
         bar.classList.add('active');
 
         if (route.geometry) {
-            if (map.getSource('route')) {
-                map.getSource('route').setData({ type: 'Feature', geometry: route.geometry });
-            } else {
-                map.addSource('route', {
-                    type: 'geojson',
-                    data: { type: 'Feature', geometry: route.geometry }
-                });
-                map.addLayer({
-                    id: 'route',
-                    type: 'line',
-                    source: 'route',
-                    layout: { 'line-join': 'round', 'line-cap': 'round' },
-                    paint: { 'line-color': '#667eea', 'line-width': 4, 'line-opacity': 0.8 }
-                });
-            }
+            // Remove old route
+            if (map.getLayer('route')) map.removeLayer('route');
+            if (map.getSource('route')) map.removeSource('route');
+
+            map.addSource('route', {
+                type: 'geojson',
+                data: { type: 'Feature', geometry: route.geometry }
+            });
+            map.addLayer({
+                id: 'route',
+                type: 'line',
+                source: 'route',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#667eea', 'line-width': 5, 'line-opacity': 0.85 }
+            });
+
+            // Fit map to show entire route
+            var coords = route.geometry.coordinates;
+            var bounds = new mapboxgl.LngLatBounds();
+            coords.forEach(function(c) { bounds.extend(c); });
+            // Also include origin
+            if (fromLat && fromLng) bounds.extend([fromLng, fromLat]);
+            map.fitBounds(bounds, { padding: 80, duration: 1000 });
         }
+
+        showToast('Route to ' + (_dirTarget ? _dirTarget.name : 'member'), 'success');
     }
 
-    document.getElementById('directionsClose').addEventListener('click', function() {
+    function clearDirections() {
         document.getElementById('directionsBar').classList.remove('active');
         if (map.getLayer('route')) map.removeLayer('route');
         if (map.getSource('route')) map.removeSource('route');
-    });
+        _dirTarget = null;
+    }
+
+    document.getElementById('directionsClose').addEventListener('click', clearDirections);
 
     // Panel toggle
     var panel = document.getElementById('familyPanel');
