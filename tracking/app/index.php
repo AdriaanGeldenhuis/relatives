@@ -32,7 +32,7 @@ $familyId = (int)$user['family_id'];
 $settings = $settingsRepo->get($familyId);
 
 // Load alert rules
-$alertsRepo = new AlertsRepo($db);
+$alertsRepo = new AlertsRepo($db, $trackingCache);
 $alertRules = $alertsRepo->get($familyId);
 
 // Mapbox token from environment
@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=3.6',
+    '/tracking/app/assets/css/tracking.css?v=4.3',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -93,14 +93,9 @@ requestAnimationFrame(function() {
             <a href="/tracking/app/settings.php" class="tracking-topbar-btn" title="Settings">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             </a>
-            <div class="tracking-topbar-user" style="background:<?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>" title="<?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?>">
-                <?php if (!empty($user['has_avatar'])): ?>
-                    <img src="/saves/<?php echo (int)$user['id']; ?>/avatar/avatar.webp" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''">
-                    <span style="display:none"><?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? 'U', 0, 1)); ?></span>
-                <?php else: ?>
-                    <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? 'U', 0, 1)); ?>
-                <?php endif; ?>
-            </div>
+            <button class="tracking-topbar-btn" id="mapStyleBtn" title="Change map view">
+                <svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+            </button>
         </div>
     </div>
 
@@ -123,7 +118,50 @@ requestAnimationFrame(function() {
         </button>
     </div>
 
-    <!-- Directions Info Bar -->
+    <!-- Navigation Header (next turn instruction) -->
+    <div class="nav-header" id="navHeader">
+        <div class="nav-header-icon" id="navIcon">
+            <svg viewBox="0 0 24 24"><polyline points="5 12 12 5 19 12"></polyline><line x1="12" y1="19" x2="12" y2="5"></line></svg>
+        </div>
+        <div class="nav-header-info">
+            <div class="nav-header-distance" id="navStepDist">--</div>
+            <div class="nav-header-instruction" id="navInstruction">Getting route...</div>
+        </div>
+    </div>
+
+    <!-- Navigation Bottom Bar (summary + controls) -->
+    <div class="nav-bottom" id="navBottom">
+        <div class="nav-bottom-stats">
+            <div class="nav-bottom-stat">
+                <span class="nav-bottom-value" id="navRemainDist">--</span>
+                <span class="nav-bottom-label">remaining</span>
+            </div>
+            <div class="nav-bottom-stat">
+                <span class="nav-bottom-value" id="navETA">--</span>
+                <span class="nav-bottom-label">ETA</span>
+            </div>
+        </div>
+        <div class="nav-bottom-actions">
+            <button class="nav-steps-btn" id="navStepsBtn" title="View all steps">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                Steps
+            </button>
+            <button class="nav-end-btn" id="navEndBtn" title="End navigation">End</button>
+        </div>
+    </div>
+
+    <!-- Steps List Panel -->
+    <div class="nav-steps-panel" id="navStepsPanel">
+        <div class="nav-steps-header">
+            <span class="nav-steps-title">Turn-by-turn</span>
+            <button class="nav-steps-close" id="navStepsClose">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div class="nav-steps-list" id="navStepsList"></div>
+    </div>
+
+    <!-- Directions Info Bar (route preview before starting nav) -->
     <div class="directions-bar" id="directionsBar">
         <div class="directions-info">
             <div class="directions-stat">
@@ -135,6 +173,11 @@ requestAnimationFrame(function() {
                 <div class="directions-stat-value" id="directionsDuration">--</div>
                 <div class="directions-stat-label">Duration</div>
             </div>
+            <div class="directions-divider"></div>
+            <button class="directions-nav-btn" id="directionsStartNav" title="Start navigation">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+                Start
+            </button>
         </div>
         <button class="directions-close" id="directionsClose" title="Close directions">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -246,7 +289,6 @@ $pageJS = [];
 require_once __DIR__ . '/../../shared/components/footer.php';
 ?>
 
-<script src="/tracking/app/assets/js/state.js?v=3.3"></script>
 <script>
 (function() {
     'use strict';
@@ -269,11 +311,16 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     mapboxgl.accessToken = window.TrackingConfig.mapboxToken;
 
-    var mapStyle = 'mapbox://styles/mapbox/dark-v11';
-    var savedStyle = (window.TrackingConfig.settings || {}).map_style;
-    if (savedStyle === 'streets') mapStyle = 'mapbox://styles/mapbox/streets-v12';
-    else if (savedStyle === 'satellite') mapStyle = 'mapbox://styles/mapbox/satellite-streets-v12';
-    else if (savedStyle === 'light') mapStyle = 'mapbox://styles/mapbox/light-v11';
+    var mapStyles = {
+        dark:      'mapbox://styles/mapbox/dark-v11',
+        streets:   'mapbox://styles/mapbox/streets-v12',
+        satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
+        light:     'mapbox://styles/mapbox/light-v11'
+    };
+    var styleOrder = ['dark', 'streets', 'satellite', 'light'];
+    var currentStyleKey = (window.TrackingConfig.settings || {}).map_style || 'dark';
+    if (!mapStyles[currentStyleKey]) currentStyleKey = 'dark';
+    var mapStyle = mapStyles[currentStyleKey];
 
     var map = new mapboxgl.Map({
         container: 'trackingMap',
@@ -296,8 +343,35 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     setTimeout(function() { map.resize(); }, 100);
     setTimeout(function() { map.resize(); }, 500);
 
+    // Map style toggle
+    document.getElementById('mapStyleBtn').addEventListener('click', function() {
+        var idx = styleOrder.indexOf(currentStyleKey);
+        currentStyleKey = styleOrder[(idx + 1) % styleOrder.length];
+        map.setStyle(mapStyles[currentStyleKey]);
+        showToast('Map: ' + currentStyleKey.charAt(0).toUpperCase() + currentStyleKey.slice(1), 'info');
+        // Persist to server
+        fetch(window.TrackingConfig.apiBase + '/settings_save.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ map_style: currentStyleKey })
+        }).catch(function(e) { console.warn('[MapStyle] Save failed:', e); });
+        // Re-add markers after style change
+        map.once('style.load', function() {
+            var oldMarkers = markers;
+            markers = {};
+            Object.keys(oldMarkers).forEach(function(uid) { oldMarkers[uid].remove(); });
+            updateMarkers(_members);
+            // Re-draw route if active
+            if (_routeBounds && _navRoute && _navRoute.geometry) {
+                drawRouteOnMap(_navRoute.geometry);
+            }
+        });
+    });
+
     // Markers storage
     var markers = {};
+    var initialFitDone = false;
 
     // Fetch family members periodically
     function fetchMembers() {
@@ -308,11 +382,27 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                     _members = data.data;
                     renderMembers(_members);
                     updateMarkers(_members);
+                    if (!initialFitDone) {
+                        initialFitDone = true;
+                        fitMapToFamily(_members);
+                    }
                 }
             })
             .catch(function(err) {
                 console.error('[Tracking] Fetch error:', err);
             });
+    }
+
+    function fitMapToFamily(members) {
+        var pts = members.filter(function(m) { return m.has_location && m.lat !== null && m.lng !== null; });
+        if (pts.length === 0) return;
+        if (pts.length === 1) {
+            map.flyTo({ center: [parseFloat(pts[0].lng), parseFloat(pts[0].lat)], zoom: 15, duration: 1000 });
+            return;
+        }
+        var bounds = new mapboxgl.LngLatBounds();
+        pts.forEach(function(m) { bounds.extend([parseFloat(m.lng), parseFloat(m.lat)]); });
+        map.fitBounds(bounds, { padding: 80, maxZoom: 16, duration: 1000 });
     }
 
     function renderMembers(members) {
@@ -321,29 +411,31 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var badge = document.getElementById('memberCount');
         var statusEl = document.getElementById('trackingStatus');
 
-        if (!list || !empty) return;
+        if (!list) return;
 
         if (!members || members.length === 0) {
-            empty.style.display = '';
             if (badge) badge.textContent = '0';
             if (statusEl) statusEl.textContent = 'No members';
+            list.innerHTML = '<div class="member-empty" id="memberEmpty">' +
+                '<div class="member-empty-icon"></div>' +
+                '<div class="member-empty-text">No members online</div>' +
+                '<div class="member-empty-sub">Waiting for family members to share location</div></div>';
             return;
         }
 
-        empty.style.display = 'none';
+        if (empty) empty.style.display = 'none';
         if (badge) badge.textContent = members.length;
-        var online = members.filter(function(m) {
-            if (!m.has_location) return false;
-            return (Date.now() - parseUTC(m.recorded_at || m.updated_at)) < 300000;
+        var withLocation = members.filter(function(m) {
+            return m.has_location && m.lat !== null;
         }).length;
-        if (statusEl) statusEl.textContent = online + ' online \u00b7 ' + members.length + ' total';
+        if (statusEl) statusEl.textContent = withLocation + ' tracking \u00b7 ' + members.length + ' total';
 
         var html = '';
         members.forEach(function(m) {
             var initial = (m.name || 'U').charAt(0).toUpperCase();
             var hasLoc = m.has_location && m.lat !== null;
             var statusClass = hasLoc ? getStatusClass(m) : 'offline';
-            var timeAgo = hasLoc ? formatTimeAgo(m.recorded_at || m.updated_at) : 'No location';
+            var timeAgo = hasLoc ? formatTimeAgo(m.updated_at || m.recorded_at) : 'No location';
             var speed = hasLoc ? formatSpeed(m.speed_mps) : '';
 
             html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
@@ -389,7 +481,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             activeIds[m.user_id] = true;
             var lngLat = [parseFloat(m.lng), parseFloat(m.lat)];
             if (markers[m.user_id]) {
-                markers[m.user_id].setLngLat(lngLat);
+                animateMarker(markers[m.user_id], lngLat);
+                var popup = markers[m.user_id].getPopup();
+                if (popup) popup.setHTML(buildPopupHTML(m));
             } else {
                 var el = document.createElement('div');
                 el.className = 'map-marker';
@@ -401,12 +495,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 } else {
                     el.innerHTML = '<div class="map-marker-inner" style="background:' + (m.avatar_color || '#667eea') + '">' + initial + '</div>';
                 }
-                markers[m.user_id] = new mapboxgl.Marker({ element: el })
+                markers[m.user_id] = new mapboxgl.Marker({ element: el, anchor: 'top-left' })
                     .setLngLat(lngLat)
-                    .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(
-                        '<strong>' + escapeHtml(m.name || 'Unknown') + '</strong><br>' +
-                        '<span style="font-size:12px;opacity:0.7">' + formatTimeAgo(m.recorded_at || m.updated_at) + '</span>'
-                    ))
+                    .setPopup(new mapboxgl.Popup({ offset: 25, maxWidth: '260px' }).setHTML(buildPopupHTML(m)))
                     .addTo(map);
             }
         });
@@ -426,7 +517,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function getStatusClass(m) {
-        var ts = parseUTC(m.recorded_at || m.updated_at);
+        var ts = parseUTC(m.updated_at || m.recorded_at);
         var diffMin = (Date.now() - ts) / 60000;
         if (diffMin < 5) return 'online';
         if (diffMin < 30) return 'idle';
@@ -441,6 +532,88 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
         if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
         return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    function animateMarker(marker, targetLngLat) {
+        var start = marker.getLngLat();
+        var startLng = start.lng, startLat = start.lat;
+        var endLng = targetLngLat[0], endLat = targetLngLat[1];
+        if (Math.abs(startLng - endLng) < 0.000001 && Math.abs(startLat - endLat) < 0.000001) return;
+        var duration = 1000;
+        var startTime = performance.now();
+        function step(now) {
+            var t = Math.min((now - startTime) / duration, 1);
+            t = t * (2 - t); // ease-out
+            marker.setLngLat([startLng + (endLng - startLng) * t, startLat + (endLat - startLat) * t]);
+            if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    function buildPopupHTML(m) {
+        var status = getStatusClass(m);
+        var statusLabel = status === 'online' ? 'Online' : status === 'idle' ? 'Idle' : 'Offline';
+        var statusColor = status === 'online' ? '#43e97b' : status === 'idle' ? '#f9d423' : '#718096';
+        var timeAgo = formatTimeAgo(m.updated_at || m.recorded_at);
+        var speed = formatSpeed(m.speed_mps);
+        var motionState = m.motion_state || 'unknown';
+        var initial = (m.name || 'U').charAt(0).toUpperCase();
+
+        var s = '<div style="min-width:200px;font-family:inherit">';
+
+        // Header row: avatar + name + status
+        s += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
+        s += '<div style="width:36px;height:36px;min-width:36px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;background:' + (m.avatar_color || '#667eea') + '">';
+        if (m.has_avatar) {
+            s += '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" style="width:36px;height:36px;object-fit:cover;border-radius:50%;display:block" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
+            s += '<span style="display:none;width:100%;height:100%;align-items:center;justify-content:center">' + initial + '</span>';
+        } else {
+            s += initial;
+        }
+        s += '</div>';
+        s += '<div style="flex:1;min-width:0">';
+        s += '<div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(m.name || 'Unknown') + '</div>';
+        s += '<div style="display:flex;align-items:center;gap:5px;font-size:11px;opacity:0.7;margin-top:1px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + statusColor + ';flex-shrink:0"></span>' + statusLabel + ' &middot; ' + timeAgo + '</div>';
+        s += '</div></div>';
+
+        // Info rows
+        var rowStyle = 'display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0';
+        var labelStyle = 'opacity:0.6';
+        var valStyle = 'font-weight:600';
+
+        s += '<div style="padding:6px 0;border-top:1px solid rgba(255,255,255,0.1);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:8px">';
+
+        if (speed) {
+            s += '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Speed</span><span style="' + valStyle + ';color:#f9d423">' + speed + '</span></div>';
+        }
+
+        var motionIcon = motionState === 'moving' ? '&#9654;' : motionState === 'idle' ? '&#9208;' : '&#8226;';
+        var motionLabel = motionState.charAt(0).toUpperCase() + motionState.slice(1);
+        s += '<div style="' + rowStyle + '"><span style="' + labelStyle + '">State</span><span style="' + valStyle + '">' + motionIcon + ' ' + motionLabel + '</span></div>';
+
+        if (m.altitude_m !== null && m.altitude_m !== undefined) {
+            var units = (window.TrackingConfig.settings || {}).units || 'metric';
+            var alt = units === 'imperial' ? (m.altitude_m * 3.281).toFixed(0) + ' ft' : Math.round(m.altitude_m) + ' m';
+            s += '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Altitude</span><span style="' + valStyle + '">' + alt + '</span></div>';
+        }
+
+        if (m.accuracy_m !== null && m.accuracy_m !== undefined) {
+            s += '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Accuracy</span><span style="' + valStyle + '">' + Math.round(m.accuracy_m) + ' m</span></div>';
+        }
+
+        if (m.bearing_deg !== null && m.bearing_deg !== undefined && parseFloat(m.speed_mps) > 0.5) {
+            var dirs = ['N','NE','E','SE','S','SW','W','NW'];
+            var dir = dirs[Math.round(m.bearing_deg / 45) % 8];
+            s += '<div style="' + rowStyle + '"><span style="' + labelStyle + '">Heading</span><span style="' + valStyle + '">' + dir + ' (' + Math.round(m.bearing_deg) + '&deg;)</span></div>';
+        }
+
+        s += '</div>';
+
+        // Navigate button
+        s += '<button onclick="getDirections(' + m.user_id + ')" style="width:100%;padding:7px 0;background:linear-gradient(135deg,#f5a623,#f7931e);border:none;border-radius:8px;color:#fff;font-weight:700;font-size:12px;cursor:pointer">Navigate</button>';
+
+        s += '</div>';
+        return s;
     }
 
     function formatSpeed(mps) {
@@ -475,63 +648,287 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         }
     };
 
-    // Get directions to member
+    // ── NAVIGATION SYSTEM ─────────────────────────────────────
+    var _routeBounds = null;
+    var _navActive = false;
+    var _navSteps = [];
+    var _navCurrentStep = 0;
+    var _navRoute = null;
+    var _navTargetName = '';
+    var _navWatchId = null;
+
+    // Format distance nicely
+    function fmtDist(m) {
+        if (m >= 1000) return (m / 1000).toFixed(1) + ' km';
+        return Math.round(m) + ' m';
+    }
+    function fmtDur(s) {
+        if (s >= 3600) return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+        return Math.max(1, Math.floor(s / 60)) + ' min';
+    }
+
+    // SVG icons for maneuver types
+    function maneuverIcon(maneuver) {
+        var m = maneuver || '';
+        if (m.indexOf('left') !== -1 && m.indexOf('slight') !== -1)
+            return '<svg viewBox="0 0 24 24"><polyline points="14 6 8 12 14 18"></polyline><line x1="20" y1="12" x2="8" y2="12"></line></svg>';
+        if (m.indexOf('left') !== -1)
+            return '<svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+        if (m.indexOf('right') !== -1 && m.indexOf('slight') !== -1)
+            return '<svg viewBox="0 0 24 24"><polyline points="10 6 16 12 10 18"></polyline><line x1="4" y1="12" x2="16" y2="12"></line></svg>';
+        if (m.indexOf('right') !== -1)
+            return '<svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+        if (m.indexOf('roundabout') !== -1)
+            return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><polyline points="12 2 12 8"></polyline></svg>';
+        if (m.indexOf('arrive') !== -1)
+            return '<svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>';
+        // Default: straight arrow
+        return '<svg viewBox="0 0 24 24"><polyline points="5 12 12 5 19 12"></polyline><line x1="12" y1="19" x2="12" y2="5"></line></svg>';
+    }
+
+    // Haversine distance in metres
+    function haversineDist(lat1, lng1, lat2, lng2) {
+        var R = 6371000, dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180;
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
     window.getDirections = function(userId) {
-        if (!navigator.geolocation) return;
-        var m = _members.find(function(x) { return x.user_id == userId; });
-        if (!m) return;
+        var target = _members.find(function(x) { return x.user_id == userId; });
+        if (!target || !target.lat || !target.lng) {
+            showToast('No location for this member', 'error');
+            return;
+        }
 
-        navigator.geolocation.getCurrentPosition(function(pos) {
-            var url = window.TrackingConfig.apiBase + '/directions.php' +
-                '?from_lat=' + pos.coords.latitude +
-                '&from_lng=' + pos.coords.longitude +
-                '&to_lat=' + m.lat +
-                '&to_lng=' + m.lng;
+        var me = _members.find(function(x) { return x.user_id == window.TrackingConfig.userId; });
+        if (!me || !me.lat || !me.lng) {
+            showToast('Your location is not available yet', 'error');
+            return;
+        }
 
-            fetch(url, { credentials: 'same-origin' })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (data.success && data.data) {
-                        showDirections(data.data);
-                    }
-                })
-                .catch(function(err) {
-                    console.error('[Directions] Error:', err);
-                });
+        // Close any open popup
+        Object.keys(markers).forEach(function(uid) {
+            var popup = markers[uid].getPopup();
+            if (popup && popup.isOpen()) popup.remove();
         });
+
+        showToast('Getting route to ' + (target.name || 'member') + '...', 'info');
+
+        var url = window.TrackingConfig.apiBase + '/directions.php' +
+            '?from_lat=' + parseFloat(me.lat) +
+            '&from_lng=' + parseFloat(me.lng) +
+            '&to_lat=' + parseFloat(target.lat) +
+            '&to_lng=' + parseFloat(target.lng);
+
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(r) {
+                if (!r.ok) throw new Error('Server ' + r.status);
+                return r.json();
+            })
+            .then(function(data) {
+                if (data.success && data.data) {
+                    showRoutePreview(data.data, target.name);
+                } else {
+                    showToast('No route found', 'error');
+                }
+            })
+            .catch(function(err) {
+                console.error('[Directions] Error:', err);
+                showToast('Could not get route — try again later', 'error');
+            });
     };
 
-    function showDirections(route) {
+    // Show route on map with preview bar (distance/duration + Start button)
+    function showRoutePreview(route, targetName) {
+        _navRoute = route;
+        _navTargetName = targetName;
+        _navSteps = route.steps || [];
+
         var bar = document.getElementById('directionsBar');
-        var distM = route.distance_m || 0;
-        var durS = route.duration_s || 0;
-        document.getElementById('directionsDistance').textContent = distM >= 1000 ? (distM / 1000).toFixed(1) + ' km' : Math.round(distM) + ' m';
-        document.getElementById('directionsDuration').textContent = durS >= 3600 ? Math.floor(durS / 3600) + 'h ' + Math.floor((durS % 3600) / 60) + 'm' : Math.floor(durS / 60) + ' min';
+        document.getElementById('directionsDistance').textContent = fmtDist(route.distance_m || 0);
+        document.getElementById('directionsDuration').textContent = fmtDur(route.duration_s || 0);
         bar.classList.add('active');
 
-        if (route.geometry) {
-            if (map.getSource('route')) {
-                map.getSource('route').setData({ type: 'Feature', geometry: route.geometry });
-            } else {
-                map.addSource('route', {
-                    type: 'geojson',
-                    data: { type: 'Feature', geometry: route.geometry }
-                });
-                map.addLayer({
-                    id: 'route',
-                    type: 'line',
-                    source: 'route',
-                    layout: { 'line-join': 'round', 'line-cap': 'round' },
-                    paint: { 'line-color': '#667eea', 'line-width': 4, 'line-opacity': 0.8 }
-                });
+        drawRouteOnMap(route.geometry);
+        showToast('Route to ' + (targetName || 'member'), 'success');
+    }
+
+    function drawRouteOnMap(geometry) {
+        if (!geometry) return;
+        if (map.getLayer('route')) map.removeLayer('route');
+        if (map.getSource('route')) map.removeSource('route');
+
+        map.addSource('route', {
+            type: 'geojson',
+            data: { type: 'Feature', geometry: geometry }
+        });
+        map.addLayer({
+            id: 'route',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#667eea', 'line-width': 6, 'line-opacity': 0.9 }
+        });
+
+        _routeBounds = new mapboxgl.LngLatBounds();
+        geometry.coordinates.forEach(function(c) { _routeBounds.extend(c); });
+        map.fitBounds(_routeBounds, { padding: 80, duration: 1000 });
+    }
+
+    // ── START NAVIGATION ──
+    function startNavigation() {
+        if (!_navRoute || _navSteps.length === 0) {
+            showToast('No steps available', 'error');
+            return;
+        }
+
+        _navActive = true;
+        _navCurrentStep = 0;
+
+        // Hide route preview, show nav UI
+        document.getElementById('directionsBar').classList.remove('active');
+        document.getElementById('trackingToolbar').style.display = 'none';
+        document.getElementById('navHeader').classList.add('active');
+        document.getElementById('navBottom').classList.add('active');
+
+        updateNavStep();
+        updateNavRemaining();
+
+        // Start watching position for auto-advance
+        if (navigator.geolocation) {
+            _navWatchId = navigator.geolocation.watchPosition(onNavPosition, function(e) {
+                console.warn('[Nav] Geolocation error:', e.message);
+            }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 5000 });
+        }
+
+        // Zoom to first step area
+        if (_navSteps[0] && _navSteps[0].location) {
+            map.flyTo({
+                center: _navSteps[0].location,
+                zoom: 17,
+                pitch: 45,
+                duration: 1000
+            });
+        }
+    }
+
+    function updateNavStep() {
+        var step = _navSteps[_navCurrentStep];
+        if (!step) return;
+        document.getElementById('navIcon').innerHTML = maneuverIcon(step.maneuver);
+        document.getElementById('navStepDist').textContent = fmtDist(step.distance_m);
+        document.getElementById('navInstruction').textContent = step.instruction || 'Continue';
+    }
+
+    function updateNavRemaining() {
+        var remainDist = 0, remainDur = 0;
+        for (var i = _navCurrentStep; i < _navSteps.length; i++) {
+            remainDist += _navSteps[i].distance_m || 0;
+            remainDur += _navSteps[i].duration_s || 0;
+        }
+        document.getElementById('navRemainDist').textContent = fmtDist(remainDist);
+
+        // ETA
+        var eta = new Date(Date.now() + remainDur * 1000);
+        document.getElementById('navETA').textContent =
+            eta.getHours().toString().padStart(2, '0') + ':' + eta.getMinutes().toString().padStart(2, '0');
+    }
+
+    // Auto-advance: when user is within 40m of next step's maneuver point, move to next
+    function onNavPosition(pos) {
+        if (!_navActive) return;
+        var lat = pos.coords.latitude, lng = pos.coords.longitude;
+
+        // Center map on user during navigation
+        map.easeTo({ center: [lng, lat], duration: 500 });
+
+        // Check if we're close to the current step's maneuver point
+        var step = _navSteps[_navCurrentStep];
+        if (step && step.location) {
+            var dist = haversineDist(lat, lng, step.location[1], step.location[0]);
+            // Update distance display to show live distance to next maneuver
+            document.getElementById('navStepDist').textContent = fmtDist(dist);
+
+            if (dist < 40 && _navCurrentStep < _navSteps.length - 1) {
+                _navCurrentStep++;
+                updateNavStep();
+                updateNavRemaining();
+            }
+
+            // Check if arrived (last step and within 50m)
+            if (_navCurrentStep === _navSteps.length - 1 && dist < 50) {
+                showToast('You have arrived!', 'success');
+                endNavigation();
             }
         }
     }
 
-    document.getElementById('directionsClose').addEventListener('click', function() {
-        document.getElementById('directionsBar').classList.remove('active');
+    function endNavigation() {
+        _navActive = false;
+
+        if (_navWatchId !== null) {
+            navigator.geolocation.clearWatch(_navWatchId);
+            _navWatchId = null;
+        }
+
+        document.getElementById('navHeader').classList.remove('active');
+        document.getElementById('navBottom').classList.remove('active');
+        document.getElementById('navStepsPanel').classList.remove('active');
+        document.getElementById('trackingToolbar').style.display = '';
+
+        // Clean up route
         if (map.getLayer('route')) map.removeLayer('route');
         if (map.getSource('route')) map.removeSource('route');
+        _routeBounds = null;
+        _navRoute = null;
+        _navSteps = [];
+
+        map.easeTo({ pitch: 0, duration: 500 });
+    }
+
+    function clearDirections() {
+        document.getElementById('directionsBar').classList.remove('active');
+        if (_navActive) endNavigation();
+        if (map.getLayer('route')) map.removeLayer('route');
+        if (map.getSource('route')) map.removeSource('route');
+        _routeBounds = null;
+    }
+
+    function renderStepsList() {
+        var html = '';
+        _navSteps.forEach(function(step, i) {
+            var isCurrent = i === _navCurrentStep;
+            html += '<div class="nav-step-item' + (isCurrent ? ' current' : '') + (i < _navCurrentStep ? ' done' : '') + '">';
+            html += '<div class="nav-step-icon">' + maneuverIcon(step.maneuver) + '</div>';
+            html += '<div class="nav-step-info">';
+            html += '<div class="nav-step-instruction">' + escapeHtml(step.instruction || 'Continue') + '</div>';
+            html += '<div class="nav-step-meta">' + fmtDist(step.distance_m) + (step.name ? ' · ' + escapeHtml(step.name) : '') + '</div>';
+            html += '</div></div>';
+        });
+        document.getElementById('navStepsList').innerHTML = html;
+    }
+
+    // Event listeners for navigation controls
+    document.getElementById('directionsClose').addEventListener('click', clearDirections);
+
+    document.getElementById('directionsStartNav').addEventListener('click', function() {
+        startNavigation();
+    });
+
+    document.getElementById('navEndBtn').addEventListener('click', function() {
+        endNavigation();
+        showToast('Navigation ended', 'info');
+    });
+
+    document.getElementById('navStepsBtn').addEventListener('click', function() {
+        renderStepsList();
+        document.getElementById('navStepsPanel').classList.add('active');
+    });
+
+    document.getElementById('navStepsClose').addEventListener('click', function() {
+        document.getElementById('navStepsPanel').classList.remove('active');
     });
 
     // Panel toggle
@@ -549,11 +946,28 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     if (panelToggleBtn) panelToggleBtn.addEventListener('click', togglePanel);
     if (panelCloseBtn) panelCloseBtn.addEventListener('click', togglePanel);
 
+    // Toast helper
+    function showToast(message, type) {
+        var existing = document.querySelector('.tracking-toast');
+        if (existing) existing.remove();
+        var toast = document.createElement('div');
+        toast.className = 'tracking-toast ' + (type || 'info');
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        requestAnimationFrame(function() { toast.classList.add('show'); });
+        setTimeout(function() {
+            toast.classList.remove('show');
+            setTimeout(function() { toast.remove(); }, 400);
+        }, 3000);
+    }
+
     // Wake FAB
     var wakeFab = document.getElementById('wakeFab');
-    wakeFab.addEventListener('click', function() {
+    var wakeLabel = wakeFab ? wakeFab.querySelector('span') : null;
+    if (wakeFab) wakeFab.addEventListener('click', function() {
         if (wakeFab.disabled) return;
         wakeFab.disabled = true;
+        if (wakeLabel) wakeLabel.textContent = 'Sending...';
 
         fetch(window.TrackingConfig.apiBase + '/wake_devices.php', {
             method: 'POST',
@@ -561,23 +975,31 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ family_id: window.TrackingConfig.familyId })
         })
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+            if (!r.ok) throw new Error('Server ' + r.status);
+            return r.json();
+        })
         .then(function(data) {
             if (data.success) {
                 wakeFab.classList.add('active');
-                Toast.success('Wake signal sent to your family');
+                if (wakeLabel) wakeLabel.textContent = 'Sent!';
+                showToast('Wake signal sent to your family', 'success');
                 setTimeout(function() {
                     wakeFab.classList.remove('active');
                     wakeFab.disabled = false;
-                }, 5000);
+                    if (wakeLabel) wakeLabel.textContent = 'Wake';
+                }, 3000);
             } else {
-                Toast.error('Failed to send wake signal');
+                showToast('Failed: ' + (data.error || 'unknown'), 'error');
                 wakeFab.disabled = false;
+                if (wakeLabel) wakeLabel.textContent = 'Wake';
             }
         })
-        .catch(function() {
-            Toast.error('Could not reach the server');
+        .catch(function(err) {
+            console.error('[Wake] Error:', err);
+            showToast('Wake failed: ' + err.message, 'error');
             wakeFab.disabled = false;
+            if (wakeLabel) wakeLabel.textContent = 'Wake';
         });
     });
 
@@ -628,8 +1050,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     map.on('load', function() {
         map.resize();
         fetchMembers();
-        var pollInterval = ((window.TrackingConfig.settings || {}).keepalive_interval_seconds || 30) * 1000;
-        setInterval(fetchMembers, Math.max(pollInterval, 10000));
+        setInterval(fetchMembers, 10000);
     });
 
     // ── TRACKING INTEGRATION ─────────────────────────────────────
@@ -649,13 +1070,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         try { mode = window.TrackingBridge.getTrackingMode(); } catch(e) {}
         console.log('[Tracking] Native tracking mode:', mode);
 
-        if (mode === 'enabled') {
-            // Already tracking — browser geolocation will also work as backup
-            console.log('[Tracking] Native tracking already active');
-            if (navigator.geolocation) startBrowserTracking();
-        } else {
-            // Not tracking — show "Enable Location" button in the toolbar
-            console.log('[Tracking] Tracking not enabled, showing enable button');
+        if (mode !== 'enabled') {
             showEnableLocationButton();
         }
 
@@ -677,11 +1092,24 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         window.addEventListener('beforeunload', function() {
             try { window.TrackingBridge.onTrackingScreenHidden(); } catch(e) {}
         });
-    } else {
-        // ── REGULAR BROWSER ─────────────────────────────────────
-        if (navigator.geolocation) {
-            startBrowserTracking();
-        }
+
+        // Listen for visibility changes to toggle native polling speed
+        document.addEventListener('visibilitychange', function() {
+            try {
+                if (document.visibilityState === 'visible') {
+                    window.TrackingBridge.onTrackingScreenVisible();
+                } else {
+                    window.TrackingBridge.onTrackingScreenHidden();
+                }
+            } catch(e) {}
+        });
+    }
+
+    // ── BROWSER GEOLOCATION ─────────────────────────────────
+    // Always start when the tracking page is open — gives immediate
+    // position update on page load. Native service handles background.
+    if (navigator.geolocation) {
+        startBrowserTracking();
     }
 
     // Show an "Enable Live Location" button in the tracking toolbar
@@ -696,13 +1124,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             try {
                 window.TrackingBridge.startTracking();
                 btn.textContent = 'Enabling...';
-                // After a short delay, check if it worked and start browser tracking
                 setTimeout(function() {
                     try {
                         var newMode = window.TrackingBridge.getTrackingMode();
                         if (newMode === 'enabled') {
                             btn.remove();
-                            if (navigator.geolocation) startBrowserTracking();
+                            showToast('Live location enabled', 'success');
                         } else {
                             btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
                         }
@@ -715,7 +1142,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         toolbar.insertBefore(btn, toolbar.firstChild);
     }
 
-    // ── BROWSER GEOLOCATION (works in both WebView and browser) ──
+    // ── BROWSER GEOLOCATION ──────────────────────────────────────
     var lastUploadTime = 0;
     var uploadPending = false;
 
@@ -761,6 +1188,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         navigator.geolocation.watchPosition(uploadPosition, function(err) {
             console.warn('[Tracking] Geolocation error:', err.message);
         }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
+        console.log('[Tracking] Browser geolocation started');
     }
 
 })();

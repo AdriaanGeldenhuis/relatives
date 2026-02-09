@@ -34,11 +34,11 @@ $isAdmin = in_array($user['role'], ['owner', 'admin']);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 $settings = $settingsRepo->get($familyId);
 
-$alertsRepo = new AlertsRepo($db);
+$alertsRepo = new AlertsRepo($db, $trackingCache);
 $alertRules = $alertsRepo->get($familyId);
 
 $pageTitle = 'Tracking Settings';
-$pageCSS = ['/tracking/app/assets/css/tracking.css?v=3.2'];
+$pageCSS = ['/tracking/app/assets/css/tracking.css?v=4.3'];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 
@@ -345,9 +345,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
 </script>
 
 <?php
-$pageJS = [
-    '/tracking/app/assets/js/state.js',
-];
+$pageJS = [];
 require_once __DIR__ . '/../../shared/components/footer.php';
 ?>
 

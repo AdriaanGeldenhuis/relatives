@@ -62,8 +62,10 @@ class TrackingValidator
         $recordedAt = $input['recorded_at'] ?? $input['timestamp'] ?? null;
         if ($recordedAt) {
             // Treat input as UTC — append UTC if no timezone info present
+            // Check for timezone markers at end of string (Z, +HH:MM, -HH:MM, UTC, GMT)
+            // Previous regex falsely matched date hyphens like "-02" in "2026-02-09"
             $normalized = $recordedAt;
-            if (!preg_match('/[Z+\-]\d|UTC|GMT/i', $recordedAt)) {
+            if (!preg_match('/(?:Z|[+\-]\d{2}:?\d{2}|UTC|GMT)\s*$/i', $recordedAt)) {
                 $normalized .= ' UTC';
             }
             $ts = strtotime($normalized);

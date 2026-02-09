@@ -46,7 +46,38 @@ try {
     $stmt->execute();
     $locationsCleaned = $stmt->rowCount();
     echo "Cleaned up {$locationsCleaned} old location records\n";
-    
+
+    // Clean up tracking data per-family retention settings
+    $trackingBootstrap = __DIR__ . '/../tracking/core/bootstrap_tracking.php';
+    if (file_exists($trackingBootstrap)) {
+        require_once $trackingBootstrap;
+
+        $trackingCache = new TrackingCache($cache);
+        $settingsRepo = new SettingsRepo($db, $trackingCache);
+        $locationRepo = new LocationRepo($db, $trackingCache);
+        $eventsRepo = new EventsRepo($db);
+
+        $families = $db->query("SELECT family_id, history_retention_days, events_retention_days FROM tracking_family_settings")->fetchAll(PDO::FETCH_ASSOC);
+        $totalLocPruned = 0;
+        $totalEvtPruned = 0;
+
+        foreach ($families as $fam) {
+            $histDays = (int) ($fam['history_retention_days'] ?: 30);
+            $evtDays = (int) ($fam['events_retention_days'] ?: 90);
+
+            $stmt = $db->prepare("DELETE FROM tracking_locations WHERE family_id = ? AND created_at < DATE_SUB(NOW(), INTERVAL ? DAY)");
+            $stmt->execute([$fam['family_id'], $histDays]);
+            $totalLocPruned += $stmt->rowCount();
+
+            $stmt = $db->prepare("DELETE FROM tracking_events WHERE family_id = ? AND created_at < DATE_SUB(NOW(), INTERVAL ? DAY)");
+            $stmt->execute([$fam['family_id'], $evtDays]);
+            $totalEvtPruned += $stmt->rowCount();
+        }
+
+        echo "Pruned {$totalLocPruned} old tracking locations (per-family retention)\n";
+        echo "Pruned {$totalEvtPruned} old tracking events (per-family retention)\n";
+    }
+
     echo "[" . date('Y-m-d H:i:s') . "] Maintenance cleanup completed successfully\n\n";
     
 } catch (Exception $e) {

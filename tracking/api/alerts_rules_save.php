@@ -19,15 +19,13 @@ if (empty($input)) {
     Response::error('no_data_provided', 422);
 }
 
-$repo = new AlertsRepo($db);
+$trackingCache = new TrackingCache($cache);
+$repo = new AlertsRepo($db, $trackingCache);
 
 $saved = $repo->save($ctx->familyId, $input);
 
 if (!$saved) {
     Response::error('no_valid_fields', 422);
 }
-
-$trackingCache = new TrackingCache($cache);
-$trackingCache->deleteAlertRules($ctx->familyId);
 
 Response::success(null, 'Alert rules saved');

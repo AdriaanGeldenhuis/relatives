@@ -78,7 +78,7 @@ if ($motion['store_history']) {
 
 // Process geofences
 $eventsRepo = new EventsRepo($db);
-$alertsRepo = new AlertsRepo($db);
+$alertsRepo = new AlertsRepo($db, $trackingCache);
 $alertsEngine = new AlertsEngine($db, $trackingCache, $alertsRepo);
 $geofenceRepo = new GeofenceRepo($db, $trackingCache);
 $placesRepo = new PlacesRepo($db, $trackingCache);
