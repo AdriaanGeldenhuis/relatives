@@ -536,6 +536,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Wake FAB
     var wakeFab = document.getElementById('wakeFab');
     wakeFab.addEventListener('click', function() {
+        if (wakeFab.disabled) return;
+        wakeFab.disabled = true;
+
         fetch(window.TrackingConfig.apiBase + '/wake_devices.php', {
             method: 'POST',
             credentials: 'same-origin',
@@ -545,11 +548,21 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.success) {
-                wakeFab.classList.add('tracking-active');
-                setTimeout(function() { wakeFab.classList.remove('tracking-active'); }, 5000);
+                wakeFab.classList.add('active');
+                Toast.success('Wake signal sent to your family');
+                setTimeout(function() {
+                    wakeFab.classList.remove('active');
+                    wakeFab.disabled = false;
+                }, 5000);
+            } else {
+                Toast.error('Failed to send wake signal');
+                wakeFab.disabled = false;
             }
         })
-        .catch(function() {});
+        .catch(function() {
+            Toast.error('Could not reach the server');
+            wakeFab.disabled = false;
+        });
     });
 
     // Consent dialog logic
