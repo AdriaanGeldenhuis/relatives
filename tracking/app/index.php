@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=3.6',
+    '/tracking/app/assets/css/tracking.css?v=3.7',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
