@@ -289,7 +289,6 @@ $pageJS = [];
 require_once __DIR__ . '/../../shared/components/footer.php';
 ?>
 
-<script src="/tracking/app/assets/js/state.js?v=3.3"></script>
 <script>
 (function() {
     'use strict';
@@ -350,6 +349,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         currentStyleKey = styleOrder[(idx + 1) % styleOrder.length];
         map.setStyle(mapStyles[currentStyleKey]);
         showToast('Map: ' + currentStyleKey.charAt(0).toUpperCase() + currentStyleKey.slice(1), 'info');
+        // Persist to server
+        fetch(window.TrackingConfig.apiBase + '/settings_save.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ map_style: currentStyleKey })
+        }).catch(function(e) { console.warn('[MapStyle] Save failed:', e); });
         // Re-add markers after style change
         map.once('style.load', function() {
             var oldMarkers = markers;
