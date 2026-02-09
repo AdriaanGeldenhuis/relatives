@@ -104,15 +104,6 @@ requestAnimationFrame(function() {
 
     <!-- Family Members Panel -->
     <div class="family-panel collapsed" id="familyPanel">
-        <div class="family-panel-header" id="familyPanelHeader">
-            <div style="display:flex;align-items:center;gap:10px;">
-                <span class="family-panel-title">Family</span>
-                <span class="family-panel-badge" id="memberCount">0</span>
-            </div>
-            <button class="family-panel-toggle" id="familyPanelToggle" title="Toggle panel">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
-        </div>
         <div class="family-panel-body" id="memberList">
             <!-- Members loaded dynamically -->
             <div class="member-empty" id="memberEmpty">
@@ -519,9 +510,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // Panel toggle
     var panel = document.getElementById('familyPanel');
-    var panelToggle = document.getElementById('familyPanelToggle');
     var panelToggleBtn = document.getElementById('panelToggleBtn');
-    var panelHeader = document.getElementById('familyPanelHeader');
     var toolbar = document.getElementById('trackingToolbar');
     var isMobile = window.innerWidth <= 768;
 
@@ -538,16 +527,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         toolbar.classList.toggle('panel-open', isOpen);
     }
 
-    panelToggle.addEventListener('click', togglePanel);
     if (panelToggleBtn) panelToggleBtn.addEventListener('click', togglePanel);
-
-    if (isMobile) {
-        panelHeader.addEventListener('click', function(e) {
-            if (e.target === panelHeader || e.target.classList.contains('family-panel-title')) {
-                togglePanel();
-            }
-        });
-    }
 
     // Wake FAB
     var wakeFab = document.getElementById('wakeFab');
