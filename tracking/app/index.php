@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=3.9',
+    '/tracking/app/assets/css/tracking.css?v=4.0',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -580,6 +580,17 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Get directions to member — uses your known position from tracking data
     var _routeBounds = null;
 
+    // Haversine distance in metres
+    function haversineDistance(lat1, lng1, lat2, lng2) {
+        var R = 6371000;
+        var dLat = (lat2 - lat1) * Math.PI / 180;
+        var dLng = (lng2 - lng1) * Math.PI / 180;
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
     window.getDirections = function(userId) {
         var target = _members.find(function(x) { return x.user_id == userId; });
         if (!target || !target.lat || !target.lng) {
@@ -620,24 +631,41 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             })
             .then(function(data) {
                 if (data.success && data.data) {
-                    showDirections(data.data, target.name);
+                    showDirections(data.data, target.name, false);
                 } else {
-                    showToast('No route found', 'error');
+                    throw new Error('No route');
                 }
             })
             .catch(function(err) {
-                console.error('[Directions] Error:', err);
-                showToast('Could not get directions', 'error');
+                console.warn('[Directions] API unavailable, falling back to straight line:', err.message);
+                showStraightLine(fromLat, fromLng, toLat, toLng, target.name);
             });
     };
 
-    function showDirections(route, targetName) {
+    function showStraightLine(fromLat, fromLng, toLat, toLng, targetName) {
+        var distM = haversineDistance(fromLat, fromLng, toLat, toLng);
+        var straightRoute = {
+            distance_m: distM,
+            duration_s: 0,
+            geometry: {
+                type: 'LineString',
+                coordinates: [[fromLng, fromLat], [toLng, toLat]]
+            }
+        };
+        showDirections(straightRoute, targetName, true);
+    }
+
+    function showDirections(route, targetName, isStraightLine) {
         var bar = document.getElementById('directionsBar');
         var distM = route.distance_m || 0;
         var durS = route.duration_s || 0;
 
-        document.getElementById('directionsDistance').textContent = distM >= 1000 ? (distM / 1000).toFixed(1) + ' km' : Math.round(distM) + ' m';
-        document.getElementById('directionsDuration').textContent = durS >= 3600 ? Math.floor(durS / 3600) + 'h ' + Math.floor((durS % 3600) / 60) + 'm' : Math.floor(durS / 60) + ' min';
+        document.getElementById('directionsDistance').textContent =
+            (isStraightLine ? '~' : '') +
+            (distM >= 1000 ? (distM / 1000).toFixed(1) + ' km' : Math.round(distM) + ' m');
+        document.getElementById('directionsDuration').textContent =
+            isStraightLine ? 'N/A' :
+            (durS >= 3600 ? Math.floor(durS / 3600) + 'h ' + Math.floor((durS % 3600) / 60) + 'm' : Math.floor(durS / 60) + ' min');
         bar.classList.add('active');
 
         if (route.geometry) {
@@ -654,7 +682,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 type: 'line',
                 source: 'route',
                 layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': '#667eea', 'line-width': 5, 'line-opacity': 0.85 }
+                paint: {
+                    'line-color': isStraightLine ? '#f5a623' : '#667eea',
+                    'line-width': isStraightLine ? 3 : 5,
+                    'line-opacity': 0.85,
+                    'line-dasharray': isStraightLine ? [4, 4] : [1, 0]
+                }
             });
 
             // Fit map to show entire route
@@ -663,7 +696,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             map.fitBounds(_routeBounds, { padding: 80, duration: 1000 });
         }
 
-        showToast('Route to ' + (targetName || 'member'), 'success');
+        if (isStraightLine) {
+            showToast('Showing straight-line distance to ' + (targetName || 'member'), 'info');
+        } else {
+            showToast('Route to ' + (targetName || 'member'), 'success');
+        }
     }
 
     function clearDirections() {

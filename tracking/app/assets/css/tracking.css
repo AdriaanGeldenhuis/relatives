@@ -1197,7 +1197,7 @@ body.tracking-page {
 
 /* Toast */
 .tracking-toast {
-    position: fixed; top: 20px; right: 20px; z-index: 300;
+    position: fixed; top: 20px; right: 20px; z-index: 10000;
     background: var(--trk-panel-bg); backdrop-filter: blur(20px);
     border: 1px solid var(--trk-card-border);
     border-radius: var(--trk-radius-sm);

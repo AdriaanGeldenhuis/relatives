@@ -53,21 +53,30 @@ class MapboxDirections
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 10,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTPHEADER => ['Accept: application/json'],
         ]);
 
         $response = curl_exec($ch);
+        $curlError = curl_error($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
+        if ($curlError) {
+            error_log("MapboxDirections: cURL error: {$curlError}");
+            return null;
+        }
+
         if ($httpCode !== 200 || !$response) {
-            error_log("MapboxDirections: HTTP {$httpCode} for {$profile} route");
+            error_log("MapboxDirections: HTTP {$httpCode} for {$profile} route. Response: " . substr((string)$response, 0, 500));
             return null;
         }
 
         $data = json_decode($response, true);
         if (empty($data['routes'][0])) {
+            $msg = $data['message'] ?? $data['code'] ?? 'no routes returned';
+            error_log("MapboxDirections: {$msg}");
             return null;
         }
 
