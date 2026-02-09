@@ -104,6 +104,15 @@ requestAnimationFrame(function() {
 
     <!-- Family Members Panel -->
     <div class="family-panel collapsed" id="familyPanel">
+        <div class="family-panel-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span class="family-panel-title">Family</span>
+                <span class="family-panel-badge" id="memberCount">0</span>
+            </div>
+            <button class="family-panel-close" id="familyPanelClose" title="Close panel">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
         <div class="family-panel-body" id="memberList">
             <!-- Members loaded dynamically -->
             <div class="member-empty" id="memberEmpty">
@@ -303,17 +312,20 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     function renderMembers(members) {
         var list = document.getElementById('memberList');
         var empty = document.getElementById('memberEmpty');
+        var badge = document.getElementById('memberCount');
         var statusEl = document.getElementById('trackingStatus');
 
         if (!list || !empty) return;
 
         if (!members || members.length === 0) {
             empty.style.display = '';
+            if (badge) badge.textContent = '0';
             if (statusEl) statusEl.textContent = 'No members';
             return;
         }
 
         empty.style.display = 'none';
+        if (badge) badge.textContent = members.length;
         var online = members.filter(function(m) {
             if (!m.has_location) return false;
             return (Date.now() - parseUTC(m.recorded_at || m.updated_at)) < 300000;
@@ -508,6 +520,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Panel toggle
     var panel = document.getElementById('familyPanel');
     var panelToggleBtn = document.getElementById('panelToggleBtn');
+    var panelCloseBtn = document.getElementById('familyPanelClose');
     var toolbar = document.getElementById('trackingToolbar');
     var isMobile = window.innerWidth <= 768;
 
@@ -525,6 +538,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     if (panelToggleBtn) panelToggleBtn.addEventListener('click', togglePanel);
+    if (panelCloseBtn) panelCloseBtn.addEventListener('click', togglePanel);
 
     // Wake FAB
     var wakeFab = document.getElementById('wakeFab');
