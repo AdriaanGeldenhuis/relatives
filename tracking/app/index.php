@@ -303,20 +303,17 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     function renderMembers(members) {
         var list = document.getElementById('memberList');
         var empty = document.getElementById('memberEmpty');
-        var badge = document.getElementById('memberCount');
         var statusEl = document.getElementById('trackingStatus');
 
-        if (!list || !empty || !badge) return;
+        if (!list || !empty) return;
 
         if (!members || members.length === 0) {
             empty.style.display = '';
-            badge.textContent = '0';
             if (statusEl) statusEl.textContent = 'No members';
             return;
         }
 
         empty.style.display = 'none';
-        badge.textContent = members.length;
         var online = members.filter(function(m) {
             if (!m.has_location) return false;
             return (Date.now() - parseUTC(m.recorded_at || m.updated_at)) < 300000;
