@@ -411,16 +411,19 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var badge = document.getElementById('memberCount');
         var statusEl = document.getElementById('trackingStatus');
 
-        if (!list || !empty) return;
+        if (!list) return;
 
         if (!members || members.length === 0) {
-            empty.style.display = '';
             if (badge) badge.textContent = '0';
             if (statusEl) statusEl.textContent = 'No members';
+            list.innerHTML = '<div class="member-empty" id="memberEmpty">' +
+                '<div class="member-empty-icon"></div>' +
+                '<div class="member-empty-text">No members online</div>' +
+                '<div class="member-empty-sub">Waiting for family members to share location</div></div>';
             return;
         }
 
-        empty.style.display = 'none';
+        if (empty) empty.style.display = 'none';
         if (badge) badge.textContent = members.length;
         var withLocation = members.filter(function(m) {
             return m.has_location && m.lat !== null;
