@@ -221,9 +221,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Set page metadata
 $pageTitle = 'Admin Panel';
-$cacheVersion = '3.1.0';
-$pageCSS = ['/admin/css/admin.css?v=' . $cacheVersion];
-$pageJS = ['/admin/js/admin.js?v=' . $cacheVersion];
+$pageCSS = ['/admin/css/admin.css'];
+$pageJS = ['/admin/js/admin.js'];
 
 // Include header
 require_once __DIR__ . '/../shared/components/header.php';
@@ -518,12 +517,12 @@ require_once __DIR__ . '/../shared/components/header.php';
                             <?php endif; ?>
 
                             <?php if ($member['status'] === 'active'): ?>
-                                <button onclick="toggleUserStatus(<?php echo $member['id']; ?>, 'disabled', '<?php echo htmlspecialchars($member['full_name']); ?>')" 
+                                <button onclick="toggleUserStatus(<?php echo $member['id']; ?>, 'disabled', <?php echo json_encode($member['full_name']); ?>)"
                                         class="btn btn-sm btn-danger">
                                     Deactivate
                                 </button>
                             <?php else: ?>
-                                <button onclick="toggleUserStatus(<?php echo $member['id']; ?>, 'active', '<?php echo htmlspecialchars($member['full_name']); ?>')" 
+                                <button onclick="toggleUserStatus(<?php echo $member['id']; ?>, 'active', <?php echo json_encode($member['full_name']); ?>)"
                                         class="btn btn-sm btn-success">
                                     Activate
                                 </button>

@@ -59,9 +59,6 @@ $stmt = $db->query("
 $plans = $stmt->fetchAll();
 
 // Group by billing period
-$monthlyPlans = array_filter($plans, fn($p) => $p['billing_period'] === 'monthly');
-$yearlyPlans = array_filter($plans, fn($p) => $p['billing_period'] === 'yearly');
-
 $pageTitle = 'Subscription Plans';
 $pageCSS = ['/admin/css/admin.css'];
 

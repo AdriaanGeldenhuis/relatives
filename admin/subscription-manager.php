@@ -16,7 +16,7 @@ $user = $auth->getCurrentUser();
 // ====================================
 // SUPER ADMIN ONLY - NOBODY ELSE
 // ====================================
-if (!$user || $user['role'] !== 'admin' || $user['family_id'] != 1) {
+if (!$user || $user['role'] !== 'admin' || (int) $user['family_id'] !== 1) {
     header('Location: /home/index.php');
     exit;
 }
@@ -314,7 +314,7 @@ async function viewSubscriptionDetails(subscriptionId) {
     showModal('detailsModal');
     
     try {
-        const response = await fetch(`/api/subscription/details.php`);
+        const response = await fetch(`/api/subscription/details.php?id=${subscriptionId}`);
         const data = await response.json();
         
         if (data.ok && data.subscription) {

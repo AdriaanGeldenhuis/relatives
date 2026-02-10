@@ -8,19 +8,6 @@
 console.log('%c⚙️ Admin Panel v3.0 Loading...', 'font-size: 16px; font-weight: bold; color: #667eea;');
 
 // ============================================
-// PARTICLE SYSTEM - DISABLED FOR PERFORMANCE
-// Canvas hidden via CSS, class is a no-op stub
-// ============================================
-class ParticleSystem {
-    constructor(canvasId) {
-        // Disabled - canvas hidden via CSS for performance
-    }
-}
-
-// Initialize (no-op)
-const particleSystem = new ParticleSystem('particles');
-
-// ============================================
 // TOAST NOTIFICATION SYSTEM
 // ============================================
 class Toast {
@@ -35,10 +22,14 @@ class Toast {
             info: 'ℹ'
         };
         
-        toast.innerHTML = `
-            <div class="toast-icon">${icons[type] || icons.info}</div>
-            <div class="toast-message">${message}</div>
-        `;
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'toast-icon';
+        iconDiv.textContent = icons[type] || icons.info;
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'toast-message';
+        msgDiv.textContent = message;
+        toast.appendChild(iconDiv);
+        toast.appendChild(msgDiv);
         
         document.body.appendChild(toast);
         
@@ -827,66 +818,6 @@ function animateNumber(element, start, end, duration) {
     requestAnimationFrame(updateNumber);
 }
 
-// 3D Tilt Effect
-class TiltEffect {
-    constructor(element) {
-        this.element = element;
-        this.width = element.offsetWidth;
-        this.height = element.offsetHeight;
-        this.settings = {
-            max: 10,
-            perspective: 1200,
-            scale: 1.03,
-            speed: 400,
-            easing: 'cubic-bezier(0.03, 0.98, 0.52, 0.99)'
-        };
-        
-        this.init();
-    }
-    
-    init() {
-        this.element.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg)';
-        this.element.style.transition = `transform ${this.settings.speed}ms ${this.settings.easing}`;
-        
-        this.element.addEventListener('mouseenter', () => this.onMouseEnter());
-        this.element.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.element.addEventListener('mouseleave', () => this.onMouseLeave());
-    }
-    
-    onMouseEnter() {
-        this.width = this.element.offsetWidth;
-        this.height = this.element.offsetHeight;
-    }
-    
-    onMouseMove(e) {
-        const rect = this.element.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        const percentX = (x / this.width) - 0.5;
-        const percentY = (y / this.height) - 0.5;
-        
-        const tiltX = percentY * this.settings.max;
-        const tiltY = -percentX * this.settings.max;
-        
-        this.element.style.transform = `
-            perspective(${this.settings.perspective}px) 
-            rotateX(${tiltX}deg) 
-            rotateY(${tiltY}deg) 
-            scale3d(${this.settings.scale}, ${this.settings.scale}, ${this.settings.scale})
-        `;
-    }
-    
-    onMouseLeave() {
-        this.element.style.transform = `
-            perspective(${this.settings.perspective}px) 
-            rotateX(0deg) 
-            rotateY(0deg) 
-            scale3d(1, 1, 1)
-        `;
-    }
-}
-
 // Add card update animation
 const cardUpdateStyle = document.createElement('style');
 cardUpdateStyle.textContent = `
@@ -909,11 +840,6 @@ document.head.appendChild(cardUpdateStyle);
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c✅ Admin Panel v3.0 Initialized', 'font-size: 16px; font-weight: bold; color: #51cf66;');
-    
-    // Apply tilt to stat cards
-    document.querySelectorAll('[data-tilt]').forEach(card => {
-        new TiltEffect(card);
-    });
     
     // Animate stat numbers on scroll
     const statNumbers = document.querySelectorAll('.stat-number[data-count]');
@@ -954,30 +880,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     progressBars.forEach(bar => progressObserver.observe(bar));
     
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        // Ctrl/Cmd + I = Invite
-        if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
-            e.preventDefault();
-            showInviteModal();
-        }
-        
-        // Ctrl/Cmd + E = Edit family name (owner only)
-        if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
-            const editBtn = document.querySelector('[onclick="editFamilyName()"]');
-            if (editBtn) {
-                e.preventDefault();
-                editFamilyName();
-            }
-        }
-        
-        // Ctrl/Cmd + K = Copy invite code
-        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-            e.preventDefault();
-            copyInviteCode();
-        }
-    });
-    
     // Auto-refresh activity every 60 seconds
     setInterval(() => {
         console.log('🔄 Checking for updates...');
@@ -1009,12 +911,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
-    // Log helpful tips
-    console.log('%c💡 Keyboard Shortcuts:', 'font-size: 14px; font-weight: bold; color: #4facfe;');
-    console.log('  Ctrl/Cmd + I → Open Invite Modal');
-    console.log('  Ctrl/Cmd + E → Edit Family Name');
-    console.log('  Ctrl/Cmd + K → Copy Invite Code');
-    console.log('  ESC → Close Modals');
 });
 
 // ============================================
