@@ -6,8 +6,9 @@
 
 declare(strict_types=1);
 
-// Start session if not already started
+// Start session with correct name to match bootstrap config
 if (session_status() === PHP_SESSION_NONE) {
+    session_name('RELATIVES_SESSION');
     session_start();
 }
 
@@ -30,16 +31,31 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Get user data from session
+// Load bootstrap to get DB connection for fresh user data
+require_once __DIR__ . '/../core/bootstrap.php';
+
 $userId = (int) $_SESSION['user_id'];
-$displayName = $_SESSION['display_name'] ?? 'Player';
-$familyId = isset($_SESSION['family_id']) ? (int) $_SESSION['family_id'] : null;
-$isAdmin = (bool) ($_SESSION['is_admin'] ?? false);
+
+// Fetch actual user data from database instead of nonexistent session keys
+$stmt = $db->prepare("
+    SELECT u.id, u.full_name as name, u.email, u.role, u.family_id, u.avatar_color
+    FROM users u
+    WHERE u.id = ? AND u.status = 'active'
+    LIMIT 1
+");
+$stmt->execute([$userId]);
+$user = $stmt->fetch();
+
+if (!$user) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Not authenticated']);
+    exit;
+}
 
 // Return user info
 echo json_encode([
-    'user_id' => $userId,
-    'display_name' => $displayName,
-    'family_id' => $familyId,
-    'is_admin' => $isAdmin
+    'user_id' => (int) $user['id'],
+    'display_name' => $user['name'],
+    'family_id' => (int) $user['family_id'],
+    'is_admin' => in_array($user['role'], ['owner', 'admin'])
 ], JSON_THROW_ON_ERROR);

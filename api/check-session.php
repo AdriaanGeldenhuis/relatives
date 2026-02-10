@@ -2,7 +2,10 @@
 /**
  * Check if user is logged in
  */
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_name('RELATIVES_SESSION');
+    session_start();
+}
 header('Content-Type: application/json');
 
 $response = [

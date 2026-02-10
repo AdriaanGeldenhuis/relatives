@@ -289,7 +289,7 @@
         console.log('📱 Native app mode:', isNativeApp);
         cacheElements();
         attachEvents();
-        setTimeout(hideLoader, 500);
+        setTimeout(hideLoader, 100);
 
         // Initialize notifications if user is logged in
         if (document.body.hasAttribute('data-logged-in')) {

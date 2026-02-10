@@ -12,8 +12,29 @@ ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 ini_set('error_log', __DIR__ . '/../logs/php_errors.log');
 
-// Session - SAFE initialization (don't start if already started)
-if (session_status() === PHP_SESSION_NONE) {
+// Session - SAFE initialization
+// Many files call session_start() before bootstrap loads. If session is already
+// active with the wrong name, migrate it to the correct RELATIVES_SESSION name
+// with proper security settings applied.
+if (session_status() === PHP_SESSION_ACTIVE && session_name() !== 'RELATIVES_SESSION') {
+    // Session already started with wrong name - save data, restart properly
+    $existingData = $_SESSION;
+    session_write_close();
+
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.cookie_secure', '1');
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.gc_maxlifetime', '2592000');
+    ini_set('session.cookie_lifetime', '2592000');
+    session_name('RELATIVES_SESSION');
+    session_start();
+
+    // Restore session data if current session is empty (migration)
+    if (empty($_SESSION) && !empty($existingData)) {
+        $_SESSION = $existingData;
+    }
+} elseif (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', '1');
     ini_set('session.cookie_secure', '1');
     ini_set('session.cookie_samesite', 'Lax');

@@ -7,8 +7,9 @@ declare(strict_types=1);
  * ============================================
  */
 
-// Start session if not started
+// Start session with correct name to match bootstrap config
 if (session_status() === PHP_SESSION_NONE) {
+    session_name('RELATIVES_SESSION');
     session_start();
 }
 

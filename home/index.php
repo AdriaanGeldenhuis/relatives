@@ -8,8 +8,9 @@ declare(strict_types=1);
  * ============================================
  */
 
-// Start session first
+// Start session with correct name to match bootstrap config
 if (session_status() === PHP_SESSION_NONE) {
+    session_name('RELATIVES_SESSION');
     session_start();
 }
 
@@ -553,9 +554,9 @@ require_once __DIR__ . '/../shared/components/header.php';
                             $avatarPath = __DIR__ . "/../saves/{$member['id']}/avatar/avatar.webp";
                             if (file_exists($avatarPath)):
                             ?>
-                                <img src="/saves/<?php echo $member['id']; ?>/avatar/avatar.webp?<?php echo time(); ?>"
+                                <img src="/saves/<?php echo $member['id']; ?>/avatar/avatar.webp?v=<?php echo $cacheVersion; ?>"
                                      alt="<?php echo htmlspecialchars($member['full_name']); ?>"
-                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" loading="lazy">
                             <?php else: ?>
                                 <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
                             <?php endif; ?>
@@ -607,9 +608,9 @@ require_once __DIR__ . '/../shared/components/header.php';
                             $activityAvatarPath = __DIR__ . "/../saves/{$activity['user_id']}/avatar/avatar.webp";
                             if (!empty($activity['user_id']) && file_exists($activityAvatarPath)):
                             ?>
-                                <img src="/saves/<?php echo $activity['user_id']; ?>/avatar/avatar.webp?<?php echo time(); ?>"
+                                <img src="/saves/<?php echo $activity['user_id']; ?>/avatar/avatar.webp?v=<?php echo $cacheVersion; ?>"
                                      alt="<?php echo htmlspecialchars($activity['full_name'] ?? ''); ?>"
-                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" loading="lazy">
                             <?php else: ?>
                                 <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
                             <?php endif; ?>
