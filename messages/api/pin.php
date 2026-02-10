@@ -7,9 +7,11 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Pin feature disabled - uncomment below to enable
 echo json_encode(['success' => false, 'message' => 'Pin feature not yet enabled']);
 exit;
 
+/* --- Pin feature implementation (disabled) ---
 require_once __DIR__ . '/../../core/bootstrap.php';
 
 try {
@@ -124,3 +126,4 @@ try {
         'message' => $e->getMessage()
     ]);
 }
+--- End pin feature implementation */

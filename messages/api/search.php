@@ -213,8 +213,10 @@ try {
  * Highlight search term in text
  */
 function highlightSearchTerm($text, $query) {
-    if (empty($query)) return $text;
-    
-    $pattern = '/(' . preg_quote($query, '/') . ')/i';
-    return preg_replace($pattern, '<mark>$1</mark>', $text);
+    if (empty($query)) return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+
+    // HTML-escape the content first to prevent XSS, then wrap matches in <mark>
+    $escaped = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    $pattern = '/(' . preg_quote(htmlspecialchars($query, ENT_QUOTES, 'UTF-8'), '/') . ')/i';
+    return preg_replace($pattern, '<mark>$1</mark>', $escaped);
 }

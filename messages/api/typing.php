@@ -29,17 +29,8 @@ try {
 
     $familyId = $user['family_id'];
 
-    // Ensure typing_indicators table exists
-    $db->exec("
-        CREATE TABLE IF NOT EXISTS `typing_indicators` (
-            `id` bigint(20) NOT NULL AUTO_INCREMENT,
-            `family_id` bigint(20) UNSIGNED DEFAULT NULL,
-            `user_id` bigint(20) UNSIGNED DEFAULT NULL,
-            `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            UNIQUE KEY `unique_family_user` (`family_id`,`user_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-    ");
+    // typing_indicators table must exist via migration/schema
+    // Removed runtime CREATE TABLE - DDL on every request is expensive and unnecessary
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // SET TYPING STATUS

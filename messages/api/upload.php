@@ -31,7 +31,10 @@ try {
         'audio/webm', 'audio/ogg', 'audio/mpeg'
     ];
     
-    if (!in_array($file['type'], $allowedTypes)) {
+    // Server-side MIME validation (don't trust client-provided type)
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $detectedType = $finfo->file($file['tmp_name']);
+    if (!in_array($detectedType, $allowedTypes)) {
         throw new Exception('Invalid file type');
     }
     
@@ -59,7 +62,7 @@ try {
     
     // Create thumbnail for images
     $thumbnailUrl = null;
-    if (strpos($file['type'], 'image/') === 0) {
+    if (strpos($detectedType, 'image/') === 0) {
         try {
             $thumbnailPath = $uploadDir . 'thumb_' . $filename;
             $image = imagecreatefromstring(file_get_contents($filepath));
@@ -74,7 +77,9 @@ try {
                 imagecopyresampled($thumb, $image, 0, 0, 0, 0, $thumbWidth, $thumbHeight, $width, $height);
                 
                 if ($extension === 'png') {
-                    imagepng($thumb, $thumbnailPath);
+                    imagepng($thumb, $thumbnailPath, 8);
+                } elseif ($extension === 'webp' && function_exists('imagewebp')) {
+                    imagewebp($thumb, $thumbnailPath, 85);
                 } else {
                     imagejpeg($thumb, $thumbnailPath, 85);
                 }
@@ -93,7 +98,7 @@ try {
         'success' => true,
         'url' => $mediaUrl,
         'thumbnail' => $thumbnailUrl,
-        'type' => explode('/', $file['type'])[0] // image, video, audio
+        'type' => explode('/', $detectedType)[0] // image, video, audio
     ]);
     
 } catch (Exception $e) {
