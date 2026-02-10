@@ -175,9 +175,8 @@ try {
 
 $pageTitle = 'Schedule';
 $activePage = 'schedule';
-$cacheVersion = '10.1.0';
-$pageCSS = ['/schedule/css/schedule.css?v=' . $cacheVersion];
-$pageJS = ['/schedule/js/schedule.js?v=' . $cacheVersion];
+$pageCSS = ['/schedule/css/schedule.css'];
+$pageJS = ['/schedule/js/schedule.js'];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>

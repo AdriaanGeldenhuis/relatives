@@ -115,9 +115,8 @@ $isToday = ($selectedDate === date('Y-m-d'));
 
 $pageTitle = 'Timeline';
 $activePage = 'schedule';
-$cacheVersion = '10.1.0';
-$pageCSS = ['/schedule/timeline/css/timeline.css?v=' . $cacheVersion];
-$pageJS = ['/schedule/timeline/js/timeline.js?v=' . $cacheVersion];
+$pageCSS = ['/schedule/timeline/css/timeline.css'];
+$pageJS = ['/schedule/timeline/js/timeline.js'];
 
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>

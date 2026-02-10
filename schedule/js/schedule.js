@@ -1816,14 +1816,14 @@ function exportAsPDF() {
         <body>
             <h1>📅 Schedule for ${date}</h1>
             ${events.length === 0 ? '<p>No events scheduled</p>' : events.map(e => `
-                <div class="event status-${e.status.toLowerCase().replace(' ', '-')}">
-                    <div class="event-name">${e.name}</div>
+                <div class="event status-${escapeHtml(e.status.toLowerCase().replace(' ', '-'))}">
+                    <div class="event-name">${escapeHtml(e.name)}</div>
                     <div class="event-details">
-                        ${e.time ? '🕐 ' + e.time : ''}
-                        ${e.duration ? '⏱️ ' + e.duration : ''}
-                        | ${e.type} | ${e.status}
+                        ${e.time ? '🕐 ' + escapeHtml(e.time) : ''}
+                        ${e.duration ? '⏱️ ' + escapeHtml(e.duration) : ''}
+                        | ${escapeHtml(e.type)} | ${escapeHtml(e.status)}
                     </div>
-                    ${e.notes ? '<div class="event-details">📝 ' + e.notes + '</div>' : ''}
+                    ${e.notes ? '<div class="event-details">📝 ' + escapeHtml(e.notes) + '</div>' : ''}
                 </div>
             `).join('')}
         </body>
@@ -2251,12 +2251,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
             e.preventDefault();
             toggleBulkMode();
-        }
-        
-        // Ctrl+F - Start focus mode
-        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-            e.preventDefault();
-            startFocusMode();
         }
         
         // Ctrl+E - Export
