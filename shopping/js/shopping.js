@@ -1776,39 +1776,44 @@ function toggleGearMenu(event, itemId) {
 
     // Toggle this menu
     const isOpening = !menu.classList.contains('active');
-    menu.classList.toggle('active');
-
-    // Add/remove elevated class on parent item-card for z-index
-    const itemCard = menu.closest('.item-card');
-    if (itemCard) {
-        if (isOpening) {
-            itemCard.classList.add('gear-menu-open');
-        } else {
-            itemCard.classList.remove('gear-menu-open');
-        }
-    }
 
     if (isOpening) {
-        // Position using fixed coordinates so it overlays everything
+        // Move dropdown to body so it escapes any parent transform/overflow
+        menu._originalParent = menu.parentNode;
+        menu._originalNext = menu.nextSibling;
+        document.body.appendChild(menu);
+
+        // Position using fixed coordinates
         const btn = event.currentTarget;
         const rect = btn.getBoundingClientRect();
 
-        // Place below the button
+        // Place below the button, aligned right
         let top = rect.bottom + 4;
-        let left = rect.right - 110;
+        let left = rect.right - 120;
 
         // Keep within viewport bounds
         if (left < 8) left = 8;
-        if (left + 110 > window.innerWidth) left = window.innerWidth - 118;
+        if (left + 120 > window.innerWidth) left = window.innerWidth - 128;
 
         // If it would go below viewport, show above the button
-        if (top + 80 > window.innerHeight) {
-            top = rect.top - 80;
+        if (top + 90 > window.innerHeight) {
+            top = rect.top - 90;
         }
 
         menu.style.top = top + 'px';
         menu.style.left = left + 'px';
         menu.style.right = 'auto';
+        menu.classList.add('active');
+    } else {
+        menu.classList.remove('active');
+        // Move back to original parent
+        if (menu._originalParent) {
+            if (menu._originalNext) {
+                menu._originalParent.insertBefore(menu, menu._originalNext);
+            } else {
+                menu._originalParent.appendChild(menu);
+            }
+        }
     }
 }
 
@@ -1818,6 +1823,16 @@ function toggleGearMenu(event, itemId) {
 function closeAllGearMenus() {
     document.querySelectorAll('.gear-dropdown.active').forEach(menu => {
         menu.classList.remove('active');
+        // Move back to original parent
+        if (menu._originalParent) {
+            if (menu._originalNext) {
+                menu._originalParent.insertBefore(menu, menu._originalNext);
+            } else {
+                menu._originalParent.appendChild(menu);
+            }
+            menu._originalParent = null;
+            menu._originalNext = null;
+        }
     });
     // Remove elevated z-index class from all item-cards
     document.querySelectorAll('.item-card.gear-menu-open').forEach(card => {

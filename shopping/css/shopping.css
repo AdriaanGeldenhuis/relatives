@@ -764,7 +764,8 @@ body {
 }
 
 .category-section:hover {
-    transform: translateY(-2px);
+    /* removed transform: translateY(-2px) - it creates a stacking context
+       that traps position:fixed dropdowns inside */
 }
 
 .category-header {
