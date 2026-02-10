@@ -11,7 +11,7 @@ HT_Auth::requireLogin();
 
 // Page setup
 $pageTitle = 'Create Trip';
-$pageCSS = ['/holiday_traveling/assets/css/holiday.css'];
+$pageCSS = [];
 $pageJS = ['/holiday_traveling/assets/js/ai_worker.js'];
 
 // Render view

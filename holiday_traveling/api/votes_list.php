@@ -92,12 +92,14 @@ try {
             $option['score'] = ($votes['love'] * 2) + ($votes['meh'] * 1) + ($votes['no'] * -1);
             $option['total_votes'] = $votes['love'] + $votes['meh'] + $votes['no'];
         }
+        unset($option);
 
         $poll['user_votes'] = $userVotes;
         $poll['is_expired'] = $poll['closes_at'] && strtotime($poll['closes_at']) < time();
 
         unset($poll['options_json']); // Remove raw JSON
     }
+    unset($poll);
 
     HT_Response::ok([
         'trip_id' => $tripId,

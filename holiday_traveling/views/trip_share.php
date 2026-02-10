@@ -153,7 +153,7 @@
             nativeBtn.addEventListener('click', async function() {
                 try {
                     await navigator.share({
-                        title: 'Trip to <?php echo addslashes($trip['destination']); ?>',
+                        title: <?php echo json_encode('Trip to ' . $trip['destination']); ?>,
                         text: 'Join my trip!',
                         url: document.getElementById('shareUrlInput').value
                     });

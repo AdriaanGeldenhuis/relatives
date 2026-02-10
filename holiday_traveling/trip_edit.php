@@ -39,7 +39,7 @@ $travelers = $trip['travelers_json'] ? json_decode($trip['travelers_json'], true
 
 // Page setup
 $pageTitle = 'Edit Trip - ' . $trip['destination'];
-$pageCSS = ['/holiday_traveling/assets/css/holiday.css'];
+$pageCSS = [];
 $pageJS = [];
 
 // Render view

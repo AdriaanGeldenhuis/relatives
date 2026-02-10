@@ -114,21 +114,13 @@ try {
         'success' => true,
         'events_created' => count($events),
         'message' => $message,
-        'dates' => $dateList,
-        'debug' => [
-            'trip_id' => $tripId,
-            'start_date' => $trip['start_date'],
-            'itinerary_days' => $itineraryDays,
-            'total_activities' => $totalActivities
-        ]
+        'dates' => $dateList
     ]);
 
 } catch (Throwable $e) {
     error_log('Calendar sync error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
     echo json_encode([
         'success' => false,
-        'error' => $e->getMessage(),
-        'file' => basename($e->getFile()),
-        'line' => $e->getLine()
+        'error' => $e->getMessage()
     ]);
 }
