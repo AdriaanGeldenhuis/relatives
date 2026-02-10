@@ -348,22 +348,21 @@ function getImagePaths($imagePath) {
 }
 
 $pageTitle = 'Notes';
-$cacheVersion = '10.2.0'; // Multi-photo notes with carousel (up to 7 photos)
 $pageCSS = [
-    '/notes/css/notes.css?v=' . $cacheVersion,
-    '/collage/css/collage.css?v=' . $cacheVersion
+    '/notes/css/notes.css',
+    '/collage/css/collage.css'
 ];
 $pageJS = [
-    '/notes/js/notes.js?v=' . $cacheVersion,
-    '/collage/js/collage.state.js?v=' . $cacheVersion,
-    '/collage/js/collage.images.js?v=' . $cacheVersion,
-    '/collage/js/collage.drag.js?v=' . $cacheVersion,
-    '/collage/js/collage.resize.js?v=' . $cacheVersion,
-    '/collage/js/collage.rotate.js?v=' . $cacheVersion,
-    '/collage/js/collage.layouts.js?v=' . $cacheVersion,
-    '/collage/js/collage.background.js?v=' . $cacheVersion,
-    '/collage/js/collage.cleanup.js?v=' . $cacheVersion,
-    '/collage/js/collage.init.js?v=' . $cacheVersion
+    '/notes/js/notes.js',
+    '/collage/js/collage.state.js',
+    '/collage/js/collage.images.js',
+    '/collage/js/collage.drag.js',
+    '/collage/js/collage.resize.js',
+    '/collage/js/collage.rotate.js',
+    '/collage/js/collage.layouts.js',
+    '/collage/js/collage.background.js',
+    '/collage/js/collage.cleanup.js',
+    '/collage/js/collage.init.js'
 ];
 $shoppingCount = 0;
 

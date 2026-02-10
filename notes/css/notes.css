@@ -3,7 +3,7 @@
    Beautiful sticky notes with glassmorphism
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+/* Google Fonts loaded by header.php */
 
 :root {
     /* Brand Colors */
@@ -1417,6 +1417,11 @@ body {
     animation: pulse 2s ease-in-out infinite;
 }
 
+@keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.8; }
+}
+
 .fullscreen-note-voice audio {
     width: 100%;
     max-width: 400px;
@@ -2121,5 +2126,66 @@ body {
     .photo-previews-grid {
         grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
         gap: var(--space-xs);
+    }
+}
+
+/* ============================================
+   TOAST NOTIFICATIONS
+   ============================================ */
+
+.toast-notification {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 16px;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    z-index: 10001;
+    transform: translateX(400px);
+    transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.toast-notification.show {
+    transform: translateX(0);
+}
+
+.toast-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.toast-message {
+    font-size: 0.95rem;
+}
+
+.toast-success {
+    border-left: 4px solid #4caf50;
+}
+
+.toast-error {
+    border-left: 4px solid #f44336;
+}
+
+.toast-warning {
+    border-left: 4px solid #ff9800;
+}
+
+.toast-info {
+    border-left: 4px solid #2196f3;
+}
+
+@media (max-width: 768px) {
+    .toast-notification {
+        right: 20px;
+        left: 20px;
+        bottom: 20px;
     }
 }
