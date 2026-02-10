@@ -3,8 +3,6 @@
    The most beautiful calendar ever created
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-
 :root {
     /* Brand Colors */
     --primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -1215,12 +1213,6 @@ body {
     }
 }
 
-@keyframes fadeOut {
-    to {
-        opacity: 0;
-    }
-}
-
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -1489,20 +1481,6 @@ textarea.form-control {
     100% {
         transform: translateY(0) scale(1);
         opacity: 1;
-    }
-}
-
-@keyframes slideOutLeft {
-    to {
-        transform: translateX(-100%);
-        opacity: 0;
-    }
-}
-
-@keyframes slideOutRight {
-    to {
-        transform: translateX(100%);
-        opacity: 0;
     }
 }
 

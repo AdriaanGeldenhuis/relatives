@@ -12,108 +12,7 @@ console.log('📅 Calendar JavaScript loading...');
 // Canvas hidden via CSS, class is a no-op stub
 // ============================================
 class ParticleSystem {
-    constructor(canvasId) {
-        // Disabled - canvas hidden via CSS for performance
-    }
-}
-
-// ============================================
-// 3D TILT EFFECT
-// ============================================
-class TiltEffect {
-    constructor(element) {
-        this.element = element;
-        this.width = element.offsetWidth;
-        this.height = element.offsetHeight;
-        this.settings = {
-            max: 8,
-            perspective: 1200,
-            scale: 1.03,
-            speed: 400,
-            easing: 'cubic-bezier(0.03, 0.98, 0.52, 0.99)',
-            glare: true
-        };
-        
-        this.init();
-    }
-    
-    init() {
-        this.element.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg)';
-        this.element.style.transition = `transform ${this.settings.speed}ms ${this.settings.easing}`;
-        
-        if (this.settings.glare && !this.element.querySelector('.tilt-glare')) {
-            const glare = document.createElement('div');
-            glare.className = 'tilt-glare';
-            glare.style.cssText = `
-                position: absolute;
-                inset: 0;
-                background: linear-gradient(135deg, 
-                    rgba(255,255,255,0) 0%, 
-                    rgba(255,255,255,0.1) 50%, 
-                    rgba(255,255,255,0) 100%);
-                opacity: 0;
-                pointer-events: none;
-                transition: opacity ${this.settings.speed}ms ${this.settings.easing};
-                border-radius: inherit;
-            `;
-            this.element.style.position = 'relative';
-            this.element.appendChild(glare);
-        }
-        
-        this.element.addEventListener('mouseenter', () => this.onMouseEnter());
-        this.element.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.element.addEventListener('mouseleave', () => this.onMouseLeave());
-    }
-    
-    onMouseEnter() {
-        this.width = this.element.offsetWidth;
-        this.height = this.element.offsetHeight;
-        
-        const glare = this.element.querySelector('.tilt-glare');
-        if (glare) glare.style.opacity = '1';
-    }
-    
-    onMouseMove(e) {
-        const rect = this.element.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        const percentX = (x / this.width) - 0.5;
-        const percentY = (y / this.height) - 0.5;
-        
-        const tiltX = percentY * this.settings.max;
-        const tiltY = -percentX * this.settings.max;
-        
-        this.element.style.transform = `
-            perspective(${this.settings.perspective}px) 
-            rotateX(${tiltX}deg) 
-            rotateY(${tiltY}deg) 
-            scale3d(${this.settings.scale}, ${this.settings.scale}, ${this.settings.scale})
-        `;
-        
-        const glare = this.element.querySelector('.tilt-glare');
-        if (glare) {
-            const angle = Math.atan2(percentY, percentX) * (180 / Math.PI);
-            glare.style.background = `
-                linear-gradient(${angle + 45}deg, 
-                    rgba(255,255,255,0) 0%, 
-                    rgba(255,255,255,0.15) 50%, 
-                    rgba(255,255,255,0) 100%)
-            `;
-        }
-    }
-    
-    onMouseLeave() {
-        this.element.style.transform = `
-            perspective(${this.settings.perspective}px) 
-            rotateX(0deg) 
-            rotateY(0deg) 
-            scale3d(1, 1, 1)
-        `;
-        
-        const glare = this.element.querySelector('.tilt-glare');
-        if (glare) glare.style.opacity = '0';
-    }
+    constructor(canvasId) {}
 }
 
 // ============================================
@@ -160,11 +59,11 @@ let currentDayDate = null;
 // ============================================
 function switchView(view) {
     calendarView = view;
-    
+
     document.querySelectorAll('.view-btn').forEach(btn => {
         btn.classList.remove('active');
+        if (btn.getAttribute('onclick')?.includes(`'${view}'`)) btn.classList.add('active');
     });
-    event.target.closest('.view-btn').classList.add('active');
     
     document.querySelectorAll('.calendar-view').forEach(viewEl => {
         viewEl.classList.remove('active');
@@ -726,7 +625,7 @@ function showDayEvents(dateStr) {
                     <div class="day-event-title">${escapeHtml(event.title)}</div>
                     <div class="day-event-time">
                         ${event.all_day ? '🌅 All day' : `⏰ ${formatTime(event.starts_at)}${event.ends_at ? ' - ' + formatTime(event.ends_at) : ''}`}
-                        ${event.eventLocation ? ` • 📍 ${escapeHtml(event.eventLocation)}` : ''}
+                        ${event.location ? ` • 📍 ${escapeHtml(event.location)}` : ''}
                     </div>
                     <span class="day-event-type">${getEventTypeLabel(event.kind)}</span>
                 </div>
@@ -854,24 +753,6 @@ const eventTypeSettings = {
     todo: { color: '#f093fb', allDay: false, yearlyRepeat: false, hideTime: false }
 };
 
-// Duration presets for quick selection
-const durationPresets = [
-    { label: '15m', minutes: 15, icon: '⚡' },
-    { label: '25m', minutes: 25, icon: '🍅' },
-    { label: '30m', minutes: 30, icon: '⏱️' },
-    { label: '45m', minutes: 45, icon: '⏰' },
-    { label: '1h', minutes: 60, icon: '🕐' },
-    { label: '90m', minutes: 90, icon: '📚' },
-    { label: '2h', minutes: 120, icon: '🎯' }
-];
-
-// Priority colors
-const priorityColors = {
-    low: '#10b981',
-    medium: '#f59e0b',
-    high: '#ef4444',
-    urgent: '#dc2626'
-};
 
 function onEventTypeChange(selectElement, isEdit = false) {
     const type = selectElement.value;
@@ -1194,10 +1075,10 @@ function showEventDetails(eventId) {
             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 30px;">
                 <div style="flex: 1;">
                     <div style="display: inline-block; padding: 8px 16px; border-radius: 12px; background: ${event.color}; color: white; font-size: 12px; font-weight: 800; margin-bottom: 15px;">
-                        ${event.kind.toUpperCase()}
+                        ${escapeHtml(event.kind.toUpperCase())}
                     </div>
                     <h3 style="font-size: 28px; color: #333; margin-bottom: 10px; font-weight: 900;">
-                        ${event.title}
+                        ${escapeHtml(event.title)}
                     </h3>
                 </div>
             </div>
@@ -1236,7 +1117,7 @@ function showEventDetails(eventId) {
                 <div style="margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 14px;">
                     <div style="font-size: 14px; color: #666; margin-bottom: 8px; font-weight: 700;">📍 LOCATION</div>
                     <div style="font-size: 16px; color: #333; font-weight: 600;">
-                        ${event.location}
+                        ${escapeHtml(event.location)}
                     </div>
                     <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}" 
                        target="_blank"
@@ -1250,7 +1131,7 @@ function showEventDetails(eventId) {
                 <div style="margin-bottom: 20px;">
                     <div style="font-size: 14px; color: #666; margin-bottom: 10px; font-weight: 700;">📝 NOTES</div>
                     <div style="color: #333; line-height: 1.8; white-space: pre-wrap;">
-                        ${event.notes}
+                        ${escapeHtml(event.notes)}
                     </div>
                 </div>
             ` : ''}
@@ -1273,10 +1154,10 @@ function showEventDetails(eventId) {
                 <div style="font-size: 14px; color: #666; margin-bottom: 12px; font-weight: 700;">CREATED BY</div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="width: 50px; height: 50px; border-radius: 50%; background: ${event.avatar_color}; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                        ${event.full_name.charAt(0).toUpperCase()}
+                        ${escapeHtml(event.full_name?.charAt(0)?.toUpperCase() || '')}
                     </div>
                     <div>
-                        <div style="font-weight: 700; color: #333; font-size: 16px;">${event.full_name}</div>
+                        <div style="font-weight: 700; color: #333; font-size: 16px;">${escapeHtml(event.full_name)}</div>
                         <div style="font-size: 13px; color: #666;">
                             Created ${formatDate(event.created_at)} at ${formatTime(event.created_at)}
                         </div>
@@ -1562,7 +1443,7 @@ document.addEventListener('keydown', (e) => {
 // CONFETTI
 // ============================================
 function confetti() {
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 50; i++) {
         createConfettiPiece();
     }
 }
@@ -1640,8 +1521,6 @@ function formatTime(dateStr) {
 document.addEventListener('DOMContentLoaded', () => {
     console.log('📅 Calendar System Initialized');
     
-    new ParticleSystem('particles');
-    
     document.querySelectorAll('.stat-value[data-count]').forEach(element => {
         const observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
@@ -1655,8 +1534,6 @@ document.addEventListener('DOMContentLoaded', () => {
         observer.observe(element);
     });
     
-    document.querySelectorAll('[data-tilt]').forEach(card => new TiltEffect(card));
-
     const heroMonth = document.querySelector('.hero-month');
     if (heroMonth) {
         const text = heroMonth.textContent;
