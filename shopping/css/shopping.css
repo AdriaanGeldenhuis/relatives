@@ -1724,15 +1724,12 @@ body {
 .gear-dropdown {
     display: none;
     position: fixed;
-    z-index: 10000;
-    background: rgba(40, 35, 70, 0.95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    z-index: 2147483647;
+    background: rgb(40, 35, 70);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: var(--shopping-radius-xs);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
-    min-width: 100px;
-    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    min-width: 120px;
 }
 
 .gear-dropdown.active {
