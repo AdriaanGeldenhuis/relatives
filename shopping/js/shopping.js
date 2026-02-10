@@ -33,64 +33,6 @@ const ShoppingApp = {
 };
 
 // ============================================
-// PARTICLE SYSTEM - DISABLED FOR PERFORMANCE
-// Canvas hidden via CSS, class is a no-op stub
-// ============================================
-class ParticleSystem {
-    constructor(canvasId) {
-        // Disabled - canvas hidden via CSS for performance
-    }
-    destroy() {}
-}
-
-// ============================================
-// 3D TILT EFFECT
-// ============================================
-class TiltEffect {
-    constructor(element) {
-        this.element = element;
-        this.width = element.offsetWidth;
-        this.height = element.offsetHeight;
-        this.settings = {
-            max: 12,
-            perspective: 1200,
-            scale: 1.05,
-            speed: 400,
-            easing: 'cubic-bezier(0.03, 0.98, 0.52, 0.99)'
-        };
-        this.init();
-    }
-    
-    init() {
-        this.element.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg)';
-        this.element.style.transition = `transform ${this.settings.speed}ms ${this.settings.easing}`;
-        this.element.addEventListener('mouseenter', () => this.onMouseEnter());
-        this.element.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.element.addEventListener('mouseleave', () => this.onMouseLeave());
-    }
-    
-    onMouseEnter() {
-        this.width = this.element.offsetWidth;
-        this.height = this.element.offsetHeight;
-    }
-    
-    onMouseMove(e) {
-        const rect = this.element.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const percentX = (x / this.width) - 0.5;
-        const percentY = (y / this.height) - 0.5;
-        const tiltX = percentY * this.settings.max;
-        const tiltY = -percentX * this.settings.max;
-        this.element.style.transform = `perspective(${this.settings.perspective}px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale3d(${this.settings.scale}, ${this.settings.scale}, ${this.settings.scale})`;
-    }
-    
-    onMouseLeave() {
-        this.element.style.transform = `perspective(${this.settings.perspective}px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`;
-    }
-}
-
-// ============================================
 // API HELPER - ENHANCED ERROR HANDLING
 // ============================================
 async function apiCall(endpoint, data = {}, method = 'POST') {
@@ -803,22 +745,20 @@ function updateClearBoughtButton() {
 
     const boughtCount = document.querySelectorAll('.item-card.bought').length;
 
-    // Update badge
-    let badge = clearBoughtBtn.querySelector('.bought-badge');
+    // Update badge (matches .badge class used in server-rendered HTML)
+    let badge = clearBoughtBtn.querySelector('.badge');
 
     if (boughtCount > 0) {
         clearBoughtBtn.disabled = false;
-        clearBoughtBtn.classList.add('has-bought');
 
         if (!badge) {
             badge = document.createElement('span');
-            badge.className = 'bought-badge';
+            badge.className = 'badge';
             clearBoughtBtn.appendChild(badge);
         }
         badge.textContent = boughtCount;
     } else {
         clearBoughtBtn.disabled = true;
-        clearBoughtBtn.classList.remove('has-bought');
 
         if (badge) {
             badge.remove();
@@ -1175,7 +1115,7 @@ function applySuggestion(itemName) {
 // ============================================
 // FREQUENT ITEMS QUICK ADD
 // ============================================
-async function quickAddFrequent(itemName, category) {
+async function quickAddFrequent(event, itemName, category) {
     // Get the button that was clicked
     const button = event?.target?.closest('.frequent-chip');
     
@@ -1667,37 +1607,6 @@ function editList(listId, listName, listIcon) {
 }
 
 // ============================================
-// UPDATE CLEAR BOUGHT BUTTON
-// ============================================
-
-/**
- * Update the Clear Bought button state
- */
-function updateClearBoughtButton() {
-    const clearBtn = document.getElementById('clearBoughtBtn');
-    if (!clearBtn) return;
-
-    const boughtItems = document.querySelectorAll('.item-card.bought');
-    const count = boughtItems.length;
-
-    // Update disabled state
-    clearBtn.disabled = (count === 0);
-
-    // Update badge
-    let badge = clearBtn.querySelector('.badge');
-    if (count > 0) {
-        if (!badge) {
-            badge = document.createElement('span');
-            badge.className = 'badge';
-            clearBtn.appendChild(badge);
-        }
-        badge.textContent = count;
-    } else if (badge) {
-        badge.remove();
-    }
-}
-
-// ============================================
 // GEAR MENU FUNCTIONS
 // ============================================
 
@@ -2010,7 +1919,7 @@ window.addEventListener('popstate', (e) => {
 // ============================================
 
 const RealTimeUpdates = {
-    pollInterval: 3000, // Poll every 3 seconds
+    pollInterval: 10000, // Poll every 10 seconds
     lastUpdate: Date.now(),
     isPolling: false,
     pollTimer: null,
@@ -2197,38 +2106,11 @@ function initKeyboardShortcuts() {
 }
 
 // ============================================
-// GLOBAL CLEANUP
-// ============================================
-let particleSystemInstance = null;
-
-window.addEventListener('beforeunload', () => {
-    if (particleSystemInstance) {
-        particleSystemInstance.destroy();
-        particleSystemInstance = null;
-    }
-});
-
-// ============================================
 // INITIALIZE APP
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c✨ Shopping List Ready v2.0!', 'font-size: 14px; font-weight: bold; color: #43e97b;');
-    
-    // Initialize particle system
-    const particlesCanvas = document.getElementById('particles');
-    if (particlesCanvas) {
-        particleSystemInstance = new ParticleSystem('particles');
-    }
-    
-    // Initialize tilt effects
-    document.querySelectorAll('[data-tilt]').forEach(card => {
-        try {
-            new TiltEffect(card);
-        } catch (err) {
-            console.warn('Tilt effect failed for element:', card, err);
-        }
-    });
-    
+
     // Initialize features
     initSmartSuggestions();
     initKeyboardShortcuts();
@@ -2288,89 +2170,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================
-// ADD ITEM MODAL FUNCTIONS
-// ============================================
-function showAddItemModal() {
-    // Clear form
-    document.getElementById('itemName').value = '';
-    document.getElementById('itemQty').value = '';
-    document.getElementById('itemPrice').value = '';
-    document.getElementById('itemCategory').value = 'other';
-
-    showModal('addItemModal');
-
-    // Focus on item name
-    setTimeout(() => {
-        document.getElementById('itemName').focus();
-    }, 100);
-}
-
-async function submitAddItem(event) {
-    if (event) event.preventDefault();
-
-    const name = document.getElementById('itemName').value.trim();
-    const qty = document.getElementById('itemQty').value.trim();
-    const price = document.getElementById('itemPrice').value.trim();
-    const category = document.getElementById('itemCategory').value;
-
-    if (!name) {
-        showToast('Please enter an item name', 'error');
-        return;
-    }
-
-    const submitBtn = event.target.querySelector('button[type="submit"]');
-    const originalText = submitBtn.textContent;
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Adding...';
-
-    try {
-        const result = await apiCall(ShoppingApp.API.items, {
-            action: 'add',
-            list_id: ShoppingApp.currentListId,
-            name: name,
-            qty: qty || null,
-            price: price || null,
-            category: category
-        });
-
-        showToast(`Added "${name}"!`, 'success');
-        closeModal('addItemModal');
-
-        // Reload to show new item
-        setTimeout(() => location.reload(), 500);
-
-    } catch (error) {
-        showToast(error.message || 'Failed to add item', 'error');
-        console.error('Add item error:', error);
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = originalText;
-    }
-}
-
-function quickAddFromModal(itemName, category) {
-    document.getElementById('itemName').value = itemName;
-    document.getElementById('itemCategory').value = category;
-    document.getElementById('itemQty').focus();
-}
-
-// ============================================
-// LIST MANAGEMENT FUNCTIONS
-// ============================================
-function editList(listId, listName, listIcon) {
-    document.getElementById('listModalTitle').textContent = '✏️ Edit List';
-    document.getElementById('listId').value = listId;
-    document.getElementById('listName').value = listName;
-
-    // Set the correct icon
-    document.querySelectorAll('input[name="listIcon"]').forEach(input => {
-        input.checked = input.value === listIcon;
-    });
-
-    showModal('listModal');
-}
-
-// ============================================
 // EXPORT FUNCTIONS TO GLOBAL SCOPE
 // ============================================
 window.ShoppingApp = ShoppingApp;
@@ -2402,28 +2201,12 @@ window.shareViaEmail = shareViaEmail;
 window.shareViaSMS = shareViaSMS;
 window.exportList = exportList;
 window.exportListAs = exportListAs;
-// New functions for modal and list editing
-window.showAddItemModal = showAddItemModal;
-window.submitAddItem = submitAddItem;
-window.quickAddFromModal = quickAddFromModal;
-window.editList = editList;
-window.updateClearBoughtButton = updateClearBoughtButton;
-
-// Gear menu functions
 window.toggleGearMenu = toggleGearMenu;
 window.closeAllGearMenus = closeAllGearMenus;
-
-// List gear menu functions
 window.toggleListGearMenu = toggleListGearMenu;
 window.closeAllListGearMenus = closeAllListGearMenus;
-
-// List switching
 window.switchList = switchList;
 window.renderListItems = renderListItems;
 window.buildItemCardHTML = buildItemCardHTML;
 window.updateListStats = updateListStats;
-
-// Real-time updates
 window.RealTimeUpdates = RealTimeUpdates;
-
-console.log('%c✅ Real-Time Shopping Ready!', 'font-size: 16px; font-weight: bold; color: #43e97b;');

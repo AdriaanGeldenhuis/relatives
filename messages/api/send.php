@@ -126,11 +126,13 @@ try {
         for ($i = 0; $i < $fileCount; $i++) {
             if ($_FILES['media']['error'][$i] !== UPLOAD_ERR_OK) continue;
 
-            $fileType = $_FILES['media']['type'][$i];
             $fileSize = $_FILES['media']['size'][$i];
             $fileName = $_FILES['media']['name'][$i];
             $fileTmp  = $_FILES['media']['tmp_name'][$i];
 
+            // Server-side MIME validation (don't trust client-provided type)
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $fileType = $finfo->file($fileTmp);
             if (!in_array($fileType, $allowedTypes)) {
                 throw new Exception('Invalid file type: ' . $fileName);
             }
@@ -169,6 +171,8 @@ try {
                         imagecopyresampled($thumb, $image, 0, 0, 0, 0, $thumbWidth, $thumbHeight, $width, $height);
                         if ($extension === 'png') {
                             imagepng($thumb, $thumbnailPath, 8);
+                        } elseif ($extension === 'webp' && function_exists('imagewebp')) {
+                            imagewebp($thumb, $thumbnailPath, 85);
                         } else {
                             imagejpeg($thumb, $thumbnailPath, 85);
                         }

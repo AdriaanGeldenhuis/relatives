@@ -4,8 +4,6 @@
    Styled exactly like Notes system
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-
 :root {
     /* Brand Colors */
     --primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

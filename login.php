@@ -10,8 +10,13 @@ declare(strict_types=1);
 // Start output buffering
 ob_start();
 
-// Start session first
+// Start session with correct name and security settings
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.cookie_secure', '1');
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.use_strict_mode', '1');
+    session_name('RELATIVES_SESSION');
     session_start();
 }
 

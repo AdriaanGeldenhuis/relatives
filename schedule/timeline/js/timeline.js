@@ -44,7 +44,7 @@ function initTouchHandlers() {
         const onclickAttr = btn.getAttribute('onclick');
         if (onclickAttr) {
             btn.removeAttribute('onclick');
-            addTouchHandler(btn, () => eval(onclickAttr));
+            addTouchHandler(btn, () => new Function(onclickAttr)());
         }
     });
 
@@ -56,7 +56,7 @@ function initTouchHandlers() {
         const onclickAttr = card.getAttribute('onclick');
         if (onclickAttr) {
             card.removeAttribute('onclick');
-            addTouchHandler(card, () => eval(onclickAttr));
+            addTouchHandler(card, () => new Function(onclickAttr)());
         }
     });
 

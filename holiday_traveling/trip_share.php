@@ -53,7 +53,7 @@ $shareUrl = ($_ENV['APP_URL'] ?? 'https://relatives.app') . '/holiday_traveling/
 
 // Page setup
 $pageTitle = 'Share Trip - ' . $trip['destination'];
-$pageCSS = ['/holiday_traveling/assets/css/holiday.css'];
+$pageCSS = [];
 $pageJS = [];
 
 // Render view

@@ -20,14 +20,32 @@ class Session {
      * Initialize PHP session
      */
     private function initializeSession(): void {
-        if (session_status() === PHP_SESSION_NONE) {
+        if (session_status() === PHP_SESSION_ACTIVE && session_name() !== 'RELATIVES_SESSION') {
+            // Session started with wrong name - close and restart properly
+            $existingData = $_SESSION;
+            session_write_close();
+
             ini_set('session.gc_maxlifetime', (string)self::SESSION_LIFETIME);
             ini_set('session.cookie_lifetime', (string)self::SESSION_LIFETIME);
             ini_set('session.cookie_httponly', '1');
             ini_set('session.cookie_secure', '1');
             ini_set('session.cookie_samesite', 'Lax');
             ini_set('session.use_strict_mode', '1');
-            
+
+            session_name('RELATIVES_SESSION');
+            session_start();
+
+            if (empty($_SESSION) && !empty($existingData)) {
+                $_SESSION = $existingData;
+            }
+        } elseif (session_status() === PHP_SESSION_NONE) {
+            ini_set('session.gc_maxlifetime', (string)self::SESSION_LIFETIME);
+            ini_set('session.cookie_lifetime', (string)self::SESSION_LIFETIME);
+            ini_set('session.cookie_httponly', '1');
+            ini_set('session.cookie_secure', '1');
+            ini_set('session.cookie_samesite', 'Lax');
+            ini_set('session.use_strict_mode', '1');
+
             session_name('RELATIVES_SESSION');
             session_start();
         }

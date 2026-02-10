@@ -111,9 +111,9 @@ HomeWeatherWidget.prototype.showManualSearch = function() {
 
 HomeWeatherWidget.prototype.loadWeather = function() {
     var self = this;
-    if (!this.location) return;
+    if (!this.location) return Promise.resolve();
 
-    Promise.all([
+    return Promise.all([
         fetch('/weather/api/api.php?action=current&lat=' + this.location.lat + '&lon=' + this.location.lng),
         fetch('/weather/api/api.php?action=forecast&lat=' + this.location.lat + '&lon=' + this.location.lng)
     ]).then(function(responses) {
@@ -541,11 +541,12 @@ AIAssistant.prototype.generateInsights = function() {
         var messagesEl = document.querySelector('[href="/messages/"] .stat-number');
         var completedEl = document.querySelector('[onclick*="Analytics"] .stat-number');
 
+        // Read from data-count attribute (actual values), not textContent (animated "0")
         var stats = {
-            shopping: parseInt((shoppingEl && shoppingEl.textContent) || 0),
-            events: parseInt((eventsEl && eventsEl.textContent) || 0),
-            messages: parseInt((messagesEl && messagesEl.textContent) || 0),
-            completed: parseInt((completedEl && completedEl.textContent) || 0)
+            shopping: parseInt((shoppingEl && shoppingEl.dataset.count) || 0),
+            events: parseInt((eventsEl && eventsEl.dataset.count) || 0),
+            messages: parseInt((messagesEl && messagesEl.dataset.count) || 0),
+            completed: parseInt((completedEl && completedEl.dataset.count) || 0)
         };
 
         self.insights = [];

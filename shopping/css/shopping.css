@@ -4,7 +4,7 @@
    100% Mobile-Friendly
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+/* Google Fonts loaded by header.php */
 
 :root {
     --shopping-primary: #667eea;
@@ -628,7 +628,7 @@ body {
    ============================================ */
 
 .empty-state {
-    padding: var(--shopping-space-xl) * 2;
+    padding: calc(var(--shopping-space-xl) * 2);
     text-align: center;
 }
 

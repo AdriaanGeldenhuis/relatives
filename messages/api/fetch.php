@@ -32,22 +32,8 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Prevent multiple simultaneous requests from same session
-if (isset($_SESSION['fetching_messages']) && $_SESSION['fetching_messages'] === true) {
-    // Check if request is stale (more than 10 seconds old)
-    if (isset($_SESSION['fetch_started']) && (time() - $_SESSION['fetch_started']) < 10) {
-        http_response_code(429); // Too Many Requests
-        echo json_encode([
-            'success' => false,
-            'message' => 'Request already in progress'
-        ]);
-        exit;
-    }
-}
-
-// Mark as fetching
-$_SESSION['fetching_messages'] = true;
-$_SESSION['fetch_started'] = time();
+// Session-based throttle removed: it was fragile (crash leaves flag stuck)
+// The JS polling already prevents concurrent fetches via isLoadingMessages flag
 
 try {
     require_once __DIR__ . '/../../core/bootstrap.php';
@@ -162,10 +148,6 @@ try {
     $updateStmt = $db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
     $updateStmt->execute([$userId]);
     
-    // Clear fetching flag
-    $_SESSION['fetching_messages'] = false;
-    unset($_SESSION['fetch_started']);
-    
     // Clear any output buffer
     ob_end_clean();
     
@@ -179,10 +161,6 @@ try {
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     
 } catch (Exception $e) {
-    // Clear fetching flag on error
-    $_SESSION['fetching_messages'] = false;
-    unset($_SESSION['fetch_started']);
-    
     // Log error
     error_log("Messages fetch error: " . $e->getMessage());
     

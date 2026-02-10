@@ -263,7 +263,16 @@ function bulkArchive($db, $familyId, $messageIds) {
             $msg['created_at']
         ]);
     }
-    
+
+    // Soft-delete the originals now that they're archived
+    $archivedIds = array_column($messages, 'id');
+    $placeholders2 = str_repeat('?,', count($archivedIds) - 1) . '?';
+    $stmt = $db->prepare("
+        UPDATE messages SET deleted_at = NOW()
+        WHERE id IN ($placeholders2)
+    ");
+    $stmt->execute($archivedIds);
+
     return [
         'archived_count' => count($messages)
     ];

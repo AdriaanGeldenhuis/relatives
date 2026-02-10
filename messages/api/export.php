@@ -68,8 +68,8 @@ try {
         $params[] = $dateTo . ' 23:59:59';
     }
     
-    $sql .= " ORDER BY m.created_at ASC";
-    
+    $sql .= " ORDER BY m.created_at ASC LIMIT 10000";
+
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
     $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);

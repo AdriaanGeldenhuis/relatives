@@ -1301,6 +1301,10 @@ function updateRecordingTimer() {
 }
 
 function setupVisualizer(stream) {
+    // Close previous AudioContext to avoid hitting browser limit
+    if (audioContext) {
+        try { audioContext.close(); } catch (e) {}
+    }
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     analyser = audioContext.createAnalyser();
     const source = audioContext.createMediaStreamSource(stream);
@@ -1631,95 +1635,36 @@ function showToast(message, type = 'info') {
     // Remove existing toasts
     const existingToasts = document.querySelectorAll('.toast-notification');
     existingToasts.forEach(toast => toast.remove());
-    
+
     const toast = document.createElement('div');
     toast.className = `toast-notification toast-${type}`;
-    
+
     const icon = {
         success: '✅',
         error: '❌',
         warning: '⚠️',
         info: 'ℹ️'
     }[type] || 'ℹ️';
-    
-    toast.innerHTML = `
-        <span class="toast-icon">${icon}</span>
-        <span class="toast-message">${message}</span>
-    `;
-    
+
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'toast-icon';
+    iconSpan.textContent = icon;
+
+    const msgSpan = document.createElement('span');
+    msgSpan.className = 'toast-message';
+    msgSpan.textContent = message;
+
+    toast.appendChild(iconSpan);
+    toast.appendChild(msgSpan);
+
     document.body.appendChild(toast);
-    
+
     // Trigger animation
     setTimeout(() => toast.classList.add('show'), 10);
-    
+
     // Auto remove
     setTimeout(() => {
         toast.classList.remove('show');
         setTimeout(() => toast.remove(), 300);
     }, 3000);
-}
-
-// Add toast styles dynamically
-if (!document.getElementById('toast-styles')) {
-    const style = document.createElement('style');
-    style.id = 'toast-styles';
-    style.textContent = `
-        .toast-notification {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background: rgba(255, 255, 255, 0.15);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 16px;
-            padding: 16px 24px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            color: white;
-            font-weight: 600;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            z-index: 10001;
-            transform: translateX(400px);
-            transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-        }
-        
-        .toast-notification.show {
-            transform: translateX(0);
-        }
-        
-        .toast-icon {
-            font-size: 1.5rem;
-            line-height: 1;
-        }
-        
-        .toast-message {
-            font-size: 0.95rem;
-        }
-        
-        .toast-success {
-            border-left: 4px solid #4caf50;
-        }
-        
-        .toast-error {
-            border-left: 4px solid #f44336;
-        }
-        
-        .toast-warning {
-            border-left: 4px solid #ff9800;
-        }
-        
-        .toast-info {
-            border-left: 4px solid #2196f3;
-        }
-        
-        @media (max-width: 768px) {
-            .toast-notification {
-                right: 20px;
-                left: 20px;
-                bottom: 20px;
-            }
-        }
-    `;
-    document.head.appendChild(style);
 }

@@ -8,8 +8,9 @@ declare(strict_types=1);
  * ============================================
  */
 
-// Start session first
+// Start session with correct name to match bootstrap config
 if (session_status() === PHP_SESSION_NONE) {
+    session_name('RELATIVES_SESSION');
     session_start();
 }
 
@@ -254,9 +255,8 @@ $showWelcome = isset($_GET['welcome']) || isset($_GET['joined']);
 
 $pageTitle = 'Home';
 $activePage = 'home';
-$cacheVersion = '10.0.0';
-$pageCSS = ['/home/css/home.css?v=' . $cacheVersion];
-$pageJS = ['/home/js/home.js?v=' . $cacheVersion];
+$pageCSS = ['/home/css/home.css'];
+$pageJS = ['/home/js/home.js'];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
@@ -405,11 +405,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                                             <?php
                                             $eventTime = strtotime($event['starts_at']);
                                             $diff = $eventTime - time();
-                                            
-                                            if ($diff < 3600) {
+                                            $isToday = date('Y-m-d', $eventTime) === date('Y-m-d');
+                                            $isTomorrow = date('Y-m-d', $eventTime) === date('Y-m-d', strtotime('+1 day'));
+
+                                            if ($diff < 3600 && $diff > 0) {
                                                 echo '<span class="urgent">In ' . ceil($diff / 60) . ' min</span>';
-                                            } elseif ($diff < 86400) {
+                                            } elseif ($isToday) {
                                                 echo '<span class="today">Today at ' . date('g:i A', $eventTime) . '</span>';
+                                            } elseif ($isTomorrow) {
+                                                echo 'Tomorrow at ' . date('g:i A', $eventTime);
                                             } else {
                                                 echo date('M j, g:i A', $eventTime);
                                             }
@@ -553,9 +557,9 @@ require_once __DIR__ . '/../shared/components/header.php';
                             $avatarPath = __DIR__ . "/../saves/{$member['id']}/avatar/avatar.webp";
                             if (file_exists($avatarPath)):
                             ?>
-                                <img src="/saves/<?php echo $member['id']; ?>/avatar/avatar.webp?<?php echo time(); ?>"
+                                <img src="/saves/<?php echo $member['id']; ?>/avatar/avatar.webp?v=<?php echo $cacheVersion; ?>"
                                      alt="<?php echo htmlspecialchars($member['full_name']); ?>"
-                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" loading="lazy">
                             <?php else: ?>
                                 <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
                             <?php endif; ?>
@@ -607,9 +611,9 @@ require_once __DIR__ . '/../shared/components/header.php';
                             $activityAvatarPath = __DIR__ . "/../saves/{$activity['user_id']}/avatar/avatar.webp";
                             if (!empty($activity['user_id']) && file_exists($activityAvatarPath)):
                             ?>
-                                <img src="/saves/<?php echo $activity['user_id']; ?>/avatar/avatar.webp?<?php echo time(); ?>"
+                                <img src="/saves/<?php echo $activity['user_id']; ?>/avatar/avatar.webp?v=<?php echo $cacheVersion; ?>"
                                      alt="<?php echo htmlspecialchars($activity['full_name'] ?? ''); ?>"
-                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" loading="lazy">
                             <?php else: ?>
                                 <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
                             <?php endif; ?>

@@ -54,9 +54,8 @@ try {
 
 $pageTitle = 'Weather';
 $activePage = 'weather';
-$cacheVersion = '10.1.0';
-$pageCSS = ['/weather/css/weather.css?v=' . $cacheVersion];
-$pageJS = ['/weather/js/weather.js?v=' . $cacheVersion];
+$pageCSS = ['/weather/css/weather.css'];
+$pageJS = ['/weather/js/weather.js'];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>

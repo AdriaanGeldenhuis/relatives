@@ -108,7 +108,6 @@
         initTabs();
         initVersionSelect();
         initPlanActions();
-        initModals();
         loadWalletPreview();
         loadExpensesPreview();
         loadGoogleCalendarStatus();
@@ -205,81 +204,6 @@
             });
         }
 
-    }
-
-    /**
-     * Initialize modals
-     */
-    function initModals() {
-        // No modals to initialize
-    }
-
-    /**
-     * Initialize a closeable modal (info modals without confirm action)
-     */
-    function initCloseableModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (!modal) return;
-
-        const backdrop = modal.querySelector('.ht-modal-backdrop');
-        const closeBtn = modal.querySelector('.ht-modal-close');
-        const cancelBtns = modal.querySelectorAll('[data-action="cancel"]');
-
-        const closeModal = () => {
-            modal.style.display = 'none';
-        };
-
-        backdrop?.addEventListener('click', closeModal);
-        closeBtn?.addEventListener('click', closeModal);
-        cancelBtns.forEach(btn => btn.addEventListener('click', closeModal));
-    }
-
-    /**
-     * Initialize a modal with confirm/cancel handlers
-     */
-    function initModal(modalId, onConfirm) {
-        const modal = document.getElementById(modalId);
-        if (!modal) return;
-
-        const backdrop = modal.querySelector('.ht-modal-backdrop');
-        const cancelBtn = modal.querySelector('[data-action="cancel"]');
-        const confirmBtn = modal.querySelector('[data-action="confirm"]');
-
-        const closeModal = () => {
-            modal.style.display = 'none';
-        };
-
-        backdrop?.addEventListener('click', closeModal);
-        cancelBtn?.addEventListener('click', closeModal);
-
-        confirmBtn?.addEventListener('click', async () => {
-            confirmBtn.disabled = true;
-            confirmBtn.textContent = 'Processing...';
-
-            const result = await onConfirm(modal);
-
-            if (result !== false) {
-                closeModal();
-            }
-
-            confirmBtn.disabled = false;
-            confirmBtn.textContent = confirmBtn.dataset.originalText || 'Confirm';
-        });
-
-        // Store original text
-        if (confirmBtn) {
-            confirmBtn.dataset.originalText = confirmBtn.textContent;
-        }
-    }
-
-    /**
-     * Open a modal by ID
-     */
-    function openModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.style.display = 'flex';
-        }
     }
 
     /**

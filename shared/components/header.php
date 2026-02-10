@@ -52,7 +52,8 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <link rel="apple-touch-icon" href="/icon-192.png">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <!-- Help System -->
     <link rel="stylesheet" href="/help/css/help.css?v=<?php echo $buildTime; ?>">
     
@@ -793,14 +794,14 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <!-- CRITICAL: Fallback loader hide - ensures loader ALWAYS disappears even if JS fails -->
     <script>
         (function() {
-            // Fallback: hide loader after 3 seconds maximum, regardless of JS init
+            // Fallback: hide loader after 1.5 seconds maximum, regardless of JS init
             var fallbackTimer = setTimeout(function() {
                 var loader = document.getElementById('appLoader');
                 if (loader && !loader.classList.contains('hidden')) {
                     console.warn('⚠️ Loader fallback triggered - JS init may have failed');
                     loader.classList.add('hidden');
                 }
-            }, 3000);
+            }, 1500);
 
             // Allow main JS to cancel fallback if it runs successfully
             window._loaderFallbackTimer = fallbackTimer;

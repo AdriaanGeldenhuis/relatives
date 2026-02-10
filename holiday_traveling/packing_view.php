@@ -38,7 +38,7 @@ $isLateMode = $hoursUntilTrip >= 0 && $hoursUntilTrip <= 24;
 
 // Page setup
 $pageTitle = 'Packing List - ' . $trip['destination'];
-$pageCSS = ['/holiday_traveling/assets/css/holiday.css'];
+$pageCSS = [];
 $pageJS = ['/holiday_traveling/assets/js/packing.js'];
 
 // Render view

@@ -38,7 +38,7 @@ try {
 
     // Verify user matches
     $currentUserId = HT_Auth::userId();
-    if ($state['user_id'] != $currentUserId) {
+    if ((int) $state['user_id'] !== $currentUserId) {
         error_log("OAuth user mismatch: state={$state['user_id']}, current={$currentUserId}");
         header('Location: /holiday_traveling/?error=user_mismatch');
         exit;

@@ -41,7 +41,7 @@ $pastTrips = array_filter($trips, fn($t) => in_array($t['status'], ['completed',
 
 // Page setup
 $pageTitle = 'Holiday & Traveling';
-$pageCSS = ['/holiday_traveling/assets/css/holiday.css'];
+$pageCSS = [];
 $pageJS = [];
 
 // Render dashboard view

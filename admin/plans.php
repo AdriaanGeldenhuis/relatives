@@ -16,7 +16,7 @@ $user = $auth->getCurrentUser();
 // ====================================
 // SUPER ADMIN ONLY - NOBODY ELSE
 // ====================================
-if (!$user || $user['role'] !== 'admin' || $user['family_id'] != 1) {
+if (!$user || $user['role'] !== 'admin' || (int) $user['family_id'] !== 1) {
     header('Location: /home/index.php');
     exit;
 }
@@ -76,7 +76,7 @@ $plans = $stmt->fetchAll();
 
 $pageTitle = 'Manage Plans';
 $pageCSS = ['/admin/css/admin.css'];
-$pageJS = ['/admin/js/plans.js'];
+$pageJS = [];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>

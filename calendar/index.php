@@ -59,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             case 'create_event':
                 $title = trim($_POST['title'] ?? '');
                 $notes = trim($_POST['notes'] ?? '');
+                $eventLocation = trim($_POST['location'] ?? '');
                 $startsAt = $_POST['starts_at'] ?? '';
                 $endsAt = $_POST['ends_at'] ?? '';
                 $allDay = (int)($_POST['all_day'] ?? 0);
@@ -90,9 +91,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                 $stmt = $db->prepare("
                     INSERT INTO events
-                    (family_id, user_id, created_by, kind, title, notes, starts_at, ends_at,
+                    (family_id, user_id, created_by, kind, title, notes, location, starts_at, ends_at,
                      all_day, color, status, reminder_minutes, recurrence_rule)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
                 ");
                 $stmt->execute([
                     $user['family_id'],
@@ -101,6 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $kind,
                     $title,
                     $notes,
+                    $eventLocation,
                     $startsAt,
                     $endsAt ?: $startsAt,
                     $allDay,
@@ -283,7 +285,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $endDate = date('Y-m-t', strtotime($startDate));
 
                 $stmt = $db->prepare("
-                    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes,
+                    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes, e.location,
                            e.starts_at, e.ends_at, e.all_day, e.color, e.status,
                            e.reminder_minutes, e.created_at, e.updated_at,
                            u.full_name, u.avatar_color, 'events' as source
@@ -300,7 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                 echo json_encode(['success' => true, 'events' => $events]);
                 exit;
-                
+
             case 'get_events_for_range':
                 $startDate = $_POST['start_date'] ?? '';
                 $endDate = $_POST['end_date'] ?? '';
@@ -310,7 +312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 }
 
                 $stmt = $db->prepare("
-                    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes,
+                    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes, e.location,
                            e.starts_at, e.ends_at, e.all_day, e.color, e.status,
                            e.reminder_minutes, e.created_at, e.updated_at,
                            u.full_name, u.avatar_color, 'events' as source
@@ -327,7 +329,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                 echo json_encode(['success' => true, 'events' => $events]);
                 exit;
-                
+
             case 'get_events_for_day':
                 $date = $_POST['date'] ?? '';
 
@@ -336,7 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 }
 
                 $stmt = $db->prepare("
-                    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes,
+                    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes, e.location,
                            e.starts_at, e.ends_at, e.all_day, e.color, e.status,
                            e.reminder_minutes, e.created_at, e.updated_at,
                            u.full_name, u.avatar_color, 'events' as source
@@ -402,7 +404,7 @@ $startDate = date('Y-m-01', strtotime($currentDate));
 $endDate = date('Y-m-t', strtotime($currentDate));
 
 $stmt = $db->prepare("
-    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes,
+    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes, e.location,
            e.starts_at, e.ends_at, e.all_day, e.color, e.status,
            e.reminder_minutes, e.created_at, e.updated_at,
            u.full_name, u.avatar_color, 'events' as source
@@ -419,7 +421,7 @@ $events = $stmt->fetchAll();
 
 // Get upcoming events (next 7 days - unified events table)
 $stmt = $db->prepare("
-    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes,
+    SELECT e.id, e.family_id, e.user_id, e.kind, e.title, e.notes, e.location,
            e.starts_at, e.ends_at, e.all_day, e.color, e.status,
            e.reminder_minutes, u.full_name, u.avatar_color, 'events' as source
     FROM events e
@@ -507,9 +509,8 @@ $doneEvents = count(array_filter($events, fn($e) => $e['status'] === 'done'));
 
 $pageTitle = 'Calendar';
 $activePage = 'calendar';
-$cacheVersion = '4.0.0';
-$pageCSS = ['/calendar/css/calendar.css?v=' . $cacheVersion];
-$pageJS = ['/calendar/js/calendar.js?v=' . $cacheVersion];
+$pageCSS = ['/calendar/css/calendar.css'];
+$pageJS = ['/calendar/js/calendar.js'];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>

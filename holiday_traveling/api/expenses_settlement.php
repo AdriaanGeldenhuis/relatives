@@ -128,6 +128,7 @@ try {
             foreach ($memberMap as $id => &$member) {
                 $member['share'] += $sharePerPerson;
             }
+            unset($member);
         }
     }
 
@@ -137,6 +138,7 @@ try {
         $member['paid'] = round($member['paid'], 2);
         $member['share'] = round($member['share'], 2);
     }
+    unset($member);
 
     // Calculate settlement transactions using greedy algorithm
     $settlements = calculateSettlements($memberMap);

@@ -619,7 +619,7 @@
     </div>
 
     <script src="/shared/js/voice-assistant-advanced.js?v=<?php echo $cacheVersion; ?>"></script>
-    <script src="/shared/js/app.js?v=<?php echo $cacheVersion; ?>"></script>
+    <!-- app.js already loaded in header.php - not duplicated here -->
     
     <?php if (isset($pageJS)): ?>
         <?php foreach ((array)$pageJS as $js): ?>
@@ -664,13 +664,7 @@
         
         document.addEventListener('DOMContentLoaded', () => {
             document.body.classList.add('loaded');
-            const loader = document.getElementById('appLoader');
-            if (loader) {
-                setTimeout(() => {
-                    loader.style.opacity = '0';
-                    setTimeout(() => loader.style.display = 'none', 300);
-                }, 500);
-            }
+            // Loader hide is handled by header.js hideLoader() - no duplicate needed
         });
     </script>
 </body>

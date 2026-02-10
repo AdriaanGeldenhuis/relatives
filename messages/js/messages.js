@@ -146,10 +146,8 @@ async function warmupSession() {
         MessageSystem.sessionWarmedUp = false;
     }
     
-    setTimeout(() => {
-        loadInitialMessages();
-        startPolling();
-    }, 800);
+    loadInitialMessages();
+    startPolling();
 }
 
 // ============================================
@@ -896,22 +894,16 @@ function cancelReply() {
 // ============================================
 // MEDIA HANDLING
 // ============================================
-function handleFileSelect(event) {
-    const files = Array.from(event.target.files);
-    if (!files.length) return;
-
-    // Max 10 files
-    const newFiles = files.slice(0, 10 - MessageSystem.mediaFiles.length);
-    if (newFiles.length === 0) {
-        showError('Maximum 10 files allowed');
-        return;
-    }
-    MessageSystem.mediaFiles.push(...newFiles);
-
-    const preview = document.getElementById('mediaPreview');
+// Helper: render file previews, revoking old Object URLs to prevent memory leaks
+function renderFilePreviews() {
     const previewContent = document.getElementById('previewContent');
 
-    // Clear old previews (keep the cancel button)
+    // Revoke old Object URLs before clearing
+    previewContent.querySelectorAll('.preview-item img, .preview-item video').forEach(el => {
+        if (el.src && el.src.startsWith('blob:')) {
+            URL.revokeObjectURL(el.src);
+        }
+    });
     previewContent.querySelectorAll('.preview-item').forEach(el => el.remove());
 
     MessageSystem.mediaFiles.forEach((file, i) => {
@@ -932,8 +924,23 @@ function handleFileSelect(event) {
         }
         previewContent.appendChild(item);
     });
+}
 
-    preview.style.display = 'block';
+function handleFileSelect(event) {
+    const files = Array.from(event.target.files);
+    if (!files.length) return;
+
+    // Max 10 files
+    const newFiles = files.slice(0, 10 - MessageSystem.mediaFiles.length);
+    if (newFiles.length === 0) {
+        showError('Maximum 10 files allowed');
+        return;
+    }
+    MessageSystem.mediaFiles.push(...newFiles);
+
+    renderFilePreviews();
+
+    document.getElementById('mediaPreview').style.display = 'block';
     // Reset input so same file can be re-selected
     event.target.value = '';
 }
@@ -943,33 +950,18 @@ function removeFile(index) {
     if (MessageSystem.mediaFiles.length === 0) {
         cancelMedia();
     } else {
-        // Re-render previews
-        const fakeEvent = { target: { files: [], value: '' } };
-        const preview = document.getElementById('mediaPreview');
-        const previewContent = document.getElementById('previewContent');
-        previewContent.querySelectorAll('.preview-item').forEach(el => el.remove());
-
-        MessageSystem.mediaFiles.forEach((file, i) => {
-            const item = document.createElement('div');
-            item.className = 'preview-item';
-            if (file.type.startsWith('image/')) {
-                item.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="Preview">
-                    <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
-            } else if (file.type.startsWith('video/')) {
-                item.innerHTML = `<video src="${URL.createObjectURL(file)}" controls></video>
-                    <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
-            } else {
-                const ext = file.name.split('.').pop().toUpperCase();
-                const icon = file.type === 'application/pdf' ? '📄' : '📎';
-                item.innerHTML = `<div class="doc-preview">${icon}<span class="doc-name">${escapeHtml(file.name)}</span><span class="doc-size">${ext} · ${(file.size / 1024).toFixed(0)}KB</span></div>
-                    <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
-            }
-            previewContent.appendChild(item);
-        });
+        renderFilePreviews();
     }
 }
 
 function cancelMedia() {
+    // Revoke any remaining Object URLs
+    const previewContent = document.getElementById('previewContent');
+    previewContent.querySelectorAll('.preview-item img, .preview-item video').forEach(el => {
+        if (el.src && el.src.startsWith('blob:')) {
+            URL.revokeObjectURL(el.src);
+        }
+    });
     MessageSystem.mediaFiles = [];
     document.getElementById('mediaPreview').style.display = 'none';
     document.getElementById('fileInput').value = '';
@@ -1450,28 +1442,33 @@ function showNotification(message) {
     }, 2000);
 }
 
+// Reuse a single AudioContext to avoid resource leaks
+let _notificationAudioCtx = null;
+
 function playNotificationSound() {
     try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
+        if (!_notificationAudioCtx) {
+            _notificationAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
-        
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        
+
+        if (_notificationAudioCtx.state === 'suspended') {
+            _notificationAudioCtx.resume();
+        }
+
+        const oscillator = _notificationAudioCtx.createOscillator();
+        const gainNode = _notificationAudioCtx.createGain();
+
         oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        
+        gainNode.connect(_notificationAudioCtx.destination);
+
         oscillator.frequency.value = 800;
         oscillator.type = 'sine';
-        
-        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-        
-        oscillator.start(audioCtx.currentTime);
-        oscillator.stop(audioCtx.currentTime + 0.1);
+
+        gainNode.gain.setValueAtTime(0.1, _notificationAudioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, _notificationAudioCtx.currentTime + 0.1);
+
+        oscillator.start(_notificationAudioCtx.currentTime);
+        oscillator.stop(_notificationAudioCtx.currentTime + 0.1);
     } catch (error) {
         console.warn('Audio playback failed:', error);
     }

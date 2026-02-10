@@ -1,6 +1,6 @@
 <div class="doc-header">
     <h2 class="doc-title">Terms & Conditions</h2>
-    <p class="doc-updated">Last Updated: <?php echo date('F j, Y'); ?></p>
+    <p class="doc-updated">Last Updated: January 15, 2025</p>
 </div>
 
 <div class="doc-body">
