@@ -255,9 +255,8 @@ $showWelcome = isset($_GET['welcome']) || isset($_GET['joined']);
 
 $pageTitle = 'Home';
 $activePage = 'home';
-$cacheVersion = '10.0.0';
-$pageCSS = ['/home/css/home.css?v=' . $cacheVersion];
-$pageJS = ['/home/js/home.js?v=' . $cacheVersion];
+$pageCSS = ['/home/css/home.css'];
+$pageJS = ['/home/js/home.js'];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
@@ -406,11 +405,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                                             <?php
                                             $eventTime = strtotime($event['starts_at']);
                                             $diff = $eventTime - time();
-                                            
-                                            if ($diff < 3600) {
+                                            $isToday = date('Y-m-d', $eventTime) === date('Y-m-d');
+                                            $isTomorrow = date('Y-m-d', $eventTime) === date('Y-m-d', strtotime('+1 day'));
+
+                                            if ($diff < 3600 && $diff > 0) {
                                                 echo '<span class="urgent">In ' . ceil($diff / 60) . ' min</span>';
-                                            } elseif ($diff < 86400) {
+                                            } elseif ($isToday) {
                                                 echo '<span class="today">Today at ' . date('g:i A', $eventTime) . '</span>';
+                                            } elseif ($isTomorrow) {
+                                                echo 'Tomorrow at ' . date('g:i A', $eventTime);
                                             } else {
                                                 echo date('M j, g:i A', $eventTime);
                                             }

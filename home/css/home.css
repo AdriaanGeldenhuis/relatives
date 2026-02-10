@@ -3,7 +3,7 @@
    Native App Optimized with Enhanced Weather
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+/* Fonts loaded by header.php - no duplicate @import needed */
 
 :root {
     /* Brand Colors */
@@ -134,6 +134,17 @@ body {
     }
     to {
         transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes letterPop {
+    from {
+        transform: scale(0) translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1) translateY(0);
         opacity: 1;
     }
 }
