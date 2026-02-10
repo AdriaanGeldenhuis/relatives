@@ -101,6 +101,9 @@ $statusDisplay = $tripStatus ?? 'upcoming';
                 <a href="/holiday_traveling/trip_share.php?id=<?php echo $trip['id']; ?>" class="ht-btn ht-btn-outline ht-btn-sm">
                     Share
                 </a>
+                <button onclick="openExportModal()" class="ht-btn ht-btn-outline ht-btn-sm">
+                    📤 Export
+                </button>
             </div>
             <?php endif; ?>
         </div>
@@ -548,6 +551,7 @@ $statusDisplay = $tripStatus ?? 'upcoming';
     ]); ?>;
     window.HT.canEdit = <?php echo $canEdit ? 'true' : 'false'; ?>;
     window.HT.hasPlan = <?php echo $activePlan ? 'true' : 'false'; ?>;
+    window.HT.activePlan = <?php echo json_encode($activePlan ?: null); ?>;
 
     // Dropdown menu toggle
     document.addEventListener('DOMContentLoaded', function() {
@@ -633,4 +637,280 @@ $statusDisplay = $tripStatus ?? 'upcoming';
             });
         }
     });
+
+    // ============================================
+    // EXPORT FUNCTIONALITY
+    // ============================================
+
+    function openExportModal() {
+        document.getElementById('tripExportModal').style.display = 'flex';
+    }
+
+    function closeExportModal() {
+        document.getElementById('tripExportModal').style.display = 'none';
+    }
+
+    function escapeHtmlExport(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function getTripExportData() {
+        var tripData = window.HT.tripData || {};
+        var plan = window.HT.activePlan || {};
+        return { trip: tripData, plan: plan };
+    }
+
+    function exportTripPDF() {
+        closeExportModal();
+        var data = getTripExportData();
+        var trip = data.trip;
+        var plan = data.plan;
+
+        var dest = trip.destination || 'Trip';
+        var dates = (trip.start_date || '') + ' to ' + (trip.end_date || '');
+
+        var html = '<!DOCTYPE html><html><head><title>' + escapeHtmlExport(dest) + ' - Trip Plan</title>';
+        html += '<style>';
+        html += 'body { font-family: Arial, sans-serif; padding: 20px; color: #333; }';
+        html += 'h1 { color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }';
+        html += 'h2 { color: #667eea; margin-top: 24px; }';
+        html += '.info { background: #f5f5f5; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; }';
+        html += '.day { margin-bottom: 20px; }';
+        html += '.day-header { background: #667eea; color: white; padding: 8px 14px; border-radius: 6px; font-weight: bold; }';
+        html += '.section { padding: 6px 14px; }';
+        html += '.section-label { font-weight: bold; color: #667eea; }';
+        html += 'ul { margin: 4px 0; }';
+        html += '.stay { background: #f5f5f5; padding: 10px; border-radius: 6px; margin: 8px 0; }';
+        html += '.budget-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; }';
+        html += '.footer { margin-top: 30px; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }';
+        html += '</style></head><body>';
+
+        html += '<h1>' + escapeHtmlExport(dest) + '</h1>';
+        html += '<div class="info">';
+        html += '<strong>Dates:</strong> ' + escapeHtmlExport(dates) + '<br>';
+        html += '<strong>Travelers:</strong> ' + (trip.travelers_count || 'N/A') + '<br>';
+        html += '<strong>Status:</strong> ' + escapeHtmlExport(trip.status || 'N/A');
+        html += '</div>';
+
+        // Itinerary
+        if (plan && plan.itinerary && plan.itinerary.length > 0) {
+            html += '<h2>Daily Itinerary</h2>';
+            plan.itinerary.forEach(function(day) {
+                html += '<div class="day">';
+                html += '<div class="day-header">Day ' + (day.day || '?') + (day.date ? ' - ' + day.date : '') + '</div>';
+                ['morning', 'afternoon', 'evening'].forEach(function(period) {
+                    if (day[period] && day[period].length > 0) {
+                        var labels = { morning: '🌅 Morning', afternoon: '☀️ Afternoon', evening: '🌙 Evening' };
+                        html += '<div class="section"><span class="section-label">' + labels[period] + ':</span><ul>';
+                        day[period].forEach(function(act) {
+                            html += '<li>' + escapeHtmlExport(act) + '</li>';
+                        });
+                        html += '</ul></div>';
+                    }
+                });
+                html += '</div>';
+            });
+        }
+
+        // Stay options
+        if (plan && plan.stay_options && plan.stay_options.length > 0) {
+            html += '<h2>Accommodation Options</h2>';
+            plan.stay_options.forEach(function(stay) {
+                html += '<div class="stay">';
+                html += '<strong>' + escapeHtmlExport(stay.type || 'Accommodation') + '</strong>';
+                if (stay.area) html += ' - ' + escapeHtmlExport(stay.area);
+                if (stay.price_per_night) html += '<br>Price: ' + (trip.budget_currency || 'R') + stay.price_per_night + '/night';
+                html += '</div>';
+            });
+        }
+
+        // Budget
+        if (plan && plan.budget_breakdown) {
+            html += '<h2>Budget Breakdown</h2>';
+            var total = 0;
+            Object.keys(plan.budget_breakdown).forEach(function(key) {
+                var amount = plan.budget_breakdown[key];
+                if (typeof amount === 'number') {
+                    total += amount;
+                    var label = key.replace(/_/g, ' ').replace(/\b\w/g, function(l) { return l.toUpperCase(); });
+                    html += '<div class="budget-item"><span>' + escapeHtmlExport(label) + '</span><span>' + (trip.budget_currency || 'R') + amount.toLocaleString() + '</span></div>';
+                }
+            });
+            html += '<div class="budget-item" style="font-weight:bold;border-top:2px solid #333;"><span>Total</span><span>' + (trip.budget_currency || 'R') + total.toLocaleString() + '</span></div>';
+        }
+
+        // Safety tips
+        if (plan && plan.safety_and_local_tips && plan.safety_and_local_tips.length > 0) {
+            html += '<h2>Safety & Local Tips</h2><ul>';
+            plan.safety_and_local_tips.forEach(function(tip) {
+                html += '<li>' + escapeHtmlExport(tip) + '</li>';
+            });
+            html += '</ul>';
+        }
+
+        html += '<div class="footer">Exported from Relatives App on ' + new Date().toLocaleDateString('en-ZA') + '</div>';
+        html += '</body></html>';
+
+        var printWindow = window.open('', '_blank');
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.onload = function() { printWindow.print(); };
+    }
+
+    function exportTripCSV() {
+        closeExportModal();
+        var data = getTripExportData();
+        var trip = data.trip;
+        var plan = data.plan;
+
+        if (!plan || !plan.itinerary || plan.itinerary.length === 0) {
+            alert('No itinerary data to export. Generate a plan first.');
+            return;
+        }
+
+        var csv = 'Day,Date,Period,Activity\n';
+        plan.itinerary.forEach(function(day) {
+            ['morning', 'afternoon', 'evening'].forEach(function(period) {
+                if (day[period] && day[period].length > 0) {
+                    day[period].forEach(function(act) {
+                        csv += (day.day || '') + ',"' + (day.date || '').replace(/"/g, '""') + '","' + period + '","' + String(act).replace(/"/g, '""') + '"\n';
+                    });
+                }
+            });
+        });
+
+        // Add budget as separate section
+        if (plan.budget_breakdown) {
+            csv += '\nBudget Category,Amount\n';
+            Object.keys(plan.budget_breakdown).forEach(function(key) {
+                var amount = plan.budget_breakdown[key];
+                if (typeof amount === 'number') {
+                    csv += '"' + key.replace(/_/g, ' ') + '",' + amount + '\n';
+                }
+            });
+        }
+
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'trip-' + (trip.destination || 'export').replace(/[^a-zA-Z0-9]/g, '-') + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function exportTripText() {
+        closeExportModal();
+        var data = getTripExportData();
+        var trip = data.trip;
+        var plan = data.plan;
+
+        var dest = trip.destination || 'Trip';
+        var text = dest + ' - Trip Plan\n' + '='.repeat(40) + '\n\n';
+
+        text += 'Destination: ' + dest + '\n';
+        text += 'Dates: ' + (trip.start_date || '?') + ' to ' + (trip.end_date || '?') + '\n';
+        text += 'Travelers: ' + (trip.travelers_count || 'N/A') + '\n';
+        text += 'Status: ' + (trip.status || 'N/A') + '\n\n';
+
+        // Itinerary
+        if (plan && plan.itinerary && plan.itinerary.length > 0) {
+            text += 'DAILY ITINERARY\n' + '-'.repeat(30) + '\n\n';
+            plan.itinerary.forEach(function(day) {
+                text += 'Day ' + (day.day || '?') + (day.date ? ' (' + day.date + ')' : '') + '\n';
+                var periods = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' };
+                Object.keys(periods).forEach(function(period) {
+                    if (day[period] && day[period].length > 0) {
+                        text += '  ' + periods[period] + ':\n';
+                        day[period].forEach(function(act) {
+                            text += '    - ' + act + '\n';
+                        });
+                    }
+                });
+                text += '\n';
+            });
+        }
+
+        // Stay options
+        if (plan && plan.stay_options && plan.stay_options.length > 0) {
+            text += 'ACCOMMODATION OPTIONS\n' + '-'.repeat(30) + '\n\n';
+            plan.stay_options.forEach(function(stay) {
+                text += '  ' + (stay.type || 'Accommodation');
+                if (stay.area) text += ' - ' + stay.area;
+                if (stay.price_per_night) text += ' (' + (trip.budget_currency || 'R') + stay.price_per_night + '/night)';
+                text += '\n';
+            });
+            text += '\n';
+        }
+
+        // Budget
+        if (plan && plan.budget_breakdown) {
+            text += 'BUDGET BREAKDOWN\n' + '-'.repeat(30) + '\n\n';
+            var total = 0;
+            Object.keys(plan.budget_breakdown).forEach(function(key) {
+                var amount = plan.budget_breakdown[key];
+                if (typeof amount === 'number') {
+                    total += amount;
+                    var label = key.replace(/_/g, ' ').replace(/\b\w/g, function(l) { return l.toUpperCase(); });
+                    text += '  ' + label + ': ' + (trip.budget_currency || 'R') + amount.toLocaleString() + '\n';
+                }
+            });
+            text += '  ' + '-'.repeat(25) + '\n';
+            text += '  Total: ' + (trip.budget_currency || 'R') + total.toLocaleString() + '\n\n';
+        }
+
+        // Safety tips
+        if (plan && plan.safety_and_local_tips && plan.safety_and_local_tips.length > 0) {
+            text += 'SAFETY & LOCAL TIPS\n' + '-'.repeat(30) + '\n\n';
+            plan.safety_and_local_tips.forEach(function(tip) {
+                text += '  * ' + tip + '\n';
+            });
+            text += '\n';
+        }
+
+        text += 'Exported from Relatives App on ' + new Date().toLocaleDateString('en-ZA') + '\n';
+
+        var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'trip-' + (trip.destination || 'export').replace(/[^a-zA-Z0-9]/g, '-') + '.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function downloadTripICS() {
+        closeExportModal();
+        window.open('/holiday_traveling/api/calendar_export_ics.php?id=' + window.HT.tripId, '_blank');
+    }
 </script>
+
+<!-- Export Modal -->
+<div id="tripExportModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:white; border-radius:16px; padding:24px; max-width:400px; width:90%; margin:auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0;">📤 Export Trip</h3>
+            <button onclick="closeExportModal()" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#999;">&times;</button>
+        </div>
+        <p style="margin-bottom:16px; color:#666;">Choose export format:</p>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+            <button onclick="exportTripPDF()" class="ht-btn ht-btn-primary" style="width:100%; padding:14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <span>📄</span> <span>Export as PDF</span>
+            </button>
+            <button onclick="exportTripCSV()" class="ht-btn ht-btn-outline" style="width:100%; padding:14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <span>📊</span> <span>Export as CSV</span>
+            </button>
+            <button onclick="exportTripText()" class="ht-btn ht-btn-outline" style="width:100%; padding:14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <span>📝</span> <span>Export as Text</span>
+            </button>
+            <button onclick="downloadTripICS()" class="ht-btn ht-btn-outline" style="width:100%; padding:14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <span>📅</span> <span>Download Calendar (.ics)</span>
+            </button>
+        </div>
+    </div>
+</div>
