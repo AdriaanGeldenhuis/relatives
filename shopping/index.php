@@ -100,11 +100,10 @@ $totalPrice = array_sum(array_column(array_filter($currentList['items'], fn($i) 
 
 // Set page metadata
 $pageTitle = 'Shopping';
-$cacheVersion = '10.0.0';
-$pageCSS = ['/shopping/css/shopping.css?v=' . $cacheVersion];
+$pageCSS = ['/shopping/css/shopping.css'];
 $pageJS = [
-    '/shopping/js/shopping.js?v=' . $cacheVersion,
-    '/shopping/js/bulk.js?v=' . $cacheVersion
+    '/shopping/js/shopping.js',
+    '/shopping/js/bulk.js'
 ];
 
 // Include header
