@@ -1444,8 +1444,159 @@ function exportList() {
 }
 
 function exportListAs(format) {
-    const url = `/shopping/api/lists.php?action=export&list_id=${ShoppingApp.currentListId}&format=${format}`;
-    window.open(url, '_blank');
+    closeModal('shareModal');
+
+    const items = ShoppingApp.allItems || [];
+    if (items.length === 0) {
+        showToast('No items to export', 'error');
+        return;
+    }
+
+    // Get list name from active tab
+    const activeTab = document.querySelector('.list-tab.active');
+    const listName = activeTab ? activeTab.textContent.trim() : 'Shopping List';
+
+    if (format === 'pdf') {
+        exportShoppingPDF(items, listName);
+    } else if (format === 'csv') {
+        exportShoppingCSV(items, listName);
+    } else if (format === 'text') {
+        exportShoppingText(items, listName);
+    }
+}
+
+function exportShoppingPDF(items, listName) {
+    const pending = items.filter(i => i.status === 'pending');
+    const bought = items.filter(i => i.status === 'bought');
+    const totalPrice = pending.reduce((sum, i) => sum + (parseFloat(i.price) || 0), 0);
+
+    const printContent = `<!DOCTYPE html>
+<html>
+<head>
+    <title>${escapeHtml(listName)}</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+        h1 { color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+        .summary { background: #f5f5f5; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; }
+        .summary span { margin-right: 20px; }
+        h2 { color: #667eea; margin-top: 24px; font-size: 16px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th { background: #667eea; color: white; text-align: left; padding: 8px 12px; }
+        td { padding: 8px 12px; border-bottom: 1px solid #eee; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        .bought { text-decoration: line-through; color: #999; }
+        .footer { margin-top: 30px; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>${escapeHtml(listName)}</h1>
+    <div class="summary">
+        <span><strong>${pending.length}</strong> pending</span>
+        <span><strong>${bought.length}</strong> bought</span>
+        ${totalPrice > 0 ? '<span>Est. total: <strong>R' + totalPrice.toFixed(2) + '</strong></span>' : ''}
+    </div>
+    ${pending.length > 0 ? '<h2>Still needed</h2>' : ''}
+    ${pending.length > 0 ? buildShoppingTable(pending) : ''}
+    ${bought.length > 0 ? '<h2>Already bought</h2>' : ''}
+    ${bought.length > 0 ? buildShoppingTable(bought, true) : ''}
+    <div class="footer">Exported from Relatives App on ${new Date().toLocaleDateString('en-ZA')}</div>
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.onload = function() {
+        printWindow.print();
+    };
+    showToast('PDF ready to print!', 'success');
+}
+
+function buildShoppingTable(items, isBought) {
+    let html = '<table><tr><th>Item</th><th>Qty</th><th>Category</th><th>Price</th><th>Store</th></tr>';
+    items.forEach(item => {
+        const cls = isBought ? ' class="bought"' : '';
+        const qty = (item.qty && item.qty !== 'null' && String(item.qty).trim()) ? escapeHtml(String(item.qty)) : '-';
+        const cat = item.category || 'other';
+        const price = (item.price && parseFloat(item.price) > 0) ? 'R' + parseFloat(item.price).toFixed(2) : '-';
+        const store = (item.store && item.store !== 'null' && String(item.store).trim()) ? escapeHtml(String(item.store)) : '-';
+        html += '<tr' + cls + '><td>' + escapeHtml(item.name) + '</td><td>' + qty + '</td><td>' + escapeHtml(cat) + '</td><td>' + price + '</td><td>' + store + '</td></tr>';
+    });
+    html += '</table>';
+    return html;
+}
+
+function exportShoppingCSV(items, listName) {
+    let csv = 'Name,Quantity,Category,Price,Store,Status\n';
+    items.forEach(item => {
+        const name = '"' + (item.name || '').replace(/"/g, '""') + '"';
+        const qty = '"' + ((item.qty && item.qty !== 'null') ? String(item.qty).replace(/"/g, '""') : '') + '"';
+        const cat = '"' + (item.category || 'other') + '"';
+        const price = (item.price && parseFloat(item.price) > 0) ? parseFloat(item.price).toFixed(2) : '';
+        const store = '"' + ((item.store && item.store !== 'null') ? String(item.store).replace(/"/g, '""') : '') + '"';
+        const status = item.status || 'pending';
+        csv += name + ',' + qty + ',' + cat + ',' + price + ',' + store + ',' + status + '\n';
+    });
+
+    downloadFile(csv, listName.replace(/[^a-zA-Z0-9]/g, '-') + '.csv', 'text/csv');
+    showToast('CSV downloaded!', 'success');
+}
+
+function exportShoppingText(items, listName) {
+    const pending = items.filter(i => i.status === 'pending');
+    const bought = items.filter(i => i.status === 'bought');
+
+    let text = listName + '\n' + '='.repeat(listName.length) + '\n\n';
+
+    if (pending.length > 0) {
+        text += 'STILL NEEDED:\n';
+        // Group by category
+        const grouped = {};
+        pending.forEach(item => {
+            const cat = (item.category || 'other').toUpperCase();
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(item);
+        });
+        Object.keys(grouped).sort().forEach(cat => {
+            text += '\n  ' + cat + '\n';
+            grouped[cat].forEach(item => {
+                let line = '  - ' + item.name;
+                if (item.qty && item.qty !== 'null' && String(item.qty).trim()) line += ' (' + item.qty + ')';
+                if (item.price && parseFloat(item.price) > 0) line += ' - R' + parseFloat(item.price).toFixed(2);
+                if (item.store && item.store !== 'null' && String(item.store).trim()) line += ' @ ' + item.store;
+                text += line + '\n';
+            });
+        });
+    }
+
+    if (bought.length > 0) {
+        text += '\nALREADY BOUGHT:\n';
+        bought.forEach(item => {
+            text += '  [x] ' + item.name + '\n';
+        });
+    }
+
+    const totalPrice = pending.reduce((sum, i) => sum + (parseFloat(i.price) || 0), 0);
+    if (totalPrice > 0) {
+        text += '\nEstimated total: R' + totalPrice.toFixed(2) + '\n';
+    }
+
+    text += '\nExported from Relatives App on ' + new Date().toLocaleDateString('en-ZA') + '\n';
+
+    downloadFile(text, listName.replace(/[^a-zA-Z0-9]/g, '-') + '.txt', 'text/plain');
+    showToast('Text file downloaded!', 'success');
+}
+
+function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType + ';charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 // ============================================
