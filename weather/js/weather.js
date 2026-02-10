@@ -9,20 +9,6 @@
 console.log('%c🌤️ Weather Widget Loading v3.0...', 'font-size: 16px; font-weight: bold; color: #667eea;');
 
 // ============================================
-// PARTICLE SYSTEM - DISABLED FOR PERFORMANCE
-// Canvas hidden via CSS, class is a no-op stub
-// ============================================
-class ParticleSystem {
-    constructor(canvasId) {
-        // Disabled - canvas hidden via CSS for performance
-    }
-    destroy() {}
-}
-
-// Initialize particle system (no-op)
-let weatherParticles = null;
-
-// ============================================
 // WEATHER WIDGET
 // ============================================
 
@@ -180,8 +166,7 @@ class WeatherWidget {
                         lat: position.coords.latitude,
                         lng: position.coords.longitude
                     };
-                    
-                    await this.loadLocationName();
+
                     await this.loadAllWeatherData();
                     this.renderAll();
                     
@@ -251,34 +236,21 @@ class WeatherWidget {
                 <span class="location-text">Loading your tracked location...</span>
             `;
         }
-        
-        await this.loadLocationName();
+
         await this.loadAllWeatherData();
         this.renderAll();
         
         console.log('✅ Weather loaded from tracked location');
     }
     
-    async loadLocationName() {
-        if (!this.location) return;
-        
-        try {
-            const response = await fetch(`/weather/api/api.php?action=current&lat=${this.location.lat}&lon=${this.location.lng}`);
-            const data = await response.json();
-            
-            if (data.location_name || data.location) {
-                this.location.city = data.location_name || data.location;
-                
-                const locationEl = document.getElementById('weatherLocation');
-                if (locationEl) {
-                    locationEl.innerHTML = `
-                        <span class="location-icon">📍</span>
-                        <span class="location-text">${this.location.city}</span>
-                    `;
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load location name:', error);
+    updateLocationDisplay() {
+        if (!this.location?.city) return;
+        const locationEl = document.getElementById('weatherLocation');
+        if (locationEl) {
+            locationEl.innerHTML = `
+                <span class="location-icon">📍</span>
+                <span class="location-text">${this.location.city}</span>
+            `;
         }
     }
     
@@ -654,7 +626,13 @@ class WeatherWidget {
             
             this.currentWeather = data;
             this.saveToCache(cacheKey, data);
-            
+
+            // Set city name from weather response (avoids extra API call)
+            if (!this.location.city && (data.location_name || data.location)) {
+                this.location.city = data.location_name || data.location;
+                this.updateLocationDisplay();
+            }
+
             console.log('🌡️ Current weather loaded:', data);
         } catch (error) {
             console.error('Failed to load current weather:', error);
@@ -863,9 +841,9 @@ class WeatherWidget {
             <body>
                 <h1>🌤️ Weather for ${location}</h1>
                 <div class="current">
-                    <div class="current-temp">${weather.temperature}°${this.units === 'celsius' ? 'C' : 'F'}</div>
+                    <div class="current-temp">${weather.temperature}°${this.useFahrenheit ? 'F' : 'C'}</div>
                     <div class="current-desc">${weather.description}</div>
-                    <p>💧 Humidity: ${weather.humidity}% | 💨 Wind: ${weather.windSpeed} km/h</p>
+                    <p>💧 Humidity: ${weather.humidity}% | 💨 Wind: ${weather.wind_speed} km/h</p>
                 </div>
                 ${forecast.length > 0 ? `
                     <h2>📅 5-Day Forecast</h2>
@@ -874,7 +852,7 @@ class WeatherWidget {
                             <div class="forecast-day">
                                 <div class="forecast-date">${new Date(day.date).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' })}</div>
                                 <div style="font-size: 24px;">${day.icon || '☁️'}</div>
-                                <div class="forecast-temp">${day.tempMax}° / ${day.tempMin}°</div>
+                                <div class="forecast-temp">${day.temp_max}° / ${day.temp_min}°</div>
                             </div>
                         `).join('')}
                     </div>
@@ -902,15 +880,15 @@ class WeatherWidget {
         const forecast = this.forecast || [];
 
         let message = `🌤️ *Weather in ${location}*\n\n`;
-        message += `🌡️ *${weather.temperature}°${this.units === 'celsius' ? 'C' : 'F'}* - ${weather.description}\n`;
+        message += `🌡️ *${weather.temperature}°${this.useFahrenheit ? 'F' : 'C'}* - ${weather.description}\n`;
         message += `💧 Humidity: ${weather.humidity}%\n`;
-        message += `💨 Wind: ${weather.windSpeed} km/h\n`;
+        message += `💨 Wind: ${weather.wind_speed} km/h\n`;
 
         if (forecast.length > 0) {
             message += `\n📅 *Forecast:*\n`;
             forecast.slice(0, 5).forEach(day => {
                 const date = new Date(day.date).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' });
-                message += `${date}: ${day.tempMax}°/${day.tempMin}° ${day.description || ''}\n`;
+                message += `${date}: ${day.temp_max}°/${day.temp_min}° ${day.description || ''}\n`;
             });
         }
 
@@ -920,18 +898,6 @@ class WeatherWidget {
         this.showNotification('💬 Opening WhatsApp...', 'success');
     }
 
-    showNotification(message, type = 'info') {
-        const alertsEl = document.getElementById('weatherAlerts');
-        if (!alertsEl) return;
-
-        const alert = document.createElement('div');
-        alert.className = `weather-alert alert-${type}`;
-        alert.innerHTML = `<span>${message}</span>`;
-        alertsEl.appendChild(alert);
-
-        setTimeout(() => alert.remove(), 3000);
-    }
-    
     renderInsights() {
         const insightsEl = document.getElementById('weatherInsights');
         const sectionEl = document.getElementById('insightsSection');
