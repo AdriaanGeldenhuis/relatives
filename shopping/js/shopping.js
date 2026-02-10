@@ -1788,15 +1788,27 @@ function toggleGearMenu(event, itemId) {
         }
     }
 
-    // Position the menu
-    const btn = event.currentTarget;
-    const rect = btn.getBoundingClientRect();
-    const menuRect = menu.getBoundingClientRect();
+    if (isOpening) {
+        // Position using fixed coordinates so it overlays everything
+        const btn = event.currentTarget;
+        const rect = btn.getBoundingClientRect();
 
-    // Check if menu would go off-screen
-    if (rect.right + menuRect.width > window.innerWidth) {
-        menu.style.right = '0';
-        menu.style.left = 'auto';
+        // Place below the button
+        let top = rect.bottom + 4;
+        let left = rect.right - 110;
+
+        // Keep within viewport bounds
+        if (left < 8) left = 8;
+        if (left + 110 > window.innerWidth) left = window.innerWidth - 118;
+
+        // If it would go below viewport, show above the button
+        if (top + 80 > window.innerHeight) {
+            top = rect.top - 80;
+        }
+
+        menu.style.top = top + 'px';
+        menu.style.left = left + 'px';
+        menu.style.right = 'auto';
     }
 }
 
@@ -1854,6 +1866,12 @@ document.addEventListener('click', (e) => {
         closeAllListGearMenus();
     }
 });
+
+// Close fixed dropdowns on scroll so they don't float away from their item
+window.addEventListener('scroll', () => {
+    closeAllGearMenus();
+    closeAllListGearMenus();
+}, { passive: true });
 
 // ============================================
 // AJAX LIST SWITCHING
