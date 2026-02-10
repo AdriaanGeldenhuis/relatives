@@ -1005,6 +1005,14 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <span style="font-size: 1.25rem;">📄</span>
                     <span>Export as PDF</span>
                 </button>
+                <button onclick="exportAsCSV()" class="btn btn-secondary" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px;">
+                    <span style="font-size: 1.25rem;">📊</span>
+                    <span>Export as CSV</span>
+                </button>
+                <button onclick="exportAsText()" class="btn btn-secondary" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px;">
+                    <span style="font-size: 1.25rem;">📝</span>
+                    <span>Export as Text</span>
+                </button>
                 <button onclick="shareToWhatsApp()" class="btn btn-success" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; background: #25D366;">
                     <span style="font-size: 1.25rem;">💬</span>
                     <span>Share to WhatsApp</span>

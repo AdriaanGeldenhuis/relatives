@@ -1865,6 +1865,91 @@ function shareToWhatsApp() {
     showToast('💬 Opening WhatsApp...', 'success');
 }
 
+function exportAsCSV() {
+    closeModal('exportModal');
+    const events = getScheduleData();
+    const date = window.ScheduleApp.selectedDate;
+
+    if (events.length === 0) {
+        showToast('No events to export', 'error');
+        return;
+    }
+
+    let csv = 'Name,Time,Duration,Type,Status,Notes\n';
+    events.forEach(e => {
+        const name = '"' + (e.name || '').replace(/"/g, '""') + '"';
+        const time = '"' + (e.time || '').replace(/"/g, '""') + '"';
+        const duration = '"' + (e.duration || '').replace(/"/g, '""') + '"';
+        const type = '"' + (e.type || '') + '"';
+        const status = '"' + (e.status || '') + '"';
+        const notes = '"' + (e.notes || '').replace(/"/g, '""') + '"';
+        csv += name + ',' + time + ',' + duration + ',' + type + ',' + status + ',' + notes + '\n';
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'schedule-' + date + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('📊 CSV downloaded!', 'success');
+}
+
+function exportAsText() {
+    closeModal('exportModal');
+    const events = getScheduleData();
+    const date = window.ScheduleApp.selectedDate;
+
+    if (events.length === 0) {
+        showToast('No events to export', 'error');
+        return;
+    }
+
+    let text = 'Schedule for ' + date + '\n' + '='.repeat(30) + '\n\n';
+
+    const pending = events.filter(e => e.status !== 'Done');
+    const done = events.filter(e => e.status === 'Done');
+
+    if (pending.length > 0) {
+        text += 'UPCOMING / IN PROGRESS:\n\n';
+        pending.forEach((e, i) => {
+            const icon = e.status === 'In Progress' ? '[~]' : '[ ]';
+            text += icon + ' ' + e.name + '\n';
+            if (e.time) text += '    Time: ' + e.time + '\n';
+            if (e.duration) text += '    Duration: ' + e.duration + '\n';
+            text += '    Type: ' + e.type + ' | Status: ' + e.status + '\n';
+            if (e.notes) text += '    Notes: ' + e.notes + '\n';
+            text += '\n';
+        });
+    }
+
+    if (done.length > 0) {
+        text += 'COMPLETED:\n\n';
+        done.forEach(e => {
+            text += '[x] ' + e.name;
+            if (e.time) text += ' (' + e.time + ')';
+            text += '\n';
+        });
+        text += '\n';
+    }
+
+    text += 'Exported from Relatives App on ' + new Date().toLocaleDateString('en-ZA') + '\n';
+
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'schedule-' + date + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('📝 Text file downloaded!', 'success');
+}
+
 // ============================================
 // ADD EVENT TO DOM
 // ============================================
@@ -2307,6 +2392,8 @@ window.changeView = changeView;
 window.showQuickAdd = showQuickAdd;
 window.exportSchedule = exportSchedule;
 window.exportAsPDF = exportAsPDF;
+window.exportAsCSV = exportAsCSV;
+window.exportAsText = exportAsText;
 window.shareToWhatsApp = shareToWhatsApp;
 window.showModal = showModal;
 window.closeModal = closeModal;
