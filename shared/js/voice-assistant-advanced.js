@@ -341,7 +341,7 @@
     function executeAction(action) {
         if (!action || !action.type) return;
 
-        console.log('[Suzi] Action:', action.type);
+        console.log('[Suzi] Action:', action.type, action.data);
 
         var paths = {
             home: '/home/',
@@ -362,9 +362,180 @@
                 closeModal();
                 window.location.href = paths[action.data.to] || '/home/';
             }, 500);
+
+        } else if (action.type === 'add_shopping' && action.data && action.data.item) {
+            addShoppingItem(action.data.item, action.data.category || 'other');
+
+        } else if (action.type === 'create_note' && action.data && action.data.content) {
+            createNote(action.data.title || '', action.data.content);
+
+        } else if (action.type === 'create_event' && action.data && action.data.title) {
+            createCalendarEvent(action.data);
+
+        } else if (action.type === 'create_reminder' && action.data && action.data.title) {
+            createReminder(action.data);
+
         } else {
             setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            showSuggestions(conversation.length <= 2);
         }
+    }
+
+    // Add item to shopping list via API
+    function addShoppingItem(itemName, category) {
+        setStatus('🛒', 'Adding to list...', '');
+
+        // First get available shopping lists
+        fetch('/shopping/api/lists.php?action=get_all', {
+            credentials: 'same-origin'
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.success && data.lists && data.lists.length > 0) {
+                // Use the first list
+                return data.lists[0].id;
+            } else {
+                // No lists exist, create a default one
+                var formData = new FormData();
+                formData.append('action', 'create');
+                formData.append('name', 'Shopping List');
+                formData.append('icon', '🛒');
+
+                return fetch('/shopping/api/lists.php', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin'
+                })
+                .then(function(response) { return response.json(); })
+                .then(function(createData) {
+                    if (createData.success && createData.list_id) {
+                        return createData.list_id;
+                    }
+                    throw new Error('Could not create shopping list');
+                });
+            }
+        })
+        .then(function(listId) {
+            // Now add the item
+            var formData = new FormData();
+            formData.append('action', 'add');
+            formData.append('list_id', listId);
+            formData.append('name', itemName);
+            formData.append('category', category);
+
+            return fetch('/shopping/api/items.php', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            });
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(result) {
+            if (result.success) {
+                console.log('[Suzi] Item added:', itemName);
+            } else {
+                console.error('[Suzi] Failed to add item:', result.error);
+            }
+            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            showSuggestions(false);
+        })
+        .catch(function(error) {
+            console.error('[Suzi] Shopping error:', error);
+            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+        });
+    }
+
+    // Create a note via API
+    function createNote(title, content) {
+        setStatus('📝', 'Creating note...', '');
+
+        var formData = new FormData();
+        formData.append('action', 'create');
+        formData.append('title', title || content.substring(0, 50));
+        formData.append('content', content);
+
+        fetch('/notes/api/notes.php', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin'
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(result) {
+            if (result.success) {
+                console.log('[Suzi] Note created');
+            } else {
+                console.error('[Suzi] Failed to create note:', result.error);
+            }
+            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            showSuggestions(false);
+        })
+        .catch(function(error) {
+            console.error('[Suzi] Note error:', error);
+            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+        });
+    }
+
+    // Create a calendar event via API
+    function createCalendarEvent(eventData) {
+        setStatus('📅', 'Creating event...', '');
+
+        var formData = new FormData();
+        formData.append('action', 'create');
+        formData.append('title', eventData.title);
+        if (eventData.date) formData.append('event_date', eventData.date);
+        if (eventData.time) formData.append('event_time', eventData.time);
+
+        fetch('/calendar/api/events.php', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin'
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(result) {
+            if (result.success) {
+                console.log('[Suzi] Event created');
+            } else {
+                console.error('[Suzi] Failed to create event:', result.error);
+            }
+            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            showSuggestions(false);
+        })
+        .catch(function(error) {
+            console.error('[Suzi] Event error:', error);
+            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+        });
+    }
+
+    // Create a reminder via API
+    function createReminder(reminderData) {
+        setStatus('⏰', 'Setting reminder...', '');
+
+        var formData = new FormData();
+        formData.append('action', 'create');
+        formData.append('title', reminderData.title);
+        if (reminderData.date) formData.append('date', reminderData.date);
+        if (reminderData.time) formData.append('time', reminderData.time);
+        formData.append('type', 'todo');
+
+        fetch('/schedule/api/schedule.php', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin'
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(result) {
+            if (result.success) {
+                console.log('[Suzi] Reminder created');
+            } else {
+                console.error('[Suzi] Failed to create reminder:', result.error);
+            }
+            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            showSuggestions(false);
+        })
+        .catch(function(error) {
+            console.error('[Suzi] Reminder error:', error);
+            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+        });
     }
 
     // Modal functions
