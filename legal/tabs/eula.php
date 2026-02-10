@@ -1,7 +1,7 @@
 <div class="doc-header">
     <h2 class="doc-title">End User License Agreement (EULA)</h2>
     <p class="doc-badge">Mobile App Only</p>
-    <p class="doc-updated">Last Updated: <?php echo date('F j, Y'); ?></p>
+    <p class="doc-updated">Last Updated: January 15, 2025</p>
 </div>
 
 <div class="doc-body">
