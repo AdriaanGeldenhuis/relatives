@@ -763,9 +763,13 @@ body {
     transition: var(--shopping-transition);
 }
 
-.category-section:hover {
-    /* removed transform: translateY(-2px) - it creates a stacking context
-       that traps position:fixed dropdowns inside */
+/* Override glass-card backdrop-filter on category sections.
+   backdrop-filter creates compositing layers that render above
+   position:fixed dropdowns on desktop multi-column grids. */
+.category-section.glass-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(30, 27, 55, 0.95);
 }
 
 .category-header {
