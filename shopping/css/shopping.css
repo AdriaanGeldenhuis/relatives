@@ -763,8 +763,13 @@ body {
     transition: var(--shopping-transition);
 }
 
-.category-section:hover {
-    transform: translateY(-2px);
+/* Override glass-card backdrop-filter on category sections.
+   backdrop-filter creates compositing layers that render above
+   position:fixed dropdowns on desktop multi-column grids. */
+.category-section.glass-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(30, 27, 55, 0.95);
 }
 
 .category-header {
@@ -1722,19 +1727,13 @@ body {
 
 .gear-dropdown {
     display: none;
-    position: absolute;
-    top: 100%;
-    right: 0;
-    z-index: 100;
-    background: rgba(40, 35, 70, 0.95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    position: fixed;
+    z-index: 2147483647;
+    background: rgb(40, 35, 70);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: var(--shopping-radius-xs);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
-    min-width: 100px;
-    overflow: hidden;
-    margin-top: 4px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    min-width: 120px;
 }
 
 .gear-dropdown.active {

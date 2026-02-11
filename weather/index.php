@@ -268,6 +268,14 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <span style="font-size: 1.25rem;">📄</span>
                     <span>Export as PDF</span>
                 </button>
+                <button onclick="WeatherWidget.getInstance().exportWeatherCSV()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; background: rgba(255,255,255,0.15); color: white; transition: all 0.2s ease;">
+                    <span style="font-size: 1.25rem;">📊</span>
+                    <span>Export as CSV</span>
+                </button>
+                <button onclick="WeatherWidget.getInstance().exportWeatherText()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; background: rgba(255,255,255,0.15); color: white; transition: all 0.2s ease;">
+                    <span style="font-size: 1.25rem;">📝</span>
+                    <span>Export as Text</span>
+                </button>
                 <button onclick="WeatherWidget.getInstance().shareWeatherWhatsApp()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; background: #25D366; color: white; transition: all 0.2s ease;">
                     <span style="font-size: 1.25rem;">💬</span>
                     <span>Share to WhatsApp</span>

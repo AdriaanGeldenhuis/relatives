@@ -898,6 +898,93 @@ class WeatherWidget {
         this.showNotification('💬 Opening WhatsApp...', 'success');
     }
 
+    exportWeatherCSV() {
+        this.closeShareModal();
+        if (!this.currentWeather || !this.location) {
+            this.showNotification('No weather data to export', 'error');
+            return;
+        }
+
+        const location = this.location.city || 'Your Location';
+        const weather = this.currentWeather;
+        const forecast = this.forecast || [];
+        const unit = this.useFahrenheit ? 'F' : 'C';
+
+        let csv = 'Date,Location,Temp (' + unit + '),Description,Humidity (%),Wind (km/h),Temp Max,Temp Min\n';
+
+        // Current weather
+        csv += '"Today","' + location.replace(/"/g, '""') + '",' + weather.temperature + ',"' + (weather.description || '').replace(/"/g, '""') + '",' + weather.humidity + ',' + weather.wind_speed + ',,\n';
+
+        // Forecast
+        forecast.slice(0, 7).forEach(day => {
+            const date = day.date || '';
+            csv += '"' + date + '","' + location.replace(/"/g, '""') + '",,"' + (day.description || '').replace(/"/g, '""') + '",' + (day.humidity || '') + ',' + (day.wind_speed || '') + ',' + (day.temp_max || '') + ',' + (day.temp_min || '') + '\n';
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'weather-' + location.replace(/[^a-zA-Z0-9]/g, '-') + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        this.showNotification('📊 CSV downloaded!', 'success');
+    }
+
+    exportWeatherText() {
+        this.closeShareModal();
+        if (!this.currentWeather || !this.location) {
+            this.showNotification('No weather data to export', 'error');
+            return;
+        }
+
+        const location = this.location.city || 'Your Location';
+        const weather = this.currentWeather;
+        const forecast = this.forecast || [];
+        const unit = this.useFahrenheit ? 'F' : 'C';
+
+        let text = 'Weather Report for ' + location + '\n' + '='.repeat(35) + '\n\n';
+
+        text += 'CURRENT CONDITIONS:\n';
+        text += '  Temperature: ' + weather.temperature + '°' + unit + '\n';
+        text += '  Feels like: ' + (weather.feels_like || weather.temperature) + '°' + unit + '\n';
+        text += '  Condition: ' + (weather.description || 'N/A') + '\n';
+        text += '  Humidity: ' + weather.humidity + '%\n';
+        text += '  Wind: ' + weather.wind_speed + ' km/h\n';
+        if (weather.pressure) text += '  Pressure: ' + weather.pressure + ' hPa\n';
+        if (weather.visibility) text += '  Visibility: ' + weather.visibility + ' km\n';
+        text += '\n';
+
+        if (forecast.length > 0) {
+            text += 'FORECAST:\n\n';
+            forecast.slice(0, 7).forEach(day => {
+                const date = day.date ? new Date(day.date).toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'short' }) : 'N/A';
+                text += '  ' + date + '\n';
+                text += '    High: ' + (day.temp_max || 'N/A') + '°' + unit + ' | Low: ' + (day.temp_min || 'N/A') + '°' + unit + '\n';
+                if (day.description) text += '    Condition: ' + day.description + '\n';
+                if (day.humidity) text += '    Humidity: ' + day.humidity + '%\n';
+                text += '\n';
+            });
+        }
+
+        text += 'Exported from Relatives App on ' + new Date().toLocaleDateString('en-ZA') + '\n';
+
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'weather-' + location.replace(/[^a-zA-Z0-9]/g, '-') + '.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        this.showNotification('📝 Text file downloaded!', 'success');
+    }
+
     renderInsights() {
         const insightsEl = document.getElementById('weatherInsights');
         const sectionEl = document.getElementById('insightsSection');
