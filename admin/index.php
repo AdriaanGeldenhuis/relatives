@@ -4,6 +4,7 @@
  * Family management only - NO subscription management
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 
 if (!isset($_SESSION['user_id'])) {

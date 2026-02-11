@@ -3,6 +3,7 @@
  * SEND MESSAGE API - WITH NOTIFICATIONS
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 

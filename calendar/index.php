@@ -3,6 +3,7 @@
  * RELATIVES - CALENDAR - WITH NOTIFICATIONS
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 
 if (!isset($_SESSION['user_id'])) {

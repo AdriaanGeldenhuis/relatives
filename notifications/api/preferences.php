@@ -4,6 +4,7 @@
  * Complete CRUD for notification settings
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 header('Cache-Control: private, no-store, max-age=0');

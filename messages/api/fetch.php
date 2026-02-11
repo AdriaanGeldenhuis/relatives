@@ -7,6 +7,7 @@
  * ============================================
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 
 // Prevent output before headers

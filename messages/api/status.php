@@ -5,6 +5,7 @@
  * POST: Update message status (delivered/read)
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 

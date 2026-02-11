@@ -4,6 +4,7 @@
  * Uploads photos to /saves/{user_id}/notes/ as webp
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 

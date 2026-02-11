@@ -5,6 +5,7 @@
  * Soft deletes message (sets deleted_at)
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 
