@@ -191,12 +191,12 @@ try {
             $mediaPath = $uploadedPaths[0]['path'];
             if (strpos($firstType, 'image/') === 0) $messageType = 'image';
             elseif (strpos($firstType, 'video/') === 0) $messageType = 'video';
-            elseif (strpos($firstType, 'audio/') === 0) $messageType = 'audio';
-            else $messageType = 'document';
+            elseif (strpos($firstType, 'audio/') === 0) $messageType = 'voice';
+            else $messageType = 'file';
         } elseif (count($uploadedPaths) > 1) {
             // Multiple files - store as JSON array
             $mediaPath = json_encode($uploadedPaths);
-            $messageType = 'multi';
+            $messageType = 'file';
         }
     }
     
@@ -266,8 +266,10 @@ try {
                 $preview = '📷 Sent a photo';
             } elseif ($messageType === 'video') {
                 $preview = '🎥 Sent a video';
-            } elseif ($messageType === 'audio') {
+            } elseif ($messageType === 'voice') {
                 $preview = '🎤 Sent a voice message';
+            } elseif ($messageType === 'file') {
+                $preview = '📎 Sent a file';
             } else {
                 $preview = 'Sent a message';
             }
