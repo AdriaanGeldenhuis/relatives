@@ -129,7 +129,14 @@ class MainActivity : ComponentActivity() {
         // Start family polling immediately (works without location permission)
         familyPoller.start()
 
-        loadInitialUrl(intent)
+        // Restore WebView state when recreated (e.g. after background location
+        // permission opens Settings and the system destroys this Activity).
+        // Only load the initial URL on a truly fresh start.
+        if (savedInstanceState != null) {
+            webView.restoreState(savedInstanceState)
+        } else {
+            loadInitialUrl(intent)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -153,6 +160,13 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) enterImmersiveMode()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (::webView.isInitialized) {
+            webView.saveState(outState)
+        }
     }
 
     override fun onDestroy() {
