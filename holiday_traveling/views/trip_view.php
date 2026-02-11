@@ -569,11 +569,37 @@ $statusDisplay = $tripStatus ?? 'upcoming';
 
                 // Toggle this dropdown
                 if (!isActive) {
-                    const buttonRect = this.getBoundingClientRect();
-                    dropdown.style.top = buttonRect.bottom + 8 + 'px';
-                    dropdown.style.left = buttonRect.left + 'px';
-                    dropdown.style.right = 'auto';
+                    // Temporarily show dropdown off-screen to measure it
+                    dropdown.style.visibility = 'hidden';
+                    dropdown.style.opacity = '0';
+                    dropdown.style.display = 'block';
+                    dropdown.style.position = 'fixed';
+                    dropdown.style.top = '0';
+                    dropdown.style.left = '0';
                     menu.classList.add('active');
+
+                    const ddWidth = dropdown.offsetWidth;
+                    const ddHeight = dropdown.offsetHeight;
+                    const buttonRect = this.getBoundingClientRect();
+                    const vw = window.innerWidth;
+                    const vh = window.innerHeight;
+
+                    // Default: position below the trigger button, right-aligned
+                    let top = buttonRect.bottom + 8;
+                    let left = buttonRect.right - ddWidth;
+
+                    // Clamp to viewport
+                    if (left < 8) left = 8;
+                    if (left + ddWidth > vw - 8) left = vw - ddWidth - 8;
+                    if (top + ddHeight > vh - 8) top = buttonRect.top - ddHeight - 8;
+                    if (top < 8) top = 8;
+
+                    dropdown.style.top = top + 'px';
+                    dropdown.style.left = left + 'px';
+                    dropdown.style.right = 'auto';
+                    dropdown.style.visibility = '';
+                    dropdown.style.opacity = '';
+                    dropdown.style.display = '';
                 }
             });
         });
