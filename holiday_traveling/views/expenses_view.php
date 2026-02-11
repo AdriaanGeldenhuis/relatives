@@ -215,6 +215,12 @@ $categories = [
 </script>
 
 <style>
+.ht-section-description {
+    font-size: 14px;
+    color: var(--ht-text-secondary);
+    margin: 0 0 16px 0;
+}
+
 .ht-expense-summary {
     margin-bottom: 24px;
 }
