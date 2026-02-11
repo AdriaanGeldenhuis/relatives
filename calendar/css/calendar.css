@@ -556,6 +556,7 @@ body {
     gap: 8px;
 }
 
+
 .week-day-card {
     background: var(--glass-light);
     border: 1px solid var(--glass-border);

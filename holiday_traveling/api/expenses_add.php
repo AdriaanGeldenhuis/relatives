@@ -73,6 +73,7 @@ try {
     // Insert expense
     $expenseId = HT_DB::insert('ht_trip_expenses', [
         'trip_id' => $tripId,
+        'user_id' => HT_Auth::userId(),
         'category' => $category,
         'description' => $description,
         'amount' => $amount,

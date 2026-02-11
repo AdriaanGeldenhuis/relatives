@@ -519,56 +519,95 @@ function createMessageElement(msg) {
     
     let mediaHtml = '';
     if (msg.media_path) {
-        if (msg.message_type === 'multi') {
-            // Multiple files stored as JSON
+        // Try to detect multi-file JSON (type 'file' with JSON array, or legacy 'multi')
+        let isMulti = false;
+        if (msg.message_type === 'file' || msg.message_type === 'multi') {
             try {
-                const files = typeof msg.media_path === 'string' ? JSON.parse(msg.media_path) : msg.media_path;
-                mediaHtml = '<div class="message-media message-media-multi">';
-                files.forEach(f => {
-                    if (f.type && f.type.startsWith('image/')) {
-                        mediaHtml += `<img src="${f.path}" alt="${escapeHtml(f.name)}" loading="lazy" onclick="openMediaViewer('${f.path}', 'image')">`;
-                    } else if (f.type && f.type.startsWith('video/')) {
-                        mediaHtml += `<video src="${f.path}" controls></video>`;
-                    } else if (f.type && f.type.startsWith('audio/')) {
-                        mediaHtml += `<audio src="${f.path}" controls></audio>`;
-                    } else {
-                        const ext = f.name ? f.name.split('.').pop().toUpperCase() : 'FILE';
-                        const icon = (f.type === 'application/pdf') ? '📄' : '📎';
-                        const size = f.size ? (f.size / 1024).toFixed(0) + 'KB' : '';
-                        mediaHtml += `<a href="${f.path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(f.name)}</span><small>${ext} ${size}</small></a>`;
-                    }
-                });
-                mediaHtml += '</div>';
+                const parsed = typeof msg.media_path === 'string' ? JSON.parse(msg.media_path) : msg.media_path;
+                if (Array.isArray(parsed)) {
+                    isMulti = true;
+                    mediaHtml = '<div class="message-media message-media-multi">';
+                    parsed.forEach(f => {
+                        if (f.type && f.type.startsWith('image/')) {
+                            mediaHtml += `<img src="${f.path}" alt="${escapeHtml(f.name)}" loading="lazy" onclick="openMediaViewer('${f.path}', 'image')">`;
+                        } else if (f.type && f.type.startsWith('video/')) {
+                            mediaHtml += `<video src="${f.path}" controls></video>`;
+                        } else if (f.type && f.type.startsWith('audio/')) {
+                            mediaHtml += `<audio src="${f.path}" controls></audio>`;
+                        } else {
+                            const ext = f.name ? f.name.split('.').pop().toUpperCase() : 'FILE';
+                            const icon = (f.type === 'application/pdf') ? '📄' : '📎';
+                            const size = f.size ? (f.size / 1024).toFixed(0) + 'KB' : '';
+                            mediaHtml += `<a href="${f.path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(f.name)}</span><small>${ext} ${size}</small></a>`;
+                        }
+                    });
+                    mediaHtml += '</div>';
+                }
             } catch (e) {
-                mediaHtml = '';
+                // Not JSON - fall through to single file handling below
             }
-        } else if (msg.message_type === 'image') {
-            mediaHtml = `
-                <div class="message-media">
-                    <img src="${msg.media_path}" alt="Image" loading="lazy" onclick="openMediaViewer('${msg.media_path}', 'image')">
-                </div>
-            `;
-        } else if (msg.message_type === 'video') {
-            mediaHtml = `
-                <div class="message-media">
-                    <video src="${msg.media_path}" controls onclick="openMediaViewer('${msg.media_path}', 'video')"></video>
-                </div>
-            `;
-        } else if (msg.message_type === 'audio') {
-            mediaHtml = `
-                <div class="message-media">
-                    <audio src="${msg.media_path}" controls></audio>
-                </div>
-            `;
-        } else if (msg.message_type === 'document') {
-            const fileName = msg.media_path.split('/').pop();
-            const ext = fileName.split('.').pop().toUpperCase();
-            const icon = ext === 'PDF' ? '📄' : '📎';
-            mediaHtml = `
-                <div class="message-media">
-                    <a href="${msg.media_path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(fileName)}</span><small>${ext}</small></a>
-                </div>
-            `;
+        }
+
+        if (!isMulti) {
+            if (msg.message_type === 'image') {
+                mediaHtml = `
+                    <div class="message-media">
+                        <img src="${msg.media_path}" alt="Image" loading="lazy" onclick="openMediaViewer('${msg.media_path}', 'image')">
+                    </div>
+                `;
+            } else if (msg.message_type === 'video') {
+                mediaHtml = `
+                    <div class="message-media">
+                        <video src="${msg.media_path}" controls onclick="openMediaViewer('${msg.media_path}', 'video')"></video>
+                    </div>
+                `;
+            } else if (msg.message_type === 'voice' || msg.message_type === 'audio') {
+                mediaHtml = `
+                    <div class="message-media">
+                        <audio src="${msg.media_path}" controls></audio>
+                    </div>
+                `;
+            } else if (msg.message_type === 'file' || msg.message_type === 'document') {
+                const fileName = msg.media_path.split('/').pop();
+                const ext = fileName.split('.').pop().toUpperCase();
+                const icon = ext === 'PDF' ? '📄' : '📎';
+                mediaHtml = `
+                    <div class="message-media">
+                        <a href="${msg.media_path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(fileName)}</span><small>${ext}</small></a>
+                    </div>
+                `;
+            } else {
+                // Fallback: detect type from file extension so media always renders
+                const path = msg.media_path.toLowerCase();
+                if (path.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/)) {
+                    mediaHtml = `
+                        <div class="message-media">
+                            <img src="${msg.media_path}" alt="Image" loading="lazy" onclick="openMediaViewer('${msg.media_path}', 'image')">
+                        </div>
+                    `;
+                } else if (path.match(/\.(mp4|mov|webm)(\?|$)/)) {
+                    mediaHtml = `
+                        <div class="message-media">
+                            <video src="${msg.media_path}" controls onclick="openMediaViewer('${msg.media_path}', 'video')"></video>
+                        </div>
+                    `;
+                } else if (path.match(/\.(mp3|ogg|wav)(\?|$)/)) {
+                    mediaHtml = `
+                        <div class="message-media">
+                            <audio src="${msg.media_path}" controls></audio>
+                        </div>
+                    `;
+                } else {
+                    const fileName = msg.media_path.split('/').pop();
+                    const ext = fileName.split('.').pop().toUpperCase();
+                    const icon = ext === 'PDF' ? '📄' : '📎';
+                    mediaHtml = `
+                        <div class="message-media">
+                            <a href="${msg.media_path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(fileName)}</span><small>${ext}</small></a>
+                        </div>
+                    `;
+                }
+            }
         }
     }
     

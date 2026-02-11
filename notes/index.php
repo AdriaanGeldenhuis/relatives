@@ -543,16 +543,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                                             ✏️
                                         </button>
                                     <?php endif; ?>
-                                    <button onclick="event.stopPropagation(); duplicateNote(<?php echo $note['id']; ?>)"
-                                            class="note-action"
-                                            title="Duplicate">
-                                        📋
-                                    </button>
-                                    <button onclick="event.stopPropagation(); shareNote(<?php echo $note['id']; ?>)"
-                                            class="note-action"
-                                            title="Share">
-                                        📤
-                                    </button>
                                     <button onclick="event.stopPropagation(); deleteNote(<?php echo $note['id']; ?>)"
                                             class="note-action"
                                             title="Delete">
@@ -667,16 +657,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                                             ✏️
                                         </button>
                                     <?php endif; ?>
-                                    <button onclick="event.stopPropagation(); duplicateNote(<?php echo $note['id']; ?>)"
-                                            class="note-action"
-                                            title="Duplicate">
-                                        📋
-                                    </button>
-                                    <button onclick="event.stopPropagation(); shareNote(<?php echo $note['id']; ?>)"
-                                            class="note-action"
-                                            title="Share">
-                                        📤
-                                    </button>
                                     <button onclick="event.stopPropagation(); deleteNote(<?php echo $note['id']; ?>)"
                                             class="note-action"
                                             title="Delete">
@@ -946,36 +926,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <button type="button" onclick="closeModal('editNoteModal')" class="btn btn-secondary">Cancel</button>
                 </div>
             </form>
-        </div>
-    </div>
-</div>
-
-<!-- Share Note Modal -->
-<div id="shareNoteModal" class="modal">
-    <div class="modal-content modal-small">
-        <div class="modal-header">
-            <h2>📤 Share Note</h2>
-            <button onclick="closeModal('shareNoteModal')" class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div class="share-options">
-                <button onclick="copyNoteText()" class="share-option-btn">
-                    <span class="share-icon">📋</span>
-                    <span>Copy Text</span>
-                </button>
-                <button onclick="downloadNoteAsText()" class="share-option-btn">
-                    <span class="share-icon">💾</span>
-                    <span>Download as TXT</span>
-                </button>
-                <button onclick="printNote()" class="share-option-btn">
-                    <span class="share-icon">🖨️</span>
-                    <span>Print</span>
-                </button>
-                <button onclick="emailNote()" class="share-option-btn">
-                    <span class="share-icon">📧</span>
-                    <span>Email</span>
-                </button>
-            </div>
         </div>
     </div>
 </div>

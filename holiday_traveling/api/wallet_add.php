@@ -59,6 +59,7 @@ try {
     // Insert wallet item
     $itemId = HT_DB::insert('ht_trip_wallet_items', [
         'trip_id' => $tripId,
+        'user_id' => HT_Auth::userId(),
         'type' => $type,
         'label' => $label,
         'content' => $content,

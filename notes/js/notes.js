@@ -16,7 +16,6 @@ let analyser = null;
 let dataArray = null;
 let animationId = null;
 let recordedBlob = null;
-let currentShareNoteId = null;
 let selectedNoteImages = []; // For multiple photo uploads (up to 7)
 const MAX_PHOTOS = 7;
 
@@ -827,143 +826,6 @@ async function togglePin(noteId) {
 // DUPLICATE NOTE
 // ============================================
 
-function duplicateNote(noteId) {
-    const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
-    if (!noteCard) return;
-    
-    const noteType = noteCard.dataset.noteType;
-    
-    if (noteType === 'voice') {
-        showToast('Voice notes cannot be duplicated', 'warning');
-        return;
-    }
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || '';
-    const body = noteCard.querySelector('.note-body')?.textContent || '';
-    const color = noteCard.style.background;
-    
-    // Pre-fill create modal
-    document.getElementById('noteTitle').value = title + ' (Copy)';
-    document.getElementById('noteBody').value = body;
-    
-    // Set color
-    const colorInputs = document.querySelectorAll('input[name="noteColor"]');
-    colorInputs.forEach(input => {
-        if (input.value === color) {
-            input.checked = true;
-        }
-    });
-    
-    showCreateNoteModal('text');
-    showToast('Note duplicated! Ready to save.', 'info');
-}
-
-// ============================================
-// SHARE NOTE
-// ============================================
-
-function shareNote(noteId) {
-    currentShareNoteId = noteId;
-    document.getElementById('shareNoteModal').classList.add('active');
-}
-
-function copyNoteText() {
-    const noteCard = document.querySelector(`[data-note-id="${currentShareNoteId}"]`);
-    if (!noteCard) return;
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || 'Untitled Note';
-    const body = noteCard.querySelector('.note-body')?.textContent || '';
-    
-    const text = `${title}\n\n${body}`;
-    
-    navigator.clipboard.writeText(text).then(() => {
-        showToast('Note copied to clipboard!', 'success');
-        closeModal('shareNoteModal');
-    }).catch(err => {
-        showToast('Failed to copy note', 'error');
-    });
-}
-
-function downloadNoteAsText() {
-    const noteCard = document.querySelector(`[data-note-id="${currentShareNoteId}"]`);
-    if (!noteCard) return;
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || 'Untitled Note';
-    const body = noteCard.querySelector('.note-body')?.textContent || '';
-    
-    const text = `${title}\n\n${body}`;
-    
-    const blob = new Blob([text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.replace(/[^a-z0-9]/gi, '_')}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    showToast('Note downloaded!', 'success');
-    closeModal('shareNoteModal');
-}
-
-function printNote() {
-    const noteCard = document.querySelector(`[data-note-id="${currentShareNoteId}"]`);
-    if (!noteCard) return;
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || 'Untitled Note';
-    const body = noteCard.querySelector('.note-body')?.innerHTML || '';
-    
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>${title}</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    padding: 40px;
-                    max-width: 800px;
-                    margin: 0 auto;
-                }
-                h1 {
-                    color: #333;
-                    margin-bottom: 20px;
-                }
-                .content {
-                    line-height: 1.6;
-                    color: #555;
-                }
-            </style>
-        </head>
-        <body>
-            <h1>${title}</h1>
-            <div class="content">${body}</div>
-        </body>
-        </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
-    
-    closeModal('shareNoteModal');
-}
-
-function emailNote() {
-    const noteCard = document.querySelector(`[data-note-id="${currentShareNoteId}"]`);
-    if (!noteCard) return;
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || 'Untitled Note';
-    const body = noteCard.querySelector('.note-body')?.textContent || '';
-    
-    const subject = encodeURIComponent(`Family Note: ${title}`);
-    const bodyText = encodeURIComponent(`${title}\n\n${body}`);
-    
-    window.location.href = `mailto:?subject=${subject}&body=${bodyText}`;
-    
-    closeModal('shareNoteModal');
-}
-
 // ============================================
 // SEARCH NOTES
 // ============================================
@@ -1077,16 +939,22 @@ function updateStats() {
 // ============================================
 
 function resetVoiceRecorder() {
+    // Clear any running timer interval
+    if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+    }
+
     document.getElementById('startRecordBtn').style.display = 'inline-flex';
     document.getElementById('stopRecordBtn').style.display = 'none';
     document.getElementById('playRecordBtn').style.display = 'none';
     document.getElementById('recordedAudio').style.display = 'none';
     document.getElementById('voiceNoteForm').style.display = 'none';
-    
+
     document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '🎤';
     document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Press record to start';
     document.getElementById('recordingTimer').textContent = '00:00';
-    
+
     audioChunks = [];
     recordedBlob = null;
     
@@ -1159,6 +1027,18 @@ async function startRecording() {
             const audio = document.getElementById('recordedAudio');
             audio.src = audioUrl;
             audio.style.display = 'block';
+
+            // Update the recording timer to show the actual audio duration
+            audio.addEventListener('loadedmetadata', function onMeta() {
+                audio.removeEventListener('loadedmetadata', onMeta);
+                if (isFinite(audio.duration)) {
+                    const dur = audio.duration;
+                    const mins = Math.floor(dur / 60);
+                    const secs = Math.floor(dur % 60);
+                    document.getElementById('recordingTimer').textContent =
+                        `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                }
+            });
 
             document.getElementById('playRecordBtn').style.display = 'inline-flex';
             document.getElementById('voiceNoteForm').style.display = 'block';
@@ -1275,6 +1155,7 @@ function stopRecording() {
 
     // Stop timer
     clearInterval(recordingTimer);
+    recordingTimer = null;
 
     // Update UI
     document.getElementById('stopRecordBtn').style.display = 'none';
@@ -1443,14 +1324,6 @@ function openFullscreenNote(noteId) {
             <span>${isPinned ? 'Unpin' : 'Pin'}</span>
         </button>
         ${editBtn}
-        <button onclick="closeFullscreenNote(); duplicateNote(${noteId});" class="fullscreen-action-btn">
-            <span>📋</span>
-            <span>Duplicate</span>
-        </button>
-        <button onclick="closeFullscreenNote(); shareNote(${noteId});" class="fullscreen-action-btn share-btn">
-            <span>📤</span>
-            <span>Share</span>
-        </button>
         <button onclick="closeFullscreenNote(); deleteNote(${noteId});" class="fullscreen-action-btn delete-btn">
             <span>🗑️</span>
             <span>Delete</span>
@@ -1561,8 +1434,6 @@ function addNoteToDOM(note) {
             <button onclick="event.stopPropagation(); togglePin(${note.id})" class="note-pin" title="Pin">📌</button>
             <div class="note-actions">
                 ${editBtn}
-                <button onclick="event.stopPropagation(); duplicateNote(${note.id})" class="note-action" title="Duplicate">📋</button>
-                <button onclick="event.stopPropagation(); shareNote(${note.id})" class="note-action" title="Share">📤</button>
                 <button onclick="event.stopPropagation(); deleteNote(${note.id})" class="note-action" title="Delete">🗑️</button>
             </div>
         </div>
