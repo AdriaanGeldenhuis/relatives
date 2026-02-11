@@ -252,12 +252,11 @@ function render3RowWeekView(weekDays) {
     const weekView = document.getElementById('week-view');
     if (!weekView) return;
 
-    // Create 3-row grid structure
+    // Create single-column grid structure
     let gridHTML = '<div class="week-3row-grid">';
-
-    // Row 1: Mon, Tue, Wed
     gridHTML += '<div class="week-row">';
-    for (let i = 0; i < 3; i++) {
+
+    for (let i = 0; i < orderedDays.length; i++) {
         const day = orderedDays[i];
         const isToday = day.toDateString() === new Date().toDateString();
         const dateStr = day.toISOString().split('T')[0];
@@ -273,46 +272,8 @@ function render3RowWeekView(weekDays) {
             </div>
         `;
     }
-    gridHTML += '</div>';
 
-    // Row 2: Thu, Fri, Sat
-    gridHTML += '<div class="week-row">';
-    for (let i = 3; i < 6; i++) {
-        const day = orderedDays[i];
-        const isToday = day.toDateString() === new Date().toDateString();
-        const dateStr = day.toISOString().split('T')[0];
-        gridHTML += `
-            <div class="week-day-card ${isToday ? 'today' : ''}"
-                 data-date="${dateStr}"
-                 onclick="selectDay('${dateStr}')">
-                <div class="day-header-info">
-                    <span class="day-name">${day.toLocaleDateString('en-ZA', { weekday: 'short' })}</span>
-                    <span class="day-num">${day.getDate()}</span>
-                </div>
-                <div class="day-events-list" data-date="${dateStr}"></div>
-            </div>
-        `;
-    }
     gridHTML += '</div>';
-
-    // Row 3: Sunday (full width)
-    gridHTML += '<div class="week-row sunday-row">';
-    const sunday = orderedDays[6];
-    const isSundayToday = sunday.toDateString() === new Date().toDateString();
-    const sundayDateStr = sunday.toISOString().split('T')[0];
-    gridHTML += `
-        <div class="week-day-card ${isSundayToday ? 'today' : ''}"
-             data-date="${sundayDateStr}"
-             onclick="selectDay('${sundayDateStr}')">
-            <div class="day-header-info">
-                <span class="day-name">${sunday.toLocaleDateString('en-ZA', { weekday: 'long' })}</span>
-                <span class="day-num">${sunday.getDate()}</span>
-            </div>
-            <div class="day-events-list" data-date="${sundayDateStr}"></div>
-        </div>
-    `;
-    gridHTML += '</div>';
-
     gridHTML += '</div>';
 
     // Replace week view content

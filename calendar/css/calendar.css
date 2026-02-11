@@ -558,12 +558,8 @@ body {
 
 .week-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-}
-
-.week-row.sunday-row {
     grid-template-columns: 1fr;
+    gap: 8px;
 }
 
 .week-day-card {
