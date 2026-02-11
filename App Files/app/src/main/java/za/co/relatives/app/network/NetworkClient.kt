@@ -95,7 +95,7 @@ object NetworkClient {
     private fun seedFromPreferences(appContext: Context) {
         try {
             val prefs = appContext.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
-            val sessionCookie = prefs.getString("session_cookie", null)
+            val sessionCookie = prefs.getString("session_token", null)
             if (!sessionCookie.isNullOrBlank()) {
                 setSessionCookie("www.relatives.co.za", "PHPSESSID", sessionCookie)
             }

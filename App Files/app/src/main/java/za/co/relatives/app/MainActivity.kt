@@ -34,6 +34,7 @@ import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.QueryPurchasesParams
 import za.co.relatives.app.data.TrackingStore
+import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.tracking.FamilyPoller
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
@@ -406,6 +407,7 @@ class MainActivity : ComponentActivity() {
         val javaManager = (CookieHandler.getDefault() as? JavaNetCookieManager)
             ?: JavaNetCookieManager().also { CookieHandler.setDefault(it) }
         val uri = URI.create(WEB_URL)
+        val domain = uri.host ?: "www.relatives.co.za"
         raw.split(";").forEach { segment ->
             val trimmed = segment.trim()
             if (trimmed.isNotEmpty()) {
@@ -413,6 +415,13 @@ class MainActivity : ComponentActivity() {
                     HttpCookie.parse("Set-Cookie: $trimmed").forEach { cookie ->
                         javaManager.cookieStore.add(uri, cookie)
                     }
+                }
+                // Also push to OkHttp so native services (FamilyPoller,
+                // LocationUploadWorker) can authenticate independently of
+                // whatever page the WebView is currently showing.
+                val parts = trimmed.split("=", limit = 2)
+                if (parts.size == 2) {
+                    NetworkClient.setSessionCookie(domain, parts[0].trim(), parts[1].trim())
                 }
             }
         }
@@ -424,7 +433,12 @@ class MainActivity : ComponentActivity() {
         raw.split(";").forEach { segment ->
             val parts = segment.trim().split("=", limit = 2)
             if (parts.size == 2 && parts[0].trim().lowercase() in targetNames) {
-                prefs.sessionToken = parts[1].trim()
+                val cookieName = parts[0].trim()
+                val cookieValue = parts[1].trim()
+                prefs.sessionToken = cookieValue
+                // Push to OkHttp so background workers authenticate
+                // even after the WebView navigates away from /tracking/
+                NetworkClient.setSessionCookie("www.relatives.co.za", cookieName, cookieValue)
                 return
             }
         }
