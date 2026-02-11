@@ -97,7 +97,7 @@ object NetworkClient {
             val prefs = appContext.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
             val sessionCookie = prefs.getString("session_token", null)
             if (!sessionCookie.isNullOrBlank()) {
-                setSessionCookie("www.relatives.co.za", "PHPSESSID", sessionCookie)
+                setSessionCookie("www.relatives.co.za", "RELATIVES_SESSION", sessionCookie)
             }
         } catch (_: Exception) {
             // Non-critical -- we just won't have a session until the user logs in.

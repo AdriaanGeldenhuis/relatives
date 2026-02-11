@@ -429,7 +429,7 @@ class MainActivity : ComponentActivity() {
 
     private fun extractSessionToken() {
         val raw = CookieManager.getInstance().getCookie(WEB_URL) ?: return
-        val targetNames = setOf("session_token", "phpsessid", "token")
+        val targetNames = setOf("relatives_session", "session_token", "phpsessid", "token")
         raw.split(";").forEach { segment ->
             val parts = segment.trim().split("=", limit = 2)
             if (parts.size == 2 && parts[0].trim().lowercase() in targetNames) {
