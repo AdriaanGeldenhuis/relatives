@@ -207,6 +207,10 @@ class MainActivity : ComponentActivity() {
         else -> "disabled"
     }
 
+    fun requestNotificationPermission() {
+        permissionGate.requestNotifications()
+    }
+
     fun wakeAllDevices() {
         TrackingService.wake(this)
     }

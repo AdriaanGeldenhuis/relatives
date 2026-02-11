@@ -678,6 +678,11 @@ document.addEventListener('DOMContentLoaded', () => {
         card.style.animation = `fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${index * 0.05}s backwards`;
     });
 
+    // Native app: request notification permission when visiting this page
+    if (window.TrackingBridge && typeof TrackingBridge.requestNotificationPermission === 'function') {
+        TrackingBridge.requestNotificationPermission();
+    }
+
     console.log('✅ Notifications Initialized (AJAX Mode)');
 });
 

@@ -102,7 +102,7 @@ class PermissionGate(private val activity: ComponentActivity) {
         }
     }
 
-    private fun requestNotifications() {
+    fun requestNotifications() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission()) {
             AlertDialog.Builder(activity)
                 .setTitle(R.string.notification_dialog_title)
