@@ -549,7 +549,7 @@ body {
     display: none; /* Hide old grid */
 }
 
-/* New 3-Row Week Layout */
+/* Week Layout - Vertical Stack */
 .week-3row-grid {
     display: flex;
     flex-direction: column;
@@ -557,13 +557,9 @@ body {
 }
 
 .week-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: 8px;
-}
-
-.week-row.sunday-row {
-    grid-template-columns: 1fr;
 }
 
 .week-day-card {
