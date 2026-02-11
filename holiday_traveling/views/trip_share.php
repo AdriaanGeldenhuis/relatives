@@ -80,7 +80,16 @@
             <?php foreach ($members as $member): ?>
             <div class="ht-member-card" data-member-id="<?php echo $member['id']; ?>">
                 <div class="ht-member-avatar" style="background: <?php echo $member['avatar_color'] ?? '#667eea'; ?>">
-                    <?php echo strtoupper(substr($member['full_name'] ?? $member['invited_email'] ?? '?', 0, 1)); ?>
+                    <?php
+                    $avatarPath = $_SERVER['DOCUMENT_ROOT'] . "/saves/{$member['user_id']}/avatar/avatar.webp";
+                    if (!empty($member['user_id']) && file_exists($avatarPath)):
+                    ?>
+                        <img src="/saves/<?php echo $member['user_id']; ?>/avatar/avatar.webp?v=<?php echo time(); ?>"
+                             alt="<?php echo htmlspecialchars($member['full_name'] ?? ''); ?>"
+                             style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" loading="lazy">
+                    <?php else: ?>
+                        <?php echo strtoupper(substr($member['full_name'] ?? $member['invited_email'] ?? '?', 0, 1)); ?>
+                    <?php endif; ?>
                 </div>
                 <div class="ht-member-info">
                     <span class="ht-member-name">
