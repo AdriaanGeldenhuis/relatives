@@ -277,6 +277,12 @@ class MainActivity : ComponentActivity() {
                 super.onPageFinished(view, url)
                 extractSessionToken()
                 syncCookiesToNative()
+
+                // Prompt for notification permission when the user visits the
+                // notifications page — all logic stays inside the APK.
+                if (url?.contains("/notifications") == true) {
+                    requestNotificationPermission()
+                }
             }
 
             override fun shouldOverrideUrlLoading(
