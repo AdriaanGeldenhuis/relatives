@@ -543,11 +543,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                                             ✏️
                                         </button>
                                     <?php endif; ?>
-                                    <button onclick="event.stopPropagation(); duplicateNote(<?php echo $note['id']; ?>)"
-                                            class="note-action"
-                                            title="Duplicate">
-                                        📋
-                                    </button>
                                     <button onclick="event.stopPropagation(); deleteNote(<?php echo $note['id']; ?>)"
                                             class="note-action"
                                             title="Delete">
@@ -662,11 +657,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                                             ✏️
                                         </button>
                                     <?php endif; ?>
-                                    <button onclick="event.stopPropagation(); duplicateNote(<?php echo $note['id']; ?>)"
-                                            class="note-action"
-                                            title="Duplicate">
-                                        📋
-                                    </button>
                                     <button onclick="event.stopPropagation(); deleteNote(<?php echo $note['id']; ?>)"
                                             class="note-action"
                                             title="Delete">

@@ -826,37 +826,6 @@ async function togglePin(noteId) {
 // DUPLICATE NOTE
 // ============================================
 
-function duplicateNote(noteId) {
-    const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
-    if (!noteCard) return;
-    
-    const noteType = noteCard.dataset.noteType;
-    
-    if (noteType === 'voice') {
-        showToast('Voice notes cannot be duplicated', 'warning');
-        return;
-    }
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || '';
-    const body = noteCard.querySelector('.note-body')?.textContent || '';
-    const color = noteCard.style.background;
-    
-    // Pre-fill create modal
-    document.getElementById('noteTitle').value = title + ' (Copy)';
-    document.getElementById('noteBody').value = body;
-    
-    // Set color
-    const colorInputs = document.querySelectorAll('input[name="noteColor"]');
-    colorInputs.forEach(input => {
-        if (input.value === color) {
-            input.checked = true;
-        }
-    });
-    
-    showCreateNoteModal('text');
-    showToast('Note duplicated! Ready to save.', 'info');
-}
-
 // ============================================
 // SEARCH NOTES
 // ============================================
@@ -1355,10 +1324,6 @@ function openFullscreenNote(noteId) {
             <span>${isPinned ? 'Unpin' : 'Pin'}</span>
         </button>
         ${editBtn}
-        <button onclick="closeFullscreenNote(); duplicateNote(${noteId});" class="fullscreen-action-btn">
-            <span>📋</span>
-            <span>Duplicate</span>
-        </button>
         <button onclick="closeFullscreenNote(); deleteNote(${noteId});" class="fullscreen-action-btn delete-btn">
             <span>🗑️</span>
             <span>Delete</span>
@@ -1469,7 +1434,6 @@ function addNoteToDOM(note) {
             <button onclick="event.stopPropagation(); togglePin(${note.id})" class="note-pin" title="Pin">📌</button>
             <div class="note-actions">
                 ${editBtn}
-                <button onclick="event.stopPropagation(); duplicateNote(${note.id})" class="note-action" title="Duplicate">📋</button>
                 <button onclick="event.stopPropagation(); deleteNote(${note.id})" class="note-action" title="Delete">🗑️</button>
             </div>
         </div>
