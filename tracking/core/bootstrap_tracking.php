@@ -11,6 +11,7 @@ declare(strict_types=1);
  * cookie name, which reads from a different (empty) session.
  */
 if (session_status() === PHP_SESSION_NONE) {
+    session_name('RELATIVES_SESSION');
     session_start();
 }
 
