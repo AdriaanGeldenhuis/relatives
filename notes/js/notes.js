@@ -1077,16 +1077,22 @@ function updateStats() {
 // ============================================
 
 function resetVoiceRecorder() {
+    // Clear any running timer interval
+    if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+    }
+
     document.getElementById('startRecordBtn').style.display = 'inline-flex';
     document.getElementById('stopRecordBtn').style.display = 'none';
     document.getElementById('playRecordBtn').style.display = 'none';
     document.getElementById('recordedAudio').style.display = 'none';
     document.getElementById('voiceNoteForm').style.display = 'none';
-    
+
     document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '🎤';
     document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Press record to start';
     document.getElementById('recordingTimer').textContent = '00:00';
-    
+
     audioChunks = [];
     recordedBlob = null;
     
@@ -1159,6 +1165,18 @@ async function startRecording() {
             const audio = document.getElementById('recordedAudio');
             audio.src = audioUrl;
             audio.style.display = 'block';
+
+            // Update the recording timer to show the actual audio duration
+            audio.addEventListener('loadedmetadata', function onMeta() {
+                audio.removeEventListener('loadedmetadata', onMeta);
+                if (isFinite(audio.duration)) {
+                    const dur = audio.duration;
+                    const mins = Math.floor(dur / 60);
+                    const secs = Math.floor(dur % 60);
+                    document.getElementById('recordingTimer').textContent =
+                        `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                }
+            });
 
             document.getElementById('playRecordBtn').style.display = 'inline-flex';
             document.getElementById('voiceNoteForm').style.display = 'block';
@@ -1275,6 +1293,7 @@ function stopRecording() {
 
     // Stop timer
     clearInterval(recordingTimer);
+    recordingTimer = null;
 
     // Update UI
     document.getElementById('stopRecordBtn').style.display = 'none';
