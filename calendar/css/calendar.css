@@ -534,7 +534,7 @@ body {
 }
 
 /* ============================================
-   WEEK VIEW - 3 ROW LAYOUT
+   WEEK VIEW
    ============================================ */
 
 .week-view {
@@ -549,16 +549,10 @@ body {
     display: none; /* Hide old grid */
 }
 
-/* New 3-Row Week Layout */
-.week-3row-grid {
+/* Week Day List - Vertical Stack */
+.week-day-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-}
-
-.week-row {
-    display: grid;
-    grid-template-columns: 1fr;
     gap: 8px;
 }
 
@@ -1823,11 +1817,7 @@ textarea.form-control {
     }
 
     /* Week View - Mobile adjustments */
-    .week-3row-grid {
-        gap: 6px;
-    }
-
-    .week-row {
+    .week-day-list {
         gap: 6px;
     }
 

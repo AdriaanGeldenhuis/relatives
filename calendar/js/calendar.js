@@ -252,9 +252,7 @@ function render3RowWeekView(weekDays) {
     const weekView = document.getElementById('week-view');
     if (!weekView) return;
 
-    // Create single-column grid structure
-    let gridHTML = '<div class="week-3row-grid">';
-    gridHTML += '<div class="week-row">';
+    let gridHTML = '<div class="week-day-list">';
 
     for (let i = 0; i < orderedDays.length; i++) {
         const day = orderedDays[i];
@@ -273,7 +271,6 @@ function render3RowWeekView(weekDays) {
         `;
     }
 
-    gridHTML += '</div>';
     gridHTML += '</div>';
 
     // Replace week view content
