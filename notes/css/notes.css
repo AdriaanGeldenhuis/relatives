@@ -1076,46 +1076,6 @@ body {
 }
 
 /* ============================================
-   SHARE OPTIONS
-   ============================================ */
-
-.share-options {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: var(--space-md);
-}
-
-.share-option-btn {
-    background: var(--glass-medium);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-lg);
-    padding: var(--space-xl) var(--space-lg);
-    color: white;
-    cursor: pointer;
-    transition: all var(--transition-base);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-sm);
-    font-weight: 700;
-}
-
-.share-option-btn:hover {
-    background: var(--glass-heavy);
-    transform: translateY(-4px) scale(1.05);
-    box-shadow: var(--shadow-lg);
-}
-
-.share-option-btn:active {
-    transform: translateY(-2px) scale(1.02);
-}
-
-.share-icon {
-    font-size: 2.5rem;
-    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.2));
-}
-
-/* ============================================
    GLASS CARD
    ============================================ */
 
@@ -1313,10 +1273,6 @@ body {
     .modal-actions {
         flex-direction: column;
     }
-    
-    .share-options {
-        grid-template-columns: 1fr;
-    }
 }
 
 /* ============================================
@@ -1503,11 +1459,6 @@ body {
 .fullscreen-action-btn.pin-btn:hover {
     background: rgba(255, 193, 7, 0.5);
     border-color: rgba(255, 193, 7, 0.8);
-}
-
-.fullscreen-action-btn.share-btn:hover {
-    background: rgba(67, 233, 123, 0.5);
-    border-color: rgba(67, 233, 123, 0.8);
 }
 
 /* Mobile fullscreen styles */

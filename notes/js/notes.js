@@ -16,7 +16,6 @@ let analyser = null;
 let dataArray = null;
 let animationId = null;
 let recordedBlob = null;
-let currentShareNoteId = null;
 let selectedNoteImages = []; // For multiple photo uploads (up to 7)
 const MAX_PHOTOS = 7;
 
@@ -859,112 +858,6 @@ function duplicateNote(noteId) {
 }
 
 // ============================================
-// SHARE NOTE
-// ============================================
-
-function shareNote(noteId) {
-    currentShareNoteId = noteId;
-    document.getElementById('shareNoteModal').classList.add('active');
-}
-
-function copyNoteText() {
-    const noteCard = document.querySelector(`[data-note-id="${currentShareNoteId}"]`);
-    if (!noteCard) return;
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || 'Untitled Note';
-    const body = noteCard.querySelector('.note-body')?.textContent || '';
-    
-    const text = `${title}\n\n${body}`;
-    
-    navigator.clipboard.writeText(text).then(() => {
-        showToast('Note copied to clipboard!', 'success');
-        closeModal('shareNoteModal');
-    }).catch(err => {
-        showToast('Failed to copy note', 'error');
-    });
-}
-
-function downloadNoteAsText() {
-    const noteCard = document.querySelector(`[data-note-id="${currentShareNoteId}"]`);
-    if (!noteCard) return;
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || 'Untitled Note';
-    const body = noteCard.querySelector('.note-body')?.textContent || '';
-    
-    const text = `${title}\n\n${body}`;
-    
-    const blob = new Blob([text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.replace(/[^a-z0-9]/gi, '_')}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    showToast('Note downloaded!', 'success');
-    closeModal('shareNoteModal');
-}
-
-function printNote() {
-    const noteCard = document.querySelector(`[data-note-id="${currentShareNoteId}"]`);
-    if (!noteCard) return;
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || 'Untitled Note';
-    const body = noteCard.querySelector('.note-body')?.innerHTML || '';
-    
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>${title}</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    padding: 40px;
-                    max-width: 800px;
-                    margin: 0 auto;
-                }
-                h1 {
-                    color: #333;
-                    margin-bottom: 20px;
-                }
-                .content {
-                    line-height: 1.6;
-                    color: #555;
-                }
-            </style>
-        </head>
-        <body>
-            <h1>${title}</h1>
-            <div class="content">${body}</div>
-        </body>
-        </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
-    
-    closeModal('shareNoteModal');
-}
-
-function emailNote() {
-    const noteCard = document.querySelector(`[data-note-id="${currentShareNoteId}"]`);
-    if (!noteCard) return;
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || 'Untitled Note';
-    const body = noteCard.querySelector('.note-body')?.textContent || '';
-    
-    const subject = encodeURIComponent(`Family Note: ${title}`);
-    const bodyText = encodeURIComponent(`${title}\n\n${body}`);
-    
-    window.location.href = `mailto:?subject=${subject}&body=${bodyText}`;
-    
-    closeModal('shareNoteModal');
-}
-
-// ============================================
 // SEARCH NOTES
 // ============================================
 
@@ -1466,10 +1359,6 @@ function openFullscreenNote(noteId) {
             <span>📋</span>
             <span>Duplicate</span>
         </button>
-        <button onclick="closeFullscreenNote(); shareNote(${noteId});" class="fullscreen-action-btn share-btn">
-            <span>📤</span>
-            <span>Share</span>
-        </button>
         <button onclick="closeFullscreenNote(); deleteNote(${noteId});" class="fullscreen-action-btn delete-btn">
             <span>🗑️</span>
             <span>Delete</span>
@@ -1581,7 +1470,6 @@ function addNoteToDOM(note) {
             <div class="note-actions">
                 ${editBtn}
                 <button onclick="event.stopPropagation(); duplicateNote(${note.id})" class="note-action" title="Duplicate">📋</button>
-                <button onclick="event.stopPropagation(); shareNote(${note.id})" class="note-action" title="Share">📤</button>
                 <button onclick="event.stopPropagation(); deleteNote(${note.id})" class="note-action" title="Delete">🗑️</button>
             </div>
         </div>
