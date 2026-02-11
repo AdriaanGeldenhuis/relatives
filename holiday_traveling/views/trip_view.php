@@ -66,7 +66,6 @@ $statusDisplay = $tripStatus ?? 'upcoming';
                 <div class="ht-menu-dropdown">
                     <a href="/holiday_traveling/trip_edit.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Edit</a>
                     <a href="/holiday_traveling/trip_share.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Share</a>
-                    <a href="/holiday_traveling/trip_duplicate.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Duplicate</a>
                     <button class="ht-menu-item ht-menu-item-danger" data-action="delete" data-trip-id="<?php echo $trip['id']; ?>">Delete</button>
                 </div>
             </div>
