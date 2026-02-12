@@ -732,93 +732,6 @@ body {
 }
 
 /* ============================================
-   TASK PROGRESS
-   ============================================ */
-
-.task-progress {
-    display: flex;
-    justify-content: center;
-    margin-bottom: var(--space-md);
-}
-
-.progress-circle {
-    position: relative;
-    width: 140px;
-    height: 140px;
-}
-
-.progress-circle svg {
-    width: 100%;
-    height: 100%;
-    transform: rotate(-90deg);
-}
-
-.progress-bg {
-    fill: none;
-    stroke: var(--glass-border);
-    stroke-width: 8;
-}
-
-.progress-fill {
-    fill: none;
-    stroke: url(#progressGradient);
-    stroke-width: 8;
-    stroke-linecap: round;
-    stroke-dasharray: 283;
-    stroke-dashoffset: 283;
-    transition: stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.progress-text {
-    position: absolute;
-    top: 0; right: 0; bottom: 0; left: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-.progress-value {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 2rem;
-    font-weight: 900;
-    color: white;
-}
-
-.progress-label {
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.6);
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-}
-
-.task-stats {
-    display: flex;
-    justify-content: space-around;
-    padding-top: var(--space-md);
-    border-top: 1px solid var(--glass-border);
-}
-
-.task-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-}
-
-.task-stat .stat-number {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 1.5rem;
-    font-weight: 900;
-    color: white;
-}
-
-.task-stat .stat-label {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-/* ============================================
    UPCOMING EVENTS
    ============================================ */
 
@@ -1359,15 +1272,6 @@ body {
 }
 
 /* ============================================
-   HEATMAP
-   ============================================ */
-
-#activityHeatmap {
-    width: 100%;
-    height: 150px;
-}
-
-/* ============================================
    TOAST NOTIFICATIONS
    ============================================ */
 
@@ -1632,9 +1536,6 @@ body {
         grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     }
     
-    #activityHeatmap {
-        height: 200px;
-    }
 }
 
 /* ============================================

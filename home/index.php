@@ -96,7 +96,7 @@ try {
     ");
     $stmt->execute([$user['family_id']]);
     $stats['completed_tasks'] = (int)$stmt->fetchColumn();
-    
+
     $stmt = $db->prepare("
         SELECT COUNT(DISTINCT sl.id) FROM shopping_lists sl
         JOIN shopping_items si ON sl.id = si.list_id
@@ -341,51 +341,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                             <div class="insight-item loading">
                                 <div class="skeleton skeleton-text"></div>
                                 <div class="skeleton skeleton-text"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="ai-card activity-card" data-tilt>
-                    <div class="ai-card-header">
-                        <div class="ai-card-icon" aria-hidden="true">📊</div>
-                        <h3>Activity Heatmap</h3>
-                    </div>
-                    <div class="ai-card-body">
-                        <canvas id="activityHeatmap" aria-label="Activity heatmap visualization"></canvas>
-                    </div>
-                </div>
-
-                <div class="ai-card tasks-card" data-tilt>
-                    <div class="ai-card-header">
-                        <div class="ai-card-icon" aria-hidden="true">✅</div>
-                        <h3>Task Intelligence</h3>
-                    </div>
-                    <div class="ai-card-body">
-                        <div class="task-progress">
-                            <div class="progress-circle" data-progress="<?php echo $stats['completed_tasks'] > 0 ? round(($stats['completed_tasks'] / ($stats['shopping_items'] + $stats['completed_tasks'])) * 100) : 0; ?>" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                                <svg viewBox="0 0 100 100" aria-hidden="true">
-                                    <circle cx="50" cy="50" r="45" class="progress-bg"/>
-                                    <circle cx="50" cy="50" r="45" class="progress-fill"/>
-                                </svg>
-                                <div class="progress-text">
-                                    <span class="progress-value">0%</span>
-                                    <span class="progress-label">Complete</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="task-stats">
-                            <div class="task-stat">
-                                <span class="stat-number"><?php echo $stats['completed_tasks']; ?></span>
-                                <span class="stat-label">Completed</span>
-                            </div>
-                            <div class="task-stat">
-                                <span class="stat-number"><?php echo $stats['shopping_items']; ?></span>
-                                <span class="stat-label">Pending</span>
-                            </div>
-                            <div class="task-stat">
-                                <span class="stat-number"><?php echo $stats['active_lists']; ?></span>
-                                <span class="stat-label">Active Lists</span>
                             </div>
                         </div>
                     </div>
@@ -661,15 +616,5 @@ window.USER_LOCATION = <?php echo $userLocation ? json_encode([
     'timestamp' => $userLocation['created_at']
 ]) : 'null'; ?>;
 </script>
-
-<!-- SVG Gradients -->
-<svg width="0" height="0" style="position: absolute;" aria-hidden="true">
-    <defs>
-        <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
-            <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
-        </linearGradient>
-    </defs>
-</svg>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>
