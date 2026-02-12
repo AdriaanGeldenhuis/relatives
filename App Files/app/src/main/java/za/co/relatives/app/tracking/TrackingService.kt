@@ -1,5 +1,7 @@
 package za.co.relatives.app.tracking
 
+import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,6 +11,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.location.Location
 import android.os.BatteryManager
 import android.os.Build
@@ -52,12 +55,15 @@ class TrackingService : Service() {
         const val ACTION_START = "za.co.relatives.app.tracking.START"
         const val ACTION_STOP = "za.co.relatives.app.tracking.STOP"
         const val ACTION_WAKE = "za.co.relatives.app.tracking.WAKE"
+        const val ACTION_HEARTBEAT = "za.co.relatives.app.tracking.HEARTBEAT"
 
         private const val CHANNEL_ID = "tracking_channel"
         private const val NOTIFICATION_ID = 9001
 
         private const val WAKELOCK_TAG = "Relatives::TrackingWakeLock"
-        private const val WAKELOCK_TIMEOUT_MS = 10L * 60 * 1000
+        private const val WAKELOCK_TIMEOUT_MS = 30L * 60 * 1000       // 30 min safety net
+        private const val WAKELOCK_HEARTBEAT_MS = 60_000L             // 60s for heartbeat processing
+        private const val HEARTBEAT_ALARM_INTERVAL_MS = 5L * 60 * 1000 // 5 min alarm
 
         // Motion thresholds
         private const val SPEED_MOVING_THRESHOLD = 1.0f   // m/s (~3.6 km/h)
@@ -136,6 +142,7 @@ class TrackingService : Service() {
             ACTION_START -> doStart()
             ACTION_STOP -> doStop()
             ACTION_WAKE -> doWake()
+            ACTION_HEARTBEAT -> doHeartbeat()
             else -> doStart()
         }
         return START_STICKY
@@ -144,6 +151,7 @@ class TrackingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        cancelHeartbeatAlarm()
         stopLocationUpdates()
         releaseWakeLock()
         try { unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
@@ -155,18 +163,28 @@ class TrackingService : Service() {
     private fun doStart() {
         Log.i(TAG, "Starting tracking")
         persistEnabled(true)
-        startForeground(NOTIFICATION_ID, buildNotification())
-        acquireWakeLock()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification())
+        }
+        acquireWakeLock(WAKELOCK_TIMEOUT_MS)
         registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
 
         // Start in IDLE. Will transition to MOVING when motion detected.
         applyMode(Mode.IDLE)
         lastHeartbeatTime = System.currentTimeMillis()
+        scheduleHeartbeatAlarm()
     }
 
     private fun doStop() {
         Log.i(TAG, "Stopping tracking")
         persistEnabled(false)
+        cancelHeartbeatAlarm()
         stopLocationUpdates()
         releaseWakeLock()
         try { unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
@@ -178,6 +196,61 @@ class TrackingService : Service() {
         Log.d(TAG, "Wake burst triggered")
         wakeStartTime = SystemClock.elapsedRealtime()
         applyMode(Mode.WAKE)
+    }
+
+    // ── Heartbeat alarm ────────────────────────────────────────────────
+
+    @SuppressLint("MissingPermission")
+    private fun doHeartbeat() {
+        Log.d(TAG, "Heartbeat alarm fired")
+        acquireWakeLock(WAKELOCK_HEARTBEAT_MS)
+
+        // Force a single high-accuracy location fix
+        fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+            .addOnSuccessListener { location ->
+                val loc = location ?: lastLocation
+                if (loc != null) {
+                    Log.d(TAG, "Heartbeat location: ${loc.latitude},${loc.longitude}")
+                    lastLocation = loc
+                    enqueue(loc)
+                } else {
+                    Log.w(TAG, "Heartbeat: no location available")
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Heartbeat getCurrentLocation failed", e)
+                lastLocation?.let { enqueue(it) }
+            }
+
+        // Schedule the next heartbeat
+        scheduleHeartbeatAlarm()
+    }
+
+    private fun scheduleHeartbeatAlarm() {
+        val am = getSystemService(ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, TrackingService::class.java).apply {
+            action = ACTION_HEARTBEAT
+        }
+        val pi = PendingIntent.getService(
+            this, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val triggerAt = SystemClock.elapsedRealtime() + HEARTBEAT_ALARM_INTERVAL_MS
+        am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        Log.d(TAG, "Heartbeat alarm scheduled in ${HEARTBEAT_ALARM_INTERVAL_MS / 1000}s")
+    }
+
+    private fun cancelHeartbeatAlarm() {
+        val am = getSystemService(ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, TrackingService::class.java).apply {
+            action = ACTION_HEARTBEAT
+        }
+        val pi = PendingIntent.getService(
+            this, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        am.cancel(pi)
+        Log.d(TAG, "Heartbeat alarm cancelled")
     }
 
     // ── Mode application ────────────────────────────────────────────────
@@ -222,10 +295,10 @@ class TrackingService : Service() {
                 .setMaxUpdateDelayMillis(30_000L)
                 .build()
             Mode.IDLE -> LocationRequest.Builder(
-                Priority.PRIORITY_BALANCED_POWER_ACCURACY, IDLE_INTERVAL_MS
+                Priority.PRIORITY_HIGH_ACCURACY, IDLE_INTERVAL_MS
             )
-                .setMinUpdateDistanceMeters(80f)
-                .setMaxUpdateDelayMillis(5 * 60 * 1000L)
+                .setMinUpdateDistanceMeters(30f)
+                .setMaxUpdateDelayMillis(2 * 60 * 1000L)
                 .build()
         }
     }
@@ -393,17 +466,24 @@ class TrackingService : Service() {
 
     // ── Wake lock ───────────────────────────────────────────────────────
 
-    private fun acquireWakeLock() {
+    private fun acquireWakeLock(timeoutMs: Long = WAKELOCK_TIMEOUT_MS) {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
         if (wakeLock == null) {
-            val pm = getSystemService(POWER_SERVICE) as PowerManager
-            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG).apply {
-                acquire(WAKELOCK_TIMEOUT_MS)
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG)
+        }
+        wakeLock?.let {
+            if (!it.isHeld) {
+                it.acquire(timeoutMs)
+                Log.d(TAG, "WakeLock acquired (timeout=${timeoutMs / 1000}s)")
             }
         }
     }
 
     private fun releaseWakeLock() {
-        wakeLock?.let { if (it.isHeld) it.release(); wakeLock = null }
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+            wakeLock = null
+        }
     }
 
     // ── Preferences ─────────────────────────────────────────────────────
