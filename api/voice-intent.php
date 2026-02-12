@@ -176,21 +176,23 @@ if (!isset($apiResponse['choices'][0]['message']['content'])) {
 
 $intentJson = trim($apiResponse['choices'][0]['message']['content']);
 
-// Clean up potential markdown formatting
-$intentJson = preg_replace('/^```json\s*/', '', $intentJson);
-$intentJson = preg_replace('/^```\s*/', '', $intentJson);
-$intentJson = preg_replace('/\s*```$/', '', $intentJson);
+// Clean up potential markdown formatting (handle newlines, whitespace variations)
+$intentJson = preg_replace('/^```(?:json)?\s*/s', '', $intentJson);
+$intentJson = preg_replace('/\s*```\s*$/s', '', $intentJson);
 $intentJson = trim($intentJson);
+
+// Remove BOM and invisible characters
+$intentJson = preg_replace('/^\x{FEFF}/u', '', $intentJson);
 
 // Parse JSON
 $result = json_decode($intentJson, true);
 
 if (!$result || !isset($result['intent'])) {
-    // Try to extract JSON from response if wrapped in text
-    if (preg_match('/\{[^{}]*"intent"[^{}]*\}/s', $intentJson, $matches)) {
+    // Try to extract JSON from response if wrapped in text (supports nested braces)
+    if (preg_match('/\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}/s', $intentJson, $matches)) {
         $result = json_decode($matches[0], true);
     }
-    
+
     if (!$result || !isset($result['intent'])) {
         echo json_encode([
             'intent' => 'smalltalk',
