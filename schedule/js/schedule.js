@@ -696,9 +696,10 @@ function updateEventInDOM(eventId, data) {
                     footerEl.appendChild(assignedDiv);
                 }
                 assignedDiv.innerHTML = `
-                    → 
+                    →
                     <div class="author-avatar-mini" style="background: ${memberColor}">
-                        ${initial}
+                        <img src="/saves/${data.assigned_to}/avatar/avatar.webp?v=${window.avatarVersion || 0}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                        <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${initial}</span>
                     </div>
                     <span>${escapeHtml(memberName)}</span>
                 `;
@@ -1041,9 +1042,10 @@ async function applyBulkAssign(userId) {
                         const initial = memberName.charAt(0).toUpperCase();
                         
                         assignedDiv.innerHTML = `
-                            → 
+                            →
                             <div class="author-avatar-mini" style="background: ${memberColor}">
-                                ${initial}
+                                <img src="/saves/${member.id}/avatar/avatar.webp?v=${window.avatarVersion || 0}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${initial}</span>
                             </div>
                             <span>${escapeHtml(memberName)}</span>
                         `;
@@ -2014,20 +2016,22 @@ function addEventToDOM(event) {
     let metaHTML = `
         <div class="note-author">
             <div class="author-avatar-mini" style="background: ${event.avatar_color || '#667eea'}">
-                ${event.added_by_name ? event.added_by_name.charAt(0).toUpperCase() : 'Y'}
+                <img src="/saves/${event.created_by}/avatar/avatar.webp?v=${window.avatarVersion || 0}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${event.added_by_name ? event.added_by_name.charAt(0).toUpperCase() : 'Y'}</span>
             </div>
             <span>${escapeHtml(event.added_by_name || 'You')}</span>
         </div>
     `;
-    
+
     if (event.assigned_to_name) {
         const assignedColor = event.assigned_color || '#667eea';
         const initial = event.assigned_to_name.charAt(0).toUpperCase();
         metaHTML += `
             <div class="event-assigned">
-                → 
+                →
                 <div class="author-avatar-mini" style="background: ${assignedColor}">
-                    ${initial}
+                    <img src="/saves/${event.assigned_to}/avatar/avatar.webp?v=${window.avatarVersion || 0}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                    <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${initial}</span>
                 </div>
                 <span>${escapeHtml(event.assigned_to_name)}</span>
             </div>

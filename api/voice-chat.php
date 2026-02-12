@@ -217,26 +217,50 @@ if (!isset($apiResponse['choices'][0]['message']['content'])) {
 
 $content = trim($apiResponse['choices'][0]['message']['content']);
 
-// Clean up potential markdown formatting
-$content = preg_replace('/^```json\s*/', '', $content);
-$content = preg_replace('/^```\s*/', '', $content);
-$content = preg_replace('/\s*```$/', '', $content);
+// Clean up potential markdown formatting (handle newlines, whitespace variations)
+$content = preg_replace('/^```(?:json)?\s*/s', '', $content);
+$content = preg_replace('/\s*```\s*$/s', '', $content);
 $content = trim($content);
+
+// Remove BOM and invisible characters
+$content = preg_replace('/^\x{FEFF}/u', '', $content);
 
 // Parse JSON response
 $result = json_decode($content, true);
 
 if (!$result || !isset($result['response'])) {
-    // If JSON parsing failed, try to extract response
-    if (preg_match('/\{[^{}]*"response"\s*:\s*"([^"]+)"[^{}]*\}/s', $content, $matches)) {
+    // Try to extract JSON object from within the content (handles extra text around JSON)
+    if (preg_match('/\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}/s', $content, $jsonMatch)) {
+        $result = json_decode($jsonMatch[0], true);
+    }
+}
+
+if (!$result || !isset($result['response'])) {
+    // Try to extract just the response value from the raw text
+    if (preg_match('/"response"\s*:\s*"((?:[^"\\\\]|\\\\.)*)"/s', $content, $matches)) {
+        $responseText = $matches[1];
+        // Unescape JSON string escapes
+        $responseText = str_replace(['\\n', '\\"', '\\\\'], ["\n", '"', '\\'], $responseText);
+
+        // Try to also extract the action
+        $action = null;
+        if (preg_match('/"action"\s*:\s*(\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})/s', $content, $actionMatch)) {
+            $action = json_decode($actionMatch[1], true);
+        }
+
         $result = [
-            'response' => $matches[1],
-            'action' => null
+            'response' => $responseText,
+            'action' => $action
         ];
     } else {
-        // Last resort - use the raw content as response
+        // Last resort - strip any JSON-like formatting and use as plain text
+        $plainText = $content;
+        $plainText = preg_replace('/[{}"\\\\]/', '', $plainText);
+        $plainText = preg_replace('/\b(response|action|type|data|null)\s*:\s*/', '', $plainText);
+        $plainText = trim($plainText);
+
         $result = [
-            'response' => $content,
+            'response' => $plainText ?: 'I processed your request but had trouble formatting my response.',
             'action' => null
         ];
     }

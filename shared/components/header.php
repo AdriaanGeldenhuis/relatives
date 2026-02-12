@@ -23,6 +23,13 @@ $appVersion = '12.4.0';
 $cacheVersion = '12.4.3';
 $buildTime = $cacheVersion;
 
+// Avatar cache-busting: use file modification time so browsers fetch the new image after upload
+function avatarUrl($userId) {
+    $file = __DIR__ . '/../../saves/' . (int)$userId . '/avatar/avatar.webp';
+    $v = file_exists($file) ? filemtime($file) : 0;
+    return '/saves/' . (int)$userId . '/avatar/avatar.webp?v=' . $v;
+}
+
 // Get unread notification count
 $unreadNotifCount = 0;
 if (isset($db) && isset($_SESSION['user_id'])) {
@@ -890,7 +897,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             <?php if (isset($user)): ?>
             <a href="/profile/" class="user-profile" style="text-decoration: none;">
                 <div class="user-avatar" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
-                    <img src="/saves/<?php echo (int)$user['id']; ?>/avatar/avatar.webp"
+                    <img src="<?php echo avatarUrl($user['id']); ?>"
                          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                          style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
                     <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?></span>
@@ -950,4 +957,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         
         // Initialize notification count
         window.unreadNotificationCount = <?php echo $unreadNotifCount; ?>;
+
+        // Avatar cache-busting version (file modification time)
+        window.avatarVersion = <?php echo time(); ?>;
     </script>

@@ -501,7 +501,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <div class="note-author">
                                     <div class="author-avatar-mini"
                                          style="background: <?php echo htmlspecialchars($event['avatar_color']); ?>">
-                                        <img src="/saves/<?php echo (int)$event['created_by']; ?>/avatar/avatar.webp"
+                                        <img src="<?php echo avatarUrl($event['created_by']); ?>"
                                              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                                              style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
                                         <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($event['added_by_name'] ?? 'You', 0, 1)); ?></span>
@@ -513,7 +513,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                         →
                                         <div class="author-avatar-mini"
                                              style="background: <?php echo htmlspecialchars($event['assigned_color']); ?>">
-                                            <img src="/saves/<?php echo (int)$event['assigned_to']; ?>/avatar/avatar.webp"
+                                            <img src="<?php echo avatarUrl($event['assigned_to']); ?>"
                                                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                                                  style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
                                             <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($event['assigned_to_name'], 0, 1)); ?></span>
@@ -979,7 +979,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php foreach ($familyMembers as $member): ?>
                     <button onclick="applyBulkAssign(<?php echo $member['id']; ?>)" class="assign-btn">
                         <div class="assign-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
-                            <img src="/saves/<?php echo (int)$member['id']; ?>/avatar/avatar.webp"
+                            <img src="<?php echo avatarUrl($member['id']); ?>"
                                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                                  style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
                             <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($member['full_name'], 0, 1)); ?></span>

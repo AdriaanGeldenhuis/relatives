@@ -83,6 +83,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $filepath = $uploadDir . 'avatar.webp';
 
+                // Delete old avatar if it exists
+                if (file_exists($filepath)) {
+                    unlink($filepath);
+                }
+
                 // Load image based on type
                 $sourceImage = null;
                 switch ($mimeType) {
@@ -120,15 +125,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // Handle picture removal
-        if (isset($_POST['remove_picture'])) {
-            $avatarFile = __DIR__ . '/../saves/' . $user['id'] . '/avatar/avatar.webp';
-            if (file_exists($avatarFile)) {
-                unlink($avatarFile);
-            }
-            $success = 'Profile picture removed.';
-        }
-
     } catch (Exception $e) {
         error_log('Picture update error: ' . $e->getMessage());
         $error = 'An error occurred. Please try again.';
@@ -147,7 +143,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         <?php $avatarPath = '/saves/' . $user['id'] . '/avatar/avatar.webp'; ?>
         <div class="profile-header">
             <div class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
-                <img src="<?php echo htmlspecialchars($avatarPath); ?>?t=<?php echo time(); ?>"
+                <img src="<?php echo avatarUrl($user['id']); ?>"
                      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                      alt="Profile Picture" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
                 <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-size:48px; font-weight:800;">
@@ -186,13 +182,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
             </form>
 
-            <?php if (file_exists(__DIR__ . '/../saves/' . $user['id'] . '/avatar/avatar.webp')): ?>
-                <form method="POST" style="margin-top: 15px;">
-                    <button type="submit" name="remove_picture" value="1" class="btn btn-danger btn-block" onclick="return confirm('Remove your profile picture?')">
-                        Remove Current Picture
-                    </button>
-                </form>
-            <?php endif; ?>
         </div>
 
         <!-- Avatar Color -->
