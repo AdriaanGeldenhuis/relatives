@@ -1426,18 +1426,6 @@ async function shareViaWhatsApp() {
     }
 }
 
-function shareViaEmail() {
-    const shareLink = document.getElementById('shareLink')?.value || window.location.href;
-    const subject = encodeURIComponent('Shopping List');
-    const body = encodeURIComponent(`Hi!\n\nCheck out our shopping list:\n${shareLink}\n\nSee what we need!`);
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-}
-
-function shareViaSMS() {
-    const shareLink = document.getElementById('shareLink')?.value || window.location.href;
-    const text = encodeURIComponent(`Shopping list: ${shareLink}`);
-    window.location.href = `sms:?body=${text}`;
-}
 
 function exportList() {
     showModal('shareModal');
@@ -2351,8 +2339,6 @@ window.showPriceHistory = showPriceHistory;
 window.shareList = shareList;
 window.copyShareLink = copyShareLink;
 window.shareViaWhatsApp = shareViaWhatsApp;
-window.shareViaEmail = shareViaEmail;
-window.shareViaSMS = shareViaSMS;
 window.exportList = exportList;
 window.exportListAs = exportListAs;
 window.toggleGearMenu = toggleGearMenu;
