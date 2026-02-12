@@ -28,6 +28,7 @@ class PermissionGate(private val activity: ComponentActivity) {
 
     private lateinit var fineLocationLauncher: ActivityResultLauncher<String>
     private lateinit var backgroundLocationLauncher: ActivityResultLauncher<String>
+    private lateinit var activityRecognitionLauncher: ActivityResultLauncher<String>
     private lateinit var notificationLauncher: ActivityResultLauncher<String>
 
     fun registerLaunchers() {
@@ -45,8 +46,12 @@ class PermissionGate(private val activity: ComponentActivity) {
         ) { _ ->
             onResult?.invoke(hasForegroundLocation())
             onResult = null
-            requestNotifications()
+            requestActivityRecognition()
         }
+
+        activityRecognitionLauncher = activity.registerForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { _ -> requestNotifications() }
 
         notificationLauncher = activity.registerForActivityResult(
             ActivityResultContracts.RequestPermission(),
@@ -91,13 +96,21 @@ class PermissionGate(private val activity: ComponentActivity) {
                 .setNegativeButton(R.string.dialog_skip) { _, _ ->
                     onResult?.invoke(true)
                     onResult = null
-                    requestNotifications()
+                    requestActivityRecognition()
                 }
                 .setCancelable(false)
                 .show()
         } else {
             onResult?.invoke(true)
             onResult = null
+            requestActivityRecognition()
+        }
+    }
+
+    private fun requestActivityRecognition() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasActivityRecognition()) {
+            activityRecognitionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+        } else {
             requestNotifications()
         }
     }
@@ -125,6 +138,13 @@ class PermissionGate(private val activity: ComponentActivity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ContextCompat.checkSelfPermission(
                 activity, Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+        } else true
+
+    private fun hasActivityRecognition(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                activity, Manifest.permission.ACTIVITY_RECOGNITION,
             ) == PackageManager.PERMISSION_GRANTED
         } else true
 
