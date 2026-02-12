@@ -295,7 +295,7 @@ class TrackingService : Service() {
                 .setMaxUpdateDelayMillis(30_000L)
                 .build()
             Mode.IDLE -> LocationRequest.Builder(
-                Priority.PRIORITY_HIGH_ACCURACY, IDLE_INTERVAL_MS
+                Priority.PRIORITY_BALANCED_POWER_ACCURACY, IDLE_INTERVAL_MS
             )
                 .setMinUpdateDistanceMeters(30f)
                 .setMaxUpdateDelayMillis(2 * 60 * 1000L)
