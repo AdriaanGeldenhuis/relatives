@@ -83,6 +83,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $filepath = $uploadDir . 'avatar.webp';
 
+                // Delete old avatar if it exists
+                if (file_exists($filepath)) {
+                    unlink($filepath);
+                }
+
                 // Load image based on type
                 $sourceImage = null;
                 switch ($mimeType) {
@@ -118,15 +123,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = 'Failed to process the image. Please try again.';
                 }
             }
-        }
-
-        // Handle picture removal
-        if (isset($_POST['remove_picture'])) {
-            $avatarFile = __DIR__ . '/../saves/' . $user['id'] . '/avatar/avatar.webp';
-            if (file_exists($avatarFile)) {
-                unlink($avatarFile);
-            }
-            $success = 'Profile picture removed.';
         }
 
     } catch (Exception $e) {
@@ -186,13 +182,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
             </form>
 
-            <?php if (file_exists(__DIR__ . '/../saves/' . $user['id'] . '/avatar/avatar.webp')): ?>
-                <form method="POST" style="margin-top: 15px;">
-                    <button type="submit" name="remove_picture" value="1" class="btn btn-danger btn-block" onclick="return confirm('Remove your profile picture?')">
-                        Remove Current Picture
-                    </button>
-                </form>
-            <?php endif; ?>
         </div>
 
         <!-- Avatar Color -->
