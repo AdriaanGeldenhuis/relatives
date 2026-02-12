@@ -26,6 +26,7 @@ $currentPage = $input['page'] ?? '/';
 $conversation = $input['conversation'] ?? [];
 
 // Get user context
+session_name('RELATIVES_SESSION');
 session_start();
 $userId = $_SESSION['user_id'] ?? null;
 $userName = '';

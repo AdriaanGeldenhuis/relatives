@@ -4,6 +4,7 @@
  * GET: Returns current message count and limit statistics
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 

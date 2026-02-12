@@ -5,6 +5,7 @@
  * Perform bulk operations on multiple messages
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 

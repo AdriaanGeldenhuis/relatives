@@ -2,6 +2,7 @@
 header('Content-Type: application/json');
 
 // Session warmup endpoint - starts a session to prime the cookie
+session_name('RELATIVES_SESSION');
 session_start();
 
 echo json_encode([

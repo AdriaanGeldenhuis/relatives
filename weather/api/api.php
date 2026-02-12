@@ -9,6 +9,7 @@ ini_set('log_errors', '1');
 
 header('Content-Type: application/json');
 
+session_name('RELATIVES_SESSION');
 session_start();
 
 if (!isset($_SESSION['user_id'])) {

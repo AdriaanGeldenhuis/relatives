@@ -5,6 +5,7 @@
  * GET: - Get who is typing
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 

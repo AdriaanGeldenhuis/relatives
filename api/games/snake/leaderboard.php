@@ -6,6 +6,7 @@
 
 // Start session first
 if (session_status() === PHP_SESSION_NONE) {
+    session_name('RELATIVES_SESSION');
     session_start();
 }
 

@@ -80,6 +80,18 @@ class TrackingBridge(private val activity: MainActivity) {
     }
 
     /**
+     * Request notification permission (Android 13+).
+     * Called when the user visits the notifications page so they can
+     * receive push notifications.
+     */
+    @JavascriptInterface
+    fun requestNotificationPermission() {
+        activity.runOnUiThread {
+            activity.requestNotificationPermission()
+        }
+    }
+
+    /**
      * Notify native side that the tracking map screen is now visible.
      * Triggers faster polling and a location boost.
      */

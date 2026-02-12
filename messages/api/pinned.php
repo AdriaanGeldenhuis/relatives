@@ -3,6 +3,7 @@
  * GET PINNED MESSAGES
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 
