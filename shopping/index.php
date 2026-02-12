@@ -4,6 +4,7 @@
  * Clean view-only version - All logic moved to API
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 
 if (!isset($_SESSION['user_id'])) {

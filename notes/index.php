@@ -4,6 +4,7 @@
  * Beautiful sticky notes with AI & voice
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 
 if (!isset($_SESSION['user_id'])) {

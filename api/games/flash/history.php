@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 // Start session
 if (session_status() === PHP_SESSION_NONE) {
+    session_name('RELATIVES_SESSION');
     session_start();
 }
 

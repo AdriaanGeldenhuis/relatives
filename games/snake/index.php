@@ -7,6 +7,7 @@
  * Multiple visual themes available.
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 
 // Check authentication - redirect if not logged in

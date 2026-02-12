@@ -4,6 +4,7 @@
  * Read-only view of game state from QR code/state string
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 // No auth required for spectator view
 $cacheVersion = '1.0.0';

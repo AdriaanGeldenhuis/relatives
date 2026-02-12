@@ -56,7 +56,7 @@ class PreferencesManager(context: Context) {
     // ── Tracking configuration ─────────────────────────────────────────────
 
     var trackingEnabled: Boolean
-        get() = prefs.getBoolean(KEY_TRACKING_ENABLED, true)
+        get() = prefs.getBoolean(KEY_TRACKING_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_TRACKING_ENABLED, value).apply()
 
     /** Interval (in seconds) for the MOVING tracking mode. */

@@ -7,6 +7,7 @@
  * SECTION 6: Audio support added
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 

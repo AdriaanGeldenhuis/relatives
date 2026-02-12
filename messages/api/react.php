@@ -5,6 +5,7 @@
  * Toggles reaction (add if not exists, remove if exists)
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 

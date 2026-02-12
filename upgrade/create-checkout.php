@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+session_name('RELATIVES_SESSION');
 session_start();
 
 header('Content-Type: application/json');

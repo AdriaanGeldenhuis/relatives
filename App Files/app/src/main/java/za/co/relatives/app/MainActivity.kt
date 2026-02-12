@@ -34,6 +34,7 @@ import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.QueryPurchasesParams
 import za.co.relatives.app.data.TrackingStore
+import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.tracking.FamilyPoller
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
@@ -128,7 +129,14 @@ class MainActivity : ComponentActivity() {
         // Start family polling immediately (works without location permission)
         familyPoller.start()
 
-        loadInitialUrl(intent)
+        // Restore WebView state when recreated (e.g. after background location
+        // permission opens Settings and the system destroys this Activity).
+        // Only load the initial URL on a truly fresh start.
+        if (savedInstanceState != null) {
+            webView.restoreState(savedInstanceState)
+        } else {
+            loadInitialUrl(intent)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -152,6 +160,13 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) enterImmersiveMode()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (::webView.isInitialized) {
+            webView.saveState(outState)
+        }
     }
 
     override fun onDestroy() {
@@ -190,6 +205,10 @@ class MainActivity : ComponentActivity() {
         !permissionGate.hasForegroundLocation() -> "no_permission"
         prefs.trackingEnabled -> "enabled"
         else -> "disabled"
+    }
+
+    fun requestNotificationPermission() {
+        permissionGate.requestNotifications()
     }
 
     fun wakeAllDevices() {
@@ -258,6 +277,12 @@ class MainActivity : ComponentActivity() {
                 super.onPageFinished(view, url)
                 extractSessionToken()
                 syncCookiesToNative()
+
+                // Prompt for notification permission when the user visits the
+                // notifications page — all logic stays inside the APK.
+                if (url?.contains("/notifications") == true) {
+                    requestNotificationPermission()
+                }
             }
 
             override fun shouldOverrideUrlLoading(
@@ -406,6 +431,7 @@ class MainActivity : ComponentActivity() {
         val javaManager = (CookieHandler.getDefault() as? JavaNetCookieManager)
             ?: JavaNetCookieManager().also { CookieHandler.setDefault(it) }
         val uri = URI.create(WEB_URL)
+        val domain = uri.host ?: "www.relatives.co.za"
         raw.split(";").forEach { segment ->
             val trimmed = segment.trim()
             if (trimmed.isNotEmpty()) {
@@ -414,17 +440,29 @@ class MainActivity : ComponentActivity() {
                         javaManager.cookieStore.add(uri, cookie)
                     }
                 }
+                // Also push to OkHttp so native services (FamilyPoller,
+                // LocationUploadWorker) can authenticate independently of
+                // whatever page the WebView is currently showing.
+                val parts = trimmed.split("=", limit = 2)
+                if (parts.size == 2) {
+                    NetworkClient.setSessionCookie(domain, parts[0].trim(), parts[1].trim())
+                }
             }
         }
     }
 
     private fun extractSessionToken() {
         val raw = CookieManager.getInstance().getCookie(WEB_URL) ?: return
-        val targetNames = setOf("session_token", "phpsessid", "token")
+        val targetNames = setOf("relatives_session", "session_token", "phpsessid", "token")
         raw.split(";").forEach { segment ->
             val parts = segment.trim().split("=", limit = 2)
             if (parts.size == 2 && parts[0].trim().lowercase() in targetNames) {
-                prefs.sessionToken = parts[1].trim()
+                val cookieName = parts[0].trim()
+                val cookieValue = parts[1].trim()
+                prefs.sessionToken = cookieValue
+                // Push to OkHttp so background workers authenticate
+                // even after the WebView navigates away from /tracking/
+                NetworkClient.setSessionCookie("www.relatives.co.za", cookieName, cookieValue)
                 return
             }
         }

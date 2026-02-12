@@ -7,6 +7,7 @@
  * FIXED: No longer uses schedule_events - everything goes to events table
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 

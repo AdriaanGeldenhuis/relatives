@@ -4,6 +4,7 @@
  * Modular tab system with separate content files
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 
 if (!isset($_SESSION['user_id'])) {

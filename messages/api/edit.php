@@ -5,6 +5,7 @@
  * Allows editing messages with history tracking
  */
 
+session_name('RELATIVES_SESSION');
 session_start();
 header('Content-Type: application/json');
 
