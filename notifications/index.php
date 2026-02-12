@@ -391,7 +391,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <div class="note-author">
                                     <?php if ($notif['from_user_id']): ?>
                                         <div class="author-avatar-mini" style="background: <?php echo htmlspecialchars($notif['avatar_color'] ?? '#667eea'); ?>">
-                                            <img src="/saves/<?php echo (int)$notif['from_user_id']; ?>/avatar/avatar.webp"
+                                            <img src="<?php echo avatarUrl($notif['from_user_id']); ?>"
                                                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                                                  style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
                                             <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($notif['full_name'] ?? '?', 0, 1)); ?></span>

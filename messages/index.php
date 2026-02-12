@@ -96,7 +96,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                             $myAvatarPath = __DIR__ . "/../saves/{$user['id']}/avatar/avatar.webp";
                             if (file_exists($myAvatarPath)):
                             ?>
-                                <img src="/saves/<?php echo $user['id']; ?>/avatar/avatar.webp" alt="You">
+                                <img src="<?php echo avatarUrl($user['id']); ?>" alt="You">
                             <?php else: ?>
                                 <?php echo strtoupper(substr($user['name'], 0, 2)); ?>
                             <?php endif; ?>
@@ -117,7 +117,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <div class="member-item" data-user-id="<?php echo $member['id']; ?>">
                             <div class="member-avatar" style="background: <?php echo $memberHasAvatar ? 'transparent' : htmlspecialchars($member['avatar_color']); ?>">
                                 <?php if ($memberHasAvatar): ?>
-                                    <img src="/saves/<?php echo $member['id']; ?>/avatar/avatar.webp" alt="<?php echo htmlspecialchars($member['full_name']); ?>">
+                                    <img src="<?php echo avatarUrl($member['id']); ?>" alt="<?php echo htmlspecialchars($member['full_name']); ?>">
                                 <?php else: ?>
                                     <?php echo strtoupper(substr($member['full_name'], 0, 2)); ?>
                                 <?php endif; ?>

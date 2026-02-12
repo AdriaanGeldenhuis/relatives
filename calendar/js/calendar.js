@@ -1111,8 +1111,9 @@ function showEventDetails(eventId) {
             <div style="margin-bottom: 25px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
                 <div style="font-size: 14px; color: #666; margin-bottom: 12px; font-weight: 700;">CREATED BY</div>
                 <div style="display: flex; align-items: center; gap: 12px;">
-                    <div style="width: 50px; height: 50px; border-radius: 50%; background: ${event.avatar_color}; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                        ${escapeHtml(event.full_name?.charAt(0)?.toUpperCase() || '')}
+                    <div style="width: 50px; height: 50px; border-radius: 50%; background: ${event.avatar_color}; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); overflow: hidden;">
+                        <img src="/saves/${event.user_id}/avatar/avatar.webp?v=${window.avatarVersion || 0}" style="width:100%; height:100%; object-fit:cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='';">
+                        <span style="display:none;">${escapeHtml(event.full_name?.charAt(0)?.toUpperCase() || '')}</span>
                     </div>
                     <div>
                         <div style="font-weight: 700; color: #333; font-size: 16px;">${escapeHtml(event.full_name)}</div>

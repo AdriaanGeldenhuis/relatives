@@ -1443,7 +1443,7 @@ function addNoteToDOM(note) {
         <div class="note-footer">
             <div class="note-author">
                 <div class="author-avatar-mini" style="background: ${escapeHtml(note.avatar_color || '#667eea')}">
-                    <img src="/saves/${note.user_id}/avatar/avatar.webp"
+                    <img src="/saves/${note.user_id}/avatar/avatar.webp?v=${window.avatarVersion || 0}"
                          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                          style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
                     <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${(note.user_name || 'U').substring(0, 1).toUpperCase()}</span>

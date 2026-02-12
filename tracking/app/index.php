@@ -442,7 +442,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
             html += '  <div class="member-avatar" style="background:' + (m.avatar_color || '#667eea') + '">';
             if (m.has_avatar) {
-                html += '    <img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\'">';
+                html += '    <img src="/saves/' + m.user_id + '/avatar/avatar.webp?v=' + (window.avatarVersion || 0) + '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\'">';
                 html += '    <span style="display:none">' + initial + '</span>';
             } else {
                 html += '    <span>' + initial + '</span>';
@@ -491,7 +491,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 var initial = (m.name || 'U').charAt(0).toUpperCase();
                 if (m.has_avatar) {
                     el.innerHTML = '<div class="map-marker-inner map-marker-avatar" style="background:' + (m.avatar_color || '#667eea') + '">' +
-                        '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" alt="" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + initial + '\'">' +
+                        '<img src="/saves/' + m.user_id + '/avatar/avatar.webp?v=' + (window.avatarVersion || 0) + '" alt="" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + initial + '\'">' +
                         '</div>';
                 } else {
                     el.innerHTML = '<div class="map-marker-inner" style="background:' + (m.avatar_color || '#667eea') + '">' + initial + '</div>';

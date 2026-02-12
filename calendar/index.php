@@ -683,7 +683,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                         </div>
                                     </div>
                                     <div class="upcoming-avatar" style="background: <?php echo htmlspecialchars($event['avatar_color']); ?>">
-                                        <img src="/saves/<?php echo (int)$event['user_id']; ?>/avatar/avatar.webp"
+                                        <img src="<?php echo avatarUrl($event['user_id']); ?>"
                                              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                                              style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
                                         <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($event['full_name'], 0, 1)); ?></span>
