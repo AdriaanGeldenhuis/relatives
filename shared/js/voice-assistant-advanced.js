@@ -469,6 +469,7 @@
         .then(function(result) {
             if (result.success) {
                 console.log('[Suzi] Item added:', itemName);
+                refreshPageData('shopping');
                 if (callback) callback(true);
             } else {
                 console.error('[Suzi] Failed to add item:', result.error);
@@ -499,6 +500,7 @@
         .then(function(result) {
             if (result.success) {
                 console.log('[Suzi] Note created');
+                refreshPageData('note');
                 if (callback) callback(true);
             } else {
                 console.error('[Suzi] Failed to create note:', result.error);
@@ -517,11 +519,12 @@
 
         var startTime = eventData.time || '09:00';
         var endTime = calculateEndTime(startTime);
+        var eventDate = eventData.date || new Date().toISOString().split('T')[0];
 
         var formData = new FormData();
         formData.append('action', 'create');
         formData.append('title', eventData.title);
-        formData.append('date', eventData.date || new Date().toISOString().split('T')[0]);
+        formData.append('date', eventDate);
         formData.append('start_time', startTime);
         formData.append('end_time', endTime);
         formData.append('kind', 'event');
@@ -535,6 +538,15 @@
         .then(function(result) {
             if (result.success) {
                 console.log('[Suzi] Event created, id:', result.event_id);
+                refreshPageData('event', {
+                    id: result.event_id,
+                    title: eventData.title,
+                    date: eventDate,
+                    starts_at: eventDate + ' ' + startTime + ':00',
+                    ends_at: eventDate + ' ' + endTime + ':00',
+                    kind: 'event',
+                    color: '#3498db'
+                });
                 if (callback) callback(true);
             } else {
                 console.error('[Suzi] Failed to create event:', result.error);
@@ -553,11 +565,12 @@
 
         var startTime = reminderData.time || '09:00';
         var endTime = calculateEndTime(startTime);
+        var reminderDate = reminderData.date || new Date().toISOString().split('T')[0];
 
         var formData = new FormData();
         formData.append('action', 'create');
         formData.append('title', reminderData.title);
-        formData.append('date', reminderData.date || new Date().toISOString().split('T')[0]);
+        formData.append('date', reminderDate);
         formData.append('start_time', startTime);
         formData.append('end_time', endTime);
         formData.append('kind', 'todo');
@@ -571,6 +584,15 @@
         .then(function(result) {
             if (result.success) {
                 console.log('[Suzi] Reminder created, id:', result.event_id);
+                refreshPageData('reminder', {
+                    id: result.event_id,
+                    title: reminderData.title,
+                    date: reminderDate,
+                    starts_at: reminderDate + ' ' + startTime + ':00',
+                    ends_at: reminderDate + ' ' + endTime + ':00',
+                    kind: 'todo',
+                    color: '#9b59b6'
+                });
                 if (callback) callback(true);
             } else {
                 console.error('[Suzi] Failed to create reminder:', result.error);
@@ -581,6 +603,50 @@
             console.error('[Suzi] Reminder error:', error);
             if (callback) callback(false, 'Sorry, there was a problem setting the reminder.');
         });
+    }
+
+    // Refresh the current page data after voice action
+    function refreshPageData(type, eventObj) {
+        var path = window.location.pathname;
+
+        try {
+            // Calendar page
+            if (path.indexOf('/calendar') === 0) {
+                if (typeof window.addEventToCalendar === 'function') {
+                    window.addEventToCalendar(eventObj);
+                    console.log('[Suzi] Calendar updated live');
+                } else if (typeof window.loadMonthData === 'function' && window.currentYear && window.currentMonth) {
+                    window.loadMonthData(window.currentYear, window.currentMonth, 'fadeIn');
+                    console.log('[Suzi] Calendar month reloaded');
+                }
+            }
+
+            // Schedule page
+            if (path.indexOf('/schedule') === 0) {
+                if (typeof window.loadScheduleData === 'function' && window.ScheduleApp && window.ScheduleApp.selectedDate) {
+                    window.loadScheduleData(window.ScheduleApp.selectedDate, 'fadeIn');
+                    console.log('[Suzi] Schedule reloaded');
+                }
+            }
+
+            // Shopping page
+            if (path.indexOf('/shopping') === 0 && type === 'shopping') {
+                if (typeof window.loadItems === 'function') {
+                    window.loadItems();
+                    console.log('[Suzi] Shopping list reloaded');
+                }
+            }
+
+            // Notes page
+            if (path.indexOf('/notes') === 0 && type === 'note') {
+                if (typeof window.loadNotes === 'function') {
+                    window.loadNotes();
+                    console.log('[Suzi] Notes reloaded');
+                }
+            }
+        } catch (e) {
+            console.log('[Suzi] Page refresh skipped:', e.message);
+        }
     }
 
     // Calculate end time as 1 hour after start time
