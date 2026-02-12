@@ -313,14 +313,21 @@
             if (data.success && data.response) {
                 conversation.push({ role: 'assistant', content: data.response });
 
-                speak(data.response, function() {
-                    if (data.action) {
+                // For data actions: execute FIRST, then speak based on result
+                if (data.action && isDataAction(data.action.type)) {
+                    executeDataAction(data.action, data.response);
+                } else if (data.action) {
+                    // Navigation and other instant actions: speak then act
+                    speak(data.response, function() {
                         executeAction(data.action);
-                    } else {
+                    });
+                } else {
+                    // No action: just speak
+                    speak(data.response, function() {
                         setStatus('🎤', 'Tap to speak', 'Ask me anything');
                         showSuggestions(conversation.length <= 2);
-                    }
-                });
+                    });
+                }
             } else {
                 speak('Sorry, I had trouble with that. Please try again.', function() {
                     setStatus('🎤', 'Tap to speak', 'Ask me anything');
@@ -337,7 +344,52 @@
         });
     }
 
-    // Execute action from AI
+    // Check if action type modifies data (needs to complete before confirming)
+    function isDataAction(type) {
+        return type === 'add_shopping' || type === 'create_event' ||
+               type === 'create_reminder' || type === 'create_note';
+    }
+
+    // Execute data action FIRST, then speak success or error
+    function executeDataAction(action, aiResponse) {
+        console.log('[Suzi] Data action:', action.type, action.data);
+
+        var actionFn = null;
+
+        if (action.type === 'add_shopping' && action.data && action.data.item) {
+            actionFn = function(cb) { addShoppingItem(action.data.item, action.data.category || 'other', cb); };
+        } else if (action.type === 'create_note' && action.data && action.data.content) {
+            actionFn = function(cb) { createNote(action.data.title || '', action.data.content, cb); };
+        } else if (action.type === 'create_event' && action.data && action.data.title) {
+            actionFn = function(cb) { createCalendarEvent(action.data, cb); };
+        } else if (action.type === 'create_reminder' && action.data && action.data.title) {
+            actionFn = function(cb) { createReminder(action.data, cb); };
+        }
+
+        if (actionFn) {
+            actionFn(function(success, errorMsg) {
+                if (success) {
+                    speak(aiResponse, function() {
+                        setStatus('🎤', 'Tap to speak', 'Ask me anything');
+                        showSuggestions(false);
+                    });
+                } else {
+                    var errText = errorMsg || 'Sorry, I couldn\'t complete that action. Please try again.';
+                    speak(errText, function() {
+                        setStatus('🎤', 'Tap to speak', 'Ask me anything');
+                        showSuggestions(false);
+                    });
+                }
+            });
+        } else {
+            speak(aiResponse, function() {
+                setStatus('🎤', 'Tap to speak', 'Ask me anything');
+                showSuggestions(false);
+            });
+        }
+    }
+
+    // Execute non-data actions (navigation etc)
     function executeAction(action) {
         if (!action || !action.type) return;
 
@@ -362,19 +414,6 @@
                 closeModal();
                 window.location.href = paths[action.data.to] || '/home/';
             }, 500);
-
-        } else if (action.type === 'add_shopping' && action.data && action.data.item) {
-            addShoppingItem(action.data.item, action.data.category || 'other');
-
-        } else if (action.type === 'create_note' && action.data && action.data.content) {
-            createNote(action.data.title || '', action.data.content);
-
-        } else if (action.type === 'create_event' && action.data && action.data.title) {
-            createCalendarEvent(action.data);
-
-        } else if (action.type === 'create_reminder' && action.data && action.data.title) {
-            createReminder(action.data);
-
         } else {
             setStatus('🎤', 'Tap to speak', 'Ask me anything');
             showSuggestions(conversation.length <= 2);
@@ -382,7 +421,7 @@
     }
 
     // Add item to shopping list via API
-    function addShoppingItem(itemName, category) {
+    function addShoppingItem(itemName, category, callback) {
         setStatus('🛒', 'Adding to list...', '');
 
         // First get available shopping lists
@@ -392,10 +431,8 @@
         .then(function(response) { return response.json(); })
         .then(function(data) {
             if (data.success && data.lists && data.lists.length > 0) {
-                // Use the first list
                 return data.lists[0].id;
             } else {
-                // No lists exist, create a default one
                 var formData = new FormData();
                 formData.append('action', 'create');
                 formData.append('name', 'Shopping List');
@@ -416,7 +453,6 @@
             }
         })
         .then(function(listId) {
-            // Now add the item
             var formData = new FormData();
             formData.append('action', 'add');
             formData.append('list_id', listId);
@@ -433,20 +469,20 @@
         .then(function(result) {
             if (result.success) {
                 console.log('[Suzi] Item added:', itemName);
+                if (callback) callback(true);
             } else {
                 console.error('[Suzi] Failed to add item:', result.error);
+                if (callback) callback(false, 'Sorry, I couldn\'t add that to your shopping list.');
             }
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
-            showSuggestions(false);
         })
         .catch(function(error) {
             console.error('[Suzi] Shopping error:', error);
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            if (callback) callback(false, 'Sorry, there was a problem adding that item.');
         });
     }
 
     // Create a note via API
-    function createNote(title, content) {
+    function createNote(title, content, callback) {
         setStatus('📝', 'Creating note...', '');
 
         var formData = new FormData();
@@ -463,20 +499,20 @@
         .then(function(result) {
             if (result.success) {
                 console.log('[Suzi] Note created');
+                if (callback) callback(true);
             } else {
                 console.error('[Suzi] Failed to create note:', result.error);
+                if (callback) callback(false, 'Sorry, I couldn\'t create that note.');
             }
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
-            showSuggestions(false);
         })
         .catch(function(error) {
             console.error('[Suzi] Note error:', error);
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            if (callback) callback(false, 'Sorry, there was a problem creating the note.');
         });
     }
 
     // Create a calendar event via API
-    function createCalendarEvent(eventData) {
+    function createCalendarEvent(eventData, callback) {
         setStatus('📅', 'Creating event...', '');
 
         var startTime = eventData.time || '09:00';
@@ -498,21 +534,21 @@
         .then(function(response) { return response.json(); })
         .then(function(result) {
             if (result.success) {
-                console.log('[Suzi] Event created');
+                console.log('[Suzi] Event created, id:', result.event_id);
+                if (callback) callback(true);
             } else {
                 console.error('[Suzi] Failed to create event:', result.error);
+                if (callback) callback(false, 'Sorry, I couldn\'t add that to your calendar. ' + (result.message || ''));
             }
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
-            showSuggestions(false);
         })
         .catch(function(error) {
             console.error('[Suzi] Event error:', error);
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            if (callback) callback(false, 'Sorry, there was a problem creating the event.');
         });
     }
 
     // Create a reminder via API
-    function createReminder(reminderData) {
+    function createReminder(reminderData, callback) {
         setStatus('⏰', 'Setting reminder...', '');
 
         var startTime = reminderData.time || '09:00';
@@ -534,16 +570,16 @@
         .then(function(response) { return response.json(); })
         .then(function(result) {
             if (result.success) {
-                console.log('[Suzi] Reminder created');
+                console.log('[Suzi] Reminder created, id:', result.event_id);
+                if (callback) callback(true);
             } else {
                 console.error('[Suzi] Failed to create reminder:', result.error);
+                if (callback) callback(false, 'Sorry, I couldn\'t set that reminder. ' + (result.message || ''));
             }
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
-            showSuggestions(false);
         })
         .catch(function(error) {
             console.error('[Suzi] Reminder error:', error);
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            if (callback) callback(false, 'Sorry, there was a problem setting the reminder.');
         });
     }
 
