@@ -479,13 +479,18 @@
     function createCalendarEvent(eventData) {
         setStatus('📅', 'Creating event...', '');
 
+        var startTime = eventData.time || '09:00';
+        var endTime = calculateEndTime(startTime);
+
         var formData = new FormData();
         formData.append('action', 'create');
         formData.append('title', eventData.title);
-        if (eventData.date) formData.append('event_date', eventData.date);
-        if (eventData.time) formData.append('event_time', eventData.time);
+        formData.append('date', eventData.date || new Date().toISOString().split('T')[0]);
+        formData.append('start_time', startTime);
+        formData.append('end_time', endTime);
+        formData.append('kind', 'event');
 
-        fetch('/calendar/api/events.php', {
+        fetch('/api/events.php', {
             method: 'POST',
             body: formData,
             credentials: 'same-origin'
@@ -510,14 +515,18 @@
     function createReminder(reminderData) {
         setStatus('⏰', 'Setting reminder...', '');
 
+        var startTime = reminderData.time || '09:00';
+        var endTime = calculateEndTime(startTime);
+
         var formData = new FormData();
         formData.append('action', 'create');
         formData.append('title', reminderData.title);
-        if (reminderData.date) formData.append('date', reminderData.date);
-        if (reminderData.time) formData.append('time', reminderData.time);
-        formData.append('type', 'todo');
+        formData.append('date', reminderData.date || new Date().toISOString().split('T')[0]);
+        formData.append('start_time', startTime);
+        formData.append('end_time', endTime);
+        formData.append('kind', 'todo');
 
-        fetch('/schedule/api/schedule.php', {
+        fetch('/api/events.php', {
             method: 'POST',
             body: formData,
             credentials: 'same-origin'
@@ -536,6 +545,14 @@
             console.error('[Suzi] Reminder error:', error);
             setStatus('🎤', 'Tap to speak', 'Ask me anything');
         });
+    }
+
+    // Calculate end time as 1 hour after start time
+    function calculateEndTime(startTime) {
+        var parts = startTime.split(':');
+        var hour = (parseInt(parts[0], 10) + 1) % 24;
+        var minute = parts[1] || '00';
+        return (hour < 10 ? '0' : '') + hour + ':' + minute;
     }
 
     // Modal functions
