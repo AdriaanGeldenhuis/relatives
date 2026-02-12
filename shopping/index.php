@@ -196,10 +196,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <span class="btn-icon">👤</span>
                     <span>Assign To</span>
                 </button>
-                <button onclick="bulkDelete()" class="btn btn-danger btn-sm">
-                    <span class="btn-icon">🗑️</span>
-                    <span>Delete</span>
-                </button>
                 <button onclick="toggleBulkMode()" class="btn btn-secondary btn-sm">
                     <span class="btn-icon">✕</span>
                     <span>Cancel</span>
@@ -657,12 +653,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <div class="share-buttons">
                     <button onclick="shareViaWhatsApp()" class="btn btn-success btn-sm">
                         WhatsApp
-                    </button>
-                    <button onclick="shareViaEmail()" class="btn btn-secondary btn-sm">
-                        Email
-                    </button>
-                    <button onclick="shareViaSMS()" class="btn btn-secondary btn-sm">
-                        SMS
                     </button>
                 </div>
             </div>

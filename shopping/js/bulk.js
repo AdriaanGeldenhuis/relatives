@@ -145,79 +145,6 @@ function bulkDeselectAll() {
 /**
  * Bulk delete items with confirmation
  */
-async function bulkDelete() {
-    if (ShoppingApp.selectedItems.size === 0) {
-        showToast('No items selected', 'error');
-        return;
-    }
-    
-    const count = ShoppingApp.selectedItems.size;
-    const itemIds = Array.from(ShoppingApp.selectedItems);
-    
-    if (!confirm(`Delete ${count} selected item${count > 1 ? 's' : ''}? This cannot be undone.`)) {
-        return;
-    }
-    
-    // Show loading state
-    const deleteBtn = document.querySelector('.bulk-buttons .btn-danger');
-    if (deleteBtn) {
-        deleteBtn.disabled = true;
-        deleteBtn.innerHTML = '<span class="btn-icon">⏳</span><span>Deleting...</span>';
-    }
-    
-    try {
-        const result = await apiCall(ShoppingApp.API.bulk, {
-            action: 'delete',
-            item_ids: JSON.stringify(itemIds)
-        });
-        
-        showToast(`✓ Deleted ${result.count || count} items!`, 'success');
-        
-        // Remove from DOM with staggered animation
-        itemIds.forEach((itemId, index) => {
-            setTimeout(() => {
-                const itemCard = document.querySelector(`[data-item-id="${itemId}"]`);
-                if (itemCard) {
-                    const category = itemCard.closest('.category-section')?.getAttribute('data-category');
-                    
-                    itemCard.style.opacity = '0';
-                    itemCard.style.transform = 'translateX(-100px)';
-                    
-                    setTimeout(() => {
-                        itemCard.remove();
-                        
-                        if (category) {
-                            updateCategoryCount(category);
-                        }
-                    }, 300);
-                }
-            }, index * 50); // Stagger by 50ms
-        });
-        
-        // Exit bulk mode after animations
-        setTimeout(() => {
-            toggleBulkMode();
-            updateProgressBar();
-            
-            // Show empty state if no items left
-            const remainingItems = document.querySelectorAll('.item-card');
-            if (remainingItems.length === 0) {
-                setTimeout(() => showEmptyState(), 300);
-            }
-        }, itemIds.length * 50 + 400);
-        
-    } catch (error) {
-        showToast(error.message || 'Failed to delete items', 'error');
-        console.error('Bulk delete error:', error);
-    } finally {
-        // Restore button
-        if (deleteBtn) {
-            deleteBtn.disabled = false;
-            deleteBtn.innerHTML = '<span class="btn-icon">🗑️</span><span>Delete</span>';
-        }
-    }
-}
-
 // ============================================
 // BULK MARK BOUGHT - ENHANCED
 // ============================================
@@ -678,12 +605,6 @@ document.addEventListener('keydown', (e) => {
         bulkDeselectAll();
     }
     
-    // Delete key - Delete selected (in bulk mode)
-    if (ShoppingApp.bulkMode && e.key === 'Delete' && ShoppingApp.selectedItems.size > 0) {
-        e.preventDefault();
-        bulkDelete();
-    }
-    
     // Ctrl/Cmd + Shift + M - Mark selected as bought (in bulk mode)
     if (ShoppingApp.bulkMode && (e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') {
         e.preventDefault();
@@ -701,7 +622,6 @@ window.toggleBulkMode = toggleBulkMode;
 window.updateBulkCount = updateBulkCount;
 window.bulkSelectAll = bulkSelectAll;
 window.bulkDeselectAll = bulkDeselectAll;
-window.bulkDelete = bulkDelete;
 window.bulkMarkBought = bulkMarkBought;
 window.showBulkCategoryModal = showBulkCategoryModal;
 window.applyBulkCategory = applyBulkCategory;

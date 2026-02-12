@@ -522,8 +522,6 @@ AIAssistant.prototype.init = function() {
     var self = this;
     console.log('🤖 Initializing AI Assistant...');
     this.generateInsights().then(function() {
-        self.initActivityHeatmap();
-        self.animateProgressCircles();
         console.log('✅ AI Assistant initialized');
     });
 };
@@ -685,84 +683,6 @@ AIAssistant.prototype.renderInsights = function() {
         '</div>';
     }
     insightsEl.innerHTML = html;
-};
-
-AIAssistant.prototype.initActivityHeatmap = function() {
-    var canvas = document.getElementById('activityHeatmap');
-    if (!canvas) return;
-
-    var ctx = canvas.getContext('2d');
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-
-    var days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    var hours = isMobile ? 12 : 24; // Show fewer hours on mobile
-    var cellWidth = canvas.width / hours;
-    var cellHeight = canvas.height / 7;
-
-    for (var day = 0; day < 7; day++) {
-        for (var hour = 0; hour < hours; hour++) {
-            var actualHour = isMobile ? hour * 2 : hour; // Every 2 hours on mobile
-            var peakHours = (actualHour >= 8 && actualHour <= 10) || (actualHour >= 17 && actualHour <= 20);
-            var weekendBoost = (day === 5 || day === 6) ? 0.3 : 0;
-            var baseIntensity = Math.random() * 0.5;
-            var intensity = Math.min(1, baseIntensity + (peakHours ? 0.4 : 0) + weekendBoost);
-
-            var colors = [
-                'rgba(102, 126, 234, 0.1)',
-                'rgba(102, 126, 234, 0.3)',
-                'rgba(102, 126, 234, 0.5)',
-                'rgba(102, 126, 234, 0.7)',
-                'rgba(102, 126, 234, 0.9)'
-            ];
-            var color = colors[Math.floor(intensity * (colors.length - 1))];
-
-            ctx.fillStyle = color;
-            ctx.fillRect(hour * cellWidth, day * cellHeight, cellWidth - 1, cellHeight - 1);
-        }
-    }
-
-    // Day labels (only on non-mobile or larger screens)
-    if (!isMobile || window.innerWidth > 600) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.font = '10px Plus Jakarta Sans';
-        ctx.textAlign = 'right';
-        for (var i = 0; i < days.length; i++) {
-            ctx.fillText(days[i], canvas.width - 5, (i + 0.6) * cellHeight);
-        }
-    }
-};
-
-AIAssistant.prototype.animateProgressCircles = function() {
-    var circles = document.querySelectorAll('.progress-circle');
-    for (var i = 0; i < circles.length; i++) {
-        (function(circle) {
-            var progress = parseInt(circle.dataset.progress || 0);
-            var progressFill = circle.querySelector('.progress-fill');
-            var progressValue = circle.querySelector('.progress-value');
-
-            if (!progressFill || !progressValue) return;
-
-            var circumference = 283;
-            var offset = circumference - (progress / 100) * circumference;
-
-            setTimeout(function() {
-                progressFill.style.strokeDashoffset = offset;
-                var current = 0;
-                var duration = 2000;
-                var increment = progress / (duration / 16);
-
-                var timer = setInterval(function() {
-                    current += increment;
-                    if (current >= progress) {
-                        current = progress;
-                        clearInterval(timer);
-                    }
-                    progressValue.textContent = Math.floor(current) + '%';
-                }, 16);
-            }, 500);
-        })(circles[i]);
-    }
 };
 
 AIAssistant.openSmartSearch = function() {
