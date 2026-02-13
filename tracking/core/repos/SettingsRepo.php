@@ -10,8 +10,8 @@ class SettingsRepo
     private TrackingCache $cache;
 
     private const DEFAULTS = [
-        'mode' => 1,
-        'session_ttl_seconds' => 300,
+        'mode' => 2,
+        'session_ttl_seconds' => 86400,
         'keepalive_interval_seconds' => 30,
         'moving_interval_seconds' => 30,
         'idle_interval_seconds' => 300,

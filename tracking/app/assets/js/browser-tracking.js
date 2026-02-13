@@ -136,12 +136,9 @@ window.Tracking = window.Tracking || {};
     function flush() {
         if (buffer.length === 0) return;
 
-        // Mode 1 check: only send when session is active.
-        var settings = Tracking.getState('settings') || {};
-        var mode = settings.tracking_mode || 2;
-        if (mode === 1 && !Tracking.getState('sessionActive')) {
-            return;
-        }
+        // Allow uploads always — UI session state should not block location ingest.
+        // Background tracking is handled by the native Android service; browser
+        // tracking is only a supplementary source when the page is open.
 
         var batch = buffer.slice();
         buffer = [];

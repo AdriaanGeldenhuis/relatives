@@ -189,9 +189,9 @@ class TrackingService : Service() {
             .getBoolean("tracking_enabled", false)
 
         if (enabled) {
-            Log.i(TAG, "Task removed with tracking on; restarting service.")
+            Log.i(TAG, "Task removed with tracking on; scheduling restart via WorkManager.")
             scheduleUpload() // Attempt to flush queue before restarting
-            TrackingService.start(this)
+            TrackingRestartWorker.enqueue(this)
         }
         super.onTaskRemoved(rootIntent)
     }
