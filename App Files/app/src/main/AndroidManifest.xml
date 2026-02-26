@@ -54,6 +54,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Native Tracking Activity (replaces WebView for tracking) -->
+        <activity
+            android:name=".ui.tracking.TrackingActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.Relatives" />
+
         <!-- Registered Subscription Activity -->
         <activity
             android:name=".ui.SubscriptionActivity"

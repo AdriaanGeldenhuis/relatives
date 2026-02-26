@@ -67,6 +67,13 @@ dependencies {
     // JSON serialisation
     implementation(libs.gson)
 
+    // Mapbox Maps SDK (native map)
+    implementation(libs.mapbox.maps)
+
+    // ViewModel + Navigation Compose
+    implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.navigation.compose)
+
     // WorkManager for location upload
     implementation(libs.work.runtime.ktx)
 

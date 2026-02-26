@@ -39,6 +39,7 @@ import za.co.relatives.app.tracking.FamilyPoller
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
 import za.co.relatives.app.tracking.TrackingService
+import za.co.relatives.app.ui.tracking.TrackingActivity
 import za.co.relatives.app.utils.PreferencesManager
 import java.net.CookieHandler
 import java.net.HttpCookie
@@ -290,6 +291,14 @@ class MainActivity : ComponentActivity() {
                 request: WebResourceRequest?,
             ): Boolean {
                 val url = request?.url?.toString() ?: return false
+
+                // Intercept tracking URLs → launch native TrackingActivity
+                if (url.contains("/tracking/app")) {
+                    syncCookiesToNative()
+                    startActivity(Intent(this@MainActivity, TrackingActivity::class.java))
+                    return true
+                }
+
                 if (url.contains("relatives.co.za")) return false
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                 return true
@@ -342,6 +351,11 @@ class MainActivity : ComponentActivity() {
     private fun loadInitialUrl(intent: Intent?) {
         val deepLink = intent?.getStringExtra("action_url")
         if (!deepLink.isNullOrBlank()) {
+            // Intercept tracking deep links → launch native TrackingActivity
+            if (deepLink.contains("/tracking/app")) {
+                startActivity(Intent(this, TrackingActivity::class.java))
+                return
+            }
             webView.loadUrl(resolveUrl(deepLink))
         } else {
             webView.loadUrl(WEB_URL)
@@ -350,6 +364,11 @@ class MainActivity : ComponentActivity() {
 
     private fun handleDeepLink(intent: Intent?) {
         val actionUrl = intent?.getStringExtra("action_url") ?: return
+        // Intercept tracking deep links → launch native TrackingActivity
+        if (actionUrl.contains("/tracking/app")) {
+            startActivity(Intent(this, TrackingActivity::class.java))
+            return
+        }
         webView.loadUrl(resolveUrl(actionUrl))
     }
 
