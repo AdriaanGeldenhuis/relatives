@@ -14,9 +14,7 @@ import kotlinx.coroutines.launch
 import za.co.relatives.app.RelativesApplication
 import za.co.relatives.app.data.TrackingStore
 import za.co.relatives.app.network.TrackingApiClient
-import za.co.relatives.app.tracking.FamilyPoller
 import za.co.relatives.app.tracking.TrackingService
-import za.co.relatives.app.utils.PreferencesManager
 
 /**
  * Central ViewModel for all native tracking screens.
@@ -41,7 +39,6 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     private var pollJob: Job? = null
     private var activePollInterval = 5_000L
-    private var backgroundPollInterval = 15_000L
 
     fun startPolling() {
         if (pollJob?.isActive == true) return

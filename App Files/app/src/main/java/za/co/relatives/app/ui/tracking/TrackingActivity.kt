@@ -1,14 +1,12 @@
 package za.co.relatives.app.ui.tracking
 
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
-import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,11 +14,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import za.co.relatives.app.data.TrackingStore
 import za.co.relatives.app.tracking.FamilyPoller
 import za.co.relatives.app.tracking.PermissionGate
-import za.co.relatives.app.tracking.TrackingService
-import za.co.relatives.app.data.TrackingStore
-import za.co.relatives.app.RelativesApplication
 import za.co.relatives.app.ui.theme.RelativesTheme
 
 /**
