@@ -32,7 +32,7 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
     val store = TrackingStore(application)
     private val prefs = (application as RelativesApplication).preferencesManager
 
-    // ── Family Members ──────────────────────────────────────────────────
+    // -- Family Members -----------------------------------------------------
 
     private val _members = MutableStateFlow<List<TrackingStore.MemberLocation>>(emptyList())
     val members: StateFlow<List<TrackingStore.MemberLocation>> = _members.asStateFlow()
@@ -95,7 +95,7 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ── Tracking toggle ─────────────────────────────────────────────────
+    // -- Tracking toggle ----------------------------------------------------
 
     private val _trackingEnabled = MutableStateFlow(prefs.trackingEnabled)
     val trackingEnabled: StateFlow<Boolean> = _trackingEnabled.asStateFlow()
@@ -112,7 +112,7 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
         _trackingEnabled.value = false
     }
 
-    // ── Events ──────────────────────────────────────────────────────────
+    // -- Events -----------------------------------------------------------
 
     data class TrackingEvent(
         val id: Int,
@@ -181,7 +181,7 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ── Geofences ───────────────────────────────────────────────────────
+    // -- Geofences --------------------------------------------------------
 
     data class Geofence(
         val id: Int,
@@ -262,7 +262,7 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ── Settings ────────────────────────────────────────────────────────
+    // -- Settings ---------------------------------------------------------
 
     private val _settings = MutableStateFlow<JsonObject?>(null)
     val settings: StateFlow<JsonObject?> = _settings.asStateFlow()
@@ -304,7 +304,7 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     fun clearSaveStatus() { _saveSuccess.value = null }
 
-    // ── Wake ────────────────────────────────────────────────────────────
+    // -- Wake -------------------------------------------------------------
 
     fun wakeAllDevices() {
         viewModelScope.launch {

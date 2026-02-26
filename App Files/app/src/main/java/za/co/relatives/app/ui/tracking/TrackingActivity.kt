@@ -24,7 +24,7 @@ import za.co.relatives.app.ui.theme.RelativesTheme
  *
  * Hosts all tracking screens (Map, Events, Geofences, Settings)
  * using Jetpack Compose navigation. Completely replaces the WebView
- * for all /tracking/app/* pages.
+ * for all /tracking/app/ pages.
  *
  * The existing TrackingService, FamilyPoller, TrackingStore, and
  * LocationUploadWorker continue to work exactly as before — this

@@ -12,7 +12,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 /**
  * Native API client for all tracking endpoints.
  *
- * Replaces the WebView JS calls to /tracking/api/* with direct OkHttp calls.
+ * Replaces the WebView JS calls to /tracking/api/ with direct OkHttp calls.
  * All methods run on [Dispatchers.IO] and return parsed results or throw.
  */
 class TrackingApiClient(context: Context) {
@@ -25,7 +25,7 @@ class TrackingApiClient(context: Context) {
     private val http = NetworkClient.getInstance(context.applicationContext)
     private val gson = Gson()
 
-    // ── Family locations ────────────────────────────────────────────────
+    // -- Family locations -------------------------------------------------
 
     suspend fun getCurrentLocations(): JsonObject = withContext(Dispatchers.IO) {
         val request = Request.Builder().url("$BASE/current.php").get().build()
@@ -42,7 +42,7 @@ class TrackingApiClient(context: Context) {
         executeJson(request)
     }
 
-    // ── Session management ──────────────────────────────────────────────
+    // -- Session management -----------------------------------------------
 
     suspend fun keepAlive(): JsonObject = withContext(Dispatchers.IO) {
         val request = Request.Builder().url("$BASE/keepalive.php")
@@ -55,7 +55,7 @@ class TrackingApiClient(context: Context) {
         executeJson(request)
     }
 
-    // ── Events ──────────────────────────────────────────────────────────
+    // -- Events -----------------------------------------------------------
 
     suspend fun getEvents(
         limit: Int = 30,
@@ -68,7 +68,7 @@ class TrackingApiClient(context: Context) {
         executeJson(request)
     }
 
-    // ── Geofences ───────────────────────────────────────────────────────
+    // -- Geofences --------------------------------------------------------
 
     suspend fun getGeofences(): JsonObject = withContext(Dispatchers.IO) {
         val request = Request.Builder().url("$BASE/geofences_list.php").get().build()
@@ -94,7 +94,7 @@ class TrackingApiClient(context: Context) {
         executeJson(request)
     }
 
-    // ── Places ──────────────────────────────────────────────────────────
+    // -- Places -----------------------------------------------------------
 
     suspend fun getPlaces(): JsonObject = withContext(Dispatchers.IO) {
         val request = Request.Builder().url("$BASE/places_list.php").get().build()
@@ -114,7 +114,7 @@ class TrackingApiClient(context: Context) {
         executeJson(request)
     }
 
-    // ── Settings ────────────────────────────────────────────────────────
+    // -- Settings ---------------------------------------------------------
 
     suspend fun getSettings(): JsonObject = withContext(Dispatchers.IO) {
         val request = Request.Builder().url("$BASE/settings_get.php").get().build()
@@ -127,7 +127,7 @@ class TrackingApiClient(context: Context) {
         executeJson(request)
     }
 
-    // ── Alert Rules ─────────────────────────────────────────────────────
+    // -- Alert Rules ------------------------------------------------------
 
     suspend fun getAlertRules(): JsonObject = withContext(Dispatchers.IO) {
         val request = Request.Builder().url("$BASE/alerts_rules_get.php").get().build()
@@ -140,7 +140,7 @@ class TrackingApiClient(context: Context) {
         executeJson(request)
     }
 
-    // ── Directions ──────────────────────────────────────────────────────
+    // -- Directions -------------------------------------------------------
 
     suspend fun getDirections(
         fromLat: Double, fromLng: Double,
@@ -151,7 +151,7 @@ class TrackingApiClient(context: Context) {
         executeJson(request)
     }
 
-    // ── Wake devices ────────────────────────────────────────────────────
+    // -- Wake devices -----------------------------------------------------
 
     suspend fun wakeDevices(): JsonObject = withContext(Dispatchers.IO) {
         val request = Request.Builder().url("$BASE/wake_devices.php")
@@ -159,7 +159,7 @@ class TrackingApiClient(context: Context) {
         executeJson(request)
     }
 
-    // ── Internal ────────────────────────────────────────────────────────
+    // -- Internal ---------------------------------------------------------
 
     private fun executeJson(request: Request): JsonObject {
         val response = http.newCall(request).execute()
