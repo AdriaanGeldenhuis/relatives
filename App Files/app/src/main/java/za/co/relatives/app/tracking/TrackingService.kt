@@ -138,10 +138,15 @@ class TrackingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        fusedClient = LocationServices.getFusedLocationProviderClient(this)
-        geofencingClient = LocationServices.getGeofencingClient(this)
-        store = TrackingStore(this)
-        createNotificationChannel()
+        try {
+            fusedClient = LocationServices.getFusedLocationProviderClient(this)
+            geofencingClient = LocationServices.getGeofencingClient(this)
+            store = TrackingStore(this)
+            createNotificationChannel()
+        } catch (e: Exception) {
+            Log.e(TAG, "Service init failed", e)
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -202,13 +207,20 @@ class TrackingService : Service() {
             return
         }
         started = true
-        
+
         Log.i(TAG, "Starting tracking")
         persistEnabled(true)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification())
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start foreground service", e)
+            started = false
+            stopSelf()
+            return
         }
         acquireWakeLock(WAKELOCK_TIMEOUT_MS)
         lastBatteryBucket = getBatteryBucket()

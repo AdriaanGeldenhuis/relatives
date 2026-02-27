@@ -59,8 +59,25 @@
 # ── Kotlin coroutines ─────────────────────────────────────────────────
 -dontwarn kotlinx.coroutines.**
 
-# ── Android services ──────────────────────────────────────────────────
-# Foreground service declared in manifest — keep it findable.
+# ── Android services & receivers ──────────────────────────────────────
+# Declared in manifest — keep findable.
 -keep class za.co.relatives.app.tracking.TrackingService
 -keep class za.co.relatives.app.services.RelativesFirebaseService
 -keep class za.co.relatives.app.receivers.BootReceiver
+-keep class za.co.relatives.app.tracking.ActivityTransitionsReceiver
+-keep class za.co.relatives.app.tracking.GeofenceReceiver
+
+# ── Application class ────────────────────────────────────────────────
+-keep class za.co.relatives.app.RelativesApplication { *; }
+
+# ── ViewModels (instantiated by reflection via ViewModelProvider) ────
+-keep class za.co.relatives.app.ui.tracking.TrackingViewModel { *; }
+
+# ── Data classes used by Gson / JSON serialisation ───────────────────
+-keep class za.co.relatives.app.data.TrackingStore$MemberLocation { *; }
+-keep class za.co.relatives.app.data.QueuedLocationEntity { *; }
+-keep class za.co.relatives.app.network.ApiException { *; }
+
+# ── Tracking workers (instantiated by WorkManager via reflection) ────
+-keep class za.co.relatives.app.tracking.LocationUploadWorker { *; }
+-keep class za.co.relatives.app.tracking.TrackingRestartWorker { *; }

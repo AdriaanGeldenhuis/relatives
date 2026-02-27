@@ -30,7 +30,8 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     private val api = TrackingApiClient(application)
     val store = TrackingStore(application)
-    private val prefs = (application as RelativesApplication).preferencesManager
+    private val prefs = (application as? RelativesApplication)?.preferencesManager
+        ?: za.co.relatives.app.utils.PreferencesManager(application)
 
     // -- Family Members -----------------------------------------------------
 

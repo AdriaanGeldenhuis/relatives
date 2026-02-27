@@ -112,7 +112,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        prefs = (application as RelativesApplication).preferencesManager
+        prefs = (application as? RelativesApplication)?.preferencesManager
+            ?: PreferencesManager(this)
         trackingStore = TrackingStore(this)
         permissionGate = PermissionGate(this)
         familyPoller = FamilyPoller(this, trackingStore)
@@ -492,21 +493,25 @@ class MainActivity : ComponentActivity() {
     // ════════════════════════════════════════════════════════════════════
 
     private fun connectBillingClient() {
-        billingClient = BillingClient.newBuilder(this)
-            .setListener { _, _ -> }
-            .enablePendingPurchases(
-                PendingPurchasesParams.newBuilder().enableOneTimeProducts().build(),
-            )
-            .build()
+        try {
+            billingClient = BillingClient.newBuilder(this)
+                .setListener { _, _ -> }
+                .enablePendingPurchases(
+                    PendingPurchasesParams.newBuilder().enableOneTimeProducts().build(),
+                )
+                .build()
 
-        billingClient?.startConnection(object : BillingClientStateListener {
-            override fun onBillingSetupFinished(result: BillingResult) {
-                if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                    querySubscriptionStatus()
+            billingClient?.startConnection(object : BillingClientStateListener {
+                override fun onBillingSetupFinished(result: BillingResult) {
+                    if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                        querySubscriptionStatus()
+                    }
                 }
-            }
-            override fun onBillingServiceDisconnected() {}
-        })
+                override fun onBillingServiceDisconnected() {}
+            })
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "BillingClient init failed", e)
+        }
     }
 
     private fun querySubscriptionStatus() {

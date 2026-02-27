@@ -41,9 +41,9 @@ class RelativesFirebaseService : FirebaseMessagingService() {
         super.onNewToken(token)
         Log.d(TAG, "New FCM token received")
 
-        // Persist via PreferencesManager.
-        val prefs = (application as RelativesApplication).preferencesManager
-        prefs.fcmToken = token
+        // Persist via PreferencesManager (safe cast to avoid crash if Application init failed).
+        val prefs = (application as? RelativesApplication)?.preferencesManager
+        prefs?.fcmToken = token
 
         // Register with backend.
         serviceScope.launch {

@@ -40,7 +40,13 @@ class TrackingActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        viewModel = ViewModelProvider(this)[TrackingViewModel::class.java]
+        try {
+            viewModel = ViewModelProvider(this)[TrackingViewModel::class.java]
+        } catch (e: Exception) {
+            android.util.Log.e("TrackingActivity", "ViewModel init failed", e)
+            finish()
+            return
+        }
         val trackingStore = TrackingStore(this)
         permissionGate = PermissionGate(this)
         familyPoller = FamilyPoller(this, trackingStore)
