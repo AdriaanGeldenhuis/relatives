@@ -187,6 +187,7 @@ class TrackingService : Service() {
 
     private var started = false
     private var isForeground = false
+    private var initFailed = false
     private var currentMode = Mode.IDLE
     private var lastLocation: Location? = null
     private var lastEnqueueTime = 0L
@@ -216,10 +217,18 @@ class TrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
-        fusedClient = LocationServices.getFusedLocationProviderClient(this)
-        geofencingClient = LocationServices.getGeofencingClient(this)
-        store = TrackingStore(this)
-        createNotificationChannel()
+        try {
+            // Channel first: foreground promotion depends on it.
+            createNotificationChannel()
+            fusedClient = LocationServices.getFusedLocationProviderClient(this)
+            geofencingClient = LocationServices.getGeofencingClient(this)
+            store = TrackingStore(this)
+        } catch (e: Exception) {
+            // Play Services / Room can fail on broken devices — shut down
+            // cleanly on the next command instead of crashing the app.
+            Log.e(TAG, "Service init failed", e)
+            initFailed = true
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -238,6 +247,12 @@ class TrackingService : Service() {
         // Rule 1: promote to foreground before anything else, on every path.
         if (!promoteToForeground(hasPermission)) {
             Log.w(TAG, "Cannot run as foreground service; shutting down.")
+            shutdown()
+            return START_NOT_STICKY
+        }
+
+        if (initFailed) {
+            Log.e(TAG, "onCreate init failed; shutting down.")
             shutdown()
             return START_NOT_STICKY
         }

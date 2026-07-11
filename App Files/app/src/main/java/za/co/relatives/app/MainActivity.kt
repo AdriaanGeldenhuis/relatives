@@ -46,6 +46,7 @@ import za.co.relatives.app.tracking.FamilyPoller
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
 import za.co.relatives.app.tracking.TrackingService
+import za.co.relatives.app.ui.tracking.TrackingActivity
 import za.co.relatives.app.utils.PreferencesManager
 import java.net.CookieHandler
 import java.net.HttpCookie
@@ -120,7 +121,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        prefs = (application as RelativesApplication).preferencesManager
+        prefs = (application as? RelativesApplication)?.preferencesManager
+            ?: PreferencesManager(this)
         trackingStore = TrackingStore(this)
         permissionGate = PermissionGate(this)
         familyPoller = FamilyPoller(this, trackingStore)
@@ -385,6 +387,14 @@ class MainActivity : ComponentActivity() {
                 request: WebResourceRequest?,
             ): Boolean {
                 val url = request?.url?.toString() ?: return false
+
+                // Intercept tracking URLs → launch native TrackingActivity
+                if (url.contains("/tracking/app")) {
+                    syncCookiesToNative()
+                    startActivity(Intent(this@MainActivity, TrackingActivity::class.java))
+                    return true
+                }
+
                 if (url.contains("relatives.co.za")) return false
                 return try {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -462,6 +472,14 @@ class MainActivity : ComponentActivity() {
     private fun loadInitialUrl(intent: Intent?) {
         val deepLink = intent?.getStringExtra("action_url")
         if (!deepLink.isNullOrBlank()) {
+            // Intercept tracking deep links → launch native TrackingActivity,
+            // but still give the WebView a page so backing out of the native
+            // screen doesn't land on a blank activity.
+            if (deepLink.contains("/tracking/app")) {
+                webView.loadUrl(WEB_URL)
+                startActivity(Intent(this, TrackingActivity::class.java))
+                return
+            }
             webView.loadUrl(resolveUrl(deepLink))
         } else {
             webView.loadUrl(WEB_URL)
@@ -470,6 +488,11 @@ class MainActivity : ComponentActivity() {
 
     private fun handleDeepLink(intent: Intent?) {
         val actionUrl = intent?.getStringExtra("action_url") ?: return
+        // Intercept tracking deep links → launch native TrackingActivity
+        if (actionUrl.contains("/tracking/app")) {
+            startActivity(Intent(this, TrackingActivity::class.java))
+            return
+        }
         webView.loadUrl(resolveUrl(actionUrl))
     }
 
@@ -638,21 +661,25 @@ class MainActivity : ComponentActivity() {
     // ════════════════════════════════════════════════════════════════════
 
     private fun connectBillingClient() {
-        billingClient = BillingClient.newBuilder(this)
-            .setListener { _, _ -> }
-            .enablePendingPurchases(
-                PendingPurchasesParams.newBuilder().enableOneTimeProducts().build(),
-            )
-            .build()
+        try {
+            billingClient = BillingClient.newBuilder(this)
+                .setListener { _, _ -> }
+                .enablePendingPurchases(
+                    PendingPurchasesParams.newBuilder().enableOneTimeProducts().build(),
+                )
+                .build()
 
-        billingClient?.startConnection(object : BillingClientStateListener {
-            override fun onBillingSetupFinished(result: BillingResult) {
-                if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                    querySubscriptionStatus()
+            billingClient?.startConnection(object : BillingClientStateListener {
+                override fun onBillingSetupFinished(result: BillingResult) {
+                    if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                        querySubscriptionStatus()
+                    }
                 }
-            }
-            override fun onBillingServiceDisconnected() {}
-        })
+                override fun onBillingServiceDisconnected() {}
+            })
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "BillingClient init failed", e)
+        }
     }
 
     private fun querySubscriptionStatus() {

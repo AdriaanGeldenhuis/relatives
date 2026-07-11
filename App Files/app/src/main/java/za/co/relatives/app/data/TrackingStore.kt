@@ -29,16 +29,22 @@ class TrackingStore(context: Context) {
 
     // ── In-memory family location cache ─────────────────────────────────
 
-    /**
-     * Cached family member locations keyed by member id.
-     * Written by FamilyPoller, read by WebViewBridge / MapboxController.
-     */
-    private val familyCache = mutableMapOf<String, MemberLocation>()
+    companion object {
+        /**
+         * Family cache shared across ALL TrackingStore instances.
+         * MainActivity, TrackingActivity, TrackingViewModel and the workers
+         * each construct their own store; they must all see the same family
+         * snapshot or the native map reads a permanently empty cache.
+         */
+        private val familyCache = mutableMapOf<String, MemberLocation>()
+
+        @Volatile
+        private var familyPollTime: Long = 0L
+    }
 
     /** Timestamp of the last family poll that actually changed data. */
-    @Volatile
-    var lastFamilyPollTime: Long = 0L
-        private set
+    val lastFamilyPollTime: Long
+        get() = familyPollTime
 
     data class MemberLocation(
         val memberId: String,
@@ -61,21 +67,22 @@ class TrackingStore(context: Context) {
      * Replace all family member locations atomically.
      * Only updates [lastFamilyPollTime] if the data actually changed.
      */
-    @Synchronized
     fun putFamilyLocations(members: List<MemberLocation>) {
-        val changed = members.size != familyCache.size ||
-            members.any { m ->
-                val cached = familyCache[m.memberId]
-                cached == null || cached.lat != m.lat || cached.lng != m.lng
-            }
-        familyCache.clear()
-        members.forEach { familyCache[it.memberId] = it }
-        if (changed) lastFamilyPollTime = System.currentTimeMillis()
+        synchronized(familyCache) {
+            val changed = members.size != familyCache.size ||
+                members.any { m ->
+                    val cached = familyCache[m.memberId]
+                    cached == null || cached.lat != m.lat || cached.lng != m.lng
+                }
+            familyCache.clear()
+            members.forEach { familyCache[it.memberId] = it }
+            if (changed) familyPollTime = System.currentTimeMillis()
+        }
     }
 
     /** Get a snapshot of all cached family locations. */
-    @Synchronized
-    fun getFamilyLocations(): List<MemberLocation> = familyCache.values.toList()
+    fun getFamilyLocations(): List<MemberLocation> =
+        synchronized(familyCache) { familyCache.values.toList() }
 
     /**
      * Dump family locations as a JSON string for the WebView bridge.
@@ -84,8 +91,7 @@ class TrackingStore(context: Context) {
      * consume bridge data and API data interchangeably. Legacy keys
      * (id/latitude/longitude) are kept as aliases.
      */
-    @Synchronized
-    fun familyLocationsJson(): String {
+    fun familyLocationsJson(): String = synchronized(familyCache) {
         val arr = JSONArray()
         familyCache.values.forEach { m ->
             arr.put(JSONObject().apply {
@@ -109,7 +115,7 @@ class TrackingStore(context: Context) {
                 put("longitude", m.lng ?: JSONObject.NULL)
             })
         }
-        return arr.toString()
+        arr.toString()
     }
 
     // ── Device location dedup ───────────────────────────────────────────
