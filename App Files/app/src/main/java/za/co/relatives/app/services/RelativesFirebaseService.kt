@@ -6,6 +6,7 @@ import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import za.co.relatives.app.R
 import za.co.relatives.app.RelativesApplication
@@ -32,6 +33,11 @@ class RelativesFirebaseService : FirebaseMessagingService() {
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onDestroy() {
+        serviceScope.cancel()
+        super.onDestroy()
+    }
 
     // ------------------------------------------------------------------ //
     //  Token management

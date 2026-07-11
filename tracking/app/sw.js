@@ -99,6 +99,12 @@ self.addEventListener('fetch', function (event) {
 
     var url = request.url;
 
+    // Live-location polling: network only. Caching every poll response was a
+    // disk write per poll (battery) and served stale positions after logout.
+    if (url.indexOf('/tracking/api/current.php') !== -1) {
+        return;
+    }
+
     // API calls: network-first with cache fallback
     if (isApiRequest(url)) {
         event.respondWith(networkFirst(request, API_CACHE));

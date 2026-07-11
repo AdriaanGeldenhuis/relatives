@@ -51,6 +51,11 @@ $results = [];
 $storedCount = 0;
 
 foreach ($locations as $i => $input) {
+    if (!is_array($input)) {
+        $results[] = ['index' => $i, 'status' => 'error', 'error' => 'each location must be an object'];
+        continue;
+    }
+
     $loc = $validator->validateLocation($input);
 
     if ($loc === null) {

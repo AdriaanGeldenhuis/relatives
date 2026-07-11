@@ -22,7 +22,11 @@ object NetworkClient {
     @Volatile
     private var client: OkHttpClient? = null
 
-    /** Simple in-memory cookie store keyed by host. */
+    /**
+     * Simple in-memory cookie store keyed by host. Accessed concurrently from
+     * OkHttp worker threads, the UI thread (cookie sync) and WorkManager
+     * threads — every access must hold the [cookieStore] monitor.
+     */
     private val cookieStore = mutableMapOf<String, MutableList<Cookie>>()
 
     /**
@@ -49,15 +53,19 @@ object NetworkClient {
             .value(value)
             .path("/")
             .build()
-        cookieStore.getOrPut(domain) { mutableListOf() }.let { list ->
-            list.removeAll { it.name == name }
-            list.add(cookie)
+        synchronized(cookieStore) {
+            cookieStore.getOrPut(domain) { mutableListOf() }.let { list ->
+                list.removeAll { it.name == name }
+                list.add(cookie)
+            }
         }
     }
 
     /** Clear all cookies (e.g. on logout). */
     fun clearCookies() {
-        cookieStore.clear()
+        synchronized(cookieStore) {
+            cookieStore.clear()
+        }
     }
 
     // --------------------------------------------------------------------- //
@@ -75,15 +83,19 @@ object NetworkClient {
             .cookieJar(object : CookieJar {
                 override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
                     val host = url.host
-                    val stored = cookieStore.getOrPut(host) { mutableListOf() }
-                    for (cookie in cookies) {
-                        stored.removeAll { it.name == cookie.name }
-                        stored.add(cookie)
+                    synchronized(cookieStore) {
+                        val stored = cookieStore.getOrPut(host) { mutableListOf() }
+                        for (cookie in cookies) {
+                            stored.removeAll { it.name == cookie.name }
+                            stored.add(cookie)
+                        }
                     }
                 }
 
                 override fun loadForRequest(url: HttpUrl): List<Cookie> {
-                    return cookieStore[url.host].orEmpty()
+                    return synchronized(cookieStore) {
+                        cookieStore[url.host].orEmpty().toList()
+                    }
                 }
             })
             .build()

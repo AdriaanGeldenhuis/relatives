@@ -145,11 +145,15 @@ class NotificationManager {
                 'sound' => $data['sound'] ?? 'default'
             ];
 
-            $fcmData = array_merge($data['data'] ?? [], [
+            // Defaults first, caller-provided data last: an explicit
+            // data.type (e.g. 'wake_tracking' for silent device wakes) must
+            // survive the merge — the previous order clobbered it with the
+            // generic notification type, so silent wakes never reached apps.
+            $fcmData = array_merge([
                 'notification_id' => (string)$notificationId,
                 'type' => $data['type'],
                 'action_url' => $data['action_url'] ?? '/'
-            ]);
+            ], $data['data'] ?? []);
 
             // Send to all tokens
             foreach ($tokens as $tokenData) {

@@ -10,6 +10,17 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $ctx = SiteContext::require($db);
 
+// One wake per user per 60s: each wake fans a high-priority FCM out to every
+// family device and triggers a GPS burst on each — unthrottled, one user
+// could hold the whole family's phones in high-accuracy mode.
+$wakeKey = 'tracking:wake_rl:' . $ctx->userId;
+if ($cache->available()) {
+    if ($cache->get($wakeKey)) {
+        Response::error('rate_limited', 429);
+    }
+    $cache->set($wakeKey, time(), 60);
+}
+
 try {
     $nm = NotificationManager::getInstance($db);
     $nm->createForFamily($ctx->familyId, [

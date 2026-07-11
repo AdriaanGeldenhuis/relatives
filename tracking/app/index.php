@@ -304,13 +304,14 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         });
     }
 
-    // Initialize Mapbox
-    if (!window.TrackingConfig || !window.TrackingConfig.mapboxToken) {
-        console.error('[Tracking] No Mapbox token configured');
-        return;
-    }
-
-    mapboxgl.accessToken = window.TrackingConfig.mapboxToken;
+    // Initialize Mapbox. EVERY failure mode (missing token, CDN blocked,
+    // no WebGL, GPU trouble in the Android WebView) must leave the rest of
+    // the page alive — family panel, polling and the native bridge all work
+    // without the map. Never `return` out of this IIFE for a map problem.
+    var mapboxAvailable = typeof mapboxgl !== 'undefined';
+    var mapboxToken = (window.TrackingConfig && window.TrackingConfig.mapboxToken) || '';
+    if (!mapboxAvailable) console.error('[Tracking] Mapbox GL JS failed to load');
+    if (!mapboxToken) console.error('[Tracking] No Mapbox token configured');
 
     var mapStyles = {
         dark:      'mapbox://styles/mapbox/dark-v11',
@@ -319,14 +320,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         light:     'mapbox://styles/mapbox/light-v11'
     };
     var styleOrder = ['dark', 'streets', 'satellite', 'light'];
-    var currentStyleKey = (window.TrackingConfig.settings || {}).map_style || 'dark';
+    var currentStyleKey = ((window.TrackingConfig || {}).settings || {}).map_style || 'dark';
     if (!mapStyles[currentStyleKey]) currentStyleKey = 'dark';
     var mapStyle = mapStyles[currentStyleKey];
 
-    // Map init can fail (no WebGL, GPU trouble inside the Android WebView).
-    // The family panel and polling must keep working without the map.
     var map = null;
-    try {
+    if (mapboxAvailable && mapboxToken) try {
+        mapboxgl.accessToken = mapboxToken;
         map = new mapboxgl.Map({
             container: 'trackingMap',
             style: mapStyle,
@@ -356,6 +356,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     } catch (mapErr) {
         console.error('[Tracking] Map init failed, continuing without map:', mapErr);
         map = null;
+    }
+
+    if (!map) {
         var mapStatusEl = document.getElementById('trackingStatus');
         if (mapStatusEl) mapStatusEl.textContent = 'Map unavailable on this device';
     }
@@ -1033,9 +1036,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         });
     });
 
-    // Consent dialog logic
+    // Consent dialog logic (localStorage can throw in privacy modes)
     var consentOverlay = document.getElementById('consentOverlay');
-    var hasConsent = localStorage.getItem('tracking_consent');
+    var hasConsent = null;
+    try { hasConsent = localStorage.getItem('tracking_consent'); } catch (e) {}
 
     if (!hasConsent) {
         setTimeout(function() {
@@ -1044,13 +1048,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     document.getElementById('consentAccept').addEventListener('click', function() {
-        localStorage.setItem('tracking_consent', '1');
+        try { localStorage.setItem('tracking_consent', '1'); } catch (e) {}
         consentOverlay.classList.remove('active');
         requestNotificationPermission();
     });
 
     document.getElementById('consentDecline').addEventListener('click', function() {
-        localStorage.setItem('tracking_consent', '0');
+        try { localStorage.setItem('tracking_consent', '0'); } catch (e) {}
         consentOverlay.classList.remove('active');
     });
 

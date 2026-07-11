@@ -156,8 +156,14 @@ class TrackingStore(context: Context) {
 
     fun enqueueLocation(entity: QueuedLocationEntity) {
         scope.launch {
-            dao.insert(entity)
-            dao.trimToMaxSize(300)
+            try {
+                dao.insert(entity)
+                dao.trimToMaxSize(300)
+            } catch (e: Exception) {
+                // A failed queue write (disk full, DB corruption) must never
+                // take the process down; the point is simply lost.
+                android.util.Log.w("TrackingStore", "Failed to queue location", e)
+            }
         }
     }
 

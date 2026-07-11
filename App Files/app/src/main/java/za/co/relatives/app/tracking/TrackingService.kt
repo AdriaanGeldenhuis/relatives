@@ -519,23 +519,29 @@ class TrackingService : Service() {
         updateNotification()
     }
 
+    /**
+     * No minimum-displacement filters here, deliberately: with a distance
+     * filter, a stationary device receives NO callbacks at all, which (a)
+     * kept MOVING mode's high-accuracy GPS request active forever because the
+     * idle-revert check in [onLocationReceived] never ran, and (b) starved
+     * the 10-minute idle heartbeat so family members looked offline all day.
+     * Interval-based updates keep both alive; dedup happens in
+     * [TrackingStore.shouldEnqueue].
+     */
     private fun buildLocationRequest(mode: Mode): LocationRequest {
         val battery = getBatteryBucket()
         if (battery == BatteryBucket.CRITICAL) {
-            return LocationRequest.Builder(Priority.PRIORITY_PASSIVE, 5 * 60 * 1000L)
-                .setMinUpdateDistanceMeters(250f).build()
+            return LocationRequest.Builder(Priority.PRIORITY_PASSIVE, 5 * 60 * 1000L).build()
         }
         if (battery == BatteryBucket.LOW) {
             return LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 3 * 60 * 1000L)
-                .setMinUpdateDistanceMeters(150f).build()
+                .build()
         }
         return when (mode) {
             Mode.MOVING -> LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, MOVING_INTERVAL_MS)
-                .setMinUpdateDistanceMeters(15f)
                 .setMaxUpdateDelayMillis(30_000L)
                 .build()
             Mode.IDLE -> LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, IDLE_INTERVAL_MS)
-                .setMinUpdateDistanceMeters(30f)
                 .setMaxUpdateDelayMillis(2 * 60 * 1000L)
                 .build()
         }
@@ -611,8 +617,13 @@ class TrackingService : Service() {
     }
 
     private fun scheduleUpload() {
+        // Small delay + KEEP batches points captured close together into one
+        // POST instead of powering the radio up for every single fix.
         val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-        val request = OneTimeWorkRequestBuilder<LocationUploadWorker>().setConstraints(constraints).build()
+        val request = OneTimeWorkRequestBuilder<LocationUploadWorker>()
+            .setConstraints(constraints)
+            .setInitialDelay(15, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
         WorkManager.getInstance(this).enqueueUniqueWork(LocationUploadWorker.WORK_NAME, ExistingWorkPolicy.KEEP, request)
     }
 

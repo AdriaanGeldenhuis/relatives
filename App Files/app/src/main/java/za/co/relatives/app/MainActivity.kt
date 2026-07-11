@@ -150,6 +150,12 @@ class MainActivity : ComponentActivity() {
         enterImmersiveMode()
         CookieManager.getInstance().flush()
 
+        // Wake the WebView back up (timers/JS paused in onPause).
+        if (::webView.isInitialized) {
+            webView.onResume()
+            webView.resumeTimers()
+        }
+
         // Poll only while the app is actually in the foreground.
         familyPoller.start()
 
@@ -172,6 +178,14 @@ class MainActivity : ComponentActivity() {
         // last known positions for instant render on return, and background
         // polling was pure battery/data drain.
         familyPoller.stop()
+
+        // Freeze the WebView: without this its JS intervals and any page
+        // geolocation keep running with the screen off. (TrackingService is a
+        // separate process-level service and is unaffected.)
+        if (::webView.isInitialized) {
+            webView.onPause()
+            webView.pauseTimers()
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -322,6 +336,12 @@ class MainActivity : ComponentActivity() {
                 super.onPageFinished(view, url)
                 extractSessionToken()
                 syncCookiesToNative()
+
+                // Drive the poll rate from the real page URL. The page's own
+                // beforeunload/visibility signals are unreliable in a WebView,
+                // which used to leave the poller stuck in fast mode after
+                // navigating away from the tracking map.
+                familyPoller.setActive(url?.contains("/tracking") == true)
 
                 // Prompt for notification permission when the user visits the
                 // notifications page — all logic stays inside the APK.

@@ -19,6 +19,22 @@ import za.co.relatives.app.MainActivity
 class TrackingBridge(private val activity: MainActivity) {
 
     /**
+     * Run [action] on the UI thread, swallowing any exception. Bridge calls
+     * originate from the WebView's JavaBridge thread and can land while the
+     * activity is finishing (e.g. dialog on a dead window) — nothing a web
+     * page triggers may ever crash the app.
+     */
+    private inline fun safeOnUiThread(crossinline action: () -> Unit) {
+        activity.runOnUiThread {
+            try {
+                action()
+            } catch (e: Exception) {
+                android.util.Log.w("TrackingBridge", "Bridge call failed", e)
+            }
+        }
+    }
+
+    /**
      * Returns cached family member locations as a JSON string.
      * The map JS uses this to render pins immediately without waiting
      * for the next API poll — this is the cache-to-render pipeline.
@@ -38,7 +54,7 @@ class TrackingBridge(private val activity: MainActivity) {
      */
     @JavascriptInterface
     fun startTracking() {
-        activity.runOnUiThread {
+        safeOnUiThread {
             activity.startTrackingWithPermissions()
         }
     }
@@ -48,7 +64,7 @@ class TrackingBridge(private val activity: MainActivity) {
      */
     @JavascriptInterface
     fun stopTracking() {
-        activity.runOnUiThread {
+        safeOnUiThread {
             activity.stopTrackingService()
         }
     }
@@ -86,7 +102,7 @@ class TrackingBridge(private val activity: MainActivity) {
      */
     @JavascriptInterface
     fun wakeAllDevices() {
-        activity.runOnUiThread {
+        safeOnUiThread {
             activity.wakeAllDevices()
         }
     }
@@ -98,7 +114,7 @@ class TrackingBridge(private val activity: MainActivity) {
      */
     @JavascriptInterface
     fun requestNotificationPermission() {
-        activity.runOnUiThread {
+        safeOnUiThread {
             activity.requestNotificationPermission()
         }
     }
@@ -109,7 +125,7 @@ class TrackingBridge(private val activity: MainActivity) {
      */
     @JavascriptInterface
     fun onTrackingScreenVisible() {
-        activity.runOnUiThread {
+        safeOnUiThread {
             activity.onTrackingScreenVisible()
         }
     }
@@ -120,7 +136,7 @@ class TrackingBridge(private val activity: MainActivity) {
      */
     @JavascriptInterface
     fun onTrackingScreenHidden() {
-        activity.runOnUiThread {
+        safeOnUiThread {
             activity.onTrackingScreenHidden()
         }
     }
