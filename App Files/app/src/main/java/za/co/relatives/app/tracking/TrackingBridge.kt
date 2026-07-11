@@ -25,7 +25,11 @@ class TrackingBridge(private val activity: MainActivity) {
      */
     @JavascriptInterface
     fun getCachedFamily(): String {
-        return activity.trackingStore.familyLocationsJson()
+        return try {
+            activity.trackingStore.familyLocationsJson()
+        } catch (e: Exception) {
+            "[]"
+        }
     }
 
     /**
@@ -57,7 +61,11 @@ class TrackingBridge(private val activity: MainActivity) {
      */
     @JavascriptInterface
     fun getTrackingMode(): String {
-        return activity.getTrackingMode()
+        return try {
+            activity.getTrackingMode()
+        } catch (e: Exception) {
+            "disabled"
+        }
     }
 
     /**
@@ -65,7 +73,11 @@ class TrackingBridge(private val activity: MainActivity) {
      */
     @JavascriptInterface
     fun isTrackingEnabled(): Boolean {
-        return activity.isTrackingActive()
+        return try {
+            activity.isTrackingActive()
+        } catch (e: Exception) {
+            false
+        }
     }
 
     /**

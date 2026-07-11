@@ -28,13 +28,12 @@ class BootReceiver : BroadcastReceiver() {
         val prefs = context.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
         val enabled = prefs.getBoolean("tracking_enabled", false)
 
-        if (enabled) {
+        if (enabled && TrackingService.hasLocationPermission(context)) {
+            // On Android 15+ a BOOT_COMPLETED receiver may not start a
+            // location foreground service; TrackingService.start() swallows
+            // the refusal and MainActivity re-starts tracking on next open.
             Log.i(TAG, "Tracking was enabled, restarting service after boot")
-            try {
-                TrackingService.start(context)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to restart tracking on boot", e)
-            }
+            TrackingService.start(context)
         }
     }
 }

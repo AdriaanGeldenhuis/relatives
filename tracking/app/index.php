@@ -42,7 +42,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=4.3',
+    '/tracking/app/assets/css/tracking.css?v=4.4',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -323,29 +323,48 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     if (!mapStyles[currentStyleKey]) currentStyleKey = 'dark';
     var mapStyle = mapStyles[currentStyleKey];
 
-    var map = new mapboxgl.Map({
-        container: 'trackingMap',
-        style: mapStyle,
-        center: [28.0473, -26.2041],
-        zoom: 12,
-        attributionControl: false
-    });
+    // Map init can fail (no WebGL, GPU trouble inside the Android WebView).
+    // The family panel and polling must keep working without the map.
+    var map = null;
+    try {
+        map = new mapboxgl.Map({
+            container: 'trackingMap',
+            style: mapStyle,
+            center: [28.0473, -26.2041],
+            zoom: 12,
+            attributionControl: false
+        });
 
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    map.addControl(new mapboxgl.GeolocateControl({
-        positionOptions: { enableHighAccuracy: true },
-        trackUserLocation: true,
-        showUserHeading: true
-    }), 'top-right');
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        map.addControl(new mapboxgl.GeolocateControl({
+            positionOptions: { enableHighAccuracy: true },
+            trackUserLocation: true,
+            showUserHeading: true
+        }), 'top-right');
+
+        map.on('error', function(e) {
+            console.warn('[Map] Error:', e && e.error ? e.error.message : e);
+        });
+
+        map.on('load', function() {
+            map.resize();
+        });
+
+        // Force resize after layout settles
+        setTimeout(function() { if (map) map.resize(); }, 100);
+        setTimeout(function() { if (map) map.resize(); }, 500);
+    } catch (mapErr) {
+        console.error('[Tracking] Map init failed, continuing without map:', mapErr);
+        map = null;
+        var mapStatusEl = document.getElementById('trackingStatus');
+        if (mapStatusEl) mapStatusEl.textContent = 'Map unavailable on this device';
+    }
 
     window.trackingMap = map;
 
-    // Force resize after layout settles
-    setTimeout(function() { map.resize(); }, 100);
-    setTimeout(function() { map.resize(); }, 500);
-
     // Map style toggle
     document.getElementById('mapStyleBtn').addEventListener('click', function() {
+        if (!map) return;
         var idx = styleOrder.indexOf(currentStyleKey);
         currentStyleKey = styleOrder[(idx + 1) % styleOrder.length];
         map.setStyle(mapStyles[currentStyleKey]);
@@ -395,6 +414,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function fitMapToFamily(members) {
+        if (!map) return;
         var pts = members.filter(function(m) { return m.has_location && m.lat !== null && m.lng !== null; });
         if (pts.length === 0) return;
         if (pts.length === 1) {
@@ -474,6 +494,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function updateMarkers(members) {
+        if (!map) return;
         var activeIds = {};
         members.forEach(function(m) {
             // Skip members without a location
@@ -635,6 +656,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // Fly to member
     window.flyToMember = function(userId) {
+        if (!map) return;
         var m = _members.find(function(x) { return x.user_id == userId; });
         if (m) {
             map.flyTo({ center: [parseFloat(m.lng), parseFloat(m.lat)], zoom: 16, duration: 1500 });
@@ -697,6 +719,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     window.getDirections = function(userId) {
+        if (!map) {
+            showToast('Map unavailable on this device', 'error');
+            return;
+        }
         var target = _members.find(function(x) { return x.user_id == userId; });
         if (!target || !target.lat || !target.lng) {
             showToast('No location for this member', 'error');
@@ -757,7 +783,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function drawRouteOnMap(geometry) {
-        if (!geometry) return;
+        if (!geometry || !map) return;
         if (map.getLayer('route')) map.removeLayer('route');
         if (map.getSource('route')) map.removeSource('route');
 
@@ -805,7 +831,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         }
 
         // Zoom to first step area
-        if (_navSteps[0] && _navSteps[0].location) {
+        if (map && _navSteps[0] && _navSteps[0].location) {
             map.flyTo({
                 center: _navSteps[0].location,
                 zoom: 17,
@@ -843,7 +869,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var lat = pos.coords.latitude, lng = pos.coords.longitude;
 
         // Center map on user during navigation
-        map.easeTo({ center: [lng, lat], duration: 500 });
+        if (map) map.easeTo({ center: [lng, lat], duration: 500 });
 
         // Check if we're close to the current step's maneuver point
         var step = _navSteps[_navCurrentStep];
@@ -880,20 +906,23 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         document.getElementById('trackingToolbar').style.display = '';
 
         // Clean up route
-        if (map.getLayer('route')) map.removeLayer('route');
-        if (map.getSource('route')) map.removeSource('route');
+        if (map) {
+            if (map.getLayer('route')) map.removeLayer('route');
+            if (map.getSource('route')) map.removeSource('route');
+            map.easeTo({ pitch: 0, duration: 500 });
+        }
         _routeBounds = null;
         _navRoute = null;
         _navSteps = [];
-
-        map.easeTo({ pitch: 0, duration: 500 });
     }
 
     function clearDirections() {
         document.getElementById('directionsBar').classList.remove('active');
         if (_navActive) endNavigation();
-        if (map.getLayer('route')) map.removeLayer('route');
-        if (map.getSource('route')) map.removeSource('route');
+        if (map) {
+            if (map.getLayer('route')) map.removeLayer('route');
+            if (map.getSource('route')) map.removeSource('route');
+        }
         _routeBounds = null;
     }
 
@@ -1047,12 +1076,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         requestNotificationPermission();
     }
 
-    // Initial fetch then poll
-    map.on('load', function() {
-        map.resize();
-        fetchMembers();
-        setInterval(fetchMembers, 10000);
-    });
+    // Polling starts at the bottom of this script, after the native bridge
+    // environment has been detected (see startPolling below).
 
     // ── TRACKING INTEGRATION ─────────────────────────────────────
     // Detect environment: Android app (TrackingBridge) vs regular browser
@@ -1075,20 +1100,6 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             showEnableLocationButton();
         }
 
-        // Load cached family data immediately from native store
-        try {
-            var cachedJson = window.TrackingBridge.getCachedFamily();
-            if (cachedJson) {
-                var cached = JSON.parse(cachedJson);
-                if (cached && cached.length > 0) {
-                    console.log('[Tracking] Loaded', cached.length, 'cached members from native');
-                    _members = cached;
-                    renderMembers(_members);
-                    updateMarkers(_members);
-                }
-            }
-        } catch(e) { console.warn('[Tracking] Cache read error:', e); }
-
         // Notify when leaving tracking screen
         window.addEventListener('beforeunload', function() {
             try { window.TrackingBridge.onTrackingScreenHidden(); } catch(e) {}
@@ -1107,9 +1118,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     // ── BROWSER GEOLOCATION ─────────────────────────────────
-    // Always start when the tracking page is open — gives immediate
-    // position update on page load. Native service handles background.
-    if (navigator.geolocation) {
+    // Browser only. In the native app the TrackingService owns location
+    // uploads — running watchPosition here as well doubled GPS use (battery
+    // drain) and kept uploading even when the user disabled tracking.
+    if (navigator.geolocation && !isNativeApp) {
         startBrowserTracking();
     }
 
@@ -1191,6 +1203,87 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
         console.log('[Tracking] Browser geolocation started');
     }
+
+    // ── MEMBER POLLING ───────────────────────────────────────────
+    // Native app: the Kotlin FamilyPoller does the network polling; this page
+    // just reads its in-memory cache (free — no network, no battery) and
+    // reconciles against the API once a minute as a fallback.
+    // Browser: poll the API directly every 10s.
+    // Both modes stop completely while the page is hidden.
+    var memberPollTimer = null;
+    var bridgeCacheTimer = null;
+
+    // Old APK versions emit a different key set from getCachedFamily();
+    // normalize so both shapes render.
+    function normalizeCachedMember(m) {
+        if (m.user_id !== undefined && m.has_location !== undefined) return m;
+        var lat = m.lat !== undefined ? m.lat : m.latitude;
+        var lng = m.lng !== undefined ? m.lng : m.longitude;
+        return {
+            user_id: parseInt(m.user_id !== undefined ? m.user_id : m.id, 10),
+            name: m.name,
+            avatar_color: m.avatar_color || m.color || '#667eea',
+            has_avatar: !!m.has_avatar,
+            has_location: lat !== null && lat !== undefined,
+            lat: lat !== undefined ? lat : null,
+            lng: lng !== undefined ? lng : null,
+            accuracy_m: m.accuracy_m !== undefined ? m.accuracy_m : (m.accuracy !== undefined ? m.accuracy : null),
+            speed_mps: m.speed_mps !== undefined ? m.speed_mps : (m.speed !== undefined ? m.speed : null),
+            bearing_deg: m.bearing_deg !== undefined ? m.bearing_deg : null,
+            altitude_m: m.altitude_m !== undefined ? m.altitude_m : null,
+            motion_state: m.motion_state || 'unknown',
+            recorded_at: m.recorded_at || null,
+            updated_at: m.updated_at || null
+        };
+    }
+
+    function readBridgeCache() {
+        if (!isNativeApp) return;
+        try {
+            var cachedJson = window.TrackingBridge.getCachedFamily();
+            if (!cachedJson) return;
+            var cached = JSON.parse(cachedJson);
+            if (cached && cached.length > 0) {
+                _members = cached.map(normalizeCachedMember);
+                renderMembers(_members);
+                updateMarkers(_members);
+                if (!initialFitDone) {
+                    initialFitDone = true;
+                    fitMapToFamily(_members);
+                }
+            }
+        } catch (e) {
+            console.warn('[Tracking] Cache read error:', e);
+        }
+    }
+
+    function startPolling() {
+        stopPolling();
+        if (isNativeApp) {
+            readBridgeCache();
+            fetchMembers();
+            bridgeCacheTimer = setInterval(readBridgeCache, 5000);
+            memberPollTimer = setInterval(fetchMembers, 60000);
+        } else {
+            fetchMembers();
+            memberPollTimer = setInterval(fetchMembers, 10000);
+        }
+    }
+
+    function stopPolling() {
+        if (memberPollTimer) { clearInterval(memberPollTimer); memberPollTimer = null; }
+        if (bridgeCacheTimer) { clearInterval(bridgeCacheTimer); bridgeCacheTimer = null; }
+    }
+
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+            startPolling();
+        } else {
+            stopPolling();
+        }
+    });
+
+    startPolling();
 
 })();
 </script>

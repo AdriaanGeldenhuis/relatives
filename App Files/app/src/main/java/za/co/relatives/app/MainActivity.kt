@@ -12,9 +12,11 @@ import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -59,6 +61,7 @@ import java.net.CookieManager as JavaNetCookieManager
 class MainActivity : ComponentActivity() {
 
     companion object {
+        private const val TAG = "MainActivity"
         private const val WEB_URL = "https://www.relatives.co.za"
         private const val SUBSCRIPTION_ACTIVITY_CLASS =
             "za.co.relatives.app.ui.SubscriptionActivity"
@@ -75,6 +78,7 @@ class MainActivity : ComponentActivity() {
 
     // ── UI ───────────────────────────────────────────────────────────────
 
+    private lateinit var root: FrameLayout
     private lateinit var webView: WebView
     private var trialDialogShown = false
 
@@ -121,13 +125,9 @@ class MainActivity : ComponentActivity() {
         registerNonTrackingLaunchers()
 
         buildLayout()
-        configureWebView()
         onBackPressedDispatcher.addCallback(this, backCallback)
         connectBillingClient()
         enterImmersiveMode()
-
-        // Start family polling immediately (works without location permission)
-        familyPoller.start()
 
         // Restore WebView state when recreated (e.g. after background location
         // permission opens Settings and the system destroys this Activity).
@@ -149,12 +149,29 @@ class MainActivity : ComponentActivity() {
         backCallback.isEnabled = true
         enterImmersiveMode()
         CookieManager.getInstance().flush()
-        familyPoller.setActive(true)
+
+        // Poll only while the app is actually in the foreground.
+        familyPoller.start()
+
+        // Resume tracking if the user has it enabled but the service is not
+        // running (system kill, reboot on Android 15+ where BootReceiver may
+        // not start a location service, permission round-trips, etc.).
+        // Starting a foreground service from a resumed activity is always
+        // allowed.
+        if (prefs.trackingEnabled &&
+            permissionGate.hasForegroundLocation() &&
+            !TrackingService.isRunning
+        ) {
+            TrackingService.start(this)
+        }
     }
 
     override fun onPause() {
         super.onPause()
-        familyPoller.setActive(false)
+        // Stop polling entirely in the background — the native cache keeps the
+        // last known positions for instant render on return, and background
+        // polling was pure battery/data drain.
+        familyPoller.stop()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -172,7 +189,12 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         familyPoller.stop()
         billingClient?.endConnection()
-        webView.destroy()
+        if (::webView.isInitialized) {
+            try {
+                webView.destroy()
+            } catch (_: Exception) {
+            }
+        }
         super.onDestroy()
     }
 
@@ -212,7 +234,12 @@ class MainActivity : ComponentActivity() {
     }
 
     fun wakeAllDevices() {
-        TrackingService.motionStarted(this)
+        // The web page POSTs /tracking/api/wake_devices.php itself to wake the
+        // rest of the family via FCM; here we only boost our own device, and
+        // only when tracking is actually on.
+        if (prefs.trackingEnabled && permissionGate.hasForegroundLocation()) {
+            TrackingService.motionStarted(this)
+        }
     }
 
     fun onTrackingScreenVisible() {
@@ -229,8 +256,12 @@ class MainActivity : ComponentActivity() {
     // ════════════════════════════════════════════════════════════════════
 
     private fun buildLayout() {
-        val root = FrameLayout(this)
+        root = FrameLayout(this)
+        attachNewWebView()
+        setContentView(root)
+    }
 
+    private fun attachNewWebView() {
         webView = WebView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -238,8 +269,22 @@ class MainActivity : ComponentActivity() {
             )
         }
         root.addView(webView)
+        configureWebView()
+    }
 
-        setContentView(root)
+    /**
+     * Replace a WebView whose renderer process died. Without this the system
+     * kills the entire app — the map page (Mapbox GL) is GPU/memory heavy and
+     * renderer crashes there must not take the app down.
+     */
+    private fun recreateWebView(lastUrl: String?) {
+        try {
+            root.removeView(webView)
+            webView.destroy()
+        } catch (_: Exception) {
+        }
+        attachNewWebView()
+        webView.loadUrl(lastUrl ?: WEB_URL)
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -291,8 +336,23 @@ class MainActivity : ComponentActivity() {
             ): Boolean {
                 val url = request?.url?.toString() ?: return false
                 if (url.contains("relatives.co.za")) return false
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                return true
+                return try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    true
+                } catch (e: Exception) {
+                    Log.w(TAG, "No handler for external url: $url", e)
+                    true
+                }
+            }
+
+            override fun onRenderProcessGone(
+                view: WebView?,
+                detail: RenderProcessGoneDetail?,
+            ): Boolean {
+                Log.e(TAG, "WebView renderer gone (didCrash=${detail?.didCrash()}); rebuilding WebView")
+                val lastUrl = view?.url
+                runOnUiThread { recreateWebView(lastUrl) }
+                return true // handled — do NOT let the system kill the app
             }
         }
 

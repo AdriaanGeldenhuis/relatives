@@ -15,8 +15,8 @@ class GeofenceReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
         val prefs = context.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
-        if (!prefs.getBoolean("tracking_enabled", false)) {
-            Log.d(TAG, "Tracking disabled, ignoring geofence event.")
+        if (!prefs.getBoolean("tracking_enabled", false) || !TrackingService.hasLocationPermission(context)) {
+            Log.d(TAG, "Tracking disabled or permission missing, ignoring geofence event.")
             return
         }
 

@@ -17,6 +17,11 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import za.co.relatives.app.data.TrackingStore
 import za.co.relatives.app.network.NetworkClient
+import za.co.relatives.app.utils.PreferencesManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 /**
@@ -53,6 +58,14 @@ class LocationUploadWorker(
     private val store = TrackingStore(applicationContext)
     private val gson = Gson()
     private val http = NetworkClient.getInstance(applicationContext)
+    private val prefs = PreferencesManager(applicationContext)
+
+    // Server expects "recorded_at" as UTC "yyyy-MM-dd HH:mm:ss"; a raw epoch-ms
+    // "timestamp" fails its strtotime() parse and queued offline points would
+    // all be stamped with upload time instead of capture time.
+    private val utcFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
 
     override suspend fun doWork(): Result {
         Log.d(TAG, "Upload starting (attempt $runAttemptCount)")
@@ -72,6 +85,7 @@ class LocationUploadWorker(
         }
 
         return try {
+            val deviceId = prefs.deviceUuid
             val payload = viable.map { e ->
                 mapOf(
                     "client_event_id" to e.clientEventId,
@@ -84,7 +98,9 @@ class LocationUploadWorker(
                     "speed_kmh" to e.speedKmh,
                     "is_moving" to e.isMoving,
                     "battery_level" to e.batteryLevel,
-                    "timestamp" to e.timestamp,
+                    "recorded_at" to utcFormat.format(Date(e.timestamp)),
+                    "device_id" to deviceId,
+                    "platform" to "android",
                 )
             }
             val jsonBody = gson.toJson(mapOf("locations" to payload))

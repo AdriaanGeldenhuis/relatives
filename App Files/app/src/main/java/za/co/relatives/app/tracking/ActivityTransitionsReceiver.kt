@@ -15,8 +15,8 @@ class ActivityTransitionsReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (!isTrackingEnabled(context)) {
-            Log.d(TAG, "Tracking disabled, ignoring activity transition.")
+        if (!isTrackingEnabled(context) || !TrackingService.hasLocationPermission(context)) {
+            Log.d(TAG, "Tracking disabled or permission missing, ignoring activity transition.")
             return
         }
 

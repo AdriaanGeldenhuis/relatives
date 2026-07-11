@@ -11,3 +11,8 @@ help/logs/
 # uploads (optional, but usually)
 uploads/
 saves/
+
+# Android build artifacts (App Files)
+App Files/.gradle/
+App Files/app/build/
+App Files/build/

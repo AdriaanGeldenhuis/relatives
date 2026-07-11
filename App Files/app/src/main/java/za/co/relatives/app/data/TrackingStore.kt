@@ -43,13 +43,18 @@ class TrackingStore(context: Context) {
     data class MemberLocation(
         val memberId: String,
         val name: String,
-        val lat: Double,
-        val lng: Double,
-        val accuracy: Float?,
-        val speed: Float?,
-        val motionState: String?,
-        val updatedAt: String?,
-        val color: String? = null,
+        val lat: Double?,
+        val lng: Double?,
+        val hasLocation: Boolean = lat != null && lng != null,
+        val accuracy: Float? = null,
+        val speed: Float? = null,
+        val bearingDeg: Float? = null,
+        val altitudeM: Double? = null,
+        val motionState: String? = null,
+        val recordedAt: String? = null,
+        val updatedAt: String? = null,
+        val avatarColor: String? = null,
+        val hasAvatar: Boolean = false,
     )
 
     /**
@@ -74,22 +79,34 @@ class TrackingStore(context: Context) {
 
     /**
      * Dump family locations as a JSON string for the WebView bridge.
-     * Format: [{ id, name, lat, lng, accuracy, speed, motion_state, updated_at, color }]
+     *
+     * The shape mirrors /tracking/api/current.php exactly so the web page can
+     * consume bridge data and API data interchangeably. Legacy keys
+     * (id/latitude/longitude) are kept as aliases.
      */
     @Synchronized
     fun familyLocationsJson(): String {
         val arr = JSONArray()
         familyCache.values.forEach { m ->
             arr.put(JSONObject().apply {
-                put("id", m.memberId)
+                put("user_id", m.memberId.toIntOrNull() ?: m.memberId)
                 put("name", m.name)
-                put("latitude", m.lat)
-                put("longitude", m.lng)
-                put("accuracy", m.accuracy ?: JSONObject.NULL)
-                put("speed", m.speed ?: JSONObject.NULL)
+                put("avatar_color", m.avatarColor ?: JSONObject.NULL)
+                put("has_avatar", m.hasAvatar)
+                put("has_location", m.hasLocation)
+                put("lat", m.lat ?: JSONObject.NULL)
+                put("lng", m.lng ?: JSONObject.NULL)
+                put("accuracy_m", m.accuracy ?: JSONObject.NULL)
+                put("speed_mps", m.speed ?: JSONObject.NULL)
+                put("bearing_deg", m.bearingDeg ?: JSONObject.NULL)
+                put("altitude_m", m.altitudeM ?: JSONObject.NULL)
                 put("motion_state", m.motionState ?: JSONObject.NULL)
+                put("recorded_at", m.recordedAt ?: JSONObject.NULL)
                 put("updated_at", m.updatedAt ?: JSONObject.NULL)
-                put("color", m.color ?: JSONObject.NULL)
+                // Legacy aliases
+                put("id", m.memberId)
+                put("latitude", m.lat ?: JSONObject.NULL)
+                put("longitude", m.lng ?: JSONObject.NULL)
             })
         }
         return arr.toString()

@@ -80,14 +80,27 @@ class RelativesFirebaseService : FirebaseMessagingService() {
 
     /**
      * Silently trigger a WAKE location fix without showing any notification.
-     * Used when another family member taps "Find Device" or similar.
+     * Used when another family member taps "Wake" on the tracking screen.
+     *
+     * Only acts when this device has tracking enabled AND location permission —
+     * otherwise the service cannot legally run as a location foreground
+     * service and the wake must be ignored (previously this crashed every
+     * family device that had never enabled tracking).
      */
     private fun handleWakeTracking() {
+        if (!TrackingService.isTrackingEnabled(this)) {
+            Log.d(TAG, "Wake tracking ignored: tracking not enabled on this device")
+            return
+        }
+        if (!TrackingService.hasLocationPermission(this)) {
+            Log.d(TAG, "Wake tracking ignored: no location permission")
+            return
+        }
         Log.d(TAG, "Wake tracking: triggering motion mode")
         try {
             TrackingService.motionStarted(this)
         } catch (e: Exception) {
-            TrackingService.start(this)
+            Log.w(TAG, "Wake tracking failed", e)
         }
     }
 

@@ -6,7 +6,7 @@
  * ============================================
  */
 
-const CACHE_VERSION = 'tracking-v1.0.0';
+const CACHE_VERSION = 'tracking-v1.1.0';
 const STATIC_CACHE = 'tracking-static-' + CACHE_VERSION;
 const API_CACHE = 'tracking-api-' + CACHE_VERSION;
 

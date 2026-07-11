@@ -41,11 +41,14 @@ class TrackingRestartWorker(
             .getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
             .getBoolean("tracking_enabled", false)
 
-        if (enabled) {
+        if (enabled && !TrackingService.isRunning && TrackingService.hasLocationPermission(applicationContext)) {
+            // Works on Android 8-11; on 12+ background FGS starts are blocked
+            // and TrackingService.start() swallows the refusal — the geofence /
+            // activity-recognition triggers will revive the service instead.
             Log.i(TAG, "Restarting TrackingService after task removal.")
             TrackingService.start(applicationContext)
         } else {
-            Log.d(TAG, "Tracking not enabled, skipping restart.")
+            Log.d(TAG, "Restart not needed (enabled=$enabled, running=${TrackingService.isRunning}).")
         }
         return Result.success()
     }
