@@ -69,6 +69,11 @@ class TrackingValidator
                 $normalized .= ' UTC';
             }
             $ts = strtotime($normalized);
+            // Clamp future timestamps (client clock skew) — clients treat
+            // recorded_at as authoritative for freshness display.
+            if ($ts !== false && $ts > time()) {
+                $ts = time();
+            }
             $recordedAt = $ts ? gmdate('Y-m-d H:i:s', $ts) : gmdate('Y-m-d H:i:s');
         } else {
             $recordedAt = gmdate('Y-m-d H:i:s');

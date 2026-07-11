@@ -102,6 +102,13 @@ class RelativesFirebaseService : FirebaseMessagingService() {
             Log.d(TAG, "Wake tracking ignored: no location permission")
             return
         }
+        if (!TrackingService.canReviveFromBackground(this)) {
+            // A service *started* from the background without background
+            // location never receives fixes — it would just sit in MOVING
+            // mode with a notification, burning battery for nothing.
+            Log.d(TAG, "Wake tracking ignored: no background location and service not running")
+            return
+        }
         Log.d(TAG, "Wake tracking: triggering motion mode")
         try {
             TrackingService.motionStarted(this)

@@ -160,6 +160,12 @@ class MainActivity : ComponentActivity() {
         enterImmersiveMode()
         CookieManager.getInstance().flush()
 
+        // Rebuild a WebView whose renderer died while we were backgrounded.
+        pendingRecreateUrl?.let { url ->
+            pendingRecreateUrl = null
+            recreateWebView(url)
+        }
+
         // Wake the WebView back up (timers/JS paused in onPause).
         if (::webView.isInitialized) {
             webView.onResume()
@@ -191,8 +197,9 @@ class MainActivity : ComponentActivity() {
 
         // Freeze the WebView: without this its JS intervals and any page
         // geolocation keep running with the screen off. (TrackingService is a
-        // separate process-level service and is unaffected.)
-        if (::webView.isInitialized) {
+        // separate process-level service and is unaffected.) Skip in
+        // multi-window, where a paused activity can still be visible.
+        if (::webView.isInitialized && !isInMultiWindowMode) {
             webView.onPause()
             webView.pauseTimers()
         }
@@ -298,6 +305,7 @@ class MainActivity : ComponentActivity() {
 
     private var lastRendererCrashAt = 0L
     private var rendererCrashCount = 0
+    private var pendingRecreateUrl: String? = null
 
     /**
      * Replace a WebView whose renderer process died. Without this the system
@@ -393,7 +401,17 @@ class MainActivity : ComponentActivity() {
             ): Boolean {
                 Log.e(TAG, "WebView renderer gone (didCrash=${detail?.didCrash()}); rebuilding WebView")
                 val lastUrl = view?.url
-                runOnUiThread { recreateWebView(lastUrl) }
+                runOnUiThread {
+                    if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                        recreateWebView(lastUrl)
+                    } else {
+                        // Renderer reclaimed while backgrounded (didCrash=false
+                        // is the common case): reloading now would just churn —
+                        // the OS may kill it again. Leave the dead view in
+                        // place and rebuild on next resume.
+                        pendingRecreateUrl = lastUrl ?: WEB_URL
+                    }
+                }
                 return true // handled — do NOT let the system kill the app
             }
         }
@@ -568,20 +586,30 @@ class MainActivity : ComponentActivity() {
         if (fcmTokenSynced) return
         fcmTokenSynced = true
         try {
-            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-                if (token.isNullOrBlank()) return@addOnSuccessListener
-                prefs.fcmToken = token
-                lifecycleScope.launch(Dispatchers.IO) {
-                    try {
-                        ApiClient(applicationContext).registerFcmToken(token)
-                        Log.d(TAG, "FCM token registered with backend")
-                    } catch (e: Exception) {
-                        // Not logged in yet or offline — retry on a later page load.
+            FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    if (token.isNullOrBlank()) {
                         fcmTokenSynced = false
-                        Log.w(TAG, "FCM token registration failed (will retry)", e)
+                        return@addOnSuccessListener
+                    }
+                    prefs.fcmToken = token
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        try {
+                            ApiClient(applicationContext).registerFcmToken(token)
+                            Log.d(TAG, "FCM token registered with backend")
+                        } catch (e: Exception) {
+                            // Not logged in yet or offline — retry on a later page load.
+                            fcmTokenSynced = false
+                            Log.w(TAG, "FCM token registration failed (will retry)", e)
+                        }
                     }
                 }
-            }
+                .addOnFailureListener { e ->
+                    // Async token fetch failure (no network, Play Services busy)
+                    // must also re-arm the retry.
+                    fcmTokenSynced = false
+                    Log.w(TAG, "FCM token fetch failed (will retry)", e)
+                }
         } catch (e: Exception) {
             fcmTokenSynced = false
             Log.w(TAG, "FCM token fetch failed", e)

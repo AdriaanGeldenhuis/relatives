@@ -70,6 +70,19 @@ class LocationUploadWorker(
     override suspend fun doWork(): Result {
         Log.d(TAG, "Upload starting (attempt $runAttemptCount)")
 
+        // Drain the whole queue (max 300 items ≈ 3 batches), not just the
+        // first 100 — the queue trims oldest-first, so leaving points behind
+        // loses history.
+        repeat(3) {
+            val result = uploadBatch()
+            if (result !is Result.Success || store.unsentCount() == 0) {
+                return result
+            }
+        }
+        return Result.success()
+    }
+
+    private suspend fun uploadBatch(): Result {
         val batch = store.getUnsentLocations(100)
         if (batch.isEmpty()) {
             store.cleanupSent()

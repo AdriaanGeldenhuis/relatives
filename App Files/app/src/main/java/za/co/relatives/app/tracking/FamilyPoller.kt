@@ -80,10 +80,9 @@ class FamilyPoller(context: Context, private val store: TrackingStore) {
         intervalMs = newInterval
         val currentScope = scope ?: return
         pollJob?.cancel()
-        pollJob = currentScope.launch {
-            if (active) fetchAndCache()
-            pollLoop()
-        }
+        // pollLoop fetches immediately on entry, so restarting the loop
+        // already gives the fresh-data-now behaviour on activation.
+        pollJob = currentScope.launch { pollLoop() }
         Log.d(TAG, "Interval changed to ${intervalMs}ms (active=$active)")
     }
 

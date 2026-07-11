@@ -437,9 +437,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
         if (!list) return;
 
+        var statusPrefix = map ? '' : 'Map unavailable · ';
+
         if (!members || members.length === 0) {
             if (badge) badge.textContent = '0';
-            if (statusEl) statusEl.textContent = 'No members';
+            if (statusEl) statusEl.textContent = statusPrefix + 'No members';
             list.innerHTML = '<div class="member-empty" id="memberEmpty">' +
                 '<div class="member-empty-icon"></div>' +
                 '<div class="member-empty-text">No members online</div>' +
@@ -452,7 +454,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var withLocation = members.filter(function(m) {
             return m.has_location && m.lat !== null;
         }).length;
-        if (statusEl) statusEl.textContent = withLocation + ' tracking \u00b7 ' + members.length + ' total';
+        if (statusEl) statusEl.textContent = statusPrefix + withLocation + ' tracking \u00b7 ' + members.length + ' total';
 
         var html = '';
         members.forEach(function(m) {
