@@ -41,6 +41,20 @@ class TrackingActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "TrackingActivity"
+
+        /** Intent extra naming the start destination: map/events/geofences/settings. */
+        const val EXTRA_START_SCREEN = "start_screen"
+
+        private val SCREENS = setOf("map", "events", "geofences", "settings")
+
+        /** Map a /tracking/app/... path (or deep link) to a start destination. */
+        fun screenForPath(path: String?): String = when {
+            path == null -> "map"
+            path.contains("events") -> "events"
+            path.contains("geofences") -> "geofences"
+            path.contains("settings") -> "settings"
+            else -> "map"
+        }
     }
 
     private lateinit var viewModel: TrackingViewModel
@@ -53,6 +67,7 @@ class TrackingActivity : ComponentActivity() {
      * the map area shows a loading state until it is available.
      */
     private var mapboxTokenReady by mutableStateOf(false)
+    private var tokenFetchInFlight = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,11 +90,14 @@ class TrackingActivity : ComponentActivity() {
 
         enterImmersiveMode()
 
+        val startScreen = intent.getStringExtra(EXTRA_START_SCREEN)
+            ?.takeIf { it in SCREENS } ?: "map"
+
         setContent {
             RelativesTheme(darkTheme = true) {
                 val navController = rememberNavController()
 
-                NavHost(navController = navController, startDestination = "map") {
+                NavHost(navController = navController, startDestination = startScreen) {
                     composable("map") {
                         TrackingMapScreen(
                             viewModel = viewModel,
@@ -129,6 +147,10 @@ class TrackingActivity : ComponentActivity() {
         familyPoller.setActive(true)
         familyPoller.pollNow()
         viewModel.pollNow()
+        // Retry the token fetch if the first attempt failed (offline start).
+        if (!mapboxTokenReady) {
+            bootstrapMapboxToken()
+        }
     }
 
     override fun onPause() {
@@ -141,6 +163,9 @@ class TrackingActivity : ComponentActivity() {
     override fun onDestroy() {
         if (::familyPoller.isInitialized) {
             familyPoller.stop()
+        }
+        if (::permissionGate.isInitialized) {
+            permissionGate.dismissDialogs()
         }
         super.onDestroy()
     }
@@ -160,6 +185,8 @@ class TrackingActivity : ComponentActivity() {
             mapboxTokenReady = true
         }
 
+        if (tokenFetchInFlight) return
+        tokenFetchInFlight = true
         lifecycleScope.launch {
             try {
                 val result = TrackingApiClient(applicationContext).getMapboxToken()
@@ -171,7 +198,9 @@ class TrackingActivity : ComponentActivity() {
                     mapboxTokenReady = true
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Mapbox token fetch failed (map disabled until next open)", e)
+                Log.w(TAG, "Mapbox token fetch failed (retried on next resume)", e)
+            } finally {
+                tokenFetchInFlight = false
             }
         }
     }

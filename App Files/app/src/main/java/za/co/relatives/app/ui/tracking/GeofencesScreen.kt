@@ -26,6 +26,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
+import com.mapbox.common.MapboxOptions
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.annotation.annotations
@@ -59,6 +62,8 @@ fun GeofencesScreen(
 ) {
     val geofences by viewModel.geofences.collectAsState()
     val loading by viewModel.geofencesLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
     var showAddDialog by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<TrackingViewModel.Geofence?>(null) }
 
@@ -66,6 +71,15 @@ fun GeofencesScreen(
         viewModel.loadGeofences()
     }
 
+    // Surface add/delete failures instead of silently doing nothing.
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            snackbar.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -147,6 +161,12 @@ fun GeofencesScreen(
             }
         }
     }
+
+        SnackbarHost(
+            hostState = snackbar,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
+    } // Box
 
     // Add geofence dialog
     if (showAddDialog) {
@@ -250,8 +270,12 @@ private fun GeofenceCard(
                 )
             }
 
-            // Mini map preview
-            if (geofence.centerLat != 0.0 && geofence.centerLng != 0.0) {
+            // Mini map preview — only for circle zones with a real centre, and
+            // only once the Mapbox token is set (otherwise the MapView renders
+            // blank). Each row owns a MapView, so it MUST be destroyed when the
+            // row is recycled or LazyColumn scrolling leaks GL contexts.
+            val hasToken = remember { !MapboxOptions.accessToken.isNullOrBlank() }
+            if (hasToken && geofence.centerLat != 0.0 && geofence.centerLng != 0.0) {
                 Spacer(Modifier.height(8.dp))
                 AndroidView(
                     modifier = Modifier
@@ -285,6 +309,7 @@ private fun GeofenceCard(
                             }
                         }
                     },
+                    onRelease = { it.onDestroy() },
                 )
             }
         }

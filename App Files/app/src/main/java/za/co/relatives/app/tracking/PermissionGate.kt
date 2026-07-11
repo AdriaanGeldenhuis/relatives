@@ -15,7 +15,8 @@ import za.co.relatives.app.R
  *
  * Flow:
  *   1. Prominent disclosure dialog (explains why location is needed)
- *   2. System foreground location prompt (ACCESS_FINE_LOCATION)
+ *   2. System foreground location prompt (FINE + COARSE together — Android 12+
+ *      silently ignores a FINE-only request: no dialog, auto-denied)
  *   3. Background location dialog + system prompt (Android 10+)
  *   4. Notification permission prompt (Android 13+)
  *
@@ -26,15 +27,20 @@ class PermissionGate(private val activity: ComponentActivity) {
 
     private var onResult: ((Boolean) -> Unit)? = null
 
-    private lateinit var fineLocationLauncher: ActivityResultLauncher<String>
+    private lateinit var locationLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var backgroundLocationLauncher: ActivityResultLauncher<String>
     private lateinit var activityRecognitionLauncher: ActivityResultLauncher<String>
     private lateinit var notificationLauncher: ActivityResultLauncher<String>
 
+    /** Dialog currently showing, so the host activity can dismiss on destroy. */
+    private var visibleDialog: AlertDialog? = null
+
     fun registerLaunchers() {
-        fineLocationLauncher = activity.registerForActivityResult(
-            ActivityResultContracts.RequestPermission(),
-        ) { granted ->
+        locationLauncher = activity.registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) { grants ->
+            val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
             if (granted) requestBackgroundLocation() else {
                 onResult?.invoke(false)
                 onResult = null
@@ -76,12 +82,30 @@ class PermissionGate(private val activity: ComponentActivity) {
     private fun canShowDialog(): Boolean =
         !activity.isFinishing && !activity.isDestroyed
 
+    /** Dismiss any visible dialog — call from the host activity's onDestroy. */
+    fun dismissDialogs() {
+        try {
+            visibleDialog?.takeIf { it.isShowing }?.dismiss()
+        } catch (_: Exception) {
+        }
+        visibleDialog = null
+        onResult = null
+    }
+
+    private fun builder(): AlertDialog.Builder =
+        AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+
     private fun showProminentDisclosure() {
-        AlertDialog.Builder(activity)
+        visibleDialog = builder()
             .setTitle(R.string.location_dialog_title)
             .setMessage(R.string.location_dialog_message)
             .setPositiveButton(R.string.location_dialog_enable) { _, _ ->
-                fineLocationLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                locationLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    ),
+                )
             }
             .setNegativeButton(R.string.dialog_not_now) { _, _ ->
                 onResult?.invoke(false)
@@ -93,7 +117,7 @@ class PermissionGate(private val activity: ComponentActivity) {
 
     private fun requestBackgroundLocation() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasBackgroundLocation() && canShowDialog()) {
-            AlertDialog.Builder(activity)
+            visibleDialog = builder()
                 .setTitle(R.string.background_dialog_title)
                 .setMessage(R.string.background_dialog_message)
                 .setPositiveButton(R.string.dialog_continue) { _, _ ->
@@ -125,7 +149,7 @@ class PermissionGate(private val activity: ComponentActivity) {
 
     fun requestNotifications() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission() && canShowDialog()) {
-            AlertDialog.Builder(activity)
+            visibleDialog = builder()
                 .setTitle(R.string.notification_dialog_title)
                 .setMessage(R.string.notification_dialog_message)
                 .setPositiveButton(R.string.dialog_enable) { _, _ ->
@@ -140,7 +164,10 @@ class PermissionGate(private val activity: ComponentActivity) {
     fun hasForegroundLocation(): Boolean =
         ContextCompat.checkSelfPermission(
             activity, Manifest.permission.ACCESS_FINE_LOCATION,
-        ) == PackageManager.PERMISSION_GRANTED
+        ) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                activity, Manifest.permission.ACCESS_COARSE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
 
     private fun hasBackgroundLocation(): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

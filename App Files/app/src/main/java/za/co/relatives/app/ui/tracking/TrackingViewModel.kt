@@ -38,6 +38,10 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
     private val _members = MutableStateFlow(store.getFamilyLocations())
     val members: StateFlow<List<TrackingStore.MemberLocation>> = _members.asStateFlow()
 
+    /** Camera state preserved across map-screen recompositions (nav round trips). */
+    var didInitialCameraFit = false
+    var savedCamera: com.mapbox.maps.CameraOptions? = null
+
     private var pollJob: Job? = null
     private var activePollInterval = 5_000L
 
@@ -107,19 +111,21 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
     private var eventsOffset = 0
     private var eventsNoMore = false
+    private var eventsJob: Job? = null
 
     fun loadEvents(type: String? = null, reset: Boolean = false) {
-        if (_eventsLoading.value) return
-        if (!reset && eventsNoMore) return
-
         if (reset) {
+            // A filter change must win over an in-flight page load.
+            eventsJob?.cancel()
             eventsOffset = 0
             eventsNoMore = false
             _events.value = emptyList()
+        } else if (_eventsLoading.value || eventsNoMore) {
+            return
         }
 
         _eventsLoading.value = true
-        viewModelScope.launch {
+        eventsJob = viewModelScope.launch {
             try {
                 val result = api.getEvents(limit = 30, offset = eventsOffset, type = type)
                 // Response::success wraps the payload under "data".
@@ -138,7 +144,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
 
                         parsed.add(
                             TrackingEvent(
-                                id = ev.intOrNull("id") ?: i,
+                                // Negative synthetic ids for rows without one so
+                                // they can't collide with real ids across pages.
+                                id = ev.intOrNull("id") ?: -(eventsOffset + i + 1),
                                 eventType = ev.strOrNull("event_type") ?: "unknown",
                                 userName = meta?.strOrNull("user_name")
                                     ?: ev.strOrNull("user_name") ?: "Unknown",
@@ -150,12 +158,17 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
                             )
                         )
                     }
-                    eventsOffset += parsed.size
-                    _events.value = _events.value + parsed
-                    if (parsed.size < 30) eventsNoMore = true
+                    // Advance by rows fetched, and dedupe on append: offset
+                    // pagination overlaps when new events arrive between pages,
+                    // and duplicate ids crash LazyColumn's keyed items.
+                    eventsOffset += eventList.size()
+                    _events.value = (_events.value + parsed).distinctBy { it.id }
+                    if (eventList.size() < 30) eventsNoMore = true
                 }
-            } catch (_: Exception) { }
-            _eventsLoading.value = false
+            } catch (_: Exception) {
+            } finally {
+                _eventsLoading.value = false
+            }
         }
     }
 
@@ -208,8 +221,10 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
                     }
                     _geofences.value = parsed
                 }
-            } catch (_: Exception) { }
-            _geofencesLoading.value = false
+            } catch (_: Exception) {
+            } finally {
+                _geofencesLoading.value = false
+            }
         }
     }
 
@@ -218,7 +233,9 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
             try {
                 api.deleteGeofence(id)
                 _geofences.value = _geofences.value.filter { it.id != id }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                _errorMessage.value = "Could not delete zone. Try again."
+            }
         }
     }
 
@@ -239,9 +256,19 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
                 }
                 api.addGeofence(payload)
                 loadGeofences()
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                // Surface server validation errors instead of silently
+                // closing the dialog with nothing created.
+                _errorMessage.value = "Could not create zone. Check the details and try again."
+            }
         }
     }
+
+    /** One-shot user-facing error message (e.g. failed add/delete). */
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    fun clearError() { _errorMessage.value = null }
 
     // -- Settings ---------------------------------------------------------
 
@@ -265,20 +292,20 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
                 val alertsResult = api.getAlertRules()
                 _alertRules.value = dataObject(alertsResult)
                     ?: alertsResult.getAsJsonObject("rules")
-            } catch (_: Exception) { }
-            _settingsLoading.value = false
+            } catch (_: Exception) {
+            } finally {
+                _settingsLoading.value = false
+            }
         }
     }
 
     fun saveSettings(settingsPayload: JsonObject, alertsPayload: JsonObject) {
         viewModelScope.launch {
-            try {
-                api.saveSettings(settingsPayload)
-                api.saveAlertRules(alertsPayload)
-                _saveSuccess.value = true
-            } catch (_: Exception) {
-                _saveSuccess.value = false
-            }
+            // Report success only when BOTH saves land — reporting success on
+            // a partial save left the user thinking alert rules were saved.
+            val ok = runCatching { api.saveSettings(settingsPayload) }.isSuccess &&
+                runCatching { api.saveAlertRules(alertsPayload) }.isSuccess
+            _saveSuccess.value = ok
         }
     }
 

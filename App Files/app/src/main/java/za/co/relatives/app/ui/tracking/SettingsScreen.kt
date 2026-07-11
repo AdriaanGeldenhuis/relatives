@@ -42,7 +42,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+
+/** Read a JSON value as a boolean, accepting both JSON booleans and 0/1 ints/strings. */
+private fun truthy(e: JsonElement?): Boolean? =
+    e?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.asJsonPrimitive?.let { p ->
+        when {
+            p.isBoolean -> p.asBoolean
+            else -> p.asString == "1" || p.asString.equals("true", ignoreCase = true)
+        }
+    }
+
+/** Read a JSON number/string as a display string without throwing on booleans/null. */
+private fun numStr(e: JsonElement?): String? =
+    e?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.asString
 
 @Composable
 fun SettingsScreen(
@@ -80,25 +94,28 @@ fun SettingsScreen(
     // Populate form from loaded settings
     LaunchedEffect(settings) {
         settings?.let { s ->
-            mode = s.get("mode")?.asString ?: "1"
-            movingInterval = s.get("moving_interval_seconds")?.asString ?: "30"
-            idleInterval = s.get("idle_interval_seconds")?.asString ?: "120"
-            speedThreshold = s.get("speed_threshold_mps")?.asString ?: "1.0"
-            distanceThreshold = s.get("distance_threshold_m")?.asString ?: "20"
-            minAccuracy = s.get("min_accuracy_m")?.asString ?: "50"
-            historyDays = s.get("history_retention_days")?.asString ?: "30"
-            eventsDays = s.get("events_retention_days")?.asString ?: "30"
+            mode = numStr(s.get("mode")) ?: "1"
+            movingInterval = numStr(s.get("moving_interval_seconds")) ?: "30"
+            idleInterval = numStr(s.get("idle_interval_seconds")) ?: "120"
+            speedThreshold = numStr(s.get("speed_threshold_mps")) ?: "1.0"
+            distanceThreshold = numStr(s.get("distance_threshold_m")) ?: "20"
+            minAccuracy = numStr(s.get("min_accuracy_m")) ?: "50"
+            historyDays = numStr(s.get("history_retention_days")) ?: "30"
+            eventsDays = numStr(s.get("events_retention_days")) ?: "30"
         }
     }
 
     LaunchedEffect(alertRules) {
         alertRules?.let { r ->
-            alertsEnabled = r.get("enabled")?.let { it.asInt == 1 } ?: true
-            arrivePlaceEnabled = r.get("arrive_place_enabled")?.let { it.asInt == 1 } ?: true
-            leavePlaceEnabled = r.get("leave_place_enabled")?.let { it.asInt == 1 } ?: true
-            enterGeofenceEnabled = r.get("enter_geofence_enabled")?.let { it.asInt == 1 } ?: true
-            exitGeofenceEnabled = r.get("exit_geofence_enabled")?.let { it.asInt == 1 } ?: true
-            cooldownSeconds = r.get("cooldown_seconds")?.asString ?: "900"
+            // The DB row returns 0/1 ints but freshly-defaulted families return
+            // JSON booleans — asInt throws NumberFormatException on a boolean,
+            // which would crash the screen. truthy() accepts both.
+            alertsEnabled = truthy(r.get("enabled")) ?: true
+            arrivePlaceEnabled = truthy(r.get("arrive_place_enabled")) ?: true
+            leavePlaceEnabled = truthy(r.get("leave_place_enabled")) ?: true
+            enterGeofenceEnabled = truthy(r.get("enter_geofence_enabled")) ?: true
+            exitGeofenceEnabled = truthy(r.get("exit_geofence_enabled")) ?: true
+            cooldownSeconds = numStr(r.get("cooldown_seconds")) ?: "900"
         }
     }
 
@@ -230,6 +247,10 @@ fun SettingsScreen(
                     }
                     viewModel.saveSettings(settingsPayload, alertsPayload)
                 },
+                // Don't let the user save before the form is populated: a Save
+                // fired against defaults (or while the load is still in flight)
+                // would overwrite the family's real server settings.
+                enabled = !loading && settings != null,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF667eea)),
                 shape = RoundedCornerShape(10.dp),

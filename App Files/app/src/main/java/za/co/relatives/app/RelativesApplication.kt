@@ -12,12 +12,12 @@ class RelativesApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        try {
-            preferencesManager = PreferencesManager(this)
-        } catch (e: Exception) {
-            Log.e("RelativesApp", "PreferencesManager init failed", e)
-            preferencesManager = PreferencesManager(this)
-        }
+        // PreferencesManager is a thin SharedPreferences wrapper; if its
+        // constructor ever throws, retrying it identically would just throw
+        // again, so let it propagate rather than loop. (Callers that can run
+        // before/without the Application already fall back to their own
+        // PreferencesManager via `application as? RelativesApplication`.)
+        preferencesManager = PreferencesManager(this)
         try {
             NotificationHelper.createChannels(this)
         } catch (e: Exception) {

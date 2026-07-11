@@ -221,6 +221,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         familyPoller.stop()
+        if (::permissionGate.isInitialized) {
+            permissionGate.dismissDialogs()
+        }
         billingClient?.endConnection()
         if (::webView.isInitialized) {
             try {
@@ -386,21 +389,37 @@ class MainActivity : ComponentActivity() {
                 view: WebView?,
                 request: WebResourceRequest?,
             ): Boolean {
-                val url = request?.url?.toString() ?: return false
+                val uri = request?.url ?: return false
+                val internal = isRelativesHost(uri.host)
 
-                // Intercept tracking URLs → launch native TrackingActivity
-                if (url.contains("/tracking/app")) {
+                // Intercept tracking URLs → launch native TrackingActivity.
+                // Main-frame + real host + path prefix only: a foreign URL
+                // merely containing the substring must not trigger it.
+                if (request.isForMainFrame && internal &&
+                    uri.path?.startsWith("/tracking/app") == true
+                ) {
                     syncCookiesToNative()
-                    startActivity(Intent(this@MainActivity, TrackingActivity::class.java))
+                    startActivity(
+                        Intent(this@MainActivity, TrackingActivity::class.java).apply {
+                            putExtra(
+                                TrackingActivity.EXTRA_START_SCREEN,
+                                TrackingActivity.screenForPath(uri.path),
+                            )
+                        },
+                    )
                     return true
                 }
 
-                if (url.contains("relatives.co.za")) return false
+                // Host check, not substring: "evil.com/relatives.co.za" must
+                // NOT stay inside this WebView — TrackingBridge is exposed to
+                // every page loaded here.
+                if (internal) return false
+                if (!request.isForMainFrame) return true // cancel foreign subframe navigations
                 return try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    startActivity(Intent(Intent.ACTION_VIEW, uri))
                     true
                 } catch (e: Exception) {
-                    Log.w(TAG, "No handler for external url: $url", e)
+                    Log.w(TAG, "No handler for external url: $uri", e)
                     true
                 }
             }
@@ -451,7 +470,8 @@ class MainActivity : ComponentActivity() {
                 val hasSystemPermission = ContextCompat.checkSelfPermission(
                     this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION,
                 ) == PackageManager.PERMISSION_GRANTED
-                val allowed = hasSystemPermission && origin?.contains("relatives.co.za") == true
+                val originHost = origin?.let { runCatching { Uri.parse(it).host }.getOrNull() }
+                val allowed = hasSystemPermission && isRelativesHost(originHost)
                 callback?.invoke(origin, allowed, false)
             }
 
@@ -477,7 +497,7 @@ class MainActivity : ComponentActivity() {
             // screen doesn't land on a blank activity.
             if (deepLink.contains("/tracking/app")) {
                 webView.loadUrl(WEB_URL)
-                startActivity(Intent(this, TrackingActivity::class.java))
+                launchTrackingActivity(deepLink)
                 return
             }
             webView.loadUrl(resolveUrl(deepLink))
@@ -490,14 +510,33 @@ class MainActivity : ComponentActivity() {
         val actionUrl = intent?.getStringExtra("action_url") ?: return
         // Intercept tracking deep links → launch native TrackingActivity
         if (actionUrl.contains("/tracking/app")) {
-            startActivity(Intent(this, TrackingActivity::class.java))
+            launchTrackingActivity(actionUrl)
             return
         }
         webView.loadUrl(resolveUrl(actionUrl))
     }
 
+    private fun launchTrackingActivity(path: String?) {
+        startActivity(
+            Intent(this, TrackingActivity::class.java).apply {
+                putExtra(
+                    TrackingActivity.EXTRA_START_SCREEN,
+                    TrackingActivity.screenForPath(path),
+                )
+            },
+        )
+    }
+
     private fun resolveUrl(path: String): String =
         if (path.startsWith("http")) path else "$WEB_URL$path"
+
+    /**
+     * True only for relatives.co.za and its subdomains. A plain substring
+     * check would also match attacker URLs like evil.com/relatives.co.za and
+     * keep them inside the TrackingBridge-armed WebView.
+     */
+    private fun isRelativesHost(host: String?): Boolean =
+        host == "relatives.co.za" || host?.endsWith(".relatives.co.za") == true
 
     // ════════════════════════════════════════════════════════════════════
     //  IMMERSIVE MODE

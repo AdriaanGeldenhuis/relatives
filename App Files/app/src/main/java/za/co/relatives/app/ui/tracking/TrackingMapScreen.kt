@@ -80,7 +80,6 @@ fun TrackingMapScreen(
     // per update leaks a map layer each time and eventually kills the
     // renderer.
     var annotationManager by remember { mutableStateOf<CircleAnnotationManager?>(null) }
-    var didInitialFit by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.pollNow()
@@ -91,21 +90,22 @@ fun TrackingMapScreen(
         onDispose { viewModel.stopPolling() }
     }
 
-    // Fit the camera to the family once the first located members arrive.
+    // Fit the camera to the family once per activity (state lives in the
+    // ViewModel so navigating away and back doesn't refit or lose position).
     LaunchedEffect(members, mapView) {
-        if (!didInitialFit) {
+        if (!viewModel.didInitialCameraFit) {
             val located = members.filter { it.lat != null && it.lng != null }
             val mv = mapView
             if (located.isNotEmpty() && mv != null) {
-                didInitialFit = true
+                viewModel.didInitialCameraFit = true
                 val avgLat = located.mapNotNull { it.lat }.average()
                 val avgLng = located.mapNotNull { it.lng }.average()
-                mv.mapboxMap.setCamera(
-                    CameraOptions.Builder()
-                        .center(Point.fromLngLat(avgLng, avgLat))
-                        .zoom(if (located.size == 1) 13.0 else 10.0)
-                        .build()
-                )
+                val cam = CameraOptions.Builder()
+                    .center(Point.fromLngLat(avgLng, avgLat))
+                    .zoom(if (located.size == 1) 13.0 else 10.0)
+                    .build()
+                mv.mapboxMap.setCamera(cam)
+                viewModel.savedCamera = cam
             }
         }
     }
@@ -121,9 +121,10 @@ fun TrackingMapScreen(
                         mapView = mv
                         annotationManager = mv.annotations.createCircleAnnotationManager()
                         mv.mapboxMap.loadStyle(Style.DARK) {
-                            // Initial camera — South Africa
+                            // Restore the previous camera (nav round trip) or
+                            // default to South Africa on first creation.
                             mv.mapboxMap.setCamera(
-                                CameraOptions.Builder()
+                                viewModel.savedCamera ?: CameraOptions.Builder()
                                     .center(Point.fromLngLat(28.0473, -26.2041))
                                     .zoom(10.0)
                                     .build()
@@ -133,7 +134,23 @@ fun TrackingMapScreen(
                 },
                 update = {
                     updateMapAnnotations(annotationManager, members)
-                }
+                },
+                onRelease = { mv ->
+                    // AndroidView only detaches; without an explicit destroy the
+                    // MapView (GL context, tile cache) leaks on every nav round
+                    // trip until the activity dies — eventually OOM.
+                    viewModel.savedCamera = mv.mapboxMap.cameraState.let { s ->
+                        CameraOptions.Builder()
+                            .center(s.center)
+                            .zoom(s.zoom)
+                            .bearing(s.bearing)
+                            .pitch(s.pitch)
+                            .build()
+                    }
+                    mv.onDestroy()
+                    mapView = null
+                    annotationManager = null
+                },
             )
         } else {
             Box(
