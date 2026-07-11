@@ -19,6 +19,10 @@ class GeofenceReceiver : BroadcastReceiver() {
             Log.d(TAG, "Tracking disabled or permission missing, ignoring geofence event.")
             return
         }
+        if (!TrackingService.canReviveFromBackground(context)) {
+            Log.d(TAG, "No background location permission and service not running; skipping revival.")
+            return
+        }
 
         if (intent == null) return
         val geofencingEvent = GeofencingEvent.fromIntent(intent)

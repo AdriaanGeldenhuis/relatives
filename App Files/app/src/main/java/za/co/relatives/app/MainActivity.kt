@@ -29,6 +29,11 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import za.co.relatives.app.network.ApiClient
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingResult
@@ -131,9 +136,13 @@ class MainActivity : ComponentActivity() {
 
         // Restore WebView state when recreated (e.g. after background location
         // permission opens Settings and the system destroys this Activity).
-        // Only load the initial URL on a truly fresh start.
+        // Only load the initial URL on a truly fresh start — but never leave
+        // a blank WebView if restoration produced nothing.
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState)
+            if (webView.url.isNullOrBlank()) {
+                loadInitialUrl(intent)
+            }
         } else {
             loadInitialUrl(intent)
         }
@@ -141,6 +150,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleDeepLink(intent)
     }
 
@@ -286,19 +296,30 @@ class MainActivity : ComponentActivity() {
         configureWebView()
     }
 
+    private var lastRendererCrashAt = 0L
+    private var rendererCrashCount = 0
+
     /**
      * Replace a WebView whose renderer process died. Without this the system
      * kills the entire app — the map page (Mapbox GL) is GPU/memory heavy and
      * renderer crashes there must not take the app down.
+     *
+     * If the same page keeps killing the renderer, reloading it would just
+     * crash-loop (GPU OOM), so after repeated crashes in quick succession we
+     * escape to the home page instead.
      */
     private fun recreateWebView(lastUrl: String?) {
+        val now = System.currentTimeMillis()
+        rendererCrashCount = if (now - lastRendererCrashAt < 60_000L) rendererCrashCount + 1 else 1
+        lastRendererCrashAt = now
+
         try {
             root.removeView(webView)
             webView.destroy()
         } catch (_: Exception) {
         }
         attachNewWebView()
-        webView.loadUrl(lastUrl ?: WEB_URL)
+        webView.loadUrl(if (rendererCrashCount >= 3) WEB_URL else lastUrl ?: WEB_URL)
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -336,6 +357,7 @@ class MainActivity : ComponentActivity() {
                 super.onPageFinished(view, url)
                 extractSessionToken()
                 syncCookiesToNative()
+                syncFcmToken()
 
                 // Drive the poll rate from the real page URL. The page's own
                 // beforeunload/visibility signals are unreliable in a WebView,
@@ -531,6 +553,41 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ── FCM token registration ──────────────────────────────────────────
+
+    private var fcmTokenSynced = false
+
+    /**
+     * Register this device's FCM token with the backend once a page has
+     * loaded (i.e. once session cookies exist). FirebaseMessagingService's
+     * onNewToken usually fires before the user has logged in, so its 401'd
+     * registration was never retried — leaving the device unreachable for
+     * pushes and tracking wakes.
+     */
+    private fun syncFcmToken() {
+        if (fcmTokenSynced) return
+        fcmTokenSynced = true
+        try {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                if (token.isNullOrBlank()) return@addOnSuccessListener
+                prefs.fcmToken = token
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        ApiClient(applicationContext).registerFcmToken(token)
+                        Log.d(TAG, "FCM token registered with backend")
+                    } catch (e: Exception) {
+                        // Not logged in yet or offline — retry on a later page load.
+                        fcmTokenSynced = false
+                        Log.w(TAG, "FCM token registration failed (will retry)", e)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            fcmTokenSynced = false
+            Log.w(TAG, "FCM token fetch failed", e)
+        }
+    }
+
     private fun extractSessionToken() {
         val raw = CookieManager.getInstance().getCookie(WEB_URL) ?: return
         val targetNames = setOf("relatives_session", "session_token", "phpsessid", "token")
@@ -587,7 +644,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showTrialDialog() {
-        if (trialDialogShown || isFinishing) return
+        if (trialDialogShown || isFinishing || isDestroyed) return
         trialDialogShown = true
 
         AlertDialog.Builder(this)

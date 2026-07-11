@@ -153,6 +153,25 @@ class TrackingService : Service() {
                     context, Manifest.permission.ACCESS_COARSE_LOCATION,
                 ) == PackageManager.PERMISSION_GRANTED
 
+        fun hasBackgroundLocation(context: Context): Boolean =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+
+        /**
+         * Whether a broadcast receiver (running with the app in background)
+         * should revive the service. If the service is already running its
+         * while-in-use location grant stays valid, but a service *started*
+         * from the background without ACCESS_BACKGROUND_LOCATION never
+         * receives fixes — starting it would burn battery for nothing.
+         */
+        fun canReviveFromBackground(context: Context): Boolean =
+            isRunning || hasBackgroundLocation(context)
+
         private fun persistEnabled(context: Context, enabled: Boolean) {
             context.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
                 .edit().putBoolean("tracking_enabled", enabled).apply()
@@ -207,6 +226,15 @@ class TrackingService : Service() {
         val enabled = isTrackingEnabled(this)
         val hasPermission = hasLocationPermission(this)
 
+        // Stop requests arrive via plain startService (companion stop() and
+        // the notification action), which carries no foreground obligation —
+        // handle them before promotion so a stop on a dead service doesn't
+        // flash the tracking notification.
+        if (intent?.action == ACTION_STOP) {
+            doStop()
+            return START_NOT_STICKY
+        }
+
         // Rule 1: promote to foreground before anything else, on every path.
         if (!promoteToForeground(hasPermission)) {
             Log.w(TAG, "Cannot run as foreground service; shutting down.")
@@ -215,10 +243,6 @@ class TrackingService : Service() {
         }
 
         when (intent?.action) {
-            ACTION_STOP -> {
-                doStop()
-                return START_NOT_STICKY
-            }
             ACTION_START -> {
                 if (hasPermission) {
                     persistEnabled(this, true)

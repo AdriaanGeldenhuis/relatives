@@ -5,7 +5,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -74,15 +73,21 @@ class ApiClient(private val context: Context) {
     /**
      * Register (or update) the device FCM token with the backend so it can
      * send push notifications to this device.
+     *
+     * Endpoint contract (api/fcm/register.php): POST JSON
+     * { "token": ..., "device_type": "android" } with the session cookie.
+     * (The previous implementation posted form data to a nonexistent
+     * /api/notifications/register_token.php — tokens were never registered,
+     * so no pushes or tracking wakes ever reached Android devices.)
      */
     suspend fun registerFcmToken(token: String): JsonObject = withContext(Dispatchers.IO) {
-        val formBody = FormBody.Builder()
-            .add("token", token)
-            .add("platform", "android")
-            .build()
+        val body = JsonObject().apply {
+            addProperty("token", token)
+            addProperty("device_type", "android")
+        }
         val request = Request.Builder()
-            .url("${BASE_URL}notifications/register_token.php")
-            .post(formBody)
+            .url("${BASE_URL}fcm/register.php")
+            .post(gson.toJson(body).toRequestBody(JSON_MEDIA))
             .build()
         executeJson(request)
     }

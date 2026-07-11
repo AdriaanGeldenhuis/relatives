@@ -64,9 +64,17 @@ class PermissionGate(private val activity: ComponentActivity) {
             requestNotifications()
             return
         }
+        if (!canShowDialog()) {
+            callback(false)
+            return
+        }
         onResult = callback
         showProminentDisclosure()
     }
+
+    /** Dialogs on a finishing/destroyed activity throw BadTokenException. */
+    private fun canShowDialog(): Boolean =
+        !activity.isFinishing && !activity.isDestroyed
 
     private fun showProminentDisclosure() {
         AlertDialog.Builder(activity)
@@ -84,7 +92,7 @@ class PermissionGate(private val activity: ComponentActivity) {
     }
 
     private fun requestBackgroundLocation() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasBackgroundLocation()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasBackgroundLocation() && canShowDialog()) {
             AlertDialog.Builder(activity)
                 .setTitle(R.string.background_dialog_title)
                 .setMessage(R.string.background_dialog_message)
@@ -116,7 +124,7 @@ class PermissionGate(private val activity: ComponentActivity) {
     }
 
     fun requestNotifications() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission() && canShowDialog()) {
             AlertDialog.Builder(activity)
                 .setTitle(R.string.notification_dialog_title)
                 .setMessage(R.string.notification_dialog_message)

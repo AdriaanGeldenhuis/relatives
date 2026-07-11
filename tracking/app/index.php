@@ -459,7 +459,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             var initial = (m.name || 'U').charAt(0).toUpperCase();
             var hasLoc = m.has_location && m.lat !== null;
             var statusClass = hasLoc ? getStatusClass(m) : 'offline';
-            var timeAgo = hasLoc ? formatTimeAgo(m.updated_at || m.recorded_at) : 'No location';
+            var timeAgo = hasLoc ? formatTimeAgo(m.recorded_at || m.updated_at) : 'No location';
             var speed = hasLoc ? formatSpeed(m.speed_mps) : '';
 
             html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
@@ -542,7 +542,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function getStatusClass(m) {
-        var ts = parseUTC(m.updated_at || m.recorded_at);
+        var ts = parseUTC(m.recorded_at || m.updated_at);
         var diffMin = (Date.now() - ts) / 60000;
         if (diffMin < 5) return 'online';
         if (diffMin < 30) return 'idle';
@@ -579,7 +579,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var status = getStatusClass(m);
         var statusLabel = status === 'online' ? 'Online' : status === 'idle' ? 'Idle' : 'Offline';
         var statusColor = status === 'online' ? '#43e97b' : status === 'idle' ? '#f9d423' : '#718096';
-        var timeAgo = formatTimeAgo(m.updated_at || m.recorded_at);
+        var timeAgo = formatTimeAgo(m.recorded_at || m.updated_at);
         var speed = formatSpeed(m.speed_mps);
         var motionState = m.motion_state || 'unknown';
         var initial = (m.name || 'U').charAt(0).toUpperCase();
