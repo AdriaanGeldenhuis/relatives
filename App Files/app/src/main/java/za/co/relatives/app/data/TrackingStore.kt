@@ -32,9 +32,9 @@ class TrackingStore(context: Context) {
     companion object {
         /**
          * Family cache shared across ALL TrackingStore instances.
-         * MainActivity, TrackingActivity, TrackingViewModel and the workers
-         * each construct their own store; they must all see the same family
-         * snapshot or the native map reads a permanently empty cache.
+         * MainActivity, TrackingBridge and the workers each construct their
+         * own store; they must all see the same family snapshot or the map
+         * page reads a permanently empty cache.
          */
         private val familyCache = mutableMapOf<String, MemberLocation>()
 

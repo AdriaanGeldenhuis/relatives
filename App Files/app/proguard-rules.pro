@@ -59,11 +59,6 @@
 # ── Kotlin coroutines ─────────────────────────────────────────────────
 -dontwarn kotlinx.coroutines.**
 
-# ── osmdroid (OpenStreetMap map view) ─────────────────────────────────
-# Pure-Java library; only suppress warnings about its optional
-# integrations that are not on the classpath.
--dontwarn org.osmdroid.**
-
 # ── Android services & receivers ──────────────────────────────────────
 # Declared in manifest — keep findable.
 -keep class za.co.relatives.app.tracking.TrackingService
@@ -74,9 +69,6 @@
 
 # ── Application class ────────────────────────────────────────────────
 -keep class za.co.relatives.app.RelativesApplication { *; }
-
-# ── ViewModels (instantiated by reflection via ViewModelProvider) ────
--keep class za.co.relatives.app.ui.tracking.TrackingViewModel { *; }
 
 # ── Data classes used by Gson / JSON serialisation ───────────────────
 -keep class za.co.relatives.app.data.TrackingStore$MemberLocation { *; }

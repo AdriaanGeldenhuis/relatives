@@ -14,8 +14,8 @@ android {
         applicationId = "za.co.relatives.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -66,13 +66,6 @@ dependencies {
 
     // JSON serialisation
     implementation(libs.gson)
-
-    // osmdroid (OpenStreetMap, pure-Java native map)
-    implementation(libs.osmdroid)
-
-    // ViewModel + Navigation Compose
-    implementation(libs.lifecycle.viewmodel.compose)
-    implementation(libs.navigation.compose)
 
     // WorkManager for location upload
     implementation(libs.work.runtime.ktx)
