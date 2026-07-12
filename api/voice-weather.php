@@ -15,8 +15,7 @@ $tomorrow = $input['tomorrow'] ?? false;
 $apiKey = '563504b6b46d0e6bcf9a49e1cb6bc4f3';
 
 // Try to get user's location
-session_name('RELATIVES_SESSION');
-session_start();
+require_once __DIR__ . '/../core/session_boot.php';
 $lat = null;
 $lon = null;
 

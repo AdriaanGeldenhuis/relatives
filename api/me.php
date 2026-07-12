@@ -7,10 +7,7 @@
 declare(strict_types=1);
 
 // Start session with correct name to match bootstrap config
-if (session_status() === PHP_SESSION_NONE) {
-    session_name('RELATIVES_SESSION');
-    session_start();
-}
+require_once __DIR__ . '/../core/session_boot.php';
 
 // Set JSON response headers
 header('Content-Type: application/json; charset=utf-8');

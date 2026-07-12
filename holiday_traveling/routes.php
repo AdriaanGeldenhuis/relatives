@@ -6,10 +6,7 @@
 declare(strict_types=1);
 
 // Ensure session is started first
-if (session_status() === PHP_SESSION_NONE) {
-    session_name('RELATIVES_SESSION');
-    session_start();
-}
+require_once __DIR__ . '/../core/session_boot.php';
 
 // Load core bootstrap if not already loaded
 if (!class_exists('DB')) {

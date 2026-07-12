@@ -6,6 +6,7 @@ import android.util.Log
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
@@ -17,9 +18,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.mapbox.common.MapboxOptions
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import za.co.relatives.app.RelativesApplication
 import za.co.relatives.app.data.TrackingStore
+import za.co.relatives.app.network.ApiException
 import za.co.relatives.app.network.TrackingApiClient
 import za.co.relatives.app.tracking.FamilyPoller
 import za.co.relatives.app.tracking.PermissionGate
@@ -180,9 +183,9 @@ class TrackingActivity : ComponentActivity() {
             ?: PreferencesManager(this)
 
         val cached = prefs.mapboxToken
-        if (!cached.isNullOrBlank()) {
-            MapboxOptions.accessToken = cached
-            mapboxTokenReady = true
+        if (!cached.isNullOrBlank() && !applyMapboxToken(cached)) {
+            abortMapUnavailable()
+            return
         }
 
         if (tokenFetchInFlight) return
@@ -194,15 +197,58 @@ class TrackingActivity : ComponentActivity() {
                     ?.takeIf { it.isJsonPrimitive }?.asString
                 if (!token.isNullOrBlank()) {
                     prefs.mapboxToken = token
-                    MapboxOptions.accessToken = token
-                    mapboxTokenReady = true
+                    if (!applyMapboxToken(token)) abortMapUnavailable()
                 }
+            } catch (e: ApiException) {
+                if (e.httpCode == 401) {
+                    // Session expired/logged out: the native screen has no
+                    // login UI, so a stuck "Loading map…" is a dead end. Send
+                    // the user back to the WebView to sign in.
+                    Toast.makeText(
+                        this@TrackingActivity,
+                        "Your session has expired. Please log in again.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    finish()
+                } else {
+                    Log.w(TAG, "Mapbox token fetch failed (retried on next resume)", e)
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Mapbox token fetch failed (retried on next resume)", e)
             } finally {
                 tokenFetchInFlight = false
             }
         }
+    }
+
+    /**
+     * Set the Mapbox access token, tolerating native-loader failures
+     * (UnsatisfiedLinkError and friends are Errors, not Exceptions — an
+     * incompatible Mapbox native build must degrade gracefully, not kill
+     * the process the moment the user opens tracking).
+     */
+    private fun applyMapboxToken(token: String): Boolean =
+        try {
+            MapboxOptions.accessToken = token
+            mapboxTokenReady = true
+            true
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Log.e(TAG, "Mapbox native init failed", t)
+            false
+        }
+
+    /** Leave the tracking screen instead of showing a permanently dead map. */
+    private fun abortMapUnavailable() {
+        if (isFinishing || isDestroyed) return
+        Toast.makeText(
+            this,
+            "The map could not start on this device. Please update the app.",
+            Toast.LENGTH_LONG,
+        ).show()
+        finish()
     }
 
     private fun enterImmersiveMode() {

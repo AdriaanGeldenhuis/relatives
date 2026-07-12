@@ -10,25 +10,28 @@ declare(strict_types=1);
 // Start output buffering
 ob_start();
 
-// Start session with correct name and security settings
-if (session_status() === PHP_SESSION_NONE) {
-    ini_set('session.cookie_httponly', '1');
-    ini_set('session.cookie_secure', '1');
-    ini_set('session.cookie_samesite', 'Lax');
-    ini_set('session.use_strict_mode', '1');
-    session_name('RELATIVES_SESSION');
-    session_start();
+// Start session with correct name and security settings (shared helper —
+// also applies the 30-day gc_maxlifetime/cookie_lifetime the old inline
+// block was missing).
+require_once __DIR__ . '/core/session_boot.php';
+
+// Post-login redirect target (e.g. /login.php?redirect=%2Ftracking%2Fapp%2F
+// sent by tracking/index.php). Internal paths only: must start with a single
+// "/" (reject protocol-relative "//host" and backslash tricks) and carry no
+// CR/LF. Used by the already-logged-in shortcut AND the sign-in success page.
+$postLoginRedirect = $_POST['redirect'] ?? $_GET['redirect'] ?? '/home/';
+if (!is_string($postLoginRedirect)
+    || $postLoginRedirect === ''
+    || $postLoginRedirect[0] !== '/'
+    || (isset($postLoginRedirect[1]) && ($postLoginRedirect[1] === '/' || $postLoginRedirect[1] === '\\'))
+    || preg_match('/[\r\n]/', $postLoginRedirect)
+) {
+    $postLoginRedirect = '/home/';
 }
 
 // If already logged in, redirect immediately
 if (isset($_SESSION['user_id']) && !empty($_SESSION['user_id'])) {
-    // Respect redirect parameter if present
-    $redirect = $_GET['redirect'] ?? '/home/';
-    // Validate redirect is internal (starts with /)
-    if (empty($redirect) || $redirect[0] !== '/') {
-        $redirect = '/home/';
-    }
-    header('Location: ' . $redirect, true, 302);
+    header('Location: ' . $postLoginRedirect, true, 302);
     exit;
 }
 
@@ -74,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta http-equiv="Expires" content="0">
     
     <!-- META REFRESH FALLBACK - Redirects after 2 seconds if JavaScript fails -->
-    <meta http-equiv="refresh" content="2;url=/home/">
+    <meta http-equiv="refresh" content="2;url=<?php echo e($postLoginRedirect); ?>">
     
     <title>Logging in - Relatives</title>
     <style>
@@ -221,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         
         <!-- Manual link if redirect fails -->
-        <a href="/home/" class="manual-link" id="manualLink" style="display: none;">
+        <a href="<?php echo e($postLoginRedirect); ?>" class="manual-link" id="manualLink" style="display: none;">
             Click here if not redirected
         </a>
     </div>
@@ -259,21 +262,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             
+            // Where to land after login (validated server-side: internal path only)
+            var redirectTarget = <?php echo json_encode($postLoginRedirect, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+
             // Function to perform redirect
             function doRedirect() {
                 if (redirected) return;
                 redirected = true;
-                
-                console.log('🚀 Redirecting to /home/...');
+
+                console.log('🚀 Redirecting to ' + redirectTarget + '...');
                 document.getElementById('statusText').textContent = 'Redirecting...';
-                
+
                 // Try multiple redirect methods
                 try {
-                    window.location.replace('/home/');
+                    window.location.replace(redirectTarget);
                 } catch (e) {
                     console.error('Replace failed:', e);
                     try {
-                        window.location.href = '/home/';
+                        window.location.href = redirectTarget;
                     } catch (e2) {
                         console.error('Href failed:', e2);
                         // Show manual link as last resort
@@ -295,7 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Show manual link after 3 seconds if still not redirected
             setTimeout(function() {
-                if (!redirected && window.location.pathname !== '/home/') {
+                if (!redirected && window.location.pathname !== redirectTarget) {
                     console.error('❌ All automatic redirects failed');
                     document.getElementById('statusText').textContent = 'Redirect taking longer than expected...';
                     document.getElementById('manualLink').style.display = 'inline-block';
@@ -324,9 +330,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     <!-- Noscript fallback -->
     <noscript>
-        <meta http-equiv="refresh" content="0;url=/home/">
+        <meta http-equiv="refresh" content="0;url=<?php echo e($postLoginRedirect); ?>">
         <div style="text-align: center; padding: 20px;">
-            <p>JavaScript is disabled. <a href="/home/" style="color: white; text-decoration: underline;">Click here to continue</a></p>
+            <p>JavaScript is disabled. <a href="<?php echo e($postLoginRedirect); ?>" style="color: white; text-decoration: underline;">Click here to continue</a></p>
         </div>
     </noscript>
 </body>
@@ -882,6 +888,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
 
             <form method="POST" class="auth-form" id="loginForm">
+                <!-- Carry the post-login destination across the POST -->
+                <input type="hidden" name="redirect" value="<?php echo e($postLoginRedirect); ?>">
                 <div class="form-group">
                     <label for="email" class="form-label">Email Address</label>
                     <div class="input-wrapper">

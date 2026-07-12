@@ -1,10 +1,7 @@
 <?php
 declare(strict_types=1);
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_name('RELATIVES_SESSION');
-    session_start();
-}
+require_once __DIR__ . '/../../core/session_boot.php';
 
 if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
     header('Location: /login.php', true, 302);

@@ -859,7 +859,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
                 <span class="nav-text">Schedule</span>
             </a>
             
-            <a href="/tracking/" class="mobile-nav-link <?php echo $activePage === 'tracking' ? 'active' : ''; ?>">
+            <a href="/tracking/app/" class="mobile-nav-link <?php echo $activePage === 'tracking' ? 'active' : ''; ?>">
                 <span class="nav-icon">📍</span>
                 <span class="nav-text">Tracking</span>
             </a>

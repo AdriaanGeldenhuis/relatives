@@ -43,6 +43,7 @@ class FamilyPoller(context: Context, private val store: TrackingStore) {
     private val gson = Gson()
     private val fetchMutex = Mutex()
 
+    @Volatile
     private var scope: CoroutineScope? = null
     private var pollJob: Job? = null
 

@@ -7,10 +7,7 @@
 
 declare(strict_types=1);
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_name('RELATIVES_SESSION');
-    session_start();
-}
+require_once __DIR__ . '/../../../core/session_boot.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=600');

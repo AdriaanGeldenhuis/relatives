@@ -5,15 +5,14 @@ declare(strict_types=1);
  * Tracking Bootstrap
  * Loads core app bootstrap + tracking-specific classes
  *
- * IMPORTANT: Start session BEFORE core bootstrap.
- * The login flow stores session data under the default PHPSESSID cookie.
- * If bootstrap.php starts the session first, it uses RELATIVES_SESSION
- * cookie name, which reads from a different (empty) session.
+ * The session is started through the shared session_boot helper so the
+ * hardened ini settings (30-day gc_maxlifetime, strict mode, secure cookie)
+ * apply to these high-frequency endpoints too. A bare session_start() here
+ * ran with the php.ini default 24-minute gc_maxlifetime, and PHP's GC firing
+ * from the app's 15-second location polling deleted everyone's live
+ * 30-day sessions — users kept getting logged out.
  */
-if (session_status() === PHP_SESSION_NONE) {
-    session_name('RELATIVES_SESSION');
-    session_start();
-}
+require_once __DIR__ . '/../../core/session_boot.php';
 
 require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../../core/GeoUtils.php';

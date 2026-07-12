@@ -537,7 +537,7 @@
                     </svg>
                 </button>
     
-                <a href="/tracking/index.php" class="footer-btn tracking-btn">
+                <a href="/tracking/app/" class="footer-btn tracking-btn">
                  📍
                 </a>
                 

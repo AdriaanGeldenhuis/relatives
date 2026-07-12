@@ -5,8 +5,7 @@
  * Toggles reaction (add if not exists, remove if exists)
  */
 
-session_name('RELATIVES_SESSION');
-session_start();
+require_once __DIR__ . '/../../core/session_boot.php';
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id'])) {

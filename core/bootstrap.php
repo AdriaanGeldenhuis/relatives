@@ -12,38 +12,12 @@ ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 ini_set('error_log', __DIR__ . '/../logs/php_errors.log');
 
-// Session - SAFE initialization
-// Many files call session_start() before bootstrap loads. If session is already
-// active with the wrong name, migrate it to the correct RELATIVES_SESSION name
-// with proper security settings applied.
-if (session_status() === PHP_SESSION_ACTIVE && session_name() !== 'RELATIVES_SESSION') {
-    // Session already started with wrong name - save data, restart properly
-    $existingData = $_SESSION;
-    session_write_close();
-
-    ini_set('session.cookie_httponly', '1');
-    ini_set('session.cookie_secure', '1');
-    ini_set('session.cookie_samesite', 'Lax');
-    ini_set('session.use_strict_mode', '1');
-    ini_set('session.gc_maxlifetime', '2592000');
-    ini_set('session.cookie_lifetime', '2592000');
-    session_name('RELATIVES_SESSION');
-    session_start();
-
-    // Restore session data if current session is empty (migration)
-    if (empty($_SESSION) && !empty($existingData)) {
-        $_SESSION = $existingData;
-    }
-} elseif (session_status() === PHP_SESSION_NONE) {
-    ini_set('session.cookie_httponly', '1');
-    ini_set('session.cookie_secure', '1');
-    ini_set('session.cookie_samesite', 'Lax');
-    ini_set('session.use_strict_mode', '1');
-    ini_set('session.gc_maxlifetime', '2592000'); // 30 days
-    ini_set('session.cookie_lifetime', '2592000'); // 30 days
-    session_name('RELATIVES_SESSION');
-    session_start();
-}
+// Session - SAFE initialization (shared helper).
+// Many files call session_start() before bootstrap loads; they must all use
+// core/session_boot.php so the hardened ini settings are applied everywhere.
+// If a legacy file still started the session under the wrong name, the helper
+// migrates it to RELATIVES_SESSION with proper security settings applied.
+require_once __DIR__ . '/session_boot.php';
 
 // ============================================
 // CORS HANDLING - Consistent for native apps

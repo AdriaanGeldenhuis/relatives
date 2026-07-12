@@ -192,6 +192,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        // Persist cookies NOW. Chromium commits cookies to disk lazily; if the
+        // process dies while we're paused (e.g. a crash in TrackingActivity),
+        // a login cookie set since the last flush would be lost and the user
+        // silently logged out.
+        CookieManager.getInstance().flush()
+
         // Stop polling entirely in the background — the native cache keeps the
         // last known positions for instant render on return, and background
         // polling was pure battery/data drain.
@@ -370,6 +376,9 @@ class MainActivity : ComponentActivity() {
                 super.onPageFinished(view, url)
                 extractSessionToken()
                 syncCookiesToNative()
+                // Make the session cookie durable immediately — most
+                // importantly right after the login page sets it.
+                CookieManager.getInstance().flush()
                 syncFcmToken()
 
                 // Drive the poll rate from the real page URL. The page's own
@@ -396,9 +405,18 @@ class MainActivity : ComponentActivity() {
                 // Main-frame + real host + path prefix only: a foreign URL
                 // merely containing the substring must not trigger it.
                 if (request.isForMainFrame && internal &&
-                    uri.path?.startsWith("/tracking/app") == true
+                    uri.path?.startsWith("/tracking/app") == true &&
+                    hasSessionCookie()
                 ) {
+                    // Without a session cookie the native screen could only
+                    // 401 on every call — skipping the intercept lets the
+                    // server bounce the WebView to /login.php instead, and
+                    // the post-login redirect brings the user back here.
                     syncCookiesToNative()
+                    // Persist the WebView cookie store before handing over to
+                    // the native activity: if anything over there kills the
+                    // process, the login must survive.
+                    CookieManager.getInstance().flush()
                     startActivity(
                         Intent(this@MainActivity, TrackingActivity::class.java).apply {
                             putExtra(
@@ -495,8 +513,9 @@ class MainActivity : ComponentActivity() {
             // Intercept tracking deep links → launch native TrackingActivity,
             // but still give the WebView a page so backing out of the native
             // screen doesn't land on a blank activity.
-            if (deepLink.contains("/tracking/app")) {
+            if (deepLink.contains("/tracking/app") && hasSessionCookie()) {
                 webView.loadUrl(WEB_URL)
+                syncCookiesToNative()
                 launchTrackingActivity(deepLink)
                 return
             }
@@ -508,8 +527,11 @@ class MainActivity : ComponentActivity() {
 
     private fun handleDeepLink(intent: Intent?) {
         val actionUrl = intent?.getStringExtra("action_url") ?: return
-        // Intercept tracking deep links → launch native TrackingActivity
-        if (actionUrl.contains("/tracking/app")) {
+        // Intercept tracking deep links → launch native TrackingActivity.
+        // Logged out (no session cookie) → let the WebView navigate so the
+        // server redirects to the login page.
+        if (actionUrl.contains("/tracking/app") && hasSessionCookie()) {
+            syncCookiesToNative()
             launchTrackingActivity(actionUrl)
             return
         }
@@ -537,6 +559,11 @@ class MainActivity : ComponentActivity() {
      */
     private fun isRelativesHost(host: String?): Boolean =
         host == "relatives.co.za" || host?.endsWith(".relatives.co.za") == true
+
+    /** True when the WebView cookie store currently holds a session cookie. */
+    private fun hasSessionCookie(): Boolean =
+        CookieManager.getInstance().getCookie(WEB_URL)
+            ?.contains("RELATIVES_SESSION=") == true
 
     // ════════════════════════════════════════════════════════════════════
     //  IMMERSIVE MODE
@@ -680,7 +707,11 @@ class MainActivity : ComponentActivity() {
 
     private fun extractSessionToken() {
         val raw = CookieManager.getInstance().getCookie(WEB_URL) ?: return
-        val targetNames = setOf("relatives_session", "session_token", "phpsessid", "token")
+        // ONLY the real session cookie. Matching loose names like "token" or
+        // "phpsessid" let an unrelated cookie be persisted and later replayed
+        // as RELATIVES_SESSION by NetworkClient.seedFromPreferences, breaking
+        // background auth.
+        val targetNames = setOf("relatives_session")
         raw.split(";").forEach { segment ->
             val parts = segment.trim().split("=", limit = 2)
             if (parts.size == 2 && parts[0].trim().lowercase() in targetNames) {

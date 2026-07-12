@@ -7,11 +7,10 @@
  */
 declare(strict_types=1);
 
-session_name('RELATIVES_SESSION');
-session_start();
+require_once __DIR__ . '/../../core/session_boot.php';
 
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
+    header('Location: /login.php?redirect=' . rawurlencode('/tracking/app/geofences.php'));
     exit;
 }
 
@@ -20,7 +19,7 @@ require_once __DIR__ . '/../../core/bootstrap.php';
 $auth = new Auth($db);
 $user = $auth->getCurrentUser();
 if (!$user) {
-    header('Location: /login.php');
+    header('Location: /login.php?redirect=' . rawurlencode('/tracking/app/geofences.php'));
     exit;
 }
 

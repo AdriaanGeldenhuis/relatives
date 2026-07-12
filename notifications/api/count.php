@@ -9,10 +9,7 @@ header('Cache-Control: private, no-store, max-age=0');
 header('CDN-Cache-Control: no-store');
 
 // Start session if not already started
-if (session_status() === PHP_SESSION_NONE) {
-    session_name('RELATIVES_SESSION');
-    session_start();
-}
+require_once __DIR__ . '/../../core/session_boot.php';
 
 // ==========================================
 // NATIVE APP AUTH PATCH - CRITICAL FIX

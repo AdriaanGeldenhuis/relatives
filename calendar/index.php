@@ -3,8 +3,7 @@
  * RELATIVES - CALENDAR - WITH NOTIFICATIONS
  */
 
-session_name('RELATIVES_SESSION');
-session_start();
+require_once __DIR__ . '/../core/session_boot.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: /login.php');

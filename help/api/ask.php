@@ -10,10 +10,7 @@ declare(strict_types=1);
 header('Content-Type: application/json');
 
 // Start session
-if (session_status() === PHP_SESSION_NONE) {
-    session_name('RELATIVES_SESSION');
-    session_start();
-}
+require_once __DIR__ . '/../../core/session_boot.php';
 
 // Session check
 if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
