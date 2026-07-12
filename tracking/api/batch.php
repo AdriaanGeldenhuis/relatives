@@ -35,7 +35,6 @@ $geofenceRepo = new GeofenceRepo($db, $trackingCache);
 $placesRepo = new PlacesRepo($db, $trackingCache);
 $geofenceEngine = new GeofenceEngine($db, $trackingCache, $geofenceRepo, $placesRepo, $eventsRepo, $alertsEngine);
 
-$minAccuracy = (float) ($settings['min_accuracy_m'] ?? 100);
 $dedupe = new Dedupe(
     $trackingCache,
     (int) ($settings['dedupe_radius_m'] ?? 10),
