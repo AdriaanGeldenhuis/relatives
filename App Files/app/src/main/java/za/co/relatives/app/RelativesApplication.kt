@@ -23,5 +23,16 @@ class RelativesApplication : Application() {
         } catch (e: Exception) {
             Log.e("RelativesApp", "Notification channels init failed", e)
         }
+        try {
+            // osmdroid setup for the native tracking map. load() points the
+            // tile cache at app-private storage; a real user agent is
+            // required by the OpenStreetMap tile usage policy (the default
+            // one gets HTTP 403 from the tile servers).
+            val osmConfig = org.osmdroid.config.Configuration.getInstance()
+            osmConfig.load(this, getSharedPreferences("osmdroid", MODE_PRIVATE))
+            osmConfig.userAgentValue = packageName
+        } catch (e: Exception) {
+            Log.e("RelativesApp", "osmdroid config init failed", e)
+        }
     }
 }

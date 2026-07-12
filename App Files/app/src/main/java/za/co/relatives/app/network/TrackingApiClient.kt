@@ -154,14 +154,6 @@ class TrackingApiClient(context: Context) {
         executeJson(request)
     }
 
-    // -- Config -----------------------------------------------------------
-
-    /** Public Mapbox token for the native map (auth-gated on the server). */
-    suspend fun getMapboxToken(): JsonObject = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url("$BASE/mapbox_token.php").get().build()
-        executeJson(request)
-    }
-
     // -- Wake devices -----------------------------------------------------
 
     suspend fun wakeDevices(): JsonObject = withContext(Dispatchers.IO) {

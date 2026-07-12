@@ -1,8 +1,11 @@
 package za.co.relatives.app.ui.tracking
 
 import android.graphics.Color as AndroidColor
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.util.Log
-import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -47,42 +50,36 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.mapbox.geojson.Point
-import com.mapbox.maps.CameraOptions
-import com.mapbox.maps.MapView
-import com.mapbox.maps.Style
-import com.mapbox.maps.plugin.annotation.annotations
-import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
-import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
-import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.CustomZoomButtonsController
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.CopyrightOverlay
+import org.osmdroid.views.overlay.Marker
 import za.co.relatives.app.data.TrackingStore
 
 /**
  * Main tracking map screen — replaces the WebView map.
  *
- * Shows a fullscreen Mapbox map with family member pins and
- * a bottom sheet family panel.
+ * Shows a fullscreen OpenStreetMap (osmdroid) map with family member pins
+ * and a bottom sheet family panel. osmdroid is pure Java: no bundled
+ * native libraries, no access token, no native-loader failure modes.
  */
 @Composable
 fun TrackingMapScreen(
     viewModel: TrackingViewModel,
-    mapboxTokenReady: Boolean,
     onNavigateToEvents: () -> Unit,
     onNavigateToGeofences: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onBack: () -> Unit,
     onRequestPermissions: (() -> Unit)? = null,
-    onMapInitFailed: () -> Unit = {},
 ) {
     val members by viewModel.members.collectAsState()
     val trackingEnabled by viewModel.trackingEnabled.collectAsState()
     var showPanel by remember { mutableStateOf(true) }
     var selectedMember by remember { mutableStateOf<TrackingStore.MemberLocation?>(null) }
     var mapView by remember { mutableStateOf<MapView?>(null) }
-    // ONE annotation manager for the MapView's lifetime. Creating a new one
-    // per update leaks a map layer each time and eventually kills the
-    // renderer.
-    var annotationManager by remember { mutableStateOf<CircleAnnotationManager?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.pollNow()
@@ -101,87 +98,75 @@ fun TrackingMapScreen(
             val mv = mapView
             if (located.isNotEmpty() && mv != null) {
                 viewModel.didInitialCameraFit = true
-                val avgLat = located.mapNotNull { it.lat }.average()
-                val avgLng = located.mapNotNull { it.lng }.average()
-                val cam = CameraOptions.Builder()
-                    .center(Point.fromLngLat(avgLng, avgLat))
-                    .zoom(if (located.size == 1) 13.0 else 10.0)
-                    .build()
-                mv.mapboxMap.setCamera(cam)
-                viewModel.savedCamera = cam
+                try {
+                    if (located.size == 1) {
+                        mv.controller.setZoom(13.0)
+                        mv.controller.setCenter(GeoPoint(located[0].lat!!, located[0].lng!!))
+                    } else {
+                        val box = BoundingBox.fromGeoPoints(
+                            located.map { GeoPoint(it.lat!!, it.lng!!) }
+                        ).increaseByScale(1.4f)
+                        // zoomToBoundingBox needs a measured view; before the
+                        // first layout pass defer it with post {}.
+                        if (mv.width > 0 && mv.height > 0) {
+                            mv.zoomToBoundingBox(box, false)
+                        } else {
+                            mv.post { runCatching { mv.zoomToBoundingBox(box, false) } }
+                        }
+                    }
+                } catch (t: Throwable) {
+                    Log.w("TrackingMapScreen", "Initial camera fit skipped", t)
+                }
             }
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Mapbox Map — only once the access token is available; MapView
-        // creation without a token renders nothing (or throws).
-        if (mapboxTokenReady) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { context ->
-                    // MapView construction is the first touch of the Mapbox
-                    // renderer; a native-init failure here is an Error, not
-                    // an Exception, and uncaught it kills the whole process.
-                    try {
-                        MapView(context).also { mv ->
-                            mapView = mv
-                            annotationManager = mv.annotations.createCircleAnnotationManager()
-                            mv.mapboxMap.loadStyle(Style.DARK) {
-                                // Restore the previous camera (nav round trip) or
-                                // default to South Africa on first creation.
-                                mv.mapboxMap.setCamera(
-                                    viewModel.savedCamera ?: CameraOptions.Builder()
-                                        .center(Point.fromLngLat(28.0473, -26.2041))
-                                        .zoom(10.0)
-                                        .build()
-                                )
-                            }
-                        }
-                    } catch (t: Throwable) {
-                        Log.e("TrackingMapScreen", "MapView creation failed", t)
-                        // If construction got far enough to assign state, drop
-                        // it: the orphaned MapView never attaches, and
-                        // onRelease will only ever see the fallback view.
-                        try { mapView?.onDestroy() } catch (_: Throwable) {}
-                        mapView = null
-                        annotationManager = null
-                        onMapInitFailed()
-                        FrameLayout(context)
-                    }
-                },
-                update = {
-                    updateMapAnnotations(annotationManager, members)
-                },
-                onRelease = { view ->
-                    // AndroidView only detaches; without an explicit destroy the
-                    // MapView (GL context, tile cache) leaks on every nav round
-                    // trip until the activity dies — eventually OOM.
-                    (view as? MapView)?.let { mv ->
-                        viewModel.savedCamera = mv.mapboxMap.cameraState.let { s ->
-                            CameraOptions.Builder()
-                                .center(s.center)
-                                .zoom(s.zoom)
-                                .bearing(s.bearing)
-                                .pitch(s.pitch)
-                                .build()
-                        }
-                        mv.onDestroy()
-                    }
-                    mapView = null
-                    annotationManager = null
-                },
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF11111F)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Loading map…", color = Color(0xFF9CA3AF), fontSize = 14.sp)
-            }
-        }
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context ->
+                MapView(context).also { mv ->
+                    mv.setTileSource(TileSourceFactory.MAPNIK)
+                    mv.setMultiTouchControls(true)
+                    mv.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+                    mv.isTilesScaledToDpi = true
+                    mv.minZoomLevel = 3.0
+                    // Dark map to match the rest of the tracking UI: invert
+                    // the tile colours (the standard osmdroid dark mode).
+                    mv.overlayManager.tilesOverlay.setColorFilter(DarkTileFilter)
+                    // OpenStreetMap tiles legally require attribution —
+                    // white text so it stays readable on the inverted tiles.
+                    mv.overlays.add(CopyrightOverlay(context).apply {
+                        setTextColor(AndroidColor.WHITE)
+                    })
+                    // Restore the previous camera (nav round trip) or default
+                    // to South Africa on first creation.
+                    val cam = viewModel.savedCamera
+                    mv.controller.setZoom(cam?.zoom ?: 10.0)
+                    mv.controller.setCenter(GeoPoint(cam?.lat ?: -26.2041, cam?.lng ?: 28.0473))
+                    mapView = mv
+                }
+            },
+            update = { mv ->
+                updateMemberMarkers(mv, members) { member ->
+                    selectedMember = member
+                }
+            },
+            onRelease = { mv ->
+                // AndroidView only detaches; osmdroid needs an explicit
+                // onDetach to free its tile provider, or every nav round
+                // trip leaks it until the activity dies.
+                runCatching {
+                    viewModel.savedCamera = TrackingViewModel.SavedCamera(
+                        lat = mv.mapCenter.latitude,
+                        lng = mv.mapCenter.longitude,
+                        zoom = mv.zoomLevelDouble,
+                    )
+                }
+                runCatching { mv.onDetach() }
+                mapView = null
+            },
+        )
 
         // Top bar overlay
         Column(
@@ -240,12 +225,9 @@ fun TrackingMapScreen(
                     val lng = member.lng
                     if (lat != null && lng != null) {
                         mapView?.let { mv ->
-                            mv.mapboxMap.setCamera(
-                                CameraOptions.Builder()
-                                    .center(Point.fromLngLat(lng, lat))
-                                    .zoom(15.0)
-                                    .build()
-                            )
+                            runCatching {
+                                mv.controller.animateTo(GeoPoint(lat, lng), 15.0, null)
+                            }
                         }
                     }
                 },
@@ -275,6 +257,79 @@ fun TrackingMapScreen(
                 fontSize = 14.sp,
             )
         }
+    }
+}
+
+// ── osmdroid helpers (shared with the geofence mini-maps) ────────────────
+
+/**
+ * Colour-inversion filter for map tiles — the standard osmdroid dark mode,
+ * matching the dark tracking UI.
+ */
+internal val DarkTileFilter = ColorMatrixColorFilter(
+    ColorMatrix(
+        floatArrayOf(
+            -1f, 0f, 0f, 0f, 255f,
+            0f, -1f, 0f, 0f, 255f,
+            0f, 0f, -1f, 0f, 255f,
+            0f, 0f, 0f, 1f, 0f,
+        )
+    )
+)
+
+/** Round pin drawable, drawn in code — no image resources needed. */
+internal fun memberPinDrawable(density: Float, colorInt: Int): Drawable =
+    GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(colorInt)
+        setStroke((3 * density).toInt().coerceAtLeast(1), AndroidColor.WHITE)
+        setSize((22 * density).toInt(), (22 * density).toInt())
+    }
+
+internal fun parseMemberColor(avatarColor: String?): Int =
+    avatarColor?.let {
+        try {
+            AndroidColor.parseColor(it)
+        } catch (_: Exception) {
+            null
+        }
+    } ?: AndroidColor.parseColor("#667eea")
+
+private const val MEMBER_MARKER_ID_PREFIX = "member:"
+
+/**
+ * Replace the member pins on the map with the current family locations.
+ * Runs on every members update (~every few seconds) — markers are cheap
+ * view-less overlays, so rebuild-instead-of-diff keeps this simple.
+ */
+private fun updateMemberMarkers(
+    mv: MapView,
+    members: List<TrackingStore.MemberLocation>,
+    onTap: (TrackingStore.MemberLocation) -> Unit,
+) {
+    try {
+        val density = mv.resources.displayMetrics.density
+        mv.overlays.removeAll { it is Marker && it.id?.startsWith(MEMBER_MARKER_ID_PREFIX) == true }
+        members.forEach { member ->
+            val lat = member.lat ?: return@forEach
+            val lng = member.lng ?: return@forEach
+            val marker = Marker(mv)
+            marker.id = MEMBER_MARKER_ID_PREFIX + member.memberId
+            marker.position = GeoPoint(lat, lng)
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            marker.icon = memberPinDrawable(density, parseMemberColor(member.avatarColor))
+            marker.title = member.name
+            // No info-window bubble: the bottom family panel is the detail UI.
+            marker.infoWindow = null
+            marker.setOnMarkerClickListener { _, _ ->
+                onTap(member)
+                true
+            }
+            mv.overlays.add(marker)
+        }
+        mv.invalidate()
+    } catch (t: Throwable) {
+        Log.w("TrackingMapScreen", "Marker update skipped", t)
     }
 }
 
@@ -369,9 +424,7 @@ private fun MemberCard(
     onClick: () -> Unit,
 ) {
     val bgColor = if (isSelected) Color(0xFF667eea) else Color(0xFF2D2D44)
-    val memberColor = member.avatarColor?.let {
-        try { Color(AndroidColor.parseColor(it)) } catch (_: Exception) { null }
-    } ?: Color(0xFF667eea)
+    val memberColor = Color(parseMemberColor(member.avatarColor))
 
     Card(
         modifier = Modifier
@@ -427,36 +480,6 @@ private fun MemberCard(
                 )
             }
         }
-    }
-}
-
-private fun updateMapAnnotations(
-    manager: CircleAnnotationManager?,
-    members: List<TrackingStore.MemberLocation>,
-) {
-    manager ?: return
-    try {
-        manager.deleteAll()
-        members.forEach { member ->
-            val lat = member.lat ?: return@forEach
-            val lng = member.lng ?: return@forEach
-            val color = member.avatarColor?.let {
-                try { AndroidColor.parseColor(it) } catch (_: Exception) { null }
-            } ?: AndroidColor.parseColor("#667eea")
-
-            manager.create(
-                CircleAnnotationOptions()
-                    .withPoint(Point.fromLngLat(lng, lat))
-                    .withCircleRadius(10.0)
-                    .withCircleColor(color)
-                    .withCircleStrokeWidth(3.0)
-                    .withCircleStrokeColor(AndroidColor.WHITE)
-            )
-        }
-    } catch (t: Throwable) {
-        // Map not yet ready — Mapbox annotation calls can also surface
-        // native-init Errors, which must not escape.
-        Log.w("TrackingMapScreen", "Annotation update skipped", t)
     }
 }
 

@@ -38,9 +38,12 @@ class TrackingViewModel(application: Application) : AndroidViewModel(application
     private val _members = MutableStateFlow(store.getFamilyLocations())
     val members: StateFlow<List<TrackingStore.MemberLocation>> = _members.asStateFlow()
 
+    /** Plain camera snapshot — deliberately no map-SDK types in the ViewModel. */
+    data class SavedCamera(val lat: Double, val lng: Double, val zoom: Double)
+
     /** Camera state preserved across map-screen recompositions (nav round trips). */
     var didInitialCameraFit = false
-    var savedCamera: com.mapbox.maps.CameraOptions? = null
+    var savedCamera: SavedCamera? = null
 
     private var pollJob: Job? = null
     private var activePollInterval = 5_000L

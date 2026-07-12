@@ -59,6 +59,11 @@
 # ── Kotlin coroutines ─────────────────────────────────────────────────
 -dontwarn kotlinx.coroutines.**
 
+# ── osmdroid (OpenStreetMap map view) ─────────────────────────────────
+# Pure-Java library; only suppress warnings about its optional
+# integrations that are not on the classpath.
+-dontwarn org.osmdroid.**
+
 # ── Android services & receivers ──────────────────────────────────────
 # Declared in manifest — keep findable.
 -keep class za.co.relatives.app.tracking.TrackingService

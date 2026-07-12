@@ -46,14 +46,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.mapbox.geojson.Point
-import com.mapbox.maps.CameraOptions
-import com.mapbox.common.MapboxOptions
-import com.mapbox.maps.MapView
-import com.mapbox.maps.Style
-import com.mapbox.maps.plugin.annotation.annotations
-import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
-import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.CustomZoomButtonsController
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
 
 @Composable
 fun GeofencesScreen(
@@ -270,12 +267,10 @@ private fun GeofenceCard(
                 )
             }
 
-            // Mini map preview — only for circle zones with a real centre, and
-            // only once the Mapbox token is set (otherwise the MapView renders
-            // blank). Each row owns a MapView, so it MUST be destroyed when the
-            // row is recycled or LazyColumn scrolling leaks GL contexts.
-            val hasToken = remember { !MapboxOptions.accessToken.isNullOrBlank() }
-            if (hasToken && geofence.centerLat != 0.0 && geofence.centerLng != 0.0) {
+            // Mini map preview — only for circle zones with a real centre.
+            // Each row owns a MapView, so it MUST be detached when the row
+            // is recycled or LazyColumn scrolling leaks tile providers.
+            if (geofence.centerLat != 0.0 && geofence.centerLng != 0.0) {
                 Spacer(Modifier.height(8.dp))
                 AndroidView(
                     modifier = Modifier
@@ -284,32 +279,37 @@ private fun GeofenceCard(
                         .clip(RoundedCornerShape(8.dp)),
                     factory = { context ->
                         MapView(context).also { mv ->
-                            mv.mapboxMap.loadStyle(Style.DARK) {
-                                mv.mapboxMap.setCamera(
-                                    CameraOptions.Builder()
-                                        .center(Point.fromLngLat(geofence.centerLng, geofence.centerLat))
-                                        .zoom(
-                                            if (geofence.type == "circle") {
-                                                (16.0 - kotlin.math.ln(geofence.radiusM / 100.0) / kotlin.math.ln(2.0)).coerceIn(10.0, 16.0)
-                                            } else 14.0
-                                        )
-                                        .build()
+                            mv.setTileSource(TileSourceFactory.MAPNIK)
+                            // Static preview: no gestures, no zoom buttons.
+                            mv.setMultiTouchControls(false)
+                            mv.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+                            mv.isTilesScaledToDpi = true
+                            mv.overlayManager.tilesOverlay.setColorFilter(DarkTileFilter)
+                            mv.controller.setZoom(
+                                if (geofence.type == "circle") {
+                                    (16.0 - kotlin.math.ln(geofence.radiusM / 100.0) / kotlin.math.ln(2.0)).coerceIn(10.0, 16.0)
+                                } else 14.0
+                            )
+                            mv.controller.setCenter(GeoPoint(geofence.centerLat, geofence.centerLng))
+                            try {
+                                val marker = Marker(mv)
+                                marker.position = GeoPoint(geofence.centerLat, geofence.centerLng)
+                                marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                                marker.icon = memberPinDrawable(
+                                    context.resources.displayMetrics.density,
+                                    android.graphics.Color.parseColor("#667eea"),
                                 )
-                                try {
-                                    val am = mv.annotations.createCircleAnnotationManager()
-                                    am.create(
-                                        CircleAnnotationOptions()
-                                            .withPoint(Point.fromLngLat(geofence.centerLng, geofence.centerLat))
-                                            .withCircleRadius(8.0)
-                                            .withCircleColor(android.graphics.Color.parseColor("#667eea"))
-                                            .withCircleStrokeWidth(2.0)
-                                            .withCircleStrokeColor(android.graphics.Color.WHITE)
-                                    )
-                                } catch (_: Exception) {}
-                            }
+                                marker.infoWindow = null
+                                mv.overlays.add(marker)
+                            } catch (_: Exception) {}
+                            // Truly static: swallow all touches so the preview
+                            // can't be panned and doesn't fight LazyColumn
+                            // scrolling (setMultiTouchControls only disables
+                            // pinch-zoom).
+                            mv.setOnTouchListener { _, _ -> true }
                         }
                     },
-                    onRelease = { it.onDestroy() },
+                    onRelease = { runCatching { it.onDetach() } },
                 )
             }
         }

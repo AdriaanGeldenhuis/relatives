@@ -1,6 +1,5 @@
 package za.co.relatives.app.ui.tracking
 
-import android.app.AlertDialog
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -11,16 +10,11 @@ import android.webkit.CookieManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.mapbox.common.MapboxOptions
-import com.mapbox.maps.CameraOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import za.co.relatives.app.RelativesApplication
@@ -39,6 +33,10 @@ import za.co.relatives.app.utils.PreferencesManager
  * Hosts all tracking screens (Map, Events, Geofences, Settings)
  * using Jetpack Compose navigation. Completely replaces the WebView
  * for all /tracking/app/ pages.
+ *
+ * The map is osmdroid (OpenStreetMap): pure Java, no bundled native
+ * libraries and no access token, so there is no native-loader failure
+ * mode — the screen renders unconditionally.
  *
  * The existing TrackingService, FamilyPoller, TrackingStore, and
  * LocationUploadWorker continue to work exactly as before — this
@@ -69,15 +67,7 @@ class TrackingActivity : ComponentActivity() {
     private lateinit var permissionGate: PermissionGate
     private lateinit var familyPoller: FamilyPoller
 
-    /**
-     * Mapbox refuses to create a MapView without an access token. The token
-     * is the site's public token, fetched once from the server and cached;
-     * the map area shows a loading state until it is available.
-     */
-    private var mapboxTokenReady by mutableStateOf(false)
-    private var tokenFetchInFlight = false
-    private var abortDialogShowing = false
-    private var abortDialog: AlertDialog? = null
+    private var sessionCheckInFlight = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,7 +86,7 @@ class TrackingActivity : ComponentActivity() {
         // Register permission launchers before onStart
         permissionGate.registerLaunchers()
 
-        bootstrapMapboxToken()
+        verifySession()
 
         enterImmersiveMode()
 
@@ -111,7 +101,6 @@ class TrackingActivity : ComponentActivity() {
                     composable("map") {
                         TrackingMapScreen(
                             viewModel = viewModel,
-                            mapboxTokenReady = mapboxTokenReady,
                             onNavigateToEvents = { navController.navigate("events") },
                             onNavigateToGeofences = { navController.navigate("geofences") },
                             onNavigateToSettings = { navController.navigate("settings") },
@@ -123,7 +112,6 @@ class TrackingActivity : ComponentActivity() {
                                     }
                                 }
                             },
-                            onMapInitFailed = { abortMapUnavailable() },
                         )
                     }
                     composable("events") {
@@ -158,10 +146,9 @@ class TrackingActivity : ComponentActivity() {
         familyPoller.setActive(true)
         familyPoller.pollNow()
         viewModel.pollNow()
-        // Retry the token fetch if the first attempt failed (offline start).
-        if (!mapboxTokenReady) {
-            bootstrapMapboxToken()
-        }
+        // Re-check the session when coming back to the foreground (covers
+        // entering offline and the session dying while backgrounded).
+        verifySession()
     }
 
     override fun onPause() {
@@ -178,50 +165,30 @@ class TrackingActivity : ComponentActivity() {
         if (::permissionGate.isInitialized) {
             permissionGate.dismissDialogs()
         }
-        abortDialog?.dismiss()
-        abortDialog = null
         super.onDestroy()
     }
 
     /**
-     * Ensure MapboxOptions.accessToken is set: use the cached copy instantly,
-     * then refresh from the server (the same public token the web map uses,
-     * exposed to authenticated users via /tracking/api/mapbox_token.php).
+     * One-shot cheap authenticated ping at entry. The map itself needs no
+     * token or network, but with a dead server session every data call 401s
+     * and the screen would just sit empty forever — and because
+     * MainActivity's intercept only checks that a session cookie EXISTS,
+     * the user would bounce into this dead screen on every tracking press
+     * with no path to the login page. Detect it once here and route the
+     * user to login instead. Network failures do NOT block entry: cached
+     * family data still renders offline.
      */
-    private fun bootstrapMapboxToken() {
-        val prefs = (application as? RelativesApplication)?.preferencesManager
-            ?: PreferencesManager(this)
-
-        val cached = prefs.mapboxToken
-        if (!cached.isNullOrBlank() && !applyMapboxToken(cached)) {
-            abortMapUnavailable()
-            return
-        }
-
-        if (tokenFetchInFlight) return
-        tokenFetchInFlight = true
+    private fun verifySession() {
+        if (sessionCheckInFlight) return
+        sessionCheckInFlight = true
         lifecycleScope.launch {
             try {
-                val result = TrackingApiClient(applicationContext).getMapboxToken()
-                val token = result.getAsJsonObject("data")?.get("token")
-                    ?.takeIf { it.isJsonPrimitive }?.asString
-                if (!token.isNullOrBlank()) {
-                    prefs.mapboxToken = token
-                    if (!applyMapboxToken(token)) abortMapUnavailable()
-                }
+                TrackingApiClient(applicationContext).getSessionStatus()
             } catch (e: ApiException) {
                 if (e.httpCode == 401) {
-                    // Session expired/logged out. This fetch only runs at
-                    // screen entry, so a 401 always means the session was
-                    // already dead when the user pressed tracking — even a
-                    // map brought up by the cached token could only ever
-                    // show empty data (every poll 401s too). The native
-                    // screen has no login UI, so drop the dead session
-                    // cookie before leaving: MainActivity's intercept only
-                    // checks that the cookie EXISTS, and leaving it behind
-                    // would relaunch this screen (and 401 again) on every
-                    // tracking press instead of letting the server redirect
-                    // the WebView to /login.php.
+                    // Drop the dead session cookie before leaving so the
+                    // next tracking press falls through to the WebView and
+                    // the server redirects it to /login.php.
                     expireDeadSession()
                     Toast.makeText(
                         this@TrackingActivity,
@@ -230,42 +197,18 @@ class TrackingActivity : ComponentActivity() {
                     ).show()
                     finish()
                 } else {
-                    Log.w(TAG, "Mapbox token fetch failed (retried on next resume)", e)
+                    Log.w(TAG, "Session check failed (http ${e.httpCode}), continuing", e)
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Mapbox token fetch failed (retried on next resume)", e)
+                // Offline start etc. — the screen still works from cache.
+                Log.w(TAG, "Session check skipped", e)
             } finally {
-                tokenFetchInFlight = false
+                sessionCheckInFlight = false
             }
         }
     }
-
-    /**
-     * Set the Mapbox access token, tolerating native-loader failures
-     * (UnsatisfiedLinkError and friends are Errors, not Exceptions — an
-     * incompatible Mapbox native build must degrade gracefully, not kill
-     * the process the moment the user opens tracking).
-     */
-    private fun applyMapboxToken(token: String): Boolean =
-        try {
-            MapboxOptions.accessToken = token
-            // MapboxOptions lives in com.mapbox.common and only loads
-            // libmapbox-common.so. The renderer's libmapbox-maps.so loads
-            // lazily on the first touch of a com.mapbox.maps class — which
-            // is otherwise MapView(context) inside the AndroidView factory,
-            // where an ExceptionInInitializerError escapes every guard and
-            // kills the process. Touch a cheap maps class here so BOTH
-            // native libraries load (or fail) under this catch.
-            CameraOptions.Builder().build()
-            mapboxTokenReady = true
-            true
-        } catch (t: Throwable) {
-            if (t is CancellationException) throw t
-            Log.e(TAG, "Mapbox native init failed", t)
-            false
-        }
 
     /**
      * The server said this session is dead. Drop every client-side copy of
@@ -289,21 +232,6 @@ class TrackingActivity : ComponentActivity() {
         val prefs = (application as? RelativesApplication)?.preferencesManager
             ?: PreferencesManager(this)
         prefs.sessionToken = null
-    }
-
-    /**
-     * Leave the tracking screen instead of showing a permanently dead map.
-     * A dialog, not a toast: this exit is otherwise indistinguishable from
-     * a crash for the user, and the reason must be readable.
-     */
-    private fun abortMapUnavailable() {
-        if (abortDialogShowing || isFinishing || isDestroyed) return
-        abortDialogShowing = true
-        abortDialog = AlertDialog.Builder(this)
-            .setMessage("The map could not start on this device. Please update the app.")
-            .setPositiveButton(android.R.string.ok) { _, _ -> finish() }
-            .setOnCancelListener { finish() }
-            .show()
     }
 
     private fun enterImmersiveMode() {
