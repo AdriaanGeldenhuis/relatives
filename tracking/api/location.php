@@ -69,10 +69,9 @@ if ($isBatch) {
             continue;
         }
 
-        // Accuracy check
-        $platform = $loc['platform'] ?? '';
-        $isWebPlatform = in_array($platform, ['web', 'android-webview'], true);
-        if (!$isWebPlatform && $loc['accuracy_m'] !== null && $loc['accuracy_m'] > $minAccuracy) {
+        // Accuracy is a quality hint, not a reason to drop a fix — a 150m
+        // dot beats no dot. Store everything except garbage cell-tower fixes.
+        if ($loc['accuracy_m'] !== null && $loc['accuracy_m'] > 2000) {
             $results[] = ['index' => $i, 'status' => 'skipped', 'reason' => 'accuracy_too_low'];
             continue;
         }
@@ -124,13 +123,10 @@ if ($isBatch) {
         Response::error(implode('; ', $validator->getErrors()), 422);
     }
 
-    // Accuracy check - skip for browser/webview uploads
-    $platform = $loc['platform'] ?? '';
-    $isWebPlatform = in_array($platform, ['web', 'android-webview'], true);
-    if (!$isWebPlatform && $loc['accuracy_m'] !== null) {
-        if ($loc['accuracy_m'] > $minAccuracy) {
-            Response::error('accuracy_too_low: ' . $loc['accuracy_m'] . 'm > ' . $minAccuracy . 'm', 422);
-        }
+    // Accuracy is a quality hint, not a reason to drop a fix — a 150m dot
+    // beats no dot. Only reject garbage cell-tower fixes.
+    if ($loc['accuracy_m'] !== null && $loc['accuracy_m'] > 2000) {
+        Response::error('accuracy_too_low: ' . $loc['accuracy_m'] . 'm', 422);
     }
 
     // Rate limit check

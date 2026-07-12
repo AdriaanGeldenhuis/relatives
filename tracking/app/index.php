@@ -41,7 +41,7 @@ $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 $pageTitle = 'Family Tracking';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
-    '/tracking/app/assets/css/tracking.css?v=4.4',
+    '/tracking/app/assets/css/tracking.css?v=4.5',
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
@@ -1123,10 +1123,15 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     // ── BROWSER GEOLOCATION ─────────────────────────────────
-    // Browser only. In the native app the TrackingService owns location
-    // uploads — running watchPosition here as well doubled GPS use (battery
-    // drain) and kept uploading even when the user disabled tracking.
-    if (navigator.geolocation && !isNativeApp) {
+    // Upload the current user's position whenever the tracking page is open,
+    // in BOTH browser and app. In the app this uploads via the WebView's own
+    // geolocation with platform 'android-webview'; that is the reliable path
+    // that makes family members actually see each other while viewing the
+    // map, independent of the background TrackingService (which keeps
+    // uploading when the app is closed). Previously this was disabled in the
+    // app, so if the background service wasn't running nobody's own dot ever
+    // moved. The 10s throttle in uploadPosition() keeps battery/GPS in check.
+    if (navigator.geolocation) {
         startBrowserTracking();
     }
 
@@ -1138,23 +1143,48 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         btn.className = 'tracking-toolbar-btn enable-location-btn';
         btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
         btn.style.cssText = 'background:#667eea;color:#fff;border:none;padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;';
+        var enableLabel = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
         btn.onclick = function() {
             try {
                 window.TrackingBridge.startTracking();
                 btn.textContent = 'Enabling...';
-                setTimeout(function() {
-                    try {
-                        var newMode = window.TrackingBridge.getTrackingMode();
-                        if (newMode === 'enabled') {
+                // The native permission flow (disclosure dialog + OS prompts +
+                // a Settings round-trip) takes far longer than one 3s check,
+                // so poll for ~40s and also re-check when the user returns to
+                // the page after granting. Only reset the button on real
+                // failure — never leave it stuck on "Enabling...".
+                var tries = 0;
+                var poll = setInterval(function() {
+                    tries++;
+                    var mode = '';
+                    try { mode = window.TrackingBridge.getTrackingMode(); } catch(e) {}
+                    if (mode === 'enabled') {
+                        clearInterval(poll);
+                        document.removeEventListener('visibilitychange', onVis);
+                        btn.remove();
+                        showToast('Live location enabled', 'success');
+                    } else if (tries >= 20) {
+                        clearInterval(poll);
+                        document.removeEventListener('visibilitychange', onVis);
+                        btn.innerHTML = enableLabel;
+                    }
+                }, 2000);
+                var onVis = function() {
+                    if (!document.hidden) {
+                        var mode = '';
+                        try { mode = window.TrackingBridge.getTrackingMode(); } catch(e) {}
+                        if (mode === 'enabled') {
+                            clearInterval(poll);
+                            document.removeEventListener('visibilitychange', onVis);
                             btn.remove();
                             showToast('Live location enabled', 'success');
-                        } else {
-                            btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
                         }
-                    } catch(e) {}
-                }, 3000);
+                    }
+                };
+                document.addEventListener('visibilitychange', onVis);
             } catch(e) {
                 console.warn('[Tracking] startTracking failed:', e);
+                btn.innerHTML = enableLabel;
             }
         };
         toolbar.insertBefore(btn, toolbar.firstChild);

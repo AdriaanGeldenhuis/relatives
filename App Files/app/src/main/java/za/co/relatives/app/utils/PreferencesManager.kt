@@ -31,7 +31,6 @@ class PreferencesManager(context: Context) {
         private const val KEY_NOTIFICATION_COUNT = "notification_count"
         private const val KEY_LAST_UPLOAD_TIME = "last_upload_time"
         private const val KEY_FCM_TOKEN = "fcm_token"
-        private const val KEY_MAPBOX_TOKEN = "mapbox_token"
         private const val KEY_FAMILY_ID = "family_id"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_NAME = "user_name"
@@ -121,11 +120,6 @@ class PreferencesManager(context: Context) {
     var fcmToken: String?
         get() = prefs.getString(KEY_FCM_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_FCM_TOKEN, value).apply()
-
-    /** Mapbox public access token for the native map, fetched from the server. */
-    var mapboxToken: String?
-        get() = prefs.getString(KEY_MAPBOX_TOKEN, null)
-        set(value) = prefs.edit().putString(KEY_MAPBOX_TOKEN, value).apply()
 
     // ── Server-driven configuration ────────────────────────────────────────
 

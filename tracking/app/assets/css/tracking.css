@@ -231,12 +231,12 @@ body.tracking-page {
    ============================================ */
 .family-panel {
     position: fixed;
-    bottom: 85px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     left: 0;
     right: 0;
     margin-inline: auto;
     width: var(--trk-panel-width);
-    max-height: calc(100vh - 85px - var(--trk-topbar-height) - 24px);
+    max-height: calc(100vh - var(--trk-topbar-height) - 64px);
     z-index: 1000;
     background: var(--trk-panel-bg);
     backdrop-filter: blur(40px) saturate(180%);
@@ -487,11 +487,22 @@ body.tracking-page {
 /* ============================================
    BOTTOM TOOLBAR - Home + Wake + Settings
    ============================================ */
+
+/* The site-wide floating footer (mic / help / tracking / plus) is
+   redundant on the fullscreen map page: it duplicated the toolbar's
+   Home action (its pin even links back to this page), covered the map
+   attribution, and forced everything 85px up the screen. */
+body.tracking-page .footer-container,
+body.tracking-page .menu-backdrop {
+    display: none !important;
+}
+
 .tracking-toolbar {
     position: absolute;
-    bottom: 85px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     left: 50%;
     transform: translateX(-50%);
+    max-width: calc(100% - 24px);
     z-index: 45;
     display: flex;
     align-items: center;
@@ -756,7 +767,7 @@ body.tracking-page {
    ============================================ */
 .directions-bar {
     position: absolute;
-    bottom: 155px;
+    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
     left: 50%;
     transform: translateX(-50%);
     z-index: 42;
@@ -882,7 +893,7 @@ body.tracking-page {
 /* Navigation bottom bar */
 .nav-bottom {
     position: absolute;
-    bottom: 85px;
+    bottom: env(safe-area-inset-bottom, 0px);
     left: 0;
     right: 0;
     z-index: 55;
@@ -952,7 +963,7 @@ body.tracking-page {
 /* Steps list panel */
 .nav-steps-panel {
     position: fixed;
-    bottom: 85px;
+    bottom: env(safe-area-inset-bottom, 0px);
     left: 0;
     right: 0;
     max-height: 50vh;
@@ -1488,15 +1499,43 @@ body.tracking-page {
 
     .family-panel {
         width: calc(100% - 24px);
-        max-height: calc(100vh - 85px - 44px - 20px);
+        max-height: calc(100vh - 44px - 56px);
         z-index: 1005;
-        bottom: 85px;
+        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
         border-radius: var(--trk-radius-lg);
     }
 
-    .tracking-toolbar { bottom: 85px; padding: 6px 10px; gap: 8px; z-index: 1002; }
-    .tracking-toolbar-btn { height: 38px; padding: 0 14px; font-size: 12px; }
-    .directions-bar { bottom: 155px; }
+    /* Full-width pill bar. With four buttons (Enable Live Location +
+       Home + Wake + Family) the old centered box overflowed the screen
+       and cut buttons off; now it scrolls sideways instead. The auto
+       margins on the first/last buttons center the row whenever it
+       fits without making overflowing content unreachable (the classic
+       "justify-content: center clips a scrollable flexbox" problem). */
+    .tracking-toolbar {
+        bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+        left: 12px;
+        right: 12px;
+        transform: none;
+        max-width: none;
+        padding: 6px 10px;
+        gap: 8px;
+        z-index: 1002;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .tracking-toolbar::-webkit-scrollbar { display: none; }
+    .tracking-toolbar-btn { height: 38px; padding: 0 14px; font-size: 12px; flex-shrink: 0; }
+    .tracking-toolbar-btn:first-child { margin-left: auto; }
+    .tracking-toolbar-btn:last-child { margin-right: auto; }
+
+    /* Keep the Mapbox logo + attribution visible above the pill bar. */
+    #trackingMap .mapboxgl-ctrl-bottom-left,
+    #trackingMap .mapboxgl-ctrl-bottom-right {
+        bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .directions-bar { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
     .nav-header { top: 44px; padding: 12px 16px; }
     .nav-header-icon { width: 40px; height: 40px; min-width: 40px; }
     .nav-header-icon svg { width: 22px; height: 22px; }

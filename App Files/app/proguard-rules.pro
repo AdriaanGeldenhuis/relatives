@@ -70,9 +70,6 @@
 # ── Application class ────────────────────────────────────────────────
 -keep class za.co.relatives.app.RelativesApplication { *; }
 
-# ── ViewModels (instantiated by reflection via ViewModelProvider) ────
--keep class za.co.relatives.app.ui.tracking.TrackingViewModel { *; }
-
 # ── Data classes used by Gson / JSON serialisation ───────────────────
 -keep class za.co.relatives.app.data.TrackingStore$MemberLocation { *; }
 -keep class za.co.relatives.app.data.QueuedLocationEntity { *; }

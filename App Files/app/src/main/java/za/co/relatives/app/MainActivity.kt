@@ -46,7 +46,6 @@ import za.co.relatives.app.tracking.FamilyPoller
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
 import za.co.relatives.app.tracking.TrackingService
-import za.co.relatives.app.ui.tracking.TrackingActivity
 import za.co.relatives.app.utils.PreferencesManager
 import java.net.CookieHandler
 import java.net.HttpCookie
@@ -193,9 +192,8 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         // Persist cookies NOW. Chromium commits cookies to disk lazily; if the
-        // process dies while we're paused (e.g. a crash in TrackingActivity),
-        // a login cookie set since the last flush would be lost and the user
-        // silently logged out.
+        // process dies while we're paused, a login cookie set since the last
+        // flush would be lost and the user silently logged out.
         CookieManager.getInstance().flush()
 
         // Stop polling entirely in the background — the native cache keeps the
@@ -254,6 +252,22 @@ class MainActivity : ComponentActivity() {
                 prefs.trackingEnabled = true
                 TrackingService.start(this)
             }
+        }
+    }
+
+    /**
+     * Ensure foreground location permission for the tracking web page's
+     * geolocation upload, then answer the WebView. On grant, also start the
+     * background service so the user's dot keeps moving when the app is
+     * closed — not only while the page is open.
+     */
+    private fun ensureLocationForWeb(answer: (Boolean) -> Unit) {
+        permissionGate.requestForegroundLocation { granted ->
+            if (granted && !prefs.trackingEnabled) {
+                prefs.trackingEnabled = true
+                TrackingService.start(this)
+            }
+            answer(granted)
         }
     }
 
@@ -401,32 +415,12 @@ class MainActivity : ComponentActivity() {
                 val uri = request?.url ?: return false
                 val internal = isRelativesHost(uri.host)
 
-                // Intercept tracking URLs → launch native TrackingActivity.
-                // Main-frame + real host + path prefix only: a foreign URL
-                // merely containing the substring must not trigger it.
-                if (request.isForMainFrame && internal &&
-                    uri.path?.startsWith("/tracking/app") == true &&
-                    hasSessionCookie()
-                ) {
-                    // Without a session cookie the native screen could only
-                    // 401 on every call — skipping the intercept lets the
-                    // server bounce the WebView to /login.php instead, and
-                    // the post-login redirect brings the user back here.
-                    syncCookiesToNative()
-                    // Persist the WebView cookie store before handing over to
-                    // the native activity: if anything over there kills the
-                    // process, the login must survive.
-                    CookieManager.getInstance().flush()
-                    startActivity(
-                        Intent(this@MainActivity, TrackingActivity::class.java).apply {
-                            putExtra(
-                                TrackingActivity.EXTRA_START_SCREEN,
-                                TrackingActivity.screenForPath(uri.path),
-                            )
-                        },
-                    )
-                    return true
-                }
+                // Tracking pages (/tracking/app/*) load in this WebView like
+                // every other page — the web dashboard guards its own session
+                // (redirects to /login.php itself). The native tracking UI
+                // was removed: it could crash or bounce in ways the web page
+                // cannot, and the WebView's renderer-crash handling below
+                // already covers the heavy map page.
 
                 // Host check, not substring: "evil.com/relatives.co.za" must
                 // NOT stay inside this WebView — TrackingBridge is exposed to
@@ -484,13 +478,23 @@ class MainActivity : ComponentActivity() {
                 origin: String?,
                 callback: GeolocationPermissions.Callback?,
             ) {
-                // Only grant WebView geolocation if system permission is already granted
-                val hasSystemPermission = ContextCompat.checkSelfPermission(
-                    this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION,
-                ) == PackageManager.PERMISSION_GRANTED
                 val originHost = origin?.let { runCatching { Uri.parse(it).host }.getOrNull() }
-                val allowed = hasSystemPermission && isRelativesHost(originHost)
-                callback?.invoke(origin, allowed, false)
+                if (!isRelativesHost(originHost)) {
+                    callback?.invoke(origin, false, false)
+                    return
+                }
+                if (permissionGate.hasForegroundLocation()) {
+                    callback?.invoke(origin, true, false)
+                    return
+                }
+                // The tracking page asked for location but the app has no OS
+                // location permission yet. Request it now — THIS is what makes
+                // the Android permission prompt appear — then answer the
+                // WebView with the result. Without this the page silently got
+                // "denied" and no one's position could ever upload.
+                ensureLocationForWeb { granted ->
+                    callback?.invoke(origin, granted, false)
+                }
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {
@@ -510,16 +514,9 @@ class MainActivity : ComponentActivity() {
     private fun loadInitialUrl(intent: Intent?) {
         val deepLink = intent?.getStringExtra("action_url")
         if (!deepLink.isNullOrBlank()) {
-            // Intercept tracking deep links → launch native TrackingActivity,
-            // but still give the WebView a page so backing out of the native
-            // screen doesn't land on a blank activity.
-            if (deepLink.contains("/tracking/app") && hasSessionCookie()) {
-                webView.loadUrl(WEB_URL)
-                syncCookiesToNative()
-                launchTrackingActivity(deepLink)
-                return
-            }
-            webView.loadUrl(resolveUrl(deepLink))
+            // Deep links (FCM notifications) load in the WebView like any
+            // other page; logged-out users get the server's login redirect.
+            loadDeepLink(deepLink)
         } else {
             webView.loadUrl(WEB_URL)
         }
@@ -527,26 +524,31 @@ class MainActivity : ComponentActivity() {
 
     private fun handleDeepLink(intent: Intent?) {
         val actionUrl = intent?.getStringExtra("action_url") ?: return
-        // Intercept tracking deep links → launch native TrackingActivity.
-        // Logged out (no session cookie) → let the WebView navigate so the
-        // server redirects to the login page.
-        if (actionUrl.contains("/tracking/app") && hasSessionCookie()) {
-            syncCookiesToNative()
-            launchTrackingActivity(actionUrl)
-            return
-        }
-        webView.loadUrl(resolveUrl(actionUrl))
+        loadDeepLink(actionUrl)
     }
 
-    private fun launchTrackingActivity(path: String?) {
-        startActivity(
-            Intent(this, TrackingActivity::class.java).apply {
-                putExtra(
-                    TrackingActivity.EXTRA_START_SCREEN,
-                    TrackingActivity.screenForPath(path),
-                )
-            },
-        )
+    /**
+     * Navigate to a notification deep link. Only relatives.co.za URLs may
+     * load this way — loadUrl bypasses shouldOverrideUrlLoading and this
+     * WebView carries TrackingBridge, so a hostile action_url in a pushed
+     * payload must not reach a foreign page. If the renderer died while
+     * backgrounded, queue the URL for the rebuild in onResume instead of
+     * loading it into a dead view.
+     */
+    private fun loadDeepLink(actionUrl: String) {
+        val resolved = resolveUrl(actionUrl)
+        val host = runCatching { Uri.parse(resolved).host }.getOrNull()
+        val target = if (isRelativesHost(host)) {
+            resolved
+        } else {
+            Log.w(TAG, "Refusing non-relatives deep link: $actionUrl")
+            WEB_URL
+        }
+        if (pendingRecreateUrl != null) {
+            pendingRecreateUrl = target
+        } else {
+            webView.loadUrl(target)
+        }
     }
 
     private fun resolveUrl(path: String): String =
@@ -559,11 +561,6 @@ class MainActivity : ComponentActivity() {
      */
     private fun isRelativesHost(host: String?): Boolean =
         host == "relatives.co.za" || host?.endsWith(".relatives.co.za") == true
-
-    /** True when the WebView cookie store currently holds a session cookie. */
-    private fun hasSessionCookie(): Boolean =
-        CookieManager.getInstance().getCookie(WEB_URL)
-            ?.contains("RELATIVES_SESSION=") == true
 
     // ════════════════════════════════════════════════════════════════════
     //  IMMERSIVE MODE
