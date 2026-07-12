@@ -1,0 +1,5 @@
+# Gradle wrapper scripts must keep POSIX line endings (and gradlew its
+# executable bit) even when the repo is synced from a Windows machine.
+gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf

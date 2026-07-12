@@ -1,6 +1,8 @@
 package za.co.relatives.app.ui.tracking
 
 import android.graphics.Color as AndroidColor
+import android.util.Log
+import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -70,6 +72,7 @@ fun TrackingMapScreen(
     onNavigateToSettings: () -> Unit,
     onBack: () -> Unit,
     onRequestPermissions: (() -> Unit)? = null,
+    onMapInitFailed: () -> Unit = {},
 ) {
     val members by viewModel.members.collectAsState()
     val trackingEnabled by viewModel.trackingEnabled.collectAsState()
@@ -117,37 +120,54 @@ fun TrackingMapScreen(
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { context ->
-                    MapView(context).also { mv ->
-                        mapView = mv
-                        annotationManager = mv.annotations.createCircleAnnotationManager()
-                        mv.mapboxMap.loadStyle(Style.DARK) {
-                            // Restore the previous camera (nav round trip) or
-                            // default to South Africa on first creation.
-                            mv.mapboxMap.setCamera(
-                                viewModel.savedCamera ?: CameraOptions.Builder()
-                                    .center(Point.fromLngLat(28.0473, -26.2041))
-                                    .zoom(10.0)
-                                    .build()
-                            )
+                    // MapView construction is the first touch of the Mapbox
+                    // renderer; a native-init failure here is an Error, not
+                    // an Exception, and uncaught it kills the whole process.
+                    try {
+                        MapView(context).also { mv ->
+                            mapView = mv
+                            annotationManager = mv.annotations.createCircleAnnotationManager()
+                            mv.mapboxMap.loadStyle(Style.DARK) {
+                                // Restore the previous camera (nav round trip) or
+                                // default to South Africa on first creation.
+                                mv.mapboxMap.setCamera(
+                                    viewModel.savedCamera ?: CameraOptions.Builder()
+                                        .center(Point.fromLngLat(28.0473, -26.2041))
+                                        .zoom(10.0)
+                                        .build()
+                                )
+                            }
                         }
+                    } catch (t: Throwable) {
+                        Log.e("TrackingMapScreen", "MapView creation failed", t)
+                        // If construction got far enough to assign state, drop
+                        // it: the orphaned MapView never attaches, and
+                        // onRelease will only ever see the fallback view.
+                        try { mapView?.onDestroy() } catch (_: Throwable) {}
+                        mapView = null
+                        annotationManager = null
+                        onMapInitFailed()
+                        FrameLayout(context)
                     }
                 },
                 update = {
                     updateMapAnnotations(annotationManager, members)
                 },
-                onRelease = { mv ->
+                onRelease = { view ->
                     // AndroidView only detaches; without an explicit destroy the
                     // MapView (GL context, tile cache) leaks on every nav round
                     // trip until the activity dies — eventually OOM.
-                    viewModel.savedCamera = mv.mapboxMap.cameraState.let { s ->
-                        CameraOptions.Builder()
-                            .center(s.center)
-                            .zoom(s.zoom)
-                            .bearing(s.bearing)
-                            .pitch(s.pitch)
-                            .build()
+                    (view as? MapView)?.let { mv ->
+                        viewModel.savedCamera = mv.mapboxMap.cameraState.let { s ->
+                            CameraOptions.Builder()
+                                .center(s.center)
+                                .zoom(s.zoom)
+                                .bearing(s.bearing)
+                                .pitch(s.pitch)
+                                .build()
+                        }
+                        mv.onDestroy()
                     }
-                    mv.onDestroy()
                     mapView = null
                     annotationManager = null
                 },
@@ -433,8 +453,10 @@ private fun updateMapAnnotations(
                     .withCircleStrokeColor(AndroidColor.WHITE)
             )
         }
-    } catch (_: Exception) {
-        // Map not yet ready
+    } catch (t: Throwable) {
+        // Map not yet ready — Mapbox annotation calls can also surface
+        // native-init Errors, which must not escape.
+        Log.w("TrackingMapScreen", "Annotation update skipped", t)
     }
 }
 

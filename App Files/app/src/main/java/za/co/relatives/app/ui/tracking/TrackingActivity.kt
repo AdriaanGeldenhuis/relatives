@@ -1,11 +1,13 @@
 package za.co.relatives.app.ui.tracking
 
+import android.app.AlertDialog
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.webkit.CookieManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,11 +20,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.mapbox.common.MapboxOptions
+import com.mapbox.maps.CameraOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import za.co.relatives.app.RelativesApplication
 import za.co.relatives.app.data.TrackingStore
 import za.co.relatives.app.network.ApiException
+import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.network.TrackingApiClient
 import za.co.relatives.app.tracking.FamilyPoller
 import za.co.relatives.app.tracking.PermissionGate
@@ -44,6 +48,7 @@ class TrackingActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "TrackingActivity"
+        private const val WEB_URL = "https://www.relatives.co.za"
 
         /** Intent extra naming the start destination: map/events/geofences/settings. */
         const val EXTRA_START_SCREEN = "start_screen"
@@ -71,6 +76,8 @@ class TrackingActivity : ComponentActivity() {
      */
     private var mapboxTokenReady by mutableStateOf(false)
     private var tokenFetchInFlight = false
+    private var abortDialogShowing = false
+    private var abortDialog: AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,6 +123,7 @@ class TrackingActivity : ComponentActivity() {
                                     }
                                 }
                             },
+                            onMapInitFailed = { abortMapUnavailable() },
                         )
                     }
                     composable("events") {
@@ -170,6 +178,8 @@ class TrackingActivity : ComponentActivity() {
         if (::permissionGate.isInitialized) {
             permissionGate.dismissDialogs()
         }
+        abortDialog?.dismiss()
+        abortDialog = null
         super.onDestroy()
     }
 
@@ -201,15 +211,27 @@ class TrackingActivity : ComponentActivity() {
                 }
             } catch (e: ApiException) {
                 if (e.httpCode == 401) {
-                    // Session expired/logged out: the native screen has no
-                    // login UI, so a stuck "Loading map…" is a dead end. Send
-                    // the user back to the WebView to sign in.
-                    Toast.makeText(
-                        this@TrackingActivity,
-                        "Your session has expired. Please log in again.",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    finish()
+                    if (mapboxTokenReady) {
+                        // The map is already up on the cached token — don't
+                        // kill a working screen over a background refresh.
+                        Log.w(TAG, "Token refresh got 401 with map already up; keeping screen", e)
+                    } else {
+                        // Session expired/logged out: the native screen has no
+                        // login UI, so a stuck "Loading map…" is a dead end.
+                        // Drop the dead session cookie before leaving —
+                        // MainActivity's intercept only checks that the cookie
+                        // EXISTS, so leaving it behind would relaunch this
+                        // screen (and 401 again) on every tracking press
+                        // instead of letting the server redirect the WebView
+                        // to /login.php.
+                        expireDeadSession()
+                        Toast.makeText(
+                            this@TrackingActivity,
+                            "Your session has expired. Please log in again.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        finish()
+                    }
                 } else {
                     Log.w(TAG, "Mapbox token fetch failed (retried on next resume)", e)
                 }
@@ -232,6 +254,14 @@ class TrackingActivity : ComponentActivity() {
     private fun applyMapboxToken(token: String): Boolean =
         try {
             MapboxOptions.accessToken = token
+            // MapboxOptions lives in com.mapbox.common and only loads
+            // libmapbox-common.so. The renderer's libmapbox-maps.so loads
+            // lazily on the first touch of a com.mapbox.maps class — which
+            // is otherwise MapView(context) inside the AndroidView factory,
+            // where an ExceptionInInitializerError escapes every guard and
+            // kills the process. Touch a cheap maps class here so BOTH
+            // native libraries load (or fail) under this catch.
+            CameraOptions.Builder().build()
             mapboxTokenReady = true
             true
         } catch (t: Throwable) {
@@ -240,15 +270,43 @@ class TrackingActivity : ComponentActivity() {
             false
         }
 
-    /** Leave the tracking screen instead of showing a permanently dead map. */
+    /**
+     * The server said this session is dead. Drop every client-side copy of
+     * it (WebView cookie store, OkHttp jar, persisted prefs) so the WebView
+     * falls through to the login page instead of bouncing back into this
+     * screen, and so background workers stop replaying a dead cookie.
+     */
+    private fun expireDeadSession() {
+        try {
+            CookieManager.getInstance().apply {
+                // The server sets a host-only cookie; also clear a
+                // domain-wide variant defensively.
+                setCookie(WEB_URL, "RELATIVES_SESSION=; Max-Age=0; path=/")
+                setCookie(WEB_URL, "RELATIVES_SESSION=; Max-Age=0; path=/; Domain=.relatives.co.za")
+                flush()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to expire WebView session cookie", e)
+        }
+        NetworkClient.clearCookies()
+        val prefs = (application as? RelativesApplication)?.preferencesManager
+            ?: PreferencesManager(this)
+        prefs.sessionToken = null
+    }
+
+    /**
+     * Leave the tracking screen instead of showing a permanently dead map.
+     * A dialog, not a toast: this exit is otherwise indistinguishable from
+     * a crash for the user, and the reason must be readable.
+     */
     private fun abortMapUnavailable() {
-        if (isFinishing || isDestroyed) return
-        Toast.makeText(
-            this,
-            "The map could not start on this device. Please update the app.",
-            Toast.LENGTH_LONG,
-        ).show()
-        finish()
+        if (abortDialogShowing || isFinishing || isDestroyed) return
+        abortDialogShowing = true
+        abortDialog = AlertDialog.Builder(this)
+            .setMessage("The map could not start on this device. Please update the app.")
+            .setPositiveButton(android.R.string.ok) { _, _ -> finish() }
+            .setOnCancelListener { finish() }
+            .show()
     }
 
     private fun enterImmersiveMode() {
