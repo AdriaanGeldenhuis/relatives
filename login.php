@@ -25,6 +25,8 @@ if (!is_string($postLoginRedirect)
     || $postLoginRedirect[0] !== '/'
     || (isset($postLoginRedirect[1]) && ($postLoginRedirect[1] === '/' || $postLoginRedirect[1] === '\\'))
     || preg_match('/[\r\n]/', $postLoginRedirect)
+    || strpos($postLoginRedirect, "\0") !== false
+    || !preg_match('//u', $postLoginRedirect) // valid UTF-8 only: invalid bytes make json_encode()/htmlspecialchars() emit nothing and break every redirect sink below
 ) {
     $postLoginRedirect = '/home/';
 }
@@ -263,7 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             // Where to land after login (validated server-side: internal path only)
-            var redirectTarget = <?php echo json_encode($postLoginRedirect, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+            var redirectTarget = <?php echo json_encode($postLoginRedirect, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_INVALID_UTF8_SUBSTITUTE) ?: "'/home/'"; ?>;
 
             // Function to perform redirect
             function doRedirect() {
