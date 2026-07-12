@@ -125,6 +125,7 @@ fun TrackingMapScreen(
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { context ->
+                val density = context.resources.displayMetrics.density
                 MapView(context).also { mv ->
                     mv.setTileSource(TileSourceFactory.MAPNIK)
                     mv.setMultiTouchControls(true)
@@ -135,9 +136,13 @@ fun TrackingMapScreen(
                     // the tile colours (the standard osmdroid dark mode).
                     mv.overlayManager.tilesOverlay.setColorFilter(DarkTileFilter)
                     // OpenStreetMap tiles legally require attribution —
-                    // white text so it stays readable on the inverted tiles.
+                    // white text so it stays readable on the inverted tiles,
+                    // top-left below the top bar because the bottom corner is
+                    // covered by the family panel.
                     mv.overlays.add(CopyrightOverlay(context).apply {
                         setTextColor(AndroidColor.WHITE)
+                        setAlignBottom(false)
+                        setOffset((8 * density).toInt(), (84 * density).toInt())
                     })
                     // Restore the previous camera (nav round trip) or default
                     // to South Africa on first creation.

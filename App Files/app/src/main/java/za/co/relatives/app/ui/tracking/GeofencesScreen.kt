@@ -50,6 +50,7 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.CopyrightOverlay
 import org.osmdroid.views.overlay.Marker
 
 @Composable
@@ -291,6 +292,9 @@ private fun GeofenceCard(
                                 } else 14.0
                             )
                             mv.controller.setCenter(GeoPoint(geofence.centerLat, geofence.centerLng))
+                            mv.overlays.add(CopyrightOverlay(context).apply {
+                                setTextColor(android.graphics.Color.WHITE)
+                            })
                             try {
                                 val marker = Marker(mv)
                                 marker.position = GeoPoint(geofence.centerLat, geofence.centerLng)
