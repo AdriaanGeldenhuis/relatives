@@ -211,27 +211,24 @@ class TrackingActivity : ComponentActivity() {
                 }
             } catch (e: ApiException) {
                 if (e.httpCode == 401) {
-                    if (mapboxTokenReady) {
-                        // The map is already up on the cached token — don't
-                        // kill a working screen over a background refresh.
-                        Log.w(TAG, "Token refresh got 401 with map already up; keeping screen", e)
-                    } else {
-                        // Session expired/logged out: the native screen has no
-                        // login UI, so a stuck "Loading map…" is a dead end.
-                        // Drop the dead session cookie before leaving —
-                        // MainActivity's intercept only checks that the cookie
-                        // EXISTS, so leaving it behind would relaunch this
-                        // screen (and 401 again) on every tracking press
-                        // instead of letting the server redirect the WebView
-                        // to /login.php.
-                        expireDeadSession()
-                        Toast.makeText(
-                            this@TrackingActivity,
-                            "Your session has expired. Please log in again.",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                        finish()
-                    }
+                    // Session expired/logged out. This fetch only runs at
+                    // screen entry, so a 401 always means the session was
+                    // already dead when the user pressed tracking — even a
+                    // map brought up by the cached token could only ever
+                    // show empty data (every poll 401s too). The native
+                    // screen has no login UI, so drop the dead session
+                    // cookie before leaving: MainActivity's intercept only
+                    // checks that the cookie EXISTS, and leaving it behind
+                    // would relaunch this screen (and 401 again) on every
+                    // tracking press instead of letting the server redirect
+                    // the WebView to /login.php.
+                    expireDeadSession()
+                    Toast.makeText(
+                        this@TrackingActivity,
+                        "Your session has expired. Please log in again.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    finish()
                 } else {
                     Log.w(TAG, "Mapbox token fetch failed (retried on next resume)", e)
                 }
