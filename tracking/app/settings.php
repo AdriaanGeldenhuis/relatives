@@ -38,7 +38,7 @@ $alertsRepo = new AlertsRepo($db, $trackingCache);
 $alertRules = $alertsRepo->get($familyId);
 
 $pageTitle = 'Tracking Settings';
-$pageCSS = ['/tracking/app/assets/css/tracking.css?v=4.3'];
+$pageCSS = ['/tracking/app/assets/css/tracking.css?v=4.5'];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 
