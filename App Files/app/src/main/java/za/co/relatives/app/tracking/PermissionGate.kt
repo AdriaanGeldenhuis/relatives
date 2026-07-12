@@ -2,11 +2,15 @@ package za.co.relatives.app.tracking
 
 import android.Manifest
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import za.co.relatives.app.R
 
@@ -27,6 +31,9 @@ class PermissionGate(private val activity: ComponentActivity) {
 
     private var onResult: ((Boolean) -> Unit)? = null
 
+    /** When true, stop after the foreground prompt (no background Settings trip). */
+    private var foregroundOnly = false
+
     private lateinit var locationLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var backgroundLocationLauncher: ActivityResultLauncher<String>
     private lateinit var activityRecognitionLauncher: ActivityResultLauncher<String>
@@ -41,9 +48,24 @@ class PermissionGate(private val activity: ComponentActivity) {
         ) { grants ->
             val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-            if (granted) requestBackgroundLocation() else {
-                onResult?.invoke(false)
-                onResult = null
+            when {
+                granted && foregroundOnly -> {
+                    foregroundOnly = false
+                    onResult?.invoke(true)
+                    onResult = null
+                    // Still offer notifications, but skip the background-location
+                    // Settings round-trip — the WebView geolocation path only
+                    // needs foreground, and that round-trip recreates the
+                    // activity and would drop this callback.
+                    requestNotifications()
+                }
+                granted -> requestBackgroundLocation()
+                else -> {
+                    foregroundOnly = false
+                    onResult?.invoke(false)
+                    onResult = null
+                    offerAppSettingsIfPermanentlyDenied()
+                }
             }
         }
 
@@ -74,8 +96,65 @@ class PermissionGate(private val activity: ComponentActivity) {
             callback(false)
             return
         }
+        foregroundOnly = false
         onResult = callback
         showProminentDisclosure()
+    }
+
+    /**
+     * Foreground-location-only request, used by the WebView geolocation
+     * prompt. Shows the disclosure + system prompt and reports the result,
+     * WITHOUT the background-location Settings round-trip that recreates the
+     * activity (which would drop the callback). Background tracking is driven
+     * separately by the "Enable live location" button via [requestTracking].
+     */
+    fun requestForegroundLocation(callback: (Boolean) -> Unit) {
+        if (hasForegroundLocation()) {
+            callback(true)
+            return
+        }
+        if (!canShowDialog()) {
+            callback(false)
+            return
+        }
+        foregroundOnly = true
+        onResult = callback
+        showProminentDisclosure()
+    }
+
+    /**
+     * After a denial, if the permission is permanently denied ("Don't allow"
+     * twice / "Don't ask again"), the system prompt no longer appears —
+     * leaving the user with no prompt and no way forward. Offer a jump
+     * straight to the app's settings page so they can flip Location on.
+     */
+    private fun offerAppSettingsIfPermanentlyDenied() {
+        if (!canShowDialog()) return
+        val permanentlyDenied = !ActivityCompat.shouldShowRequestPermissionRationale(
+            activity, Manifest.permission.ACCESS_FINE_LOCATION,
+        )
+        if (!permanentlyDenied) return
+        visibleDialog = builder()
+            .setTitle(R.string.location_dialog_title)
+            .setMessage(
+                "Location is turned off for Relatives. Open Settings → " +
+                    "Permissions → Location and choose Allow, so your family " +
+                    "can see you on the map.",
+            )
+            .setPositiveButton("Open Settings") { _, _ ->
+                try {
+                    activity.startActivity(
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.fromParts("package", activity.packageName, null),
+                        ),
+                    )
+                } catch (_: Exception) {
+                }
+            }
+            .setNegativeButton(R.string.dialog_not_now, null)
+            .setCancelable(true)
+            .show()
     }
 
     /** Dialogs on a finishing/destroyed activity throw BadTokenException. */
@@ -108,6 +187,7 @@ class PermissionGate(private val activity: ComponentActivity) {
                 )
             }
             .setNegativeButton(R.string.dialog_not_now) { _, _ ->
+                foregroundOnly = false
                 onResult?.invoke(false)
                 onResult = null
             }

@@ -255,6 +255,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Ensure foreground location permission for the tracking web page's
+     * geolocation upload, then answer the WebView. On grant, also start the
+     * background service so the user's dot keeps moving when the app is
+     * closed — not only while the page is open.
+     */
+    private fun ensureLocationForWeb(answer: (Boolean) -> Unit) {
+        permissionGate.requestForegroundLocation { granted ->
+            if (granted && !prefs.trackingEnabled) {
+                prefs.trackingEnabled = true
+                TrackingService.start(this)
+            }
+            answer(granted)
+        }
+    }
+
     fun stopTrackingService() {
         prefs.trackingEnabled = false
         TrackingService.stop(this)
@@ -462,13 +478,23 @@ class MainActivity : ComponentActivity() {
                 origin: String?,
                 callback: GeolocationPermissions.Callback?,
             ) {
-                // Only grant WebView geolocation if system permission is already granted
-                val hasSystemPermission = ContextCompat.checkSelfPermission(
-                    this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION,
-                ) == PackageManager.PERMISSION_GRANTED
                 val originHost = origin?.let { runCatching { Uri.parse(it).host }.getOrNull() }
-                val allowed = hasSystemPermission && isRelativesHost(originHost)
-                callback?.invoke(origin, allowed, false)
+                if (!isRelativesHost(originHost)) {
+                    callback?.invoke(origin, false, false)
+                    return
+                }
+                if (permissionGate.hasForegroundLocation()) {
+                    callback?.invoke(origin, true, false)
+                    return
+                }
+                // The tracking page asked for location but the app has no OS
+                // location permission yet. Request it now — THIS is what makes
+                // the Android permission prompt appear — then answer the
+                // WebView with the result. Without this the page silently got
+                // "denied" and no one's position could ever upload.
+                ensureLocationForWeb { granted ->
+                    callback?.invoke(origin, granted, false)
+                }
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {

@@ -65,8 +65,13 @@ foreach ($locations as $i => $input) {
         continue;
     }
 
-    // Accuracy check
-    if ($loc['accuracy_m'] !== null && $loc['accuracy_m'] > $minAccuracy) {
+    // Accuracy is a quality hint, not a reason to drop a fix. Rejecting
+    // every fix worse than min_accuracy_m (100m) silently stopped native
+    // devices from ever updating — indoor/urban GPS is routinely 50-150m,
+    // and this endpoint (unlike location.php) exempted no platform at all,
+    // so the whole family disappeared from each other's maps. Store the
+    // fix; only drop clearly-garbage cell-tower fixes.
+    if ($loc['accuracy_m'] !== null && $loc['accuracy_m'] > 2000) {
         $results[] = ['index' => $i, 'status' => 'skipped', 'reason' => 'accuracy_too_low'];
         continue;
     }
