@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0f0c29">
+    <meta name="theme-color" content="#06070f">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Create Family - Relatives</title>
     
@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     <style>
         :root {
-            --primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --primary: linear-gradient(135deg, #a78bfa 0%, #f472b6 100%);
             --glass-light: rgba(255, 255, 255, 0.08);
             --glass-medium: rgba(255, 255, 255, 0.12);
             --glass-border: rgba(255, 255, 255, 0.25);
@@ -96,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         body {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             color: white;
-            background: #0f0c29;
+            background: #06070f;
             -webkit-font-smoothing: antialiased;
         }
         
@@ -111,10 +111,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             position: absolute;
             inset: 0;
             background: 
-                radial-gradient(ellipse at 20% 20%, rgba(102, 126, 234, 0.4) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 80%, rgba(118, 75, 162, 0.4) 0%, transparent 50%),
-                radial-gradient(ellipse at 50% 50%, rgba(240, 147, 251, 0.3) 0%, transparent 50%),
-                linear-gradient(180deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+                radial-gradient(ellipse at 20% 20%, rgba(124, 92, 246, 0.2) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(45, 212, 191, 0.1) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(244, 114, 182, 0.1) 0%, transparent 50%),
+                linear-gradient(180deg, #06070f 0%, #141838 50%, #0b0d1a 100%);
             background-size: 200% 200%;
             animation: auroraFlow 20s ease infinite;
         }
@@ -184,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 80px;
             margin-bottom: 20px;
             display: inline-block;
-            filter: drop-shadow(0 8px 24px rgba(102, 126, 234, 0.5));
+            filter: drop-shadow(0 8px 24px rgba(167, 139, 250, 0.5));
             animation: logoFloat 3s ease-in-out infinite;
         }
         
@@ -247,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .invite-code-box {
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: linear-gradient(135deg, #a78bfa, #f472b6);
             border-radius: var(--radius-lg);
             padding: 40px 30px;
             margin: 32px 0;
@@ -407,9 +407,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .form-input:focus {
             outline: none;
-            border-color: rgba(102, 126, 234, 0.8);
+            border-color: rgba(167, 139, 250, 0.8);
             background: rgba(255, 255, 255, 0.15);
-            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+            box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.15);
         }
         
         .password-wrapper {
@@ -492,14 +492,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             letter-spacing: 1.5px;
             cursor: pointer;
             transition: all var(--transition-base);
-            box-shadow: 0 12px 32px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 12px 32px rgba(167, 139, 250, 0.4);
             font-family: 'Space Grotesk', sans-serif;
             margin-top: 12px;
         }
         
         .submit-btn:hover:not(:disabled) {
             transform: translateY(-3px);
-            box-shadow: 0 16px 40px rgba(102, 126, 234, 0.6);
+            box-shadow: 0 16px 40px rgba(167, 139, 250, 0.6);
         }
         
         .submit-btn:disabled {
