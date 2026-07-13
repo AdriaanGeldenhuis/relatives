@@ -1123,8 +1123,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         try { localStorage.setItem('tracking_consent', '0'); } catch (e) {}
         hasConsent = '0';
         consentOverlay.classList.remove('active');
-        // Stop uploading the user's position if a watch was already running.
-        stopBrowserTracking();
+        // Stop the BROWSER upload if a watch was already running. In the app
+        // the OS PermissionGate governs sharing, not this in-page dialog, so
+        // don't tear down the native WebView upload path here.
+        if (!isNativeApp) stopBrowserTracking();
     });
 
     // Notification permission
@@ -1203,6 +1205,15 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // position on the first fix regardless of consent, and kept uploading
     // after they tapped "Not Now". In the native app, the OS permission flow
     // (PermissionGate) is the consent, so start immediately there.
+    //
+    // These state vars MUST be declared before this gate: startBrowserTracking
+    // guards on browserWatchId, and `var` hoisting would leave it `undefined`
+    // (not null) here, making the guard reject the very first start.
+    var lastUploadTime = 0;
+    var uploadPending = false;
+    var latestPos = null;
+    var browserWatchId = null;
+
     if (navigator.geolocation) {
         if (isNativeApp || hasConsent === '1') {
             startBrowserTracking();
@@ -1267,10 +1278,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     // ── BROWSER GEOLOCATION ──────────────────────────────────────
-    var lastUploadTime = 0;
-    var uploadPending = false;
-    var latestPos = null;
-    var browserWatchId = null;
+    // (State vars declared above the geolocation gate — see note there.)
 
     function uploadPosition(pos) {
         // Always upload the FRESHEST fix: during the 10s throttle window,
