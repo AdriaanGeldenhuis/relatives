@@ -27,6 +27,19 @@ if (count($locations) > $maxBatch) {
 $trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 $settings = $settingsRepo->get($ctx->familyId);
+
+// Mode 0 = Off: the family explicitly disabled tracking, so honour it —
+// accept nothing, store nothing. Returning success with mode 0 in
+// server_settings lets devices back off instead of retrying.
+if ((int) ($settings['mode'] ?? 1) === 0) {
+    Response::success([
+        'processed' => 0,
+        'stored' => 0,
+        'results' => [],
+        'server_settings' => ['mode' => 0],
+    ], 'tracking_disabled');
+}
+
 $locationRepo = new LocationRepo($db, $trackingCache);
 $eventsRepo = new EventsRepo($db);
 $alertsRepo = new AlertsRepo($db, $trackingCache);

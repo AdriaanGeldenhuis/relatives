@@ -14,6 +14,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
+import android.location.LocationManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
@@ -195,6 +196,16 @@ class TrackingService : Service() {
     private lateinit var geofencingClient: GeofencingClient
     private lateinit var store: TrackingStore
 
+    /**
+     * False on devices without Google Play services (HMS-only Huawei etc.).
+     * There every fused/geofence/activity-recognition call fails, so location
+     * comes from the plain [LocationManager] instead and motion detection
+     * relies solely on the speed/distance fallback in [onLocationReceived].
+     */
+    private var hasGms = true
+    private var platformLocationManager: LocationManager? = null
+    private var lmUpdatesRegistered = false
+
     private var started = false
     private var isForeground = false
     private var initFailed = false
@@ -211,6 +222,18 @@ class TrackingService : Service() {
         override fun onLocationResult(result: LocationResult) {
             result.lastLocation?.let { onLocationReceived(it) }
         }
+    }
+
+    // Full object, not a SAM lambda: pre-API-30 platforms still invoke the
+    // legacy callbacks, which a lambda compiled against a modern SDK does not
+    // implement (AbstractMethodError).
+    private val lmListener = object : android.location.LocationListener {
+        override fun onLocationChanged(location: Location) = onLocationReceived(location)
+
+        @Deprecated("Deprecated in Java")
+        override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
+        override fun onProviderEnabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {}
     }
 
     private val batteryReceiver = object : BroadcastReceiver() {
@@ -230,8 +253,10 @@ class TrackingService : Service() {
         try {
             // Channel first: foreground promotion depends on it.
             createNotificationChannel()
+            hasGms = GmsSupport.available(this)
             fusedClient = LocationServices.getFusedLocationProviderClient(this)
             geofencingClient = LocationServices.getGeofencingClient(this)
+            platformLocationManager = getSystemService(LOCATION_SERVICE) as? LocationManager
             store = TrackingStore(this)
         } catch (e: Exception) {
             // Play Services / Room can fail on broken devices — shut down
@@ -418,6 +443,10 @@ class TrackingService : Service() {
         // least captures a fix) instead of tracking staying dead until the
         // user reopens the app.
         TrackingRestartWorker.enqueuePeriodic(this)
+        // AlarmManager backstop for the same watchdog: Huawei/Honor/MIUI
+        // battery managers defer WorkManager jobs indefinitely once the app
+        // is backgrounded, while while-idle alarms still fire.
+        WatchdogAlarmReceiver.schedule(this)
     }
 
     private fun doStop() {
@@ -426,6 +455,7 @@ class TrackingService : Service() {
         persistEnabled(this, false)
         unregisterActivityTransitions()
         removeGeofence()
+        WatchdogAlarmReceiver.cancel(this)
         shutdown()
     }
 
@@ -436,8 +466,23 @@ class TrackingService : Service() {
 
         // Force an immediate point upload on movement
         try {
-            fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                .addOnSuccessListener { loc -> if (loc != null) enqueue(loc) }
+            if (hasGms) {
+                fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                    .addOnSuccessListener { loc -> if (loc != null) enqueue(loc) }
+            } else {
+                // Fallback burst: the MOVING-mode updates registered above
+                // deliver the fresh fix; nudge with the last known position
+                // so the family sees SOMETHING move immediately.
+                platformLocationManager?.let { lm ->
+                    val provider = listOf(
+                        LocationManager.GPS_PROVIDER,
+                        LocationManager.NETWORK_PROVIDER,
+                    ).firstOrNull { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
+                    provider?.let { p ->
+                        lm.getLastKnownLocation(p)?.let { loc -> onLocationReceived(loc) }
+                    }
+                }
+            }
         } catch (_: SecurityException) {
             Log.e(TAG, "Could not get current location on motion started: permission denied")
         }
@@ -459,6 +504,10 @@ class TrackingService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun registerActivityTransitions() {
+        if (!hasGms) {
+            Log.i(TAG, "No Play services; skipping activity recognition (interval fallback active).")
+            return
+        }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
             != PackageManager.PERMISSION_GRANTED && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         ) {
@@ -509,6 +558,7 @@ class TrackingService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun addIdleGeofence(location: Location) {
+        if (!hasGms) return
         removeGeofence()
         val geofence = Geofence.Builder()
             .setRequestId(GEOFENCE_ID)
@@ -558,10 +608,15 @@ class TrackingService : Service() {
         currentMode = mode
         stopLocationUpdates()
 
-        val request = buildLocationRequest(mode)
         try {
-            fusedClient.requestLocationUpdates(request, locationCallback, mainLooper)
-            Log.i(TAG, "Mode applied: $mode (interval=${request.intervalMillis}ms, force=$force)")
+            if (hasGms) {
+                val request = buildLocationRequest(mode)
+                fusedClient.requestLocationUpdates(request, locationCallback, mainLooper)
+                Log.i(TAG, "Mode applied: $mode (interval=${request.intervalMillis}ms, force=$force)")
+            } else {
+                requestPlatformLocationUpdates(mode)
+                Log.i(TAG, "Mode applied via LocationManager fallback: $mode (force=$force)")
+            }
         } catch (e: SecurityException) {
             Log.e(TAG, "Location permission missing, stopping service.", e)
             doStop()
@@ -573,6 +628,49 @@ class TrackingService : Service() {
             Mode.MOVING -> removeGeofence()
         }
         updateNotification()
+    }
+
+    /**
+     * Location updates without Google Play services: register directly with
+     * the platform [LocationManager]. GPS and network providers both feed
+     * [onLocationReceived]; the existing speed/distance checks there handle
+     * MOVING/IDLE transitions since geofence + activity recognition are
+     * unavailable on these devices.
+     */
+    @SuppressLint("MissingPermission")
+    private fun requestPlatformLocationUpdates(mode: Mode) {
+        val lm = platformLocationManager ?: return
+        val battery = getBatteryBucket()
+        val intervalMs = when {
+            battery == BatteryBucket.CRITICAL -> 5 * 60 * 1000L
+            battery == BatteryBucket.LOW -> 3 * 60 * 1000L
+            mode == Mode.MOVING -> MOVING_INTERVAL_MS
+            else -> IDLE_INTERVAL_MS
+        }
+        // GPS only in normal-battery MOVING mode; the network provider is the
+        // cheap always-on baseline that keeps the idle heartbeat alive. If
+        // network positioning is unavailable, GPS becomes the baseline no
+        // matter the battery state — a slow dot beats a vanished family member.
+        val networkOk = runCatching {
+            lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }.getOrDefault(false)
+        val gpsOk = runCatching {
+            lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        }.getOrDefault(false)
+
+        val providers = mutableListOf<String>()
+        if (networkOk) providers.add(LocationManager.NETWORK_PROVIDER)
+        if (gpsOk && (providers.isEmpty() || (battery == BatteryBucket.NORMAL && mode == Mode.MOVING))) {
+            providers.add(LocationManager.GPS_PROVIDER)
+        }
+        if (providers.isEmpty()) {
+            Log.w(TAG, "No enabled location providers for fallback updates")
+            return
+        }
+        providers.forEach { provider ->
+            lm.requestLocationUpdates(provider, intervalMs, 0f, lmListener, mainLooper)
+        }
+        lmUpdatesRegistered = true
     }
 
     /**
@@ -611,6 +709,13 @@ class TrackingService : Service() {
         try {
             fusedClient.removeLocationUpdates(locationCallback)
         } catch (_: Exception) {
+        }
+        if (lmUpdatesRegistered) {
+            try {
+                platformLocationManager?.removeUpdates(lmListener)
+            } catch (_: Exception) {
+            }
+            lmUpdatesRegistered = false
         }
     }
 

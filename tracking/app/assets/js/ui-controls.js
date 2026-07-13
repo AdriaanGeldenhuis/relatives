@@ -41,7 +41,9 @@ window.Tracking = window.Tracking || {};
 
     /**
      * Attach handler to the wake button (id="btn-wake").
-     * Uses the native bridge when available, otherwise falls back to the API.
+     * The native bridge call only boosts THIS device's GPS; the server POST
+     * is what wakes the rest of the family via FCM — so the POST always runs.
+     * (The old code skipped the POST when native, so nobody else ever woke.)
      */
     function bindWakeButton() {
         var btn = document.getElementById('btn-wake');
@@ -51,15 +53,11 @@ window.Tracking = window.Tracking || {};
             btn.disabled = true;
             btn.textContent = 'Waking...';
 
-            var promise;
             if (Tracking.nativeBridge && Tracking.nativeBridge.isNative()) {
                 Tracking.nativeBridge.wakeAllDevices();
-                promise = Promise.resolve();
-            } else {
-                promise = Tracking.api.wakeDevices();
             }
 
-            promise
+            Tracking.api.wakeDevices()
                 .then(function () {
                     btn.textContent = 'Sent!';
                     setTimeout(function () {
@@ -69,8 +67,11 @@ window.Tracking = window.Tracking || {};
                 })
                 .catch(function (err) {
                     console.error('[UIControls] Wake failed:', err);
-                    btn.textContent = 'Wake Devices';
-                    btn.disabled = false;
+                    btn.textContent = err && err.status === 429 ? 'Just woken' : 'Wake Devices';
+                    setTimeout(function () {
+                        btn.textContent = 'Wake Devices';
+                        btn.disabled = false;
+                    }, 2000);
                 });
         });
     }

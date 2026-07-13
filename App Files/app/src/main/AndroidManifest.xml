@@ -93,6 +93,12 @@
             android:name=".tracking.GeofenceReceiver"
             android:exported="false" />
 
+        <!-- AlarmManager watchdog backstop (OEM battery killers throttle the
+             WorkManager watchdog; while-idle alarms still fire) -->
+        <receiver
+            android:name=".tracking.WatchdogAlarmReceiver"
+            android:exported="false" />
+
         <!-- Firebase Cloud Messaging Service -->
         <service
             android:name=".services.RelativesFirebaseService"

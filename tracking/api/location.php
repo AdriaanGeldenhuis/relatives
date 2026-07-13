@@ -17,6 +17,15 @@ $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
 $trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 $settings = $settingsRepo->get($ctx->familyId);
+
+// Mode 0 = Off: the family explicitly disabled tracking — store nothing.
+if ((int) ($settings['mode'] ?? 1) === 0) {
+    Response::success([
+        'status' => 'tracking_disabled',
+        'server_settings' => ['mode' => 0],
+    ], 'tracking_disabled');
+}
+
 $locationRepo = new LocationRepo($db, $trackingCache);
 $eventsRepo = new EventsRepo($db);
 $alertsRepo = new AlertsRepo($db, $trackingCache);

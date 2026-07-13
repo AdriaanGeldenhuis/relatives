@@ -319,7 +319,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         light:     'mapbox://styles/mapbox/light-v11'
     };
     var styleOrder = ['dark', 'streets', 'satellite', 'light'];
-    var currentStyleKey = ((window.TrackingConfig || {}).settings || {}).map_style || 'dark';
+    // Personal choice first (localStorage), then the family default.
+    var currentStyleKey = null;
+    try { currentStyleKey = localStorage.getItem('tracking_map_style'); } catch (e) {}
+    if (!currentStyleKey) {
+        currentStyleKey = ((window.TrackingConfig || {}).settings || {}).map_style || 'dark';
+    }
     if (!mapStyles[currentStyleKey]) currentStyleKey = 'dark';
     var mapStyle = mapStyles[currentStyleKey];
 
@@ -371,13 +376,18 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         currentStyleKey = styleOrder[(idx + 1) % styleOrder.length];
         map.setStyle(mapStyles[currentStyleKey]);
         showToast('Map: ' + currentStyleKey.charAt(0).toUpperCase() + currentStyleKey.slice(1), 'info');
-        // Persist to server
-        fetch(window.TrackingConfig.apiBase + '/settings_save.php', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ map_style: currentStyleKey })
-        }).catch(function(e) { console.warn('[MapStyle] Save failed:', e); });
+        // Persist locally for everyone; settings_save.php is admin-only, so
+        // for regular members the old server POST 403'd and their choice
+        // reverted on every reload. Admins still update the family default.
+        try { localStorage.setItem('tracking_map_style', currentStyleKey); } catch (e) {}
+        if (window.TrackingConfig.isAdmin) {
+            fetch(window.TrackingConfig.apiBase + '/settings_save.php', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ map_style: currentStyleKey })
+            }).catch(function(e) { console.warn('[MapStyle] Save failed:', e); });
+        }
         // Re-add markers after style change
         map.once('style.load', function() {
             var oldMarkers = markers;
@@ -1003,6 +1013,18 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         wakeFab.disabled = true;
         if (wakeLabel) wakeLabel.textContent = 'Sending...';
 
+        function resetWakeFab() {
+            wakeFab.classList.remove('active');
+            wakeFab.disabled = false;
+            if (wakeLabel) wakeLabel.textContent = 'Wake';
+        }
+
+        // Boost this device too: the server wake only targets the REST of
+        // the family, and in the app our own dot should refresh immediately.
+        if (typeof window.TrackingBridge !== 'undefined') {
+            try { window.TrackingBridge.wakeAllDevices(); } catch (e) {}
+        }
+
         fetch(window.TrackingConfig.apiBase + '/wake_devices.php', {
             method: 'POST',
             credentials: 'same-origin',
@@ -1010,30 +1032,40 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             body: JSON.stringify({ family_id: window.TrackingConfig.familyId })
         })
         .then(function(r) {
-            if (!r.ok) throw new Error('Server ' + r.status);
-            return r.json();
+            return r.json().catch(function() { return {}; }).then(function(body) {
+                return { status: r.status, ok: r.ok, body: body };
+            });
         })
-        .then(function(data) {
-            if (data.success) {
+        .then(function(res) {
+            var data = res.body || {};
+            if (res.status === 429) {
+                // Rate-limited (one wake per minute) — this is not a failure.
+                var wait = data.retry_after ? Math.ceil(data.retry_after) + 's' : 'a minute';
+                showToast('Devices were just woken — try again in ' + wait, 'info');
+                resetWakeFab();
+                return;
+            }
+            if (res.ok && data.success) {
+                var d = data.data || {};
                 wakeFab.classList.add('active');
                 if (wakeLabel) wakeLabel.textContent = 'Sent!';
-                showToast('Wake signal sent to your family', 'success');
-                setTimeout(function() {
-                    wakeFab.classList.remove('active');
-                    wakeFab.disabled = false;
-                    if (wakeLabel) wakeLabel.textContent = 'Wake';
-                }, 3000);
+                if (d.devices_targeted === 0) {
+                    showToast('No family devices to wake yet — ask them to install the app and enable tracking', 'info');
+                } else if (d.sent > 0) {
+                    showToast('Wake signal sent to ' + d.sent + ' device' + (d.sent === 1 ? '' : 's'), 'success');
+                } else {
+                    showToast('Wake sent, but no device confirmed — they may be offline', 'info');
+                }
+                setTimeout(resetWakeFab, 3000);
             } else {
-                showToast('Failed: ' + (data.error || 'unknown'), 'error');
-                wakeFab.disabled = false;
-                if (wakeLabel) wakeLabel.textContent = 'Wake';
+                showToast('Wake failed: ' + (data.error || ('server ' + res.status)), 'error');
+                resetWakeFab();
             }
         })
         .catch(function(err) {
             console.error('[Wake] Error:', err);
             showToast('Wake failed: ' + err.message, 'error');
-            wakeFab.disabled = false;
-            if (wakeLabel) wakeLabel.textContent = 'Wake';
+            resetWakeFab();
         });
     });
 

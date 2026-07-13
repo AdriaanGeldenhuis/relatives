@@ -454,10 +454,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             };
 
             var url = window.TrackingConfig.apiBase;
+            // geofences_update.php only accepts PUT — POSTing an edit was a
+            // guaranteed 405, so geofences could never be edited.
             var method = 'POST';
 
             if (editId) {
                 url += '/geofences_update.php';
+                method = 'PUT';
                 payload.id = parseInt(editId);
             } else {
                 url += '/geofences_add.php';
@@ -473,7 +476,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 saveBtn.disabled = false;
-                if (data.ok) {
+                // API envelope is {success, message, data} — the old data.ok
+                // check treated every successful save as a failure.
+                if (data.success) {
                     location.reload();
                 } else {
                     alert(data.error || 'Failed to save geofence');
@@ -531,15 +536,16 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         btn.addEventListener('click', function() {
             if (!confirm('Delete geofence "' + btn.dataset.name + '"?')) return;
 
+            // geofences_delete.php only accepts DELETE — POST always 405'd.
             fetch(window.TrackingConfig.apiBase + '/geofences_delete.php', {
-                method: 'POST',
+                method: 'DELETE',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: parseInt(btn.dataset.id) })
             })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (data.ok) {
+                if (data.success) {
                     location.reload();
                 } else {
                     alert(data.error || 'Failed to delete');

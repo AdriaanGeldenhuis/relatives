@@ -144,8 +144,15 @@ class FirebaseMessaging {
     /**
      * Send notification using FCM v1 API
      * Returns: true = success, false = failed but token valid, 'invalid_token' = token should be removed
+     *
+     * $androidOverrides is merged into the message's android block. Wake
+     * pushes pass ['ttl' => '60s', 'collapse_key' => 'wake_tracking']: without
+     * a TTL, FCM stores an undeliverable message for its default 4 WEEKS and
+     * replays every queued copy when the device comes back online — a phone
+     * switched on in the morning burst-fired GPS for each overnight wake.
+     * collapse_key keeps at most one pending copy per kind.
      */
-    public function send(string $token, array $notification, array $data = []) {
+    public function send(string $token, array $notification, array $data = [], array $androidOverrides = []) {
         // Get access token
         $accessToken = $this->getAccessToken();
 
@@ -178,9 +185,9 @@ class FirebaseMessaging {
                 'message' => [
                     'token' => $token,
                     'data' => $this->stringifyData($dataPayload),
-                    'android' => [
+                    'android' => array_merge([
                         'priority' => 'high'
-                    ],
+                    ], $androidOverrides),
                     'apns' => [
                         'payload' => [
                             'aps' => [

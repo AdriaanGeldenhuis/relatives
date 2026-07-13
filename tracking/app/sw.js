@@ -6,19 +6,19 @@
  * ============================================
  */
 
-const CACHE_VERSION = 'tracking-v1.1.0';
+const CACHE_VERSION = 'tracking-v1.2.0';
 const STATIC_CACHE = 'tracking-static-' + CACHE_VERSION;
 const API_CACHE = 'tracking-api-' + CACHE_VERSION;
 
 /**
- * App shell files to pre-cache on install.
+ * App shell files to pre-cache on install — static assets ONLY. The PHP
+ * pages are rendered per-user with the session's data (Mapbox token, family
+ * ids, geofence coordinates) embedded; pre-caching them kept one user's
+ * private family data on disk after logout and could serve it to the next
+ * login on a shared device. Navigations stay network-first with the offline
+ * page as fallback.
  */
 const APP_SHELL = [
-    '/tracking/app/',
-    '/tracking/app/index.php',
-    '/tracking/app/geofences.php',
-    '/tracking/app/events.php',
-    '/tracking/app/settings.php',
     '/tracking/app/offline.html',
     '/tracking/app/assets/css/tracking.css',
     '/tracking/app/assets/js/state.js',
@@ -179,23 +179,14 @@ function cacheFirst(request, cacheName) {
 }
 
 /**
- * Navigation handler: network-first with offline fallback page.
+ * Navigation handler: network with offline fallback page. Authenticated
+ * PHP pages are never persisted (see APP_SHELL note) — offline users get
+ * the offline page, not a stale copy of someone's family data.
  */
 function navigationHandler(request) {
     return fetch(request)
-        .then(function (response) {
-            if (response && response.status === 200) {
-                var clone = response.clone();
-                caches.open(STATIC_CACHE).then(function (cache) {
-                    cache.put(request, clone);
-                });
-            }
-            return response;
-        })
         .catch(function () {
-            return caches.match(request).then(function (cached) {
-                return cached || caches.match('/tracking/app/offline.html');
-            });
+            return caches.match('/tracking/app/offline.html');
         });
 }
 
