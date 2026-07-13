@@ -181,5 +181,8 @@ class TrackingStore(context: Context) {
 
     suspend fun cleanupSent() = dao.deleteSent()
 
+    /** Drop queued points older than [cutoffMillis] (age-based expiry). */
+    suspend fun expireOlderThan(cutoffMillis: Long) = dao.deleteOlderThan(cutoffMillis)
+
     suspend fun unsentCount() = dao.unsentCount()
 }

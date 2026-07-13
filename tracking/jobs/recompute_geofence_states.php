@@ -66,13 +66,24 @@ try {
         }
 
         foreach ($members as $member) {
+            // Members without a fix yet come back with NULL lat/lng — never
+            // evaluate them against geofences (that fired bogus exit events
+            // at Null Island for anyone with a lingering is_inside state).
+            if ($member['lat'] === null || $member['lng'] === null) {
+                continue;
+            }
+
             $userId = (int)$member['user_id'];
             $lat = (float)$member['lat'];
             $lng = (float)$member['lng'];
             $name = $member['name'] ?? 'User';
 
-            // Skip if location is too stale (older than 1 hour)
-            $recordedAt = strtotime($member['recorded_at'] ?? $member['updated_at'] ?? '');
+            // Skip if location is too stale (older than 1 hour). recorded_at
+            // is UTC — parsing it as server-local (+02:00) made every fresh
+            // fix look 2h old, so this safety-net job silently processed
+            // no one. Time::parse reads the UTC convention correctly.
+            $recordedRaw = $member['recorded_at'] ?? $member['updated_at'] ?? '';
+            $recordedAt = $recordedRaw !== '' ? Time::parse($recordedRaw) : 0;
             if ($recordedAt && (time() - $recordedAt) > 3600) {
                 continue;
             }
@@ -80,7 +91,8 @@ try {
             // Re-process through the geofence engine
             // The engine handles state comparison internally and only fires
             // events/alerts on actual transitions
-            $geofenceEngine->process($familyId, $userId, $lat, $lng, $name);
+            $accuracy = isset($member['accuracy_m']) ? (float) $member['accuracy_m'] : null;
+            $geofenceEngine->process($familyId, $userId, $lat, $lng, $name, $accuracy);
             $processed++;
         }
 

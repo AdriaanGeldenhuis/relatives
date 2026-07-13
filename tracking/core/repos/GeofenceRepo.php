@@ -81,10 +81,13 @@ class GeofenceRepo
      */
     public function update(int $familyId, int $id, array $data): bool
     {
+        // COALESCE keeps the current active flag when the caller doesn't send
+        // one — the edit form omits it, so `?? 1` silently re-armed geofences
+        // an admin had deactivated every time they were edited.
         $stmt = $this->db->prepare("
             UPDATE tracking_geofences
             SET name = ?, type = ?, center_lat = ?, center_lng = ?, radius_m = ?,
-                polygon_json = ?, active = ?
+                polygon_json = ?, active = COALESCE(?, active)
             WHERE id = ? AND family_id = ?
         ");
         $result = $stmt->execute([
@@ -94,7 +97,7 @@ class GeofenceRepo
             $data['center_lng'],
             $data['radius_m'],
             $data['polygon_json'],
-            $data['active'] ?? 1,
+            $data['active'] ?? null,
             $id,
             $familyId,
         ]);

@@ -102,10 +102,12 @@ require_once __DIR__ . '/../../shared/components/header.php';
                 $userName = e($meta['user_name'] ?? $ev['user_name'] ?? 'Unknown');
                 $targetName = e($meta['geofence_name'] ?? $meta['place_name'] ?? $meta['name'] ?? 'Unknown');
                 $time = $ev['occurred_at'] ?? $ev['created_at'] ?? '';
-                $timeFormatted = $time ? date('M j, g:i A', strtotime($time)) : '';
+                // occurred_at is UTC; render it in the server's local zone.
+                $timeTs = $time ? strtotime($time . ' UTC') : false;
+                $timeFormatted = $timeTs ? date('M j, g:i A', $timeTs) : '';
                 $timeAgo = '';
-                if ($time) {
-                    $diff = time() - strtotime($time);
+                if ($timeTs) {
+                    $diff = time() - $timeTs;
                     if ($diff < 60) $timeAgo = 'just now';
                     elseif ($diff < 3600) $timeAgo = floor($diff / 60) . 'm ago';
                     elseif ($diff < 86400) $timeAgo = floor($diff / 3600) . 'h ago';

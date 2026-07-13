@@ -67,6 +67,7 @@ if ($isBatch) {
     $validator = new TrackingValidator();
     $results = [];
     $storedCount = 0;
+    $lastStored = null;
 
     foreach ($locations as $i => $locInput) {
         $loc = $validator->validateLocation($locInput);
@@ -102,10 +103,9 @@ if ($isBatch) {
             $locationRepo->insertHistory($ctx->familyId, $ctx->userId, $loc, $motion['motion_state']);
         }
 
-        // Process geofences on last item only
-        if ($i === array_key_last($locations)) {
-            $geofenceEngine->process($ctx->familyId, $ctx->userId, $loc['lat'], $loc['lng'], $ctx->name);
-        }
+        // Newest stored fix; geofences evaluated once after the loop so a
+        // trailing invalid/duplicate point can't skip the whole batch.
+        $lastStored = $loc;
 
         $storedCount++;
         $results[] = [
@@ -114,6 +114,17 @@ if ($isBatch) {
             'motion_state' => $motion['motion_state'],
             'stored_history' => $motion['store_history'],
         ];
+    }
+
+    if ($lastStored !== null) {
+        $geofenceEngine->process(
+            $ctx->familyId,
+            $ctx->userId,
+            $lastStored['lat'],
+            $lastStored['lng'],
+            $ctx->name,
+            $lastStored['accuracy_m'] ?? null
+        );
     }
 
     Response::success([
@@ -166,7 +177,7 @@ if ($isBatch) {
     }
 
     // Process geofences
-    $geofenceEngine->process($ctx->familyId, $ctx->userId, $loc['lat'], $loc['lng'], $ctx->name);
+    $geofenceEngine->process($ctx->familyId, $ctx->userId, $loc['lat'], $loc['lng'], $ctx->name, $loc['accuracy_m'] ?? null);
 
     Response::success([
         'status' => 'stored',

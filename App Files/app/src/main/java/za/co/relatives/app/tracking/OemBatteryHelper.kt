@@ -174,12 +174,12 @@ object OemBatteryHelper {
         ),
     )
 
+    // Meizu's security screen is launched by ACTION, not a component class —
+    // handled specially in openOemSettings; no ComponentName candidates.
     private val MEIZU = OemGuide(
         label = "Meizu",
         instructions = "Find Relatives and allow background running.",
-        components = listOf(
-            ComponentName("com.meizu.safe", "com.meizu.safe.security.SHOW_APPSEC"),
-        ),
+        components = emptyList(),
     )
 
     /** Manufacturer/brand (lowercase) → guide. */
@@ -241,6 +241,22 @@ object OemBatteryHelper {
      * most OEM skins links to the same battery controls).
      */
     private fun openOemSettings(activity: Activity, guide: OemGuide) {
+        // Meizu exposes its app-security screen via an ACTION intent with the
+        // package name as an extra, not a launchable activity class.
+        if (guide === MEIZU) {
+            try {
+                activity.startActivity(
+                    Intent("com.meizu.safe.security.SHOW_APPSEC").apply {
+                        addCategory(Intent.CATEGORY_DEFAULT)
+                        putExtra("packageName", activity.packageName)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    },
+                )
+                return
+            } catch (_: Exception) {
+                // Fall through to the app-details page below.
+            }
+        }
         for (component in guide.components) {
             try {
                 activity.startActivity(

@@ -18,15 +18,20 @@ class EventsRepo
      */
     public function insert(int $familyId, ?int $userId, string $eventType, array $meta = []): int
     {
+        // occurred_at stored as UTC (Time::now), matching recorded_at and
+        // geofence-state timestamps. NOW() wrote SAST wall-clock (+02:00),
+        // which the frontend then parsed as UTC — every event time was 2h
+        // off. created_at keeps its DB default (server-local) for retention.
         $stmt = $this->db->prepare("
             INSERT INTO tracking_events (family_id, user_id, event_type, meta_json, occurred_at)
-            VALUES (?, ?, ?, ?, NOW())
+            VALUES (?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $familyId,
             $userId,
             $eventType,
             !empty($meta) ? json_encode($meta) : null,
+            Time::now(),
         ]);
 
         return (int) $this->db->lastInsertId();

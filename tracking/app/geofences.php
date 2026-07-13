@@ -202,7 +202,23 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var type = el.dataset.type;
         var radius = parseFloat(el.dataset.radius) || 200;
 
-        if (!lat || !lng) return;
+        // Polygon geofences have NULL center_lat/lng, so parseFloat('') → NaN.
+        // Derive a centre from the polygon ring instead of bailing (which left
+        // every polygon card with a blank map).
+        if (isNaN(lat) || isNaN(lng)) {
+            if (type === 'polygon' && el.dataset.polygon) {
+                try {
+                    var ring = JSON.parse(el.dataset.polygon);
+                    if (ring && ring.length) {
+                        var sLat = 0, sLng = 0;
+                        ring.forEach(function(c) { sLat += c[0]; sLng += c[1]; });
+                        lat = sLat / ring.length;
+                        lng = sLng / ring.length;
+                    }
+                } catch (e) {}
+            }
+            if (isNaN(lat) || isNaN(lng)) return;
+        }
 
         var miniMap = new mapboxgl.Map({
             container: el,
@@ -438,7 +454,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             var editId = document.getElementById('gfEditId').value;
 
             if (!name) { alert('Please enter a name'); return; }
-            if (!lat || !lng) { alert('Please click on the map to set a location'); return; }
+            // Polygons carry no centre point — only circles need lat/lng, so
+            // don't demand it for polygons (that blocked every polygon edit,
+            // since polygon cards render empty gfLat/gfLng).
+            if (selectedType === 'circle' && (!lat || !lng)) {
+                alert('Please click on the map to set a location'); return;
+            }
             if (selectedType === 'polygon' && polygonPoints.length < 3 && !polygonJson) {
                 alert('Please click at least 3 points on the map for a polygon');
                 return;
@@ -447,8 +468,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             var payload = {
                 name: name,
                 type: selectedType,
-                center_lat: parseFloat(lat),
-                center_lng: parseFloat(lng),
+                center_lat: selectedType === 'circle' ? parseFloat(lat) : null,
+                center_lng: selectedType === 'circle' ? parseFloat(lng) : null,
                 radius_m: selectedType === 'circle' ? parseFloat(radius) : 0,
                 polygon_json: selectedType === 'polygon' ? (polygonJson || JSON.stringify(polygonPoints)) : null
             };

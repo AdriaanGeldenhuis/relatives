@@ -159,6 +159,13 @@ class TrackingRestartWorker(
             } ?: return
 
             val now = System.currentTimeMillis()
+            // Stamp with the fix's real capture time, not "now": the
+            // LocationManager fallback below can return a getLastKnownLocation
+            // that is hours old, and stamping it now would upload a stale
+            // position as if it were current.
+            val captureTime = if (loc.time in 1 until (now + 1)) loc.time else now
+            val fixAgeMs = now - captureTime
+
             TrackingStore(ctx).enqueueLocation(
                 QueuedLocationEntity(
                     lat = loc.latitude, lng = loc.longitude,
@@ -169,11 +176,16 @@ class TrackingRestartWorker(
                     speedKmh = if (loc.hasSpeed()) loc.speed * 3.6f else null,
                     isMoving = false,
                     batteryLevel = null,
-                    timestamp = now,
+                    timestamp = captureTime,
                 )
             )
-            ctx.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
-                .edit().putLong("last_fix_time", now).apply()
+            // Only treat the watchdog as "satisfied" for a genuinely fresh
+            // fix; a stale last-known point must not stop the watchdog from
+            // trying for a real one on the next tick.
+            if (fixAgeMs <= STALE_FIX_MS) {
+                ctx.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
+                    .edit().putLong("last_fix_time", captureTime).apply()
+            }
 
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -212,32 +224,39 @@ class TrackingRestartWorker(
             result = loc
             latch.countDown()
         }
+        // Full listener object, not a lambda: pre-API-30 the OS may invoke the
+        // legacy callbacks, which a SAM lambda compiled against a modern SDK
+        // does not implement (AbstractMethodError). Kept in scope so it can be
+        // removed on timeout — requestSingleUpdate only auto-unregisters after
+        // it delivers, so a no-fix timeout otherwise leaks a live GPS request.
+        val legacyListener = object : android.location.LocationListener {
+            override fun onLocationChanged(location: Location) {
+                consumer.accept(location)
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onStatusChanged(p: String?, status: Int, extras: android.os.Bundle?) {}
+            override fun onProviderEnabled(p: String) {}
+            override fun onProviderDisabled(p: String) {}
+        }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 lm.getCurrentLocation(provider, null, ctx.mainExecutor, consumer)
+                latch.await(50, TimeUnit.SECONDS)
             } else {
-                // Full listener object, not a lambda: pre-API-30 the OS may
-                // invoke the legacy callbacks, which a SAM lambda compiled
-                // against a modern SDK does not implement (AbstractMethodError).
                 @Suppress("DEPRECATION")
-                lm.requestSingleUpdate(
-                    provider,
-                    object : android.location.LocationListener {
-                        override fun onLocationChanged(location: Location) {
-                            consumer.accept(location)
-                        }
-
-                        @Deprecated("Deprecated in Java")
-                        override fun onStatusChanged(p: String?, status: Int, extras: android.os.Bundle?) {}
-                        override fun onProviderEnabled(p: String) {}
-                        override fun onProviderDisabled(p: String) {}
-                    },
-                    ctx.mainLooper,
-                )
+                lm.requestSingleUpdate(provider, legacyListener, ctx.mainLooper)
+                val delivered = latch.await(50, TimeUnit.SECONDS)
+                if (!delivered) {
+                    // Never got a fix — cancel the outstanding request.
+                    runCatching { lm.removeUpdates(legacyListener) }
+                }
             }
-            latch.await(50, TimeUnit.SECONDS)
         } catch (t: Throwable) {
             Log.w(TAG, "LocationManager fix failed", t)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                runCatching { lm.removeUpdates(legacyListener) }
+            }
         }
         return result ?: lm.getLastKnownLocation(provider)
     }

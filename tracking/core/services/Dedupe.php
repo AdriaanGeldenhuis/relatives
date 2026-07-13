@@ -37,7 +37,11 @@ class Dedupe
             $lng
         );
 
-        $timeDiff = abs(time() - Time::parse($last['ts']));
+        // Compare the two POINTS' recorded_at values, not wall-clock now:
+        // an offline batch flushes points recorded an hour ago, so time()
+        // would always be far past the window and dedupe never triggered.
+        // Both timestamps are UTC (Time::parse handles the zone).
+        $timeDiff = abs(Time::parse($recordedAt) - Time::parse($last['ts']));
 
         if ($distance < $this->radiusM && $timeDiff < $this->timeSeconds) {
             return true;

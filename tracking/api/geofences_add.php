@@ -9,6 +9,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $ctx = SiteContext::require($db);
 
+// Geofence management is admin-only (the UI hides the controls from members,
+// and settings/alerts already enforce this) — without the check any family
+// member could create/rewrite zones and their alert rules.
+if (!$ctx->isAdmin()) {
+    Response::error('admin_required', 403);
+}
+
 $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
 
 $validator = new TrackingValidator();

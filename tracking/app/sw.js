@@ -99,13 +99,16 @@ self.addEventListener('fetch', function (event) {
 
     var url = request.url;
 
-    // Live-location polling: network only. Caching every poll response was a
-    // disk write per poll (battery) and served stale positions after logout.
-    if (url.indexOf('/tracking/api/current.php') !== -1) {
+    // Tracking API: network only, never cached. Every endpoint returns
+    // private family data (exact geofence/home coordinates, movement events,
+    // live positions); persisting it to Cache Storage left one user's data on
+    // disk after logout and could serve it to the next login on a shared
+    // device. It was also a disk write per poll (battery).
+    if (url.indexOf('/tracking/api/') !== -1) {
         return;
     }
 
-    // API calls: network-first with cache fallback
+    // Other API calls: network-first with cache fallback
     if (isApiRequest(url)) {
         event.respondWith(networkFirst(request, API_CACHE));
         return;

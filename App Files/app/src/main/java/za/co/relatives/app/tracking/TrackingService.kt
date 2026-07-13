@@ -89,6 +89,9 @@ class TrackingService : Service() {
         private const val MOVING_INTERVAL_MS = 15_000L
         private const val IDLE_INTERVAL_MS = 120_000L
 
+        /** A cached last-known fix older than this is ignored (stale). */
+        private const val FRESH_FIX_MAX_AGE_MS = 2L * 60 * 1000
+
         private const val IDLE_ENQUEUE_INTERVAL_MS = 10L * 60 * 1000
 
         /** True while an instance is alive. Lets callers avoid start churn. */
@@ -205,6 +208,7 @@ class TrackingService : Service() {
     private var hasGms = true
     private var platformLocationManager: LocationManager? = null
     private var lmUpdatesRegistered = false
+    private var providersChangedRegistered = false
 
     private var started = false
     private var isForeground = false
@@ -242,6 +246,20 @@ class TrackingService : Service() {
             if (newBucket != lastBatteryBucket) {
                 Log.d(TAG, "Battery bucket changed from $lastBatteryBucket to $newBucket, re-applying mode.")
                 lastBatteryBucket = newBucket
+                applyMode(currentMode, force = true)
+            }
+        }
+    }
+
+    // Non-GMS devices have no geofence/AR to re-arm updates, and the plain
+    // LocationManager registration silently no-ops when GPS/network are both
+    // off. Without this, toggling Location off then on left the user's dot
+    // frozen until they reopened the app. Re-apply the mode whenever the
+    // provider set changes so updates re-register once a provider returns.
+    private val providersChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            if (!hasGms && started) {
+                Log.d(TAG, "Location providers changed; re-applying fallback updates.")
                 applyMode(currentMode, force = true)
             }
         }
@@ -344,6 +362,7 @@ class TrackingService : Service() {
         // Always stop active location callbacks (service is dying)
         stopLocationUpdates()
         unregisterBatteryReceiver()
+        unregisterProvidersChangedReceiver()
 
         // Only remove passive triggers when the user intentionally disabled
         // tracking. If the system killed us, geofence + activity recognition
@@ -415,6 +434,7 @@ class TrackingService : Service() {
     private fun shutdown() {
         stopLocationUpdates()
         unregisterBatteryReceiver()
+        unregisterProvidersChangedReceiver()
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Exception) {
@@ -435,6 +455,7 @@ class TrackingService : Service() {
         Log.i(TAG, "Starting tracking")
         lastBatteryBucket = getBatteryBucket()
         registerBatteryReceiver()
+        registerProvidersChangedReceiver()
         applyMode(Mode.IDLE, force = true)
         lastIdleEnqueueTime = System.currentTimeMillis()
         registerActivityTransitions()
@@ -472,14 +493,21 @@ class TrackingService : Service() {
             } else {
                 // Fallback burst: the MOVING-mode updates registered above
                 // deliver the fresh fix; nudge with the last known position
-                // so the family sees SOMETHING move immediately.
+                // so the family sees SOMETHING move immediately — but only if
+                // it is recent. A stale cached point (device in a drawer for
+                // hours) would corrupt the state machine and upload a fix far
+                // from the real position stamped as "now".
                 platformLocationManager?.let { lm ->
                     val provider = listOf(
                         LocationManager.GPS_PROVIDER,
                         LocationManager.NETWORK_PROVIDER,
                     ).firstOrNull { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
                     provider?.let { p ->
-                        lm.getLastKnownLocation(p)?.let { loc -> onLocationReceived(loc) }
+                        lm.getLastKnownLocation(p)?.let { loc ->
+                            if (System.currentTimeMillis() - loc.time <= FRESH_FIX_MAX_AGE_MS) {
+                                onLocationReceived(loc)
+                            }
+                        }
                     }
                 }
             }
@@ -545,13 +573,20 @@ class TrackingService : Service() {
     }
 
     private fun unregisterActivityTransitions() {
-        activityTransitionPi?.let { pi ->
-            try {
-                ActivityRecognition.getClient(this).removeActivityTransitionUpdates(pi)
-                    .addOnFailureListener { e -> Log.e(TAG, "Failed to unregister activity transitions", e) }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error unregistering activity transitions", e)
-            }
+        if (!hasGms) return
+        // After a process restart the field is null but the OLD registration
+        // is still live in Play services. Rebuild the identical PendingIntent
+        // (same request code + intent + flags → equal PI) so disabling
+        // tracking actually removes it instead of leaking it forever.
+        val pi = activityTransitionPi ?: PendingIntent.getBroadcast(
+            this, 1, Intent(this, ActivityTransitionsReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+        try {
+            ActivityRecognition.getClient(this).removeActivityTransitionUpdates(pi)
+                .addOnFailureListener { e -> Log.e(TAG, "Failed to unregister activity transitions", e) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unregistering activity transitions", e)
         }
         activityTransitionPi = null
     }
@@ -583,13 +618,19 @@ class TrackingService : Service() {
     }
 
     private fun removeGeofence() {
-        geofencePi?.let { pi ->
-            try {
-                geofencingClient.removeGeofences(pi)
-                    .addOnFailureListener { e -> Log.e(TAG, "Failed to remove geofence", e) }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error removing geofence", e)
-            }
+        if (!hasGms) return
+        // Rebuild the PendingIntent when the field is null (process restart)
+        // so the previous incarnation's geofence is actually cleared rather
+        // than left registered in Play services indefinitely.
+        val pi = geofencePi ?: PendingIntent.getBroadcast(
+            this, 2, Intent(this, GeofenceReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+        try {
+            geofencingClient.removeGeofences(pi)
+                .addOnFailureListener { e -> Log.e(TAG, "Failed to remove geofence", e) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error removing geofence", e)
         }
         geofencePi = null
     }
@@ -821,6 +862,29 @@ class TrackingService : Service() {
         } catch (_: Exception) {
         }
         batteryReceiverRegistered = false
+    }
+
+    private fun registerProvidersChangedReceiver() {
+        if (providersChangedRegistered || hasGms) return
+        try {
+            ContextCompat.registerReceiver(
+                this, providersChangedReceiver,
+                IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            providersChangedRegistered = true
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not register providers-changed receiver", e)
+        }
+    }
+
+    private fun unregisterProvidersChangedReceiver() {
+        if (!providersChangedRegistered) return
+        try {
+            unregisterReceiver(providersChangedReceiver)
+        } catch (_: Exception) {
+        }
+        providersChangedRegistered = false
     }
 
     private fun getBatteryBucket(): BatteryBucket {

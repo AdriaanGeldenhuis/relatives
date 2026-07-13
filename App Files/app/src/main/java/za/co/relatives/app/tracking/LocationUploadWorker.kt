@@ -40,7 +40,9 @@ class LocationUploadWorker(
         const val WORK_NAME = "location_upload"
         private const val BATCH_URL = "https://www.relatives.co.za/tracking/api/batch.php"
         private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
-        private const val MAX_RETRIES = 5
+
+        /** Points older than this are dropped unsent — worthless on a live map. */
+        private const val MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
 
         fun enqueue(context: Context) {
             val constraints = Constraints.Builder()
@@ -70,6 +72,12 @@ class LocationUploadWorker(
     override suspend fun doWork(): Result {
         Log.d(TAG, "Upload starting (attempt $runAttemptCount)")
 
+        // Age-based expiry is the ONLY discard of unsent points. The previous
+        // retry-count cull deleted queued fixes after 5 attempts, but the
+        // retry counter was bumped on plain network timeouts too — a flaky or
+        // captive-portal connection silently ate a user's location history.
+        store.expireOlderThan(System.currentTimeMillis() - MAX_AGE_MS)
+
         // Drain the whole queue (max 300 items ≈ 3 batches), not just the
         // first 100 — the queue trims oldest-first, so leaving points behind
         // loses history.
@@ -89,13 +97,7 @@ class LocationUploadWorker(
             return Result.success()
         }
 
-        // Filter exhausted items
-        val viable = batch.filter { it.retryCount < MAX_RETRIES }
-        batch.filter { it.retryCount >= MAX_RETRIES }.forEach { store.markSent(it.clientEventId) }
-        if (viable.isEmpty()) {
-            store.cleanupSent()
-            return Result.success()
-        }
+        val viable = batch
 
         return try {
             val deviceId = prefs.deviceUuid
@@ -135,18 +137,23 @@ class LocationUploadWorker(
                     Result.success()
                 }
                 401, 403 -> {
+                    // Not authenticated (cookie not synced yet). Keep the
+                    // queue intact; the next app open re-auths and re-runs.
                     Log.w(TAG, "Auth failure (${response.code}), aborting")
                     Result.failure()
                 }
                 else -> {
+                    // 5xx / 429 / anything else: transient. Retry with
+                    // WorkManager's backoff and KEEP the points — never
+                    // discard them for a server hiccup.
                     Log.w(TAG, "Upload failed (${response.code}): $body")
-                    viable.forEach { store.incrementRetry(it.clientEventId) }
                     Result.retry()
                 }
             }
         } catch (e: Exception) {
+            // Network error (timeout, no connectivity, captive portal).
+            // Retry; the points stay queued until they upload or age out.
             Log.e(TAG, "Upload exception", e)
-            viable.forEach { store.incrementRetry(it.clientEventId) }
             Result.retry()
         }
     }

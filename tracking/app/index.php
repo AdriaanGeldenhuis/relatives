@@ -414,9 +414,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                     _members = data.data;
                     renderMembers(_members);
                     updateMarkers(_members);
-                    if (!initialFitDone) {
+                    // Only latch the auto-fit once it actually framed someone;
+                    // fitMapToFamily returns true when it had points. Otherwise
+                    // the first poll (everyone still has_location=false) would
+                    // burn the one-shot fit and the map never centres.
+                    if (!initialFitDone && fitMapToFamily(_members)) {
                         initialFitDone = true;
-                        fitMapToFamily(_members);
                     }
                 }
             })
@@ -426,16 +429,17 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function fitMapToFamily(members) {
-        if (!map) return;
+        if (!map) return false;
         var pts = members.filter(function(m) { return m.has_location && m.lat !== null && m.lng !== null; });
-        if (pts.length === 0) return;
+        if (pts.length === 0) return false;
         if (pts.length === 1) {
             map.flyTo({ center: [parseFloat(pts[0].lng), parseFloat(pts[0].lat)], zoom: 15, duration: 1000 });
-            return;
+            return true;
         }
         var bounds = new mapboxgl.LngLatBounds();
         pts.forEach(function(m) { bounds.extend([parseFloat(m.lng), parseFloat(m.lat)]); });
         map.fitBounds(bounds, { padding: 80, maxZoom: 16, duration: 1000 });
+        return true;
     }
 
     function renderMembers(members) {
@@ -474,7 +478,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             var speed = hasLoc ? formatSpeed(m.speed_mps) : '';
 
             html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
-            html += '  <div class="member-avatar" style="background:' + (m.avatar_color || '#667eea') + '">';
+            html += '  <div class="member-avatar" style="background:' + safeColor(m.avatar_color) + '">';
             if (m.has_avatar) {
                 html += '    <img src="/saves/' + m.user_id + '/avatar/avatar.webp?v=' + (window.avatarVersion || 0) + '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\'">';
                 html += '    <span style="display:none">' + initial + '</span>';
@@ -525,11 +529,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 el.className = 'map-marker';
                 var initial = (m.name || 'U').charAt(0).toUpperCase();
                 if (m.has_avatar) {
-                    el.innerHTML = '<div class="map-marker-inner map-marker-avatar" style="background:' + (m.avatar_color || '#667eea') + '">' +
+                    el.innerHTML = '<div class="map-marker-inner map-marker-avatar" style="background:' + safeColor(m.avatar_color) + '">' +
                         '<img src="/saves/' + m.user_id + '/avatar/avatar.webp?v=' + (window.avatarVersion || 0) + '" alt="" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + initial + '\'">' +
                         '</div>';
                 } else {
-                    el.innerHTML = '<div class="map-marker-inner" style="background:' + (m.avatar_color || '#667eea') + '">' + initial + '</div>';
+                    el.innerHTML = '<div class="map-marker-inner" style="background:' + safeColor(m.avatar_color) + '">' + initial + '</div>';
                 }
                 markers[m.user_id] = new mapboxgl.Marker({ element: el, anchor: 'top-left' })
                     .setLngLat(lngLat)
@@ -599,7 +603,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
         // Header row: avatar + name + status
         s += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
-        s += '<div style="width:36px;height:36px;min-width:36px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;background:' + (m.avatar_color || '#667eea') + '">';
+        s += '<div style="width:36px;height:36px;min-width:36px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;background:' + safeColor(m.avatar_color) + '">';
         if (m.has_avatar) {
             s += '<img src="/saves/' + m.user_id + '/avatar/avatar.webp" style="width:36px;height:36px;object-fit:cover;border-radius:50%;display:block" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
             s += '<span style="display:none;width:100%;height:100%;align-items:center;justify-content:center">' + initial + '</span>';
@@ -668,11 +672,21 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         return div.innerHTML;
     }
 
+    // avatar_color is interpolated raw into style="background:..." inside
+    // innerHTML strings; today only profile picture upload writes it, but a
+    // value like `#fff"><img src=x onerror=...>` would execute for every
+    // family member viewing the map. Whitelist to a valid hex colour.
+    function safeColor(c) {
+        return /^#[0-9a-fA-F]{3,8}$/.test(c || '') ? c : '#667eea';
+    }
+
     // Fly to member
     window.flyToMember = function(userId) {
         if (!map) return;
         var m = _members.find(function(x) { return x.user_id == userId; });
-        if (m) {
+        // A poll may have replaced this member with has_location=false since
+        // the row was rendered; parseFloat(null) → NaN → mapbox throws.
+        if (m && m.has_location && m.lat !== null && m.lng !== null) {
             map.flyTo({ center: [parseFloat(m.lng), parseFloat(m.lat)], zoom: 16, duration: 1500 });
 
             document.querySelectorAll('.member-item').forEach(function(el) {
@@ -896,12 +910,23 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 _navCurrentStep++;
                 updateNavStep();
                 updateNavRemaining();
+                // Don't reuse this step's `dist` for the arrival check below —
+                // it was measured against the step we just left, which would
+                // declare arrival one turn early. Re-evaluate on the next fix.
+                return;
             }
 
-            // Check if arrived (last step and within 50m)
-            if (_navCurrentStep === _navSteps.length - 1 && dist < 50) {
-                showToast('You have arrived!', 'success');
-                endNavigation();
+            // Arrival: on the final step, measure distance to the DESTINATION
+            // (the last step's own location), not a stale value.
+            if (_navCurrentStep === _navSteps.length - 1) {
+                var last = _navSteps[_navSteps.length - 1];
+                var destDist = last && last.location
+                    ? haversineDist(lat, lng, last.location[1], last.location[0])
+                    : dist;
+                if (destDist < 50) {
+                    showToast('You have arrived!', 'success');
+                    endNavigation();
+                }
             }
         }
     }
@@ -1082,13 +1107,24 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     document.getElementById('consentAccept').addEventListener('click', function() {
         try { localStorage.setItem('tracking_consent', '1'); } catch (e) {}
+        hasConsent = '1';
         consentOverlay.classList.remove('active');
         requestNotificationPermission();
+        // Honour the "Location Sharing" toggle in the dialog. In the app the
+        // OS permission flow already governs sharing, so this only gates the
+        // browser upload path.
+        var shareLoc = document.getElementById('consentLocation');
+        if (!isNativeApp && navigator.geolocation && (!shareLoc || shareLoc.checked)) {
+            startBrowserTracking();
+        }
     });
 
     document.getElementById('consentDecline').addEventListener('click', function() {
         try { localStorage.setItem('tracking_consent', '0'); } catch (e) {}
+        hasConsent = '0';
         consentOverlay.classList.remove('active');
+        // Stop uploading the user's position if a watch was already running.
+        stopBrowserTracking();
     });
 
     // Notification permission
@@ -1155,16 +1191,24 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     // ── BROWSER GEOLOCATION ─────────────────────────────────
-    // Upload the current user's position whenever the tracking page is open,
-    // in BOTH browser and app. In the app this uploads via the WebView's own
-    // geolocation with platform 'android-webview'; that is the reliable path
-    // that makes family members actually see each other while viewing the
-    // map, independent of the background TrackingService (which keeps
-    // uploading when the app is closed). Previously this was disabled in the
-    // app, so if the background service wasn't running nobody's own dot ever
-    // moved. The 10s throttle in uploadPosition() keeps battery/GPS in check.
+    // Upload the current user's position whenever the tracking page is open.
+    // In the app this uploads via the WebView's own geolocation with platform
+    // 'android-webview'; that is the reliable path that makes family members
+    // actually see each other while viewing the map, independent of the
+    // background TrackingService. The 10s throttle in uploadPosition() keeps
+    // battery/GPS in check.
+    //
+    // In a plain BROWSER, gate the upload on the in-page consent: the consent
+    // dialog was purely decorative before — the page uploaded the user's
+    // position on the first fix regardless of consent, and kept uploading
+    // after they tapped "Not Now". In the native app, the OS permission flow
+    // (PermissionGate) is the consent, so start immediately there.
     if (navigator.geolocation) {
-        startBrowserTracking();
+        if (isNativeApp || hasConsent === '1') {
+            startBrowserTracking();
+        }
+        // Otherwise startBrowserTracking() is called from the consentAccept
+        // handler once the user agrees.
     }
 
     // Show an "Enable Live Location" button in the tracking toolbar
@@ -1225,17 +1269,27 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // ── BROWSER GEOLOCATION ──────────────────────────────────────
     var lastUploadTime = 0;
     var uploadPending = false;
+    var latestPos = null;
+    var browserWatchId = null;
 
     function uploadPosition(pos) {
+        // Always upload the FRESHEST fix: during the 10s throttle window,
+        // watchPosition keeps firing; the old code captured the first fix and
+        // discarded every newer one, so a moving user uploaded a stale point.
+        if (pos) latestPos = pos;
         var now = Date.now();
         if (now - lastUploadTime < 10000) {
             if (!uploadPending) {
                 uploadPending = true;
-                setTimeout(function() { uploadPending = false; uploadPosition(pos); }, 10000 - (now - lastUploadTime));
+                setTimeout(function() {
+                    uploadPending = false;
+                    if (latestPos) uploadPosition(latestPos);
+                }, 10000 - (now - lastUploadTime));
             }
             return;
         }
         lastUploadTime = now;
+        pos = latestPos;
 
         var payload = {
             lat: pos.coords.latitude,
@@ -1253,22 +1307,49 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
-        }).then(function(r) { return r.json(); }).then(function(data) {
+        }).then(function(r) {
+            return r.json().then(function(data) { return { status: r.status, data: data }; });
+        }).then(function(res) {
+            var data = res.data || {};
             if (data.success) {
                 console.log('[Tracking] Position uploaded:', payload.lat, payload.lng, 'accuracy:', payload.accuracy_m + 'm');
                 fetchMembers();
+            } else if (res.status === 403) {
+                // location_sharing disabled server-side — stop trying and tell
+                // the user, rather than silently failing forever.
+                setOwnStatus('Location sharing is turned off for your account');
+                stopBrowserTracking();
             } else {
                 console.warn('[Tracking] Server rejected:', data.error);
             }
         }).catch(function(e) { console.warn('[Tracking] Upload failed:', e); });
     }
 
+    // Surface a persistent note in the topbar subtitle when the user's own
+    // position can't be shared, so they don't believe they're on the map.
+    function setOwnStatus(msg) {
+        var el = document.getElementById('trackingStatus');
+        if (el) el.textContent = msg;
+    }
+
     function startBrowserTracking() {
-        if (!navigator.geolocation) return;
-        navigator.geolocation.watchPosition(uploadPosition, function(err) {
+        if (!navigator.geolocation || browserWatchId !== null) return;
+        browserWatchId = navigator.geolocation.watchPosition(uploadPosition, function(err) {
             console.warn('[Tracking] Geolocation error:', err.message);
+            if (err.code === 1) { // PERMISSION_DENIED
+                setOwnStatus('Location blocked — your position is not shared');
+                stopBrowserTracking();
+            }
+            // TIMEOUT / POSITION_UNAVAILABLE: keep the watch, it may recover.
         }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
         console.log('[Tracking] Browser geolocation started');
+    }
+
+    function stopBrowserTracking() {
+        if (browserWatchId !== null) {
+            navigator.geolocation.clearWatch(browserWatchId);
+            browserWatchId = null;
+        }
     }
 
     // ── MEMBER POLLING ───────────────────────────────────────────

@@ -9,6 +9,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
 
 $ctx = SiteContext::require($db);
 
+if (!$ctx->isAdmin()) {
+    Response::error('admin_required', 403);
+}
+
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 $id = (int) ($input['id'] ?? $_GET['id'] ?? 0);
 
