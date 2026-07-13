@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/../core/NotificationManager.php';
 
 echo "Notification Cleanup - " . date('Y-m-d H:i:s') . "\n";
 
@@ -27,12 +28,22 @@ try {
     
     echo "Deleted $expired expired notifications\n";
     
-    // Clean up old delivery logs (keep 90 days)
-    $stmt = $db->prepare("
-        DELETE FROM notification_delivery_log 
-        WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)
-    ");
-    $stmt->execute();
+    // Clean up old delivery logs (keep 90 days). The live table has
+    // created_at; installs from migrations/notifications-fcm-weather-v1.sql
+    // only have sent_at — support both.
+    try {
+        $stmt = $db->prepare("
+            DELETE FROM notification_delivery_log
+            WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)
+        ");
+        $stmt->execute();
+    } catch (Exception $e) {
+        $stmt = $db->prepare("
+            DELETE FROM notification_delivery_log
+            WHERE sent_at < DATE_SUB(NOW(), INTERVAL 90 DAY)
+        ");
+        $stmt->execute();
+    }
     $logDeleted = $stmt->rowCount();
     
     echo "Deleted $logDeleted old delivery logs\n";

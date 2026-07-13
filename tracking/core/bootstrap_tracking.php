@@ -16,6 +16,10 @@ require_once __DIR__ . '/../../core/session_boot.php';
 
 require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../../core/GeoUtils.php';
+// AlertsEngine sends geofence/place notifications through NotificationManager;
+// nothing else on the tracking path loads it, and its class_exists() guard
+// silently skipped every alert.
+require_once __DIR__ . '/../../core/NotificationManager.php';
 
 // Load tracking core
 require_once __DIR__ . '/SiteContext.php';

@@ -323,8 +323,10 @@ try {
                 'data' => [
                     'temperature' => $temp,
                     'condition' => $condition,
-                    'location' => $locationName,
-                    'weather_full' => $weatherData
+                    'location' => $locationName
+                    // Deliberately NOT the full provider response: FCM data
+                    // payloads are capped at 4KB and the full forecast blob
+                    // routinely blows past it, failing the entire push.
                 ]
             ];
             

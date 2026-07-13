@@ -462,6 +462,13 @@ class MainActivity : ComponentActivity() {
                 CookieManager.getInstance().flush()
                 syncFcmToken()
 
+                // Ask for notification permission once on first startup.
+                // Previously this was only asked inside the tracking-enable
+                // flow or on the /notifications page, so on Android 13+ most
+                // users were never prompted and the OS silently dropped every
+                // push notification.
+                maybeRequestNotificationPermissionOnce()
+
                 // Drive the poll rate from the real page URL. The page's own
                 // beforeunload/visibility signals are unreliable in a WebView,
                 // which used to leave the poller stuck in fast mode after
@@ -699,26 +706,40 @@ class MainActivity : ComponentActivity() {
     //  COOKIE SYNC & SESSION TOKEN
     // ════════════════════════════════════════════════════════════════════
 
+    /**
+     * Hosts the session cookie may live under. Reading only the www URL
+     * missed a host-only cookie set while the WebView was on the apex domain,
+     * leaving native API calls unauthenticated; OkHttp's store is keyed by
+     * exact host, so the cookie is registered under both.
+     */
+    private val cookieHosts = listOf("www.relatives.co.za", "relatives.co.za")
+
     private fun syncCookiesToNative() {
-        val raw = CookieManager.getInstance().getCookie(WEB_URL) ?: return
         val javaManager = (CookieHandler.getDefault() as? JavaNetCookieManager)
             ?: JavaNetCookieManager().also { CookieHandler.setDefault(it) }
-        val uri = URI.create(WEB_URL)
-        val domain = uri.host ?: "www.relatives.co.za"
-        raw.split(";").forEach { segment ->
-            val trimmed = segment.trim()
-            if (trimmed.isNotEmpty()) {
-                runCatching {
-                    HttpCookie.parse("Set-Cookie: $trimmed").forEach { cookie ->
-                        javaManager.cookieStore.add(uri, cookie)
+        cookieHosts.forEach { host ->
+            val url = "https://$host"
+            val raw = CookieManager.getInstance().getCookie(url) ?: return@forEach
+            val uri = URI.create(url)
+            raw.split(";").forEach { segment ->
+                val trimmed = segment.trim()
+                if (trimmed.isNotEmpty()) {
+                    runCatching {
+                        HttpCookie.parse("Set-Cookie: $trimmed").forEach { cookie ->
+                            javaManager.cookieStore.add(uri, cookie)
+                        }
                     }
-                }
-                // Also push to OkHttp so native services (FamilyPoller,
-                // LocationUploadWorker) can authenticate independently of
-                // whatever page the WebView is currently showing.
-                val parts = trimmed.split("=", limit = 2)
-                if (parts.size == 2) {
-                    NetworkClient.setSessionCookie(domain, parts[0].trim(), parts[1].trim())
+                    // Also push to OkHttp so native services (FamilyPoller,
+                    // LocationUploadWorker) can authenticate independently of
+                    // whatever page the WebView is currently showing. Cookies
+                    // stay scoped to the host they were read from — mirroring
+                    // them across hosts let a stale apex-host session
+                    // overwrite the fresh www one (extractSessionToken below
+                    // handles the session cookie cross-host, www first).
+                    val parts = trimmed.split("=", limit = 2)
+                    if (parts.size == 2) {
+                        NetworkClient.setSessionCookie(host, parts[0].trim(), parts[1].trim())
+                    }
                 }
             }
         }
@@ -770,24 +791,50 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun extractSessionToken() {
-        val raw = CookieManager.getInstance().getCookie(WEB_URL) ?: return
         // ONLY the real session cookie. Matching loose names like "token" or
         // "phpsessid" let an unrelated cookie be persisted and later replayed
         // as RELATIVES_SESSION by NetworkClient.seedFromPreferences, breaking
         // background auth.
         val targetNames = setOf("relatives_session")
-        raw.split(";").forEach { segment ->
-            val parts = segment.trim().split("=", limit = 2)
-            if (parts.size == 2 && parts[0].trim().lowercase() in targetNames) {
-                val cookieName = parts[0].trim()
-                val cookieValue = parts[1].trim()
-                prefs.sessionToken = cookieValue
-                // Push to OkHttp so background workers authenticate
-                // even after the WebView navigates away from /tracking/
-                NetworkClient.setSessionCookie("www.relatives.co.za", cookieName, cookieValue)
-                return
+        cookieHosts.forEach { host ->
+            val raw = CookieManager.getInstance().getCookie("https://$host") ?: return@forEach
+            raw.split(";").forEach { segment ->
+                val parts = segment.trim().split("=", limit = 2)
+                if (parts.size == 2 && parts[0].trim().lowercase() in targetNames) {
+                    val cookieName = parts[0].trim()
+                    val cookieValue = parts[1].trim()
+                    // A different session id means a different login (logout +
+                    // re-login, or another family member taking over the
+                    // device): re-register the FCM token under the new
+                    // session, otherwise pushes keep going to the old user.
+                    if (prefs.sessionToken != cookieValue) {
+                        fcmTokenSynced = false
+                    }
+                    prefs.sessionToken = cookieValue
+                    // Push to OkHttp so background workers authenticate
+                    // even after the WebView navigates away from /tracking/
+                    cookieHosts.forEach { storeHost ->
+                        NetworkClient.setSessionCookie(storeHost, cookieName, cookieValue)
+                    }
+                    return
+                }
             }
         }
+    }
+
+    /**
+     * One-time startup offer of the Android 13+ notification permission.
+     * PermissionGate.requestNotifications() already no-ops when the
+     * permission is granted or the OS predates runtime notification
+     * permission; the pref only stops the dialog from nagging on every
+     * launch after a "Not now".
+     */
+    private fun maybeRequestNotificationPermissionOnce() {
+        if (prefs.notificationPromptShown) return
+        // Don't burn the one-time flag if the dialog can't actually appear.
+        if (isFinishing || isDestroyed) return
+        prefs.notificationPromptShown = true
+        requestNotificationPermission()
     }
 
     // ════════════════════════════════════════════════════════════════════

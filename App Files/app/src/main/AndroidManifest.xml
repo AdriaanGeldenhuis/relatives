@@ -107,10 +107,11 @@
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="relatives_alerts" />
 
-        <!-- FCM default notification icon (uses launcher icon) -->
+        <!-- FCM default notification icon (flat alpha-only status-bar icon;
+             the adaptive launcher icon rendered as a blank grey square) -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@mipmap/ic_launcher" />
+            android:resource="@drawable/ic_notification" />
 
         <!-- FCM default notification color -->
         <meta-data

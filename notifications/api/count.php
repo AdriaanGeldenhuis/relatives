@@ -8,50 +8,12 @@ header('Content-Type: application/json');
 header('Cache-Control: private, no-store, max-age=0');
 header('CDN-Cache-Control: no-store');
 
-// Start session if not already started
+// Start session if not already started. session_boot restores $_SESSION from
+// the RELATIVES_SESSION cookie for the native app too — the old "native app
+// auth patch" here compared hash(PHP session id) against the hash of a
+// different random token in the sessions table, so it could never match and
+// was pure dead code.
 require_once __DIR__ . '/../../core/session_boot.php';
-
-// ==========================================
-// NATIVE APP AUTH PATCH - CRITICAL FIX
-// ==========================================
-if (!isset($_SESSION['user_id'])) {
-    // Check for RELATIVES_SESSION cookie (native app)
-    if (isset($_SERVER['HTTP_COOKIE'])) {
-        preg_match('/RELATIVES_SESSION=([^;]+)/', $_SERVER['HTTP_COOKIE'], $matches);
-        
-        if (isset($matches[1])) {
-            $cookieSessionId = $matches[1];
-            
-            try {
-                // Bootstrap only if needed
-                if (!isset($db)) {
-                    require_once __DIR__ . '/../../core/bootstrap.php';
-                }
-                
-                // Validate session token from cookie
-                $stmt = $db->prepare("
-                    SELECT s.user_id 
-                    FROM sessions s 
-                    JOIN users u ON s.user_id = u.id 
-                    WHERE s.session_token = ? 
-                      AND s.expires_at > NOW() 
-                      AND u.status = 'active' 
-                    LIMIT 1
-                ");
-                
-                $tokenHash = hash('sha256', $cookieSessionId);
-                $stmt->execute([$tokenHash]);
-                $session = $stmt->fetch(PDO::FETCH_ASSOC);
-                
-                if ($session) {
-                    $_SESSION['user_id'] = (int)$session['user_id'];
-                }
-            } catch (Exception $e) {
-                error_log('Native app auth error: ' . $e->getMessage());
-            }
-        }
-    }
-}
 
 // Check authentication
 if (!isset($_SESSION['user_id'])) {

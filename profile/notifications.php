@@ -31,10 +31,27 @@ try {
     exit;
 }
 
-// Get user preferences (create default if not exists)
+// This page reads/writes notification_preferences — the table
+// NotificationManager actually consults when deciding whether to store a
+// notification and send its push. (It previously wrote to its own private
+// user_notification_prefs table that nothing else ever read, so every toggle
+// here was a no-op.)
+
+// UI toggle name => notification_preferences.category
+$categoryMap = [
+    'messages_notify'  => 'message',
+    'shopping_notify'  => 'shopping',
+    'calendar_notify'  => 'calendar',
+    'reminders_notify' => 'schedule',
+    'tracking_notify'  => 'tracking',
+    'family_notify'    => 'system',
+];
+// Categories with no dedicated toggle; the global push/sound switches still
+// apply to them without touching their enabled state.
+$extraCategories = ['weather', 'note'];
+
 $preferences = [
     'push_enabled' => true,
-    'email_enabled' => false,
     'sound_enabled' => true,
     'messages_notify' => true,
     'shopping_notify' => true,
@@ -44,17 +61,14 @@ $preferences = [
     'family_notify' => true,
 ];
 
-try {
-    $stmt = $db->prepare("SELECT * FROM user_notification_prefs WHERE user_id = ?");
-    $stmt->execute([$user['id']]);
-    $savedPrefs = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if ($savedPrefs) {
-        $preferences = array_merge($preferences, $savedPrefs);
-    }
-} catch (Exception $e) {
-    // Table might not exist, use defaults
-    error_log('Notification prefs error: ' . $e->getMessage());
+function loadNotificationPrefRows(PDO $db, int $userId): array {
+    $stmt = $db->prepare("
+        SELECT category, enabled, push_enabled, sound_enabled
+        FROM notification_preferences
+        WHERE user_id = ?
+    ");
+    $stmt->execute([$userId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 $error = '';
@@ -63,71 +77,96 @@ $success = '';
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        $newPrefs = [
-            'push_enabled' => isset($_POST['push_enabled']),
-            'email_enabled' => isset($_POST['email_enabled']),
-            'sound_enabled' => isset($_POST['sound_enabled']),
-            'messages_notify' => isset($_POST['messages_notify']),
-            'shopping_notify' => isset($_POST['shopping_notify']),
-            'calendar_notify' => isset($_POST['calendar_notify']),
-            'reminders_notify' => isset($_POST['reminders_notify']),
-            'tracking_notify' => isset($_POST['tracking_notify']),
-            'family_notify' => isset($_POST['family_notify']),
-        ];
+        $pushEnabled = isset($_POST['push_enabled']) ? 1 : 0;
+        $soundEnabled = isset($_POST['sound_enabled']) ? 1 : 0;
 
-        // Check if user_notification_prefs table exists, create if not
-        $db->exec("CREATE TABLE IF NOT EXISTS user_notification_prefs (
-            user_id INT PRIMARY KEY,
-            push_enabled TINYINT(1) DEFAULT 1,
-            email_enabled TINYINT(1) DEFAULT 0,
-            sound_enabled TINYINT(1) DEFAULT 1,
-            messages_notify TINYINT(1) DEFAULT 1,
-            shopping_notify TINYINT(1) DEFAULT 1,
-            calendar_notify TINYINT(1) DEFAULT 1,
-            reminders_notify TINYINT(1) DEFAULT 1,
-            tracking_notify TINYINT(1) DEFAULT 1,
-            family_notify TINYINT(1) DEFAULT 1,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )");
+        // The /notifications settings modal manages push/sound PER CATEGORY.
+        // Only fan the master toggles out to every category when the user
+        // actually flipped them here; otherwise a save on this page would
+        // silently clobber those finer-grained choices.
+        $existingRows = loadNotificationPrefRows($db, (int)$user['id']);
+        $currentPush = empty($existingRows);
+        $currentSound = empty($existingRows);
+        foreach ($existingRows as $row) {
+            if ((int)$row['push_enabled'] === 1) $currentPush = true;
+            if ((int)$row['sound_enabled'] === 1) $currentSound = true;
+        }
+        $applyGlobals = ($pushEnabled !== (int)$currentPush) || ($soundEnabled !== (int)$currentSound);
 
-        // Upsert preferences
-        $stmt = $db->prepare("
-            INSERT INTO user_notification_prefs
-            (user_id, push_enabled, email_enabled, sound_enabled, messages_notify, shopping_notify, calendar_notify, reminders_notify, tracking_notify, family_notify)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-            push_enabled = VALUES(push_enabled),
-            email_enabled = VALUES(email_enabled),
-            sound_enabled = VALUES(sound_enabled),
-            messages_notify = VALUES(messages_notify),
-            shopping_notify = VALUES(shopping_notify),
-            calendar_notify = VALUES(calendar_notify),
-            reminders_notify = VALUES(reminders_notify),
-            tracking_notify = VALUES(tracking_notify),
-            family_notify = VALUES(family_notify)
-        ");
+        if ($applyGlobals) {
+            $upsert = $db->prepare("
+                INSERT INTO notification_preferences
+                (user_id, category, enabled, push_enabled, sound_enabled)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    enabled = VALUES(enabled),
+                    push_enabled = VALUES(push_enabled),
+                    sound_enabled = VALUES(sound_enabled)
+            ");
+        } else {
+            $upsert = $db->prepare("
+                INSERT INTO notification_preferences
+                (user_id, category, enabled, push_enabled, sound_enabled)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    enabled = VALUES(enabled)
+            ");
+        }
+        foreach ($categoryMap as $field => $category) {
+            $upsert->execute([
+                $user['id'],
+                $category,
+                isset($_POST[$field]) ? 1 : 0,
+                $pushEnabled,
+                $soundEnabled,
+            ]);
+        }
 
-        $stmt->execute([
-            $user['id'],
-            $newPrefs['push_enabled'] ? 1 : 0,
-            $newPrefs['email_enabled'] ? 1 : 0,
-            $newPrefs['sound_enabled'] ? 1 : 0,
-            $newPrefs['messages_notify'] ? 1 : 0,
-            $newPrefs['shopping_notify'] ? 1 : 0,
-            $newPrefs['calendar_notify'] ? 1 : 0,
-            $newPrefs['reminders_notify'] ? 1 : 0,
-            $newPrefs['tracking_notify'] ? 1 : 0,
-            $newPrefs['family_notify'] ? 1 : 0,
-        ]);
+        if ($applyGlobals) {
+            $upsertKeepEnabled = $db->prepare("
+                INSERT INTO notification_preferences
+                (user_id, category, enabled, push_enabled, sound_enabled)
+                VALUES (?, ?, 1, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    push_enabled = VALUES(push_enabled),
+                    sound_enabled = VALUES(sound_enabled)
+            ");
+            foreach ($extraCategories as $category) {
+                $upsertKeepEnabled->execute([$user['id'], $category, $pushEnabled, $soundEnabled]);
+            }
+        }
 
-        $preferences = $newPrefs;
         $success = 'Notification preferences saved!';
 
     } catch (Exception $e) {
         error_log('Notification prefs save error: ' . $e->getMessage());
         $error = 'Failed to save preferences. Please try again.';
     }
+}
+
+// Load current preferences for rendering
+try {
+    $rows = loadNotificationPrefRows($db, (int)$user['id']);
+
+    if ($rows) {
+        $byCategory = [];
+        $anyPush = false;
+        $anySound = false;
+        foreach ($rows as $row) {
+            $byCategory[$row['category']] = $row;
+            if ((int)$row['push_enabled'] === 1) $anyPush = true;
+            if ((int)$row['sound_enabled'] === 1) $anySound = true;
+        }
+        $preferences['push_enabled'] = $anyPush;
+        $preferences['sound_enabled'] = $anySound;
+        foreach ($categoryMap as $field => $category) {
+            if (isset($byCategory[$category])) {
+                $preferences[$field] = (bool)(int)$byCategory[$category]['enabled'];
+            }
+        }
+    }
+} catch (Exception $e) {
+    error_log('Notification prefs error: ' . $e->getMessage());
 }
 
 $pageTitle = 'Notification Preferences';
@@ -173,17 +212,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </div>
                     <label class="toggle-switch">
                         <input type="checkbox" name="push_enabled" <?php echo $preferences['push_enabled'] ? 'checked' : ''; ?>>
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-
-                <div class="toggle-row">
-                    <div class="toggle-info">
-                        <div class="toggle-label">Email Notifications</div>
-                        <div class="toggle-description">Receive important updates via email</div>
-                    </div>
-                    <label class="toggle-switch">
-                        <input type="checkbox" name="email_enabled" <?php echo $preferences['email_enabled'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>

@@ -105,7 +105,16 @@ class AlertsEngine
     private function sendFamilyAlert(int $familyId, int $triggerUserId, string $eventType, array $meta): void
     {
         if (!class_exists('NotificationManager')) {
-            return;
+            // Belt-and-braces for entry points that bypass bootstrap_tracking:
+            // load the class instead of silently dropping the alert.
+            $nmPath = __DIR__ . '/../../../core/NotificationManager.php';
+            if (file_exists($nmPath)) {
+                require_once $nmPath;
+            }
+            if (!class_exists('NotificationManager')) {
+                error_log('AlertsEngine: NotificationManager unavailable — family alert dropped');
+                return;
+            }
         }
 
         $userName = $meta['user_name'] ?? 'Someone';
