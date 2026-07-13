@@ -425,656 +425,70 @@ $games = [
 
 $pageTitle = 'Games';
 $activePage = 'games';
-$cacheVersion = '1.1.0';
-$pageCSS = [];
+$pageCSS = [
+    '/shared/css/aurora.css',
+    '/games/css/games.css'
+];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<style>
-    /* Dark theme background like schedule */
-    .bg-animation {
-        position: fixed;
-        inset: 0;
-        z-index: -1;
-        pointer-events: none;
-        background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
-    }
-
-    .games-container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 20px;
-        position: relative;
-        z-index: 1;
-    }
-
-    /* Compact hero like schedule's greeting-card */
-    .games-hero {
-        background: rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 20px;
-        padding: 24px;
-        margin-bottom: 20px;
-        text-align: center;
-    }
-
-    .games-hero-icon {
-        font-size: 36px;
-        margin-bottom: 8px;
-        filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.3));
-    }
-
-    .games-hero h1 {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.5rem;
-        font-weight: 900;
-        margin-bottom: 4px;
-        background: linear-gradient(135deg, #fff 0%, #667eea 50%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-
-    .games-hero p {
-        color: rgba(255, 255, 255, 0.7);
-        font-size: 0.85rem;
-        margin: 0;
-    }
-
-    .user-stats {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-        margin-bottom: 24px;
-    }
-
-    @media (max-width: 600px) {
-        .user-stats {
-            grid-template-columns: repeat(2, 1fr);
-        }
-    }
-
-    .stat-box {
-        background: rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 16px;
-        padding: 16px;
-        text-align: center;
-        transition: transform 0.3s, box-shadow 0.3s;
-    }
-
-    .stat-box:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        background: rgba(255, 255, 255, 0.12);
-    }
-
-    .stat-box-icon {
-        font-size: 24px;
-        margin-bottom: 8px;
-    }
-
-    .stat-box-value {
-        font-size: 1.5rem;
-        font-weight: 800;
-        color: #fff;
-    }
-
-    .stat-box-label {
-        font-size: 0.75rem;
-        color: rgba(255, 255, 255, 0.6);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .section-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 16px;
-    }
-
-    .section-header h2 {
-        font-size: 1.1rem;
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: rgba(255, 255, 255, 0.9);
-    }
-
-    .games-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-        margin-bottom: 24px;
-    }
-
-    .game-card {
-        background: rgba(255, 255, 255, 0.06);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        overflow: hidden;
-        transition: transform 0.3s, box-shadow 0.3s, background 0.3s;
-        text-decoration: none;
-        color: inherit;
-        display: block;
-    }
-
-    .game-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-        background: rgba(255, 255, 255, 0.1);
-    }
-
-    .game-card.coming-soon {
-        opacity: 0.5;
-        cursor: default;
-    }
-
-    .game-card.coming-soon:hover {
-        transform: none;
-        box-shadow: none;
-        background: rgba(255, 255, 255, 0.06);
-    }
-
-    .game-card-header {
-        padding: 16px;
-        text-align: center;
-        position: relative;
-    }
-
-    .game-icon {
-        font-size: 36px;
-        margin-bottom: 8px;
-        display: block;
-    }
-
-    .game-name {
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: #fff;
-        margin-bottom: 4px;
-    }
-
-    .game-description {
-        font-size: 0.75rem;
-        color: rgba(255, 255, 255, 0.6);
-        line-height: 1.4;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-    }
-
-    .coming-soon-badge {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        background: rgba(255, 255, 255, 0.2);
-        color: #fff;
-        font-size: 0.6rem;
-        font-weight: 700;
-        padding: 2px 6px;
-        border-radius: 10px;
-        text-transform: uppercase;
-    }
-
-    .played-today-badge {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        background: linear-gradient(135deg, #4ecca3, #3db892);
-        color: #1a1a2e;
-        font-size: 0.6rem;
-        font-weight: 700;
-        padding: 2px 6px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        gap: 2px;
-    }
-
-    .game-card.highlight {
-        border: 1px solid rgba(102, 126, 234, 0.4);
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
-    }
-
-    .game-card.highlight:hover {
-        border-color: rgba(102, 126, 234, 0.6);
-        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
-    }
-
-    .daily-tag {
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        color: #fff;
-        font-size: 0.55rem;
-        font-weight: 700;
-        padding: 2px 6px;
-        border-radius: 4px;
-        text-transform: uppercase;
-        margin-left: 4px;
-        vertical-align: middle;
-    }
-
-    .game-card-features {
-        padding: 10px 16px;
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-    }
-
-    .feature-tag {
-        background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.7);
-        font-size: 0.6rem;
-        font-weight: 600;
-        padding: 2px 6px;
-        border-radius: 12px;
-    }
-
-    .game-card-action {
-        padding: 10px 16px;
-        background: rgba(0, 0, 0, 0.15);
-        text-align: center;
-    }
-
-    .play-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 8px 20px;
-        border-radius: 10px;
-        font-weight: 700;
-        font-size: 0.8rem;
-        transition: all 0.3s;
-        border: none;
-        cursor: pointer;
-    }
-
-    .play-btn.active {
-        background: linear-gradient(135deg, #4ecca3, #3db892);
-        color: #1a1a2e;
-    }
-
-    .play-btn.active:hover {
-        transform: scale(1.05);
-        box-shadow: 0 4px 16px rgba(78, 204, 163, 0.4);
-    }
-
-    .play-btn.disabled {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.4);
-        cursor: not-allowed;
-        font-size: 0.7rem;
-    }
-
-    .leaderboard-section {
-        background: rgba(255, 255, 255, 0.06);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 20px;
-        padding: 24px;
-        margin-bottom: 30px;
-    }
-
-    .leaderboard-list {
-        list-style: none;
-    }
-
-    .leaderboard-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .leaderboard-item:last-child {
-        border-bottom: none;
-    }
-
-    .leaderboard-item.current-user {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15));
-        border-radius: 12px;
-        padding: 12px;
-        margin: -12px;
-        margin-bottom: 0;
-    }
-
-    .leaderboard-rank {
-        width: 32px;
-        height: 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        font-weight: 800;
-        font-size: 0.875rem;
-    }
-
-    .leaderboard-rank.gold {
-        background: linear-gradient(135deg, #ffd700, #ffb700);
-        color: #1a1a2e;
-    }
-
-    .leaderboard-rank.silver {
-        background: linear-gradient(135deg, #c0c0c0, #a8a8a8);
-        color: #1a1a2e;
-    }
-
-    .leaderboard-rank.bronze {
-        background: linear-gradient(135deg, #cd7f32, #b8722c);
-        color: #fff;
-    }
-
-    .leaderboard-rank.default {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.7);
-    }
-
-    .leaderboard-avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        color: #fff;
-        font-size: 1rem;
-    }
-
-    .leaderboard-info {
-        flex: 1;
-    }
-
-    .leaderboard-name {
-        font-weight: 600;
-        color: #fff;
-    }
-
-    .leaderboard-score {
-        font-size: 1.125rem;
-        font-weight: 800;
-        color: #4ecca3;
-    }
-
-    .empty-leaderboard {
-        text-align: center;
-        padding: 40px 20px;
-        color: rgba(255, 255, 255, 0.6);
-    }
-
-    .empty-leaderboard-icon {
-        font-size: 48px;
-        margin-bottom: 12px;
-    }
-
-    /* Global Leaderboard Styles */
-    .global-leaderboard-section {
-        background: rgba(255, 255, 255, 0.06);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 20px;
-        padding: 24px;
-        margin-bottom: 30px;
-    }
-
-    .global-leaderboard-header {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        margin-bottom: 20px;
-    }
-
-    .global-leaderboard-header h2 {
-        font-size: 1.1rem;
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: rgba(255, 255, 255, 0.9);
-        margin: 0;
-    }
-
-    .game-switcher {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        background: rgba(0, 0, 0, 0.3);
-        padding: 8px;
-        border-radius: 16px;
-    }
-
-    .game-switch-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 16px;
-        background: transparent;
-        border: none;
-        border-radius: 12px;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 0.85rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-    .game-switch-btn:hover {
-        background: rgba(255, 255, 255, 0.08);
-        color: #fff;
-    }
-
-    .game-switch-btn.active {
-        background: #4a4a6a;
-        color: #fff;
-    }
-
-    .game-switch-btn .game-icon {
-        font-size: 1.1rem;
-    }
-
-    /* Colored icons for game buttons */
-    .game-switch-btn[data-game="all"] .game-icon { color: #f5a623; }
-    .game-switch-btn[data-game="snake"] .game-icon { color: #4ecca3; }
-    .game-switch-btn[data-game="neon"] .game-icon { color: #00f5ff; }
-    .game-switch-btn[data-game="flash"] .game-icon { color: #f5a623; }
-    .game-switch-btn[data-game="blockforge"] .game-icon { color: #e879f9; }
-
-    .global-leaderboard-list {
-        list-style: none;
-    }
-
-    .global-leaderboard-item {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 14px 16px;
-        background: rgba(255, 255, 255, 0.04);
-        border-radius: 12px;
-        margin-bottom: 8px;
-        transition: all 0.3s;
-    }
-
-    .global-leaderboard-item:hover {
-        background: rgba(255, 255, 255, 0.08);
-        transform: translateX(4px);
-    }
-
-    .global-leaderboard-item:last-child {
-        margin-bottom: 0;
-    }
-
-    .global-leaderboard-item.current-family {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
-        border: 1px solid rgba(102, 126, 234, 0.3);
-    }
-
-    .global-rank {
-        width: 36px;
-        height: 36px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        font-weight: 800;
-        font-size: 0.9rem;
-        flex-shrink: 0;
-    }
-
-    .global-rank.gold {
-        background: linear-gradient(135deg, #ffd700, #ffb700);
-        color: #1a1a2e;
-        box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
-    }
-
-    .global-rank.silver {
-        background: linear-gradient(135deg, #c0c0c0, #a8a8a8);
-        color: #1a1a2e;
-    }
-
-    .global-rank.bronze {
-        background: linear-gradient(135deg, #cd7f32, #b8722c);
-        color: #fff;
-    }
-
-    .global-rank.default {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.7);
-    }
-
-    .global-family-info {
-        flex: 1;
-        min-width: 0;
-    }
-
-    .global-family-name {
-        font-weight: 700;
-        color: #fff;
-        font-size: 1rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .global-family-meta {
-        font-size: 0.75rem;
-        color: rgba(255, 255, 255, 0.5);
-        margin-top: 2px;
-    }
-
-    .global-family-score {
-        font-size: 1.25rem;
-        font-weight: 800;
-        color: #4ecca3;
-        text-align: right;
-        flex-shrink: 0;
-    }
-
-    .global-family-score span {
-        display: block;
-        font-size: 0.65rem;
-        font-weight: 500;
-        color: rgba(255, 255, 255, 0.5);
-        text-transform: uppercase;
-    }
-
-    .empty-global-leaderboard {
-        text-align: center;
-        padding: 40px 20px;
-        color: rgba(255, 255, 255, 0.6);
-    }
-
-    .empty-global-leaderboard-icon {
-        font-size: 48px;
-        margin-bottom: 12px;
-    }
-
-    @media (max-width: 600px) {
-        .global-leaderboard-header {
-            flex-direction: column;
-            align-items: stretch;
-        }
-
-        .game-switcher {
-            width: 100%;
-            overflow-x: auto;
-            padding: 6px;
-            -webkit-overflow-scrolling: touch;
-            flex-wrap: nowrap;
-        }
-
-        .game-switch-btn {
-            padding: 8px 12px;
-            font-size: 0.75rem;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-
-        .game-switch-btn .btn-text {
-            display: none;
-        }
-
-        .global-leaderboard-item {
-            padding: 12px;
-            gap: 12px;
-        }
-
-        .global-family-score {
-            font-size: 1.1rem;
-        }
-    }
-</style>
-
-<!-- Dark Background -->
-<div class="bg-animation"></div>
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-a"></div>
+    <div class="aurora-blob aurora-b"></div>
+    <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="shooting-star"></div>
+    <div class="aurora-grid"></div>
+</div>
 
 <main class="main-content">
-    <div class="games-container">
+    <div class="hub">
 
-        <!-- Hero Section (Schedule style) -->
-        <section class="games-hero">
-            <div class="games-hero-icon">🎮</div>
-            <h1>Family Game Center</h1>
-            <p>Play, compete, and have fun with your family!</p>
-        </section>
+        <!-- Compact page header -->
+        <header class="page-head" style="--glow:#a78bfa; --page-glow: rgba(167, 139, 250, 0.16)">
+            <span class="ph-glyph" aria-hidden="true">🎮</span>
+            <div class="ph-titles">
+                <h1>Games</h1>
+                <p class="ph-sub"><?php echo count($games); ?> games · play, compete, brag</p>
+            </div>
+            <div class="ph-actions">
+                <a href="#familyLeaderboard" class="pill-btn">
+                    <span aria-hidden="true">🏆</span> Leaderboards
+                </a>
+            </div>
+        </header>
 
-        <!-- User Stats -->
-        <section class="user-stats">
-            <div class="stat-box">
-                <div class="stat-box-icon">🎯</div>
-                <div class="stat-box-value"><?php echo number_format($userStats['total_games']); ?></div>
-                <div class="stat-box-label">Games Played</div>
+        <!-- Your stats -->
+        <section class="games-stats-bar">
+            <div class="stat-item">
+                <span class="stat-icon" aria-hidden="true">🎯</span>
+                <span class="stat-value"><?php echo number_format($userStats['total_games']); ?></span>
+                <span class="stat-label">Played</span>
             </div>
-            <div class="stat-box">
-                <div class="stat-box-icon">🏆</div>
-                <div class="stat-box-value"><?php echo number_format($userStats['best_snake_score']); ?></div>
-                <div class="stat-box-label">Best Score</div>
+            <div class="stat-item">
+                <span class="stat-icon" aria-hidden="true">🏆</span>
+                <span class="stat-value"><?php echo number_format($userStats['best_snake_score']); ?></span>
+                <span class="stat-label">Best score</span>
             </div>
-            <div class="stat-box">
-                <div class="stat-box-icon">⭐</div>
-                <div class="stat-box-value"><?php echo number_format($userStats['total_score']); ?></div>
-                <div class="stat-box-label">Total Points</div>
+            <div class="stat-item">
+                <span class="stat-icon" aria-hidden="true">⭐</span>
+                <span class="stat-value"><?php echo number_format($userStats['total_score']); ?></span>
+                <span class="stat-label">Total points</span>
             </div>
-            <div class="stat-box">
-                <div class="stat-box-icon">📅</div>
-                <div class="stat-box-value"><?php echo $userStats['games_today']; ?></div>
-                <div class="stat-box-label">Today</div>
+            <div class="stat-item">
+                <span class="stat-icon" aria-hidden="true">📅</span>
+                <span class="stat-value"><?php echo $userStats['games_today']; ?></span>
+                <span class="stat-label">Today</span>
             </div>
         </section>
 
         <!-- Games Grid -->
-        <section>
+        <section class="games-section">
             <div class="section-header">
-                <h2><span>🕹️</span> Available Games</h2>
+                <h2><span aria-hidden="true">🕹️</span> Pick a game</h2>
             </div>
 
             <div class="games-grid">
@@ -1085,18 +499,18 @@ require_once __DIR__ . '/../shared/components/header.php';
                     if (!empty($game['highlight'])) $cardClasses .= ' highlight';
                     ?>
                     <?php if ($game['available']): ?>
-                        <a href="<?php echo htmlspecialchars($game['url']); ?>" class="<?php echo $cardClasses; ?>">
+                        <a href="<?php echo htmlspecialchars($game['url']); ?>" class="<?php echo $cardClasses; ?>" style="--glow: <?php echo htmlspecialchars($game['color']); ?>">
                     <?php else: ?>
-                        <div class="<?php echo $cardClasses; ?>">
+                        <div class="<?php echo $cardClasses; ?>" style="--glow: <?php echo htmlspecialchars($game['color']); ?>">
                     <?php endif; ?>
 
                         <div class="game-card-header">
                             <?php if (!$game['available']): ?>
                                 <span class="coming-soon-badge">Coming Soon</span>
                             <?php elseif (!empty($game['played_today'])): ?>
-                                <span class="played-today-badge"><span>✓</span> Played Today</span>
+                                <span class="played-today-badge"><span>✓</span> Played today</span>
                             <?php endif; ?>
-                            <span class="game-icon"><?php echo $game['icon']; ?></span>
+                            <span class="game-chip" aria-hidden="true"><span class="game-icon"><?php echo $game['icon']; ?></span></span>
                             <h3 class="game-name">
                                 <?php echo htmlspecialchars($game['name']); ?>
                                 <?php if ($game['id'] === 'flash'): ?>
@@ -1113,13 +527,13 @@ require_once __DIR__ . '/../shared/components/header.php';
                         </div>
 
                         <div class="game-card-action">
-                            <button class="play-btn <?php echo $game['available'] ? 'active' : 'disabled'; ?>">
+                            <span class="play-btn <?php echo $game['available'] ? 'active' : 'disabled'; ?>">
                                 <?php if ($game['available']): ?>
-                                    <span>▶</span> Play Now
+                                    <span aria-hidden="true">▶</span> Play now
                                 <?php else: ?>
-                                    <span>🔒</span> Coming Soon
+                                    <span aria-hidden="true">🔒</span> Coming soon
                                 <?php endif; ?>
-                            </button>
+                            </span>
                         </div>
 
                     <?php if ($game['available']): ?>
@@ -1131,48 +545,10 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
         </section>
 
-        <!-- Global Family Leaderboard -->
-        <section class="global-leaderboard-section" id="globalLeaderboard">
-            <div class="global-leaderboard-header">
-                <h2><span>🌍</span> Global Family Rankings</h2>
-                <div class="game-switcher">
-                    <button class="game-switch-btn active" data-game="all">
-                        <span class="game-icon">🏆</span>
-                        <span class="btn-text">All Games</span>
-                    </button>
-                    <button class="game-switch-btn" data-game="snake">
-                        <span class="game-icon">🐍</span>
-                        <span class="btn-text">Snake</span>
-                    </button>
-                    <button class="game-switch-btn" data-game="neon">
-                        <span class="game-icon">💠</span>
-                        <span class="btn-text">Neon</span>
-                    </button>
-                    <button class="game-switch-btn" data-game="flash">
-                        <span class="game-icon">⚡</span>
-                        <span class="btn-text">Flash</span>
-                    </button>
-                    <button class="game-switch-btn" data-game="blockforge">
-                        <span class="game-icon">🧱</span>
-                        <span class="btn-text">BlockForge</span>
-                    </button>
-                </div>
-            </div>
-
-            <ul class="global-leaderboard-list" id="globalLeaderboardList">
-                <!-- Populated by JavaScript -->
-            </ul>
-
-            <div class="empty-global-leaderboard" id="emptyGlobalLeaderboard" style="display: none;">
-                <div class="empty-global-leaderboard-icon">🏆</div>
-                <p>No scores yet for this game! Be the first family to compete.</p>
-            </div>
-        </section>
-
         <!-- Family Leaderboard -->
-        <section class="leaderboard-section" id="familyLeaderboard">
+        <section class="leaderboard-section panel" id="familyLeaderboard" style="--glow:#f472b6">
             <div class="global-leaderboard-header">
-                <h2><span>👨‍👩‍👧‍👦</span> Family Leaderboard</h2>
+                <h2><span aria-hidden="true">👨‍👩‍👧‍👦</span> Family Leaderboard</h2>
                 <div class="game-switcher" id="familyGameSwitcher">
                     <button class="game-switch-btn active" data-game="all">
                         <span class="game-icon">🏆</span>
@@ -1204,6 +580,44 @@ require_once __DIR__ . '/../shared/components/header.php';
             <div class="empty-leaderboard" id="emptyFamilyLeaderboard" style="display: none;">
                 <div class="empty-leaderboard-icon">🏆</div>
                 <p>No scores yet! Be the first to play and claim the top spot.</p>
+            </div>
+        </section>
+
+        <!-- Global Family Leaderboard -->
+        <section class="global-leaderboard-section panel" id="globalLeaderboard" style="--glow:#38bdf8">
+            <div class="global-leaderboard-header">
+                <h2><span aria-hidden="true">🌍</span> Global Family Rankings</h2>
+                <div class="game-switcher">
+                    <button class="game-switch-btn active" data-game="all">
+                        <span class="game-icon">🏆</span>
+                        <span class="btn-text">All Games</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="snake">
+                        <span class="game-icon">🐍</span>
+                        <span class="btn-text">Snake</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="neon">
+                        <span class="game-icon">💠</span>
+                        <span class="btn-text">Neon</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="flash">
+                        <span class="game-icon">⚡</span>
+                        <span class="btn-text">Flash</span>
+                    </button>
+                    <button class="game-switch-btn" data-game="blockforge">
+                        <span class="game-icon">🧱</span>
+                        <span class="btn-text">BlockForge</span>
+                    </button>
+                </div>
+            </div>
+
+            <ul class="global-leaderboard-list" id="globalLeaderboardList">
+                <!-- Populated by JavaScript -->
+            </ul>
+
+            <div class="empty-global-leaderboard" id="emptyGlobalLeaderboard" style="display: none;">
+                <div class="empty-global-leaderboard-icon">🏆</div>
+                <p>No scores yet for this game! Be the first family to compete.</p>
             </div>
         </section>
 
