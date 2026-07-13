@@ -1,43 +1,110 @@
 /**
  * ============================================
- * RELATIVES v4.0 - HOME (FAMILY COMMAND CENTER)
- * Live clock · compact weather strip · count-ups
+ * RELATIVES v4.1 - HOME (FAMILY COMMAND CENTER)
+ * Day-ring clock · live countdowns · weather ·
+ * cursor spotlight · count-ups
  * ============================================
  */
 
 (function () {
     'use strict';
 
-    // ============================================
-    // LIVE CLOCK + DATE + DAY PROGRESS
-    // ============================================
-    var clockEl = document.getElementById('clockTime');
-    var dateEl = document.getElementById('heroDate');
-    var progressEl = document.getElementById('dayProgress');
-
     function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+    // Flag @property support so the rotating hero border only runs where it animates smoothly
+    if (window.CSS && typeof CSS.registerProperty === 'function') {
+        document.documentElement.classList.add('has-props');
+    }
+
+    // ============================================
+    // DAY-RING CLOCK (fills as the day passes)
+    // ============================================
+    var hmEl = document.getElementById('clockHM');
+    var secEl = document.getElementById('clockSec');
+    var ringEl = document.getElementById('clockRing');
+    var capEl = document.getElementById('dayCap');
+    var dateEl = document.getElementById('heroDate');
 
     function tick() {
         var now = new Date();
 
-        if (clockEl) {
-            clockEl.innerHTML = pad(now.getHours()) + '<span class="tick">:</span>' + pad(now.getMinutes());
-        }
+        if (hmEl) hmEl.textContent = pad(now.getHours()) + ':' + pad(now.getMinutes());
+        if (secEl) secEl.textContent = pad(now.getSeconds());
 
+        var pct = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 864;
+        if (ringEl) ringEl.style.setProperty('--day', pct.toFixed(2));
+        if (capEl) capEl.textContent = Math.round(pct) + '% of today';
+    }
+
+    function tickDate() {
         if (dateEl) {
-            dateEl.textContent = now.toLocaleDateString('en-ZA', {
+            dateEl.textContent = new Date().toLocaleDateString('en-ZA', {
                 weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
             });
-        }
-
-        if (progressEl) {
-            var minutes = now.getHours() * 60 + now.getMinutes();
-            progressEl.style.width = (minutes / 1440 * 100).toFixed(1) + '%';
         }
     }
 
     tick();
-    setInterval(tick, 15000);
+    tickDate();
+    setInterval(tick, 1000);
+    setInterval(tickDate, 60000);
+
+    // ============================================
+    // LIVE EVENT COUNTDOWNS ("In 38 min" ticks down)
+    // ============================================
+    function refreshEventTimes() {
+        var rows = document.querySelectorAll('.event-row[data-epoch]');
+        if (!rows.length) return;
+
+        var now = Date.now();
+        var todayKey = new Date().toDateString();
+        var tomorrowKey = new Date(now + 86400000).toDateString();
+
+        rows.forEach(function (row) {
+            var when = row.querySelector('.event-when');
+            if (!when) return;
+
+            var d = new Date(parseInt(row.dataset.epoch, 10) * 1000);
+            var diff = d.getTime() - now;
+            var hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
+            var label, tone = '';
+
+            if (diff <= 0) {
+                label = 'Now';
+                tone = 'is-urgent';
+            } else if (diff < 3600000) {
+                label = 'In ' + Math.ceil(diff / 60000) + ' min';
+                tone = 'is-urgent';
+            } else if (d.toDateString() === todayKey) {
+                label = 'Today ' + hm;
+                tone = 'is-today';
+            } else if (d.toDateString() === tomorrowKey) {
+                label = 'Tomorrow ' + hm;
+            } else {
+                label = d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + hm;
+            }
+
+            when.textContent = label;
+            row.classList.remove('is-urgent', 'is-today');
+            if (tone) row.classList.add(tone);
+        });
+    }
+
+    refreshEventTimes();
+    setInterval(refreshEventTimes, 30000);
+
+    // ============================================
+    // CURSOR SPOTLIGHT (desktop pointers only)
+    // ============================================
+    if (window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches) {
+        document.querySelectorAll('.spot').forEach(function (el) {
+            el.addEventListener('pointermove', function (e) {
+                var r = el.getBoundingClientRect();
+                el.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+                el.style.setProperty('--my', (e.clientY - r.top) + 'px');
+            });
+        });
+    }
 
     // ============================================
     // WEATHER STRIP (inside the hero card)
@@ -176,7 +243,7 @@
     });
 
     // ============================================
-    // COUNT-UP NUMBERS
+    // COUNT-UP NUMBERS (with a spring pop at the end)
     // ============================================
     function countUp(el) {
         var target = parseInt(el.dataset.count, 10) || 0;
@@ -189,7 +256,11 @@
             var p = Math.min((t - start) / duration, 1);
             var eased = 1 - Math.pow(1 - p, 3);
             el.textContent = Math.round(target * eased);
-            if (p < 1) requestAnimationFrame(frame);
+            if (p < 1) {
+                requestAnimationFrame(frame);
+            } else {
+                el.classList.add('pop');
+            }
         }
 
         requestAnimationFrame(frame);
@@ -208,6 +279,17 @@
             });
         }, { threshold: 0.2 });
         counters.forEach(function (el) { observer.observe(el); });
+
+        // Safety net: whatever hasn't animated after 4s just shows its value
+        setTimeout(function () {
+            counters.forEach(function (el) {
+                if (!seen.has(el)) {
+                    seen.add(el);
+                    observer.unobserve(el);
+                    el.textContent = parseInt(el.dataset.count, 10) || 0;
+                }
+            });
+        }, 4000);
     } else {
         counters.forEach(countUp);
     }

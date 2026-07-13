@@ -276,6 +276,9 @@ require_once __DIR__ . '/../shared/components/header.php';
     <div class="aurora-blob aurora-a"></div>
     <div class="aurora-blob aurora-b"></div>
     <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="shooting-star"></div>
     <div class="aurora-grid"></div>
 </div>
 
@@ -294,7 +297,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         <?php endif; ?>
 
         <!-- ============ HERO: greeting + live clock + weather ============ -->
-        <section class="hero" data-time="<?php echo $greetingColor; ?>">
+        <section class="hero spot" data-time="<?php echo $greetingColor; ?>">
             <div class="hero-main">
                 <div class="hero-greeting">
                     <p class="hero-kicker">
@@ -319,11 +322,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <?php endif; ?>
                 </div>
 
-                <div class="hero-clock">
-                    <div class="clock-time" id="clockTime" aria-hidden="true"><?php echo date('H:i'); ?></div>
-                    <div class="day-progress" title="How far through today you are">
-                        <i id="dayProgress" style="width: <?php echo round(((int)date('H') * 60 + (int)date('i')) / 14.4); ?>%"></i>
+                <?php $dayPct = round((((int)date('H')) * 3600 + ((int)date('i')) * 60 + (int)date('s')) / 864, 1); ?>
+                <div class="hero-clock" aria-hidden="true">
+                    <div class="clock-ring" id="clockRing" style="--day: <?php echo $dayPct; ?>">
+                        <div class="clock-core">
+                            <span class="clock-hm" id="clockHM"><?php echo date('H:i'); ?></span>
+                            <span class="clock-sec" id="clockSec"><?php echo date('s'); ?></span>
+                        </div>
                     </div>
+                    <span class="clock-cap" id="dayCap"><?php echo round($dayPct); ?>% of today</span>
                 </div>
             </div>
 
@@ -339,8 +346,8 @@ require_once __DIR__ . '/../shared/components/header.php';
         <!-- ============ APP LAUNCHER ============ -->
         <nav class="launcher" aria-label="Family apps">
             <?php foreach ($launcherApps as $app): ?>
-            <a href="<?php echo $app['href']; ?>" class="launch-tile" style="--glow: <?php echo $app['glow']; ?>">
-                <span class="launch-icon" aria-hidden="true"><?php echo $app['icon']; ?></span>
+            <a href="<?php echo $app['href']; ?>" class="launch-tile spot" style="--glow: <?php echo $app['glow']; ?>">
+                <span class="launch-chip" aria-hidden="true"><span class="launch-icon"><?php echo $app['icon']; ?></span></span>
                 <span class="launch-label"><?php echo $app['label']; ?></span>
                 <?php if ($app['badge'] > 0): ?>
                 <span class="launch-badge" aria-label="<?php echo $app['badge']; ?> pending"><?php echo $app['badge'] > 99 ? '99+' : $app['badge']; ?></span>
@@ -353,9 +360,9 @@ require_once __DIR__ . '/../shared/components/header.php';
         <div class="bento">
 
             <!-- Up next -->
-            <section class="panel panel-today">
+            <section class="panel panel-today" style="--glow:#34d399">
                 <header class="panel-head">
-                    <span class="panel-glyph" style="--glow:#34d399" aria-hidden="true">📅</span>
+                    <span class="panel-glyph" aria-hidden="true">📅</span>
                     <h2>Up next</h2>
                     <a class="panel-link" href="/calendar/">Calendar →</a>
                 </header>
@@ -381,7 +388,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                             $tone = '';
                         }
                     ?>
-                    <li class="event-row <?php echo $tone; ?>">
+                    <li class="event-row <?php echo $tone; ?>" data-epoch="<?php echo $eventTime; ?>">
                         <span class="event-when"><?php echo $when; ?></span>
                         <div class="event-body">
                             <span class="event-name"><?php echo htmlspecialchars($event['title']); ?></span>
@@ -402,9 +409,9 @@ require_once __DIR__ . '/../shared/components/header.php';
             </section>
 
             <!-- This week pulse -->
-            <section class="panel panel-pulse">
+            <section class="panel panel-pulse" style="--glow:#fbbf24">
                 <header class="panel-head">
-                    <span class="panel-glyph" style="--glow:#fbbf24" aria-hidden="true">⚡</span>
+                    <span class="panel-glyph" aria-hidden="true">⚡</span>
                     <h2>This week</h2>
                 </header>
                 <div class="pulse-grid">
@@ -428,9 +435,9 @@ require_once __DIR__ . '/../shared/components/header.php';
             </section>
 
             <!-- Family presence -->
-            <section class="panel panel-family">
+            <section class="panel panel-family" style="--glow:#f472b6">
                 <header class="panel-head">
-                    <span class="panel-glyph" style="--glow:#f472b6" aria-hidden="true">👨‍👩‍👧‍👦</span>
+                    <span class="panel-glyph" aria-hidden="true">👨‍👩‍👧‍👦</span>
                     <h2>Family</h2>
                     <a class="panel-link" href="/profile/">Profile →</a>
                 </header>
@@ -448,7 +455,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         }
                     ?>
                     <li class="family-row">
-                        <span class="family-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
+                        <span class="family-avatar <?php echo $isOnline ? 'is-on' : ''; ?>" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
                             <?php
                             $avatarPath = __DIR__ . "/../saves/{$member['id']}/avatar/avatar.webp";
                             if (file_exists($avatarPath)):
@@ -471,9 +478,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 
             <!-- Recent activity -->
             <?php if (!empty($recentActivity)): ?>
-            <section class="panel panel-activity">
+            <section class="panel panel-activity" style="--glow:#38bdf8">
                 <header class="panel-head">
-                    <span class="panel-glyph" style="--glow:#38bdf8" aria-hidden="true">🛰️</span>
+                    <span class="panel-glyph" aria-hidden="true">🛰️</span>
                     <h2>Latest in the family</h2>
                 </header>
                 <ul class="feed">
