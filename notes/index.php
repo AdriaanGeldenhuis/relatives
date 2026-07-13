@@ -349,6 +349,7 @@ function getImagePaths($imagePath) {
 
 $pageTitle = 'Notes';
 $pageCSS = [
+    '/shared/css/aurora.css',
     '/notes/css/notes.css',
     '/collage/css/collage.css'
 ];
@@ -369,40 +370,38 @@ $shoppingCount = 0;
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Animated Background -->
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-a"></div>
+    <div class="aurora-blob aurora-b"></div>
+    <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="shooting-star"></div>
+    <div class="aurora-grid"></div>
 </div>
 
 <!-- Main Content -->
 <main class="main-content">
-    <div class="container">
-        
-        <!-- Hero Section -->
-        <div class="hero-section">
-            <div class="greeting-card">
-                <div class="greeting-time"><?php echo date('l, F j, Y'); ?></div>
-                <h1 class="greeting-text">
-                    <span class="greeting-icon">📝</span>
-                    <span class="greeting-name">Family Notes</span>
-                </h1>
-                <p class="greeting-subtitle">Capture ideas, reminders, and memories together</p>
-                
-                <div class="quick-actions">
-                    <button id="btnNewNote" class="quick-action-btn" data-action="text">
-                        <span class="qa-icon">📝</span>
-                        <span>New Note</span>
-                    </button>
-                    <button id="btnVoiceNote" class="quick-action-btn" data-action="voice">
-                        <span class="qa-icon">🎤</span>
-                        <span>Voice Note</span>
-                    </button>
-                    <button id="btnSearch" class="quick-action-btn" data-action="search">
-                        <span class="qa-icon">🔍</span>
-                        <span>Search</span>
-                    </button>
-                </div>
+    <div class="hub">
+
+        <!-- Compact page header -->
+        <header class="page-head" style="--glow:#c084fc; --page-glow: rgba(192, 132, 252, 0.14)">
+            <span class="ph-glyph" aria-hidden="true">📝</span>
+            <div class="ph-titles">
+                <h1>Notes</h1>
+                <p class="ph-sub"><?php echo count($notes); ?> note<?php echo count($notes) === 1 ? '' : 's'; ?> · <?php echo count($pinnedNotes); ?> pinned</p>
+            </div>
+            <div class="ph-actions">
+                <button id="btnNewNote" class="pill-btn primary" data-action="text">
+                    <span aria-hidden="true">＋</span> New note
+                </button>
+                <button id="btnVoiceNote" class="pill-btn" data-action="voice">
+                    <span aria-hidden="true">🎤</span> Voice
+                </button>
+                <button id="btnSearch" class="pill-btn" data-action="search">
+                    <span aria-hidden="true">🔍</span> Search
+                </button>
 
                 <!-- INLINE SCRIPT FOR NATIVE APP COMPATIBILITY -->
                 <script>
@@ -459,8 +458,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                     console.log('✅ Quick action buttons ready (inline)');
                 })();
                 </script>
-            </div>
-        </div>
+        </header>
 
         <!-- Search and Filter Bar -->
         <div class="search-filter-section">
