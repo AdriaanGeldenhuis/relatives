@@ -450,27 +450,30 @@ try {
                 throw new Exception('FCM token required');
             }
 
-            // Remove any existing token for other users (device switched users)
-            $stmt = $db->prepare("DELETE FROM fcm_tokens WHERE token = ? AND user_id != ?");
-            $stmt->execute([$token, $userId]);
-
-            // Check if this token already exists for this user
-            $stmt = $db->prepare("SELECT id FROM fcm_tokens WHERE user_id = ? AND token = ?");
-            $stmt->execute([$userId, $token]);
-            $existing = $stmt->fetch();
-
-            if ($existing) {
-                // Update
-                $stmt = $db->prepare("UPDATE fcm_tokens SET device_type = ?, updated_at = NOW() WHERE id = ?");
-                $stmt->execute([$deviceType, $existing['id']]);
-            } else {
-                // Insert
-                $stmt = $db->prepare("
-                    INSERT INTO fcm_tokens (user_id, token, device_type, created_at, updated_at)
-                    VALUES (?, ?, ?, NOW(), NOW())
-                ");
-                $stmt->execute([$userId, $token, $deviceType]);
+            $validTypes = ['android', 'ios', 'web'];
+            if (!in_array($deviceType, $validTypes, true)) {
+                $deviceType = 'unknown';
             }
+
+            // Remove any row already holding this token that is not the exact
+            // (user, device_type) row we are about to upsert (device switched
+            // accounts, or same token stored under another device_type).
+            $stmt = $db->prepare("DELETE FROM fcm_tokens WHERE token = ? AND (user_id != ? OR device_type != ?)");
+            $stmt->execute([$token, $userId, $deviceType]);
+
+            // Upsert: the live schema's UNIQUE KEY user_device(user_id,
+            // device_type) made a plain INSERT collide with the row holding
+            // the device's PREVIOUS token, permanently 500ing re-registration
+            // after every FCM token rotation.
+            $stmt = $db->prepare("
+                INSERT INTO fcm_tokens (user_id, token, device_type, created_at, updated_at)
+                VALUES (?, ?, ?, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE
+                    token = VALUES(token),
+                    device_type = VALUES(device_type),
+                    updated_at = NOW()
+            ");
+            $stmt->execute([$userId, $token, $deviceType]);
 
             echo json_encode([
                 'success' => true,

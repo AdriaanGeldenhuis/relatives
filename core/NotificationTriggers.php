@@ -6,6 +6,12 @@
  * ============================================
  */
 
+// Several callers (schedule/api/events.php among others) require this file
+// on its own; without this line the NotificationManager::getInstance() call
+// below fatals with a class-not-found Error that callers swallow, so their
+// notifications silently never existed.
+require_once __DIR__ . '/NotificationManager.php';
+
 class NotificationTriggers {
     private $db;
     private $notifManager;

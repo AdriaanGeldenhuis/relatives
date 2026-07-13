@@ -26,8 +26,17 @@ class NotificationManager {
     
     private function __construct($db) {
         $this->db = $db;
-        
-        // Initialize Firebase if available
+
+        // Several entry points (tracking APIs, cron jobs) include this file
+        // without going through code that loads FirebaseMessaging — load it
+        // here so push sending never silently disables itself.
+        if (!class_exists('FirebaseMessaging')) {
+            $firebasePath = __DIR__ . '/FirebaseMessaging.php';
+            if (file_exists($firebasePath)) {
+                require_once $firebasePath;
+            }
+        }
+
         if (class_exists('FirebaseMessaging')) {
             $this->firebase = new FirebaseMessaging();
         }
@@ -59,16 +68,6 @@ class NotificationManager {
                 return false;
             }
 
-            // Check quiet hours (unless urgent or high priority)
-            if ($this->isQuietHours($data['user_id'])) {
-                $priority = $data['priority'] ?? self::PRIORITY_NORMAL;
-                if ($priority !== self::PRIORITY_URGENT && $priority !== self::PRIORITY_HIGH) {
-                    // Skip low/normal priority during quiet hours
-                    error_log("NotificationManager: Notification blocked - quiet hours active for user {$data['user_id']}");
-                    return false;
-                }
-            }
-            
             // Insert notification
             $stmt = $this->db->prepare("
                 INSERT INTO notifications (
@@ -98,8 +97,18 @@ class NotificationManager {
             
             $notificationId = (int)$this->db->lastInsertId();
             
-            // Send push notification
-            if ($this->isPushEnabled($data['user_id'], $data['type'])) {
+            // Send push notification. Quiet hours only silence the push —
+            // the notification is still stored above so the user finds it in
+            // the app afterwards (previously the whole notification was
+            // dropped and could never be seen).
+            $priority = $data['priority'] ?? self::PRIORITY_NORMAL;
+            $quietBlocked = $priority !== self::PRIORITY_URGENT
+                && $priority !== self::PRIORITY_HIGH
+                && $this->isQuietHours($data['user_id'], $data['type']);
+
+            if ($quietBlocked) {
+                $this->logDelivery($notificationId, $data['user_id'], 'push', 'failed', 'Quiet hours');
+            } elseif ($this->isPushEnabled($data['user_id'], $data['type'])) {
                 $this->sendPushNotification($notificationId, $data);
             }
             
@@ -238,17 +247,19 @@ class NotificationManager {
     }
     
     /**
-     * Check if user is in quiet hours
+     * Check if user is in quiet hours for this notification category.
+     * Preferences rows are per (user, category); matching an arbitrary row
+     * would apply one category's quiet hours to every other category.
      */
-    private function isQuietHours(int $userId): bool {
+    private function isQuietHours(int $userId, string $category): bool {
         try {
             $stmt = $this->db->prepare("
-                SELECT quiet_hours_start, quiet_hours_end 
-                FROM notification_preferences 
-                WHERE user_id = ? AND quiet_hours_enabled = 1
+                SELECT quiet_hours_start, quiet_hours_end
+                FROM notification_preferences
+                WHERE user_id = ? AND category = ? AND quiet_hours_enabled = 1
                 LIMIT 1
             ");
-            $stmt->execute([$userId]);
+            $stmt->execute([$userId, $category]);
             $prefs = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if (!$prefs) {
@@ -391,6 +402,26 @@ class NotificationManager {
         }
     }
     
+    /**
+     * Delete read notifications older than $days days.
+     * Called by cron/notification-cleanup.php (which previously fataled:
+     * this method did not exist).
+     */
+    public function cleanup(int $days = 30): int {
+        try {
+            $stmt = $this->db->prepare("
+                DELETE FROM notifications
+                WHERE is_read = 1
+                  AND created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+            ");
+            $stmt->execute([$days]);
+            return $stmt->rowCount();
+        } catch (Exception $e) {
+            error_log('NotificationManager::cleanup error: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
     /**
      * Get unread count
      */

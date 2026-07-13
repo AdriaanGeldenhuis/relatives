@@ -301,25 +301,28 @@ async function clearAllRead() {
 function updateUnreadCount() {
     const unreadCards = document.querySelectorAll('.notification-card.unread');
     const count = unreadCards.length;
-    
-    const banner = document.querySelector('.unread-banner');
-    if (banner) {
-        if (count === 0) {
-            banner.style.animation = 'fadeOut 0.3s ease forwards';
-            setTimeout(() => banner.remove(), 300);
-        } else {
-            const text = banner.querySelector('.unread-text strong');
-            if (text) text.textContent = count;
-        }
+
+    // These selectors must match the markup notifications/index.php actually
+    // renders (.ph-sub / .unread-chip / .filter-btn .filter-badge); the old
+    // ones (.unread-banner, .filter-tab .tab-badge) existed in no template,
+    // so counters went stale after mark-read/delete.
+    const sub = document.querySelector('.page-head .ph-sub');
+    if (sub) {
+        sub.textContent = count > 0 ? `${count} unread` : "You're all caught up";
     }
-    
-    const unreadTab = document.querySelector('.filter-tab[href*="unread"] .tab-badge');
-    if (unreadTab) {
+
+    const chip = document.querySelector('.stat-chip.unread-chip');
+    if (chip) {
+        chip.textContent = `🔔 ${count} unread`;
+    }
+
+    const unreadBadge = document.querySelector('.filter-btn[href*="unread"] .filter-badge');
+    if (unreadBadge) {
         if (count === 0) {
-            unreadTab.style.animation = 'fadeOut 0.3s ease forwards';
-            setTimeout(() => unreadTab.remove(), 300);
+            unreadBadge.style.animation = 'fadeOut 0.3s ease forwards';
+            setTimeout(() => unreadBadge.remove(), 300);
         } else {
-            unreadTab.textContent = count;
+            unreadBadge.textContent = count;
         }
     }
 }

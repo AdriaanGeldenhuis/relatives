@@ -32,6 +32,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_NOTIFICATION_COUNT = "notification_count"
         private const val KEY_LAST_UPLOAD_TIME = "last_upload_time"
         private const val KEY_FCM_TOKEN = "fcm_token"
+        private const val KEY_NOTIFICATION_PROMPT_SHOWN = "notification_prompt_shown"
         private const val KEY_FAMILY_ID = "family_id"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_NAME = "user_name"
@@ -131,6 +132,15 @@ class PreferencesManager(context: Context) {
     var fcmToken: String?
         get() = prefs.getString(KEY_FCM_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_FCM_TOKEN, value).apply()
+
+    /**
+     * Whether the app has already offered the Android 13+ notification
+     * permission prompt on startup (it can still be re-offered from the
+     * notifications page or the tracking enable flow).
+     */
+    var notificationPromptShown: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFICATION_PROMPT_SHOWN, false)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_PROMPT_SHOWN, value).apply()
 
     // ── Server-driven configuration ────────────────────────────────────────
 

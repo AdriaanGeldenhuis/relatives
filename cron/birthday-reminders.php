@@ -44,6 +44,7 @@ try {
             e.user_id,
             e.created_by,
             e.kind,
+            COALESCE(e.recurrence_parent_id, e.id) AS series_id,
             DATE_FORMAT(e.starts_at, '%m-%d') as event_month_day,
             CASE
                 WHEN DATE_FORMAT(e.starts_at, '%m-%d') = ? THEN 0
@@ -60,6 +61,14 @@ try {
     $stmt->execute([$today, $tomorrow, $inSevenDays, $today, $tomorrow, $inSevenDays]);
     $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    // Yearly recurrence pre-creates child copies of each birthday with the
+    // same month-day, so one birthday matches up to 6 rows and every family
+    // member got up to 6 duplicate pushes (the per-user dedup below keys on
+    // event_id, which differs per child). Send once per recurrence series;
+    // keyed on series_id rather than "parents only" so a deleted/cancelled
+    // parent row doesn't silently kill the whole series.
+    $seenSeries = [];
+
     if (empty($events)) {
         echo "No birthdays or anniversaries today, tomorrow, or in 7 days\n";
         exit(0);
@@ -74,6 +83,12 @@ try {
         try {
             $daysUntil = (int)$event['days_until'];
             $kind = $event['kind'];
+
+            $seriesKey = $event['series_id'] . '|' . $daysUntil;
+            if (isset($seenSeries[$seriesKey])) {
+                continue;
+            }
+            $seenSeries[$seriesKey] = true;
 
             echo "Processing: {$event['title']} ($kind, in $daysUntil days)\n";
 

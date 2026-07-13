@@ -3,14 +3,8 @@ package za.co.relatives.app.services
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import za.co.relatives.app.R
 import za.co.relatives.app.RelativesApplication
-import za.co.relatives.app.network.ApiClient
 import za.co.relatives.app.tracking.TrackingService
 import za.co.relatives.app.utils.NotificationHelper
 
@@ -32,13 +26,6 @@ class RelativesFirebaseService : FirebaseMessagingService() {
         private const val TAG = "RelativesFCM"
     }
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    override fun onDestroy() {
-        serviceScope.cancel()
-        super.onDestroy()
-    }
-
     // ------------------------------------------------------------------ //
     //  Token management
     // ------------------------------------------------------------------ //
@@ -49,18 +36,14 @@ class RelativesFirebaseService : FirebaseMessagingService() {
 
         // Persist via PreferencesManager (safe cast to avoid crash if Application init failed).
         val prefs = (application as? RelativesApplication)?.preferencesManager
-        prefs?.fcmToken = token
+            ?: za.co.relatives.app.utils.PreferencesManager(applicationContext)
+        prefs.fcmToken = token
 
-        // Register with backend.
-        serviceScope.launch {
-            try {
-                val api = ApiClient(applicationContext)
-                api.registerFcmToken(token)
-                Log.d(TAG, "FCM token registered with backend")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to register FCM token", e)
-            }
-        }
+        // Register with backend through WorkManager so the attempt survives
+        // this short-lived service and retries with backoff — a plain
+        // fire-and-forget call here left rotated tokens unregistered (and the
+        // device unreachable) until the next app open.
+        FcmRegistrationWorker.enqueue(applicationContext)
     }
 
     // ------------------------------------------------------------------ //

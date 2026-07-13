@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import java.util.concurrent.atomic.AtomicInteger
 import za.co.relatives.app.MainActivity
 import za.co.relatives.app.R
 
@@ -56,13 +57,21 @@ object NotificationHelper {
      *                  taps the notification the [MainActivity] will load
      *                  this URL in the WebView.
      */
+    /**
+     * Monotonic ID generator. Raw System.currentTimeMillis().toInt() let two
+     * notifications arriving in the same millisecond (or truncating to the
+     * same int) replace each other in the shade.
+     */
+    private val nextNotificationId =
+        AtomicInteger((System.currentTimeMillis() and 0x0FFFFFFF).toInt())
+
     fun showAlertNotification(
         context: Context,
         title: String,
         body: String,
         actionUrl: String? = null,
     ) {
-        val notificationId = (System.currentTimeMillis().toInt())
+        val notificationId = nextNotificationId.incrementAndGet()
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -78,8 +87,10 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+        // Status-bar icons must be flat alpha-only drawables; the adaptive
+        // launcher mipmap rendered as a blank grey square on Android 8+.
         val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
