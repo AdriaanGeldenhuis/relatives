@@ -77,6 +77,16 @@ class SessionGate
     {
         $mode = (int) ($settings['mode'] ?? 1);
 
+        // Mode 0 = Off. The settings UI offers it, but this method used to
+        // fall through to the mode-1 flow — so families who switched
+        // tracking "Off" kept being tracked whenever a session existed.
+        if ($mode === 0) {
+            return [
+                'mode' => 0,
+                'should_track' => false,
+            ];
+        }
+
         if ($mode === 2) {
             return [
                 'mode' => 2,

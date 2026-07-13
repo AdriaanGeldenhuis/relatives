@@ -9,9 +9,15 @@ class SettingsRepo
     private PDO $db;
     private TrackingCache $cache;
 
+    // These MUST match the schema column defaults in
+    // migrations/001_tracking_tables.sql. They previously diverged (mode 2 vs
+    // schema 1, ttl 86400 vs 300): a new family's freshly-inserted row took
+    // the schema defaults, but get() returned/cached the DEFAULTS here — so
+    // tracking behaved as mode 2 for ~10 minutes, then silently flipped to
+    // mode 1 when the cache expired and the real row was read.
     private const DEFAULTS = [
-        'mode' => 2,
-        'session_ttl_seconds' => 86400,
+        'mode' => 1,
+        'session_ttl_seconds' => 300,
         'keepalive_interval_seconds' => 30,
         'moving_interval_seconds' => 30,
         'idle_interval_seconds' => 300,
@@ -49,7 +55,15 @@ class SettingsRepo
 
         if (!$row) {
             $this->createDefaults($familyId);
-            $settings = array_merge(self::DEFAULTS, ['family_id' => $familyId]);
+            // Re-read the row we just inserted so the returned/cached settings
+            // exactly equal what is persisted (the DB may apply its own
+            // defaults or column types).
+            $stmt = $this->db->prepare("SELECT * FROM tracking_family_settings WHERE family_id = ?");
+            $stmt->execute([$familyId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $settings = $row
+                ? array_merge(self::DEFAULTS, $row)
+                : array_merge(self::DEFAULTS, ['family_id' => $familyId]);
         } else {
             $settings = array_merge(self::DEFAULTS, $row);
         }

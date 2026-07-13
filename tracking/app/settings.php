@@ -376,14 +376,30 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             'history_retention_days', 'events_retention_days'
         ];
 
+        var invalidField = null;
         settingsFields.forEach(function(field) {
             var el = form.querySelector('[name="' + field + '"]');
-            if (el) {
-                var val = el.value;
-                if (el.type === 'number') val = parseFloat(val);
-                settingsPayload[field] = val;
+            if (!el) return;
+            var val = el.value;
+            if (el.type === 'number') {
+                var n = parseFloat(val);
+                // A cleared numeric field parses to NaN, which JSON.stringify
+                // serialises as null — the server then wrote NULL into a
+                // NOT NULL column. Skip empty optional fields; flag genuinely
+                // invalid ones instead of corrupting settings.
+                if (val === '' || val === null) return;
+                if (!isFinite(n)) { invalidField = field; return; }
+                val = n;
             }
+            settingsPayload[field] = val;
         });
+
+        if (invalidField) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Settings';
+            showToast('Invalid value for ' + invalidField, 'error');
+            return;
+        }
 
         // Collect alert rules
         var alertsPayload = {
@@ -392,7 +408,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             leave_place_enabled: form.querySelector('[name="leave_place_enabled"]').checked ? 1 : 0,
             enter_geofence_enabled: form.querySelector('[name="enter_geofence_enabled"]').checked ? 1 : 0,
             exit_geofence_enabled: form.querySelector('[name="exit_geofence_enabled"]').checked ? 1 : 0,
-            cooldown_seconds: parseInt(form.querySelector('[name="cooldown_seconds"]').value) || 900,
+            cooldown_seconds: (function() {
+                var c = parseInt(form.querySelector('[name="cooldown_seconds"]').value, 10);
+                return Number.isFinite(c) && c >= 0 ? c : 900; // 0 is valid (no cooldown)
+            })(),
             quiet_hours_start: form.querySelector('[name="quiet_hours_start"]').value || null,
             quiet_hours_end: form.querySelector('[name="quiet_hours_end"]').value || null
         };

@@ -20,18 +20,36 @@ class LocationRepo
      */
     public function upsertCurrent(int $userId, int $familyId, array $loc, string $motionState): void
     {
+        // Is this fix newer than what we already hold? Two uploaders run
+        // concurrently by design (the WebView page POSTs location.php while
+        // the native service batches to batch.php), and a retried batch
+        // replays points recorded seconds apart. Without a guard the LAST
+        // write wins, so an older or out-of-order fix could regress the live
+        // position to a stale location.
+        $existing = $this->getCurrent($userId);
+        $isNewer = $existing === null
+            || !isset($existing['recorded_at'])
+            || Time::parse($loc['recorded_at']) >= Time::parse($existing['recorded_at']);
+
+        // The IF() guards against the concurrent-writer race at the DB level
+        // too: an interleaved older write can't clobber a newer row.
         $stmt = $this->db->prepare("
             INSERT INTO tracking_current
                 (user_id, family_id, lat, lng, accuracy_m, speed_mps, bearing_deg, altitude_m,
                  motion_state, recorded_at, device_id, platform, app_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
-                lat = VALUES(lat), lng = VALUES(lng),
-                accuracy_m = VALUES(accuracy_m), speed_mps = VALUES(speed_mps),
-                bearing_deg = VALUES(bearing_deg), altitude_m = VALUES(altitude_m),
-                motion_state = VALUES(motion_state), recorded_at = VALUES(recorded_at),
-                device_id = VALUES(device_id), platform = VALUES(platform),
-                app_version = VALUES(app_version)
+                lat = IF(VALUES(recorded_at) >= recorded_at, VALUES(lat), lat),
+                lng = IF(VALUES(recorded_at) >= recorded_at, VALUES(lng), lng),
+                accuracy_m = IF(VALUES(recorded_at) >= recorded_at, VALUES(accuracy_m), accuracy_m),
+                speed_mps = IF(VALUES(recorded_at) >= recorded_at, VALUES(speed_mps), speed_mps),
+                bearing_deg = IF(VALUES(recorded_at) >= recorded_at, VALUES(bearing_deg), bearing_deg),
+                altitude_m = IF(VALUES(recorded_at) >= recorded_at, VALUES(altitude_m), altitude_m),
+                motion_state = IF(VALUES(recorded_at) >= recorded_at, VALUES(motion_state), motion_state),
+                device_id = IF(VALUES(recorded_at) >= recorded_at, VALUES(device_id), device_id),
+                platform = IF(VALUES(recorded_at) >= recorded_at, VALUES(platform), platform),
+                app_version = IF(VALUES(recorded_at) >= recorded_at, VALUES(app_version), app_version),
+                recorded_at = IF(VALUES(recorded_at) >= recorded_at, VALUES(recorded_at), recorded_at)
         ");
 
         $stmt->execute([
@@ -43,17 +61,19 @@ class LocationRepo
             $loc['device_id'], $loc['platform'], $loc['app_version'],
         ]);
 
-        // Update cache
-        $this->cache->setCurrent($userId, [
-            'lat' => $loc['lat'],
-            'lng' => $loc['lng'],
-            'accuracy_m' => $loc['accuracy_m'],
-            'speed_mps' => $loc['speed_mps'],
-            'bearing_deg' => $loc['bearing_deg'],
-            'altitude_m' => $loc['altitude_m'],
-            'motion_state' => $motionState,
-            'recorded_at' => $loc['recorded_at'],
-        ]);
+        // Only advance the cache for a newer fix so it mirrors the DB guard.
+        if ($isNewer) {
+            $this->cache->setCurrent($userId, [
+                'lat' => $loc['lat'],
+                'lng' => $loc['lng'],
+                'accuracy_m' => $loc['accuracy_m'],
+                'speed_mps' => $loc['speed_mps'],
+                'bearing_deg' => $loc['bearing_deg'],
+                'altitude_m' => $loc['altitude_m'],
+                'motion_state' => $motionState,
+                'recorded_at' => $loc['recorded_at'],
+            ]);
+        }
 
         // Invalidate family snapshot
         $this->cache->deleteFamilySnapshot($familyId);

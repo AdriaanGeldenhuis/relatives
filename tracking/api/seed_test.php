@@ -8,6 +8,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../core/bootstrap_tracking.php';
 
+// Mutating endpoint: require POST so a GET (e.g. <img src>) can't CSRF an
+// admin into wiping rows, matching the other write endpoints.
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    Response::error('method_not_allowed', 405);
+}
+
 $ctx = SiteContext::require($db);
 if (!$ctx->isAdmin()) {
     Response::error('admin_required', 403);

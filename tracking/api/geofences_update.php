@@ -9,6 +9,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
 
 $ctx = SiteContext::require($db);
 
+if (!$ctx->isAdmin()) {
+    Response::error('admin_required', 403);
+}
+
 $input = json_decode(file_get_contents('php://input'), true);
 
 if (empty($input) || empty($input['id'])) {

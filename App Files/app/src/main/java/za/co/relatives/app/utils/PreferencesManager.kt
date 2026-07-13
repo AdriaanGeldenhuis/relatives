@@ -33,6 +33,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_LAST_UPLOAD_TIME = "last_upload_time"
         private const val KEY_FCM_TOKEN = "fcm_token"
         private const val KEY_NOTIFICATION_PROMPT_SHOWN = "notification_prompt_shown"
+        private const val KEY_OEM_GUIDANCE_SHOWN = "oem_guidance_shown"
         private const val KEY_FAMILY_ID = "family_id"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_NAME = "user_name"
@@ -141,6 +142,15 @@ class PreferencesManager(context: Context) {
     var notificationPromptShown: Boolean
         get() = prefs.getBoolean(KEY_NOTIFICATION_PROMPT_SHOWN, false)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_PROMPT_SHOWN, value).apply()
+
+    /**
+     * Whether the OEM battery-killer walkthrough (Huawei/Honor "App launch",
+     * Xiaomi autostart, …) has been offered. It can be re-forced from help
+     * flows when tracking keeps dying.
+     */
+    var oemGuidanceShown: Boolean
+        get() = prefs.getBoolean(KEY_OEM_GUIDANCE_SHOWN, false)
+        set(value) = prefs.edit().putBoolean(KEY_OEM_GUIDANCE_SHOWN, value).apply()
 
     // ── Server-driven configuration ────────────────────────────────────────
 

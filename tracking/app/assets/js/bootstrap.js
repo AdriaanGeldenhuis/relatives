@@ -66,13 +66,19 @@ window.Tracking = window.Tracking || {};
         var wakeBtn = document.getElementById('wake-btn');
         if (wakeBtn) {
             wakeBtn.addEventListener('click', function () {
+                // Bridge call = local GPS boost only; the server POST is what
+                // actually wakes the family. Always do the POST.
                 if (Tracking.nativeBridge && Tracking.nativeBridge.isNative()) {
                     Tracking.nativeBridge.wakeAllDevices();
-                    showToast('Wake signal sent to all devices');
-                } else if (Tracking.api && Tracking.api.wakeDevices) {
+                }
+                if (Tracking.api && Tracking.api.wakeDevices) {
                     Tracking.api.wakeDevices()
                         .then(function () { showToast('Wake signal sent'); })
-                        .catch(function () { showToast('Failed to send wake signal'); });
+                        .catch(function (err) {
+                            showToast(err && err.status === 429
+                                ? 'Devices were just woken — try again in a minute'
+                                : 'Failed to send wake signal');
+                        });
                 }
             });
         }

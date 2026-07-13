@@ -16,6 +16,12 @@
 
     <!-- Activity Recognition (motion detection for battery-efficient tracking) -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <!-- Pre-Android-10, Play services activity recognition uses this GMS
+         permission; without it requestActivityTransitionUpdates fails on
+         API 26-28 (minSdk is 26). -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION"
+        android:maxSdkVersion="28" />
 
     <!-- Service Permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -91,6 +97,12 @@
             android:exported="false" />
         <receiver
             android:name=".tracking.GeofenceReceiver"
+            android:exported="false" />
+
+        <!-- AlarmManager watchdog backstop (OEM battery killers throttle the
+             WorkManager watchdog; while-idle alarms still fire) -->
+        <receiver
+            android:name=".tracking.WatchdogAlarmReceiver"
             android:exported="false" />
 
         <!-- Firebase Cloud Messaging Service -->

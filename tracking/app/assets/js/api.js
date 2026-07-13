@@ -156,24 +156,27 @@ window.Tracking = window.Tracking || {};
 
     // -----------------------------------------------------------------------
     // Domain-specific API methods
+    //
+    // Endpoints are the REAL files under /tracking/api/ — there is no URL
+    // rewriting on this server, so pretty paths like "devices/wake" 404.
     // -----------------------------------------------------------------------
 
     /** Check whether the user has an active tracking session. */
     function getSessionStatus() {
-        return get('session/status');
+        return get('session_status.php');
     }
 
     /** Keep the current session alive (Mode 1). */
     function keepalive() {
-        return post('session/keepalive');
+        return post('keepalive.php');
     }
 
     /**
      * Submit a single location update.
-     * @param {Object} loc - { latitude, longitude, accuracy, speed, heading, altitude, timestamp }
+     * @param {Object} loc - { lat, lng, accuracy_m, speed_mps, bearing_deg, altitude_m, recorded_at }
      */
     function submitLocation(loc) {
-        return post('location/submit', loc);
+        return post('location.php', loc);
     }
 
     /**
@@ -181,12 +184,12 @@ window.Tracking = window.Tracking || {};
      * @param {Object[]} locs - Array of location objects.
      */
     function batchUpload(locs) {
-        return post('location/batch', { locations: locs });
+        return post('batch.php', { locations: locs });
     }
 
     /** Get the latest location for every family member. */
     function getCurrentLocations() {
-        return get('locations/current');
+        return get('current.php');
     }
 
     /**
@@ -196,25 +199,25 @@ window.Tracking = window.Tracking || {};
      * @param {string}        to   - ISO-8601 end datetime.
      */
     function getHistory(userId, from, to) {
-        return get('locations/history', { user_id: userId, from: from, to: to });
+        return get('history.php', { user_id: userId, from: from, to: to });
     }
 
     /** Retrieve current app settings. */
     function getSettings() {
-        return get('settings');
+        return get('settings_get.php');
     }
 
     /**
-     * Save (update) app settings.
+     * Save (update) app settings. Admin only.
      * @param {Object} data - Key/value settings to persist.
      */
     function saveSettings(data) {
-        return post('settings', data);
+        return post('settings_save.php', data);
     }
 
     /** Get all geofences. */
     function getGeofences() {
-        return get('geofences');
+        return get('geofences_list.php');
     }
 
     /**
@@ -222,16 +225,19 @@ window.Tracking = window.Tracking || {};
      * @param {Object} data - { name, type, center, radius, polygon, ... }
      */
     function addGeofence(data) {
-        return post('geofences', data);
+        return post('geofences_add.php', data);
     }
 
     /**
-     * Update an existing geofence.
+     * Update an existing geofence. The id travels in the JSON body.
      * @param {number|string} id
      * @param {Object} data
      */
     function updateGeofence(id, data) {
-        return put('geofences/' + id, data);
+        var body = {};
+        Object.keys(data || {}).forEach(function (k) { body[k] = data[k]; });
+        body.id = id;
+        return put('geofences_update.php', body);
     }
 
     /**
@@ -239,20 +245,20 @@ window.Tracking = window.Tracking || {};
      * @param {number|string} id
      */
     function deleteGeofence(id) {
-        return del('geofences/' + id);
+        return del('geofences_delete.php', { id: id });
     }
 
     /** Get all saved places. */
     function getPlaces() {
-        return get('places');
+        return get('places_list.php');
     }
 
     /**
      * Add a new place.
-     * @param {Object} data - { name, latitude, longitude, ... }
+     * @param {Object} data - { name, lat, lng, ... }
      */
     function addPlace(data) {
-        return post('places', data);
+        return post('places_add.php', data);
     }
 
     /**
@@ -260,7 +266,7 @@ window.Tracking = window.Tracking || {};
      * @param {number|string} id
      */
     function deletePlace(id) {
-        return del('places/' + id);
+        return del('places_delete.php', { id: id });
     }
 
     /**
@@ -270,20 +276,20 @@ window.Tracking = window.Tracking || {};
      * @param {string} [type] - Optional event type filter.
      */
     function getEvents(limit, offset, type) {
-        return get('events', { limit: limit, offset: offset, type: type });
+        return get('events_list.php', { limit: limit, offset: offset, type: type });
     }
 
     /** Get alert rules for the current family. */
     function getAlertRules() {
-        return get('alerts/rules');
+        return get('alerts_rules_get.php');
     }
 
     /**
-     * Save alert rules.
+     * Save alert rules. Admin only.
      * @param {Object} data
      */
     function saveAlertRules(data) {
-        return post('alerts/rules', data);
+        return post('alerts_rules_save.php', data);
     }
 
     /**
@@ -293,7 +299,7 @@ window.Tracking = window.Tracking || {};
      * @param {string} [profile='driving'] - 'driving' | 'walking' | 'cycling'
      */
     function getDirections(from, to, profile) {
-        return get('directions', {
+        return get('directions.php', {
             from_lat: from.lat,
             from_lng: from.lng,
             to_lat: to.lat,
@@ -304,7 +310,7 @@ window.Tracking = window.Tracking || {};
 
     /** Wake all family member devices via push notification. */
     function wakeDevices() {
-        return post('devices/wake');
+        return post('wake_devices.php');
     }
 
     // -----------------------------------------------------------------------

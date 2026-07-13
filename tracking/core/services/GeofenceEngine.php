@@ -32,15 +32,45 @@ class GeofenceEngine
     }
 
     /**
-     * Process a new location against all geofences and places for the user's family.
+     * Hysteresis buffer (metres) applied to circular boundaries so GPS jitter
+     * near the edge does not flap enter/exit. Widened by the fix's own
+     * accuracy: a 150m-accurate urban fix needs to clear the boundary by 150m
+     * before we believe the transition.
      */
-    public function process(int $familyId, int $userId, float $lat, float $lng, string $userName): void
+    private const MIN_HYSTERESIS_M = 30.0;
+
+    /**
+     * Process a new location against all geofences and places for the user's family.
+     *
+     * @param float|null $accuracyM Horizontal accuracy of this fix, used to
+     *   widen the boundary hysteresis. Null = treat as a perfect fix.
+     */
+    public function process(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM = null): void
     {
-        $this->processGeofences($familyId, $userId, $lat, $lng, $userName);
-        $this->processPlaces($familyId, $userId, $lat, $lng, $userName);
+        $this->processGeofences($familyId, $userId, $lat, $lng, $userName, $accuracyM);
+        $this->processPlaces($familyId, $userId, $lat, $lng, $userName, $accuracyM);
     }
 
-    private function processGeofences(int $familyId, int $userId, float $lat, float $lng, string $userName): void
+    /** Buffer (m) to clear before a circular boundary transition is believed. */
+    private function hysteresisBuffer(?float $accuracyM): float
+    {
+        return max(self::MIN_HYSTERESIS_M, $accuracyM ?? 0.0);
+    }
+
+    /**
+     * Decide inside/outside for a circular boundary WITH hysteresis: to enter,
+     * the fix must be inside by the buffer; to leave, outside by the buffer;
+     * within the buffer band the previous state is held.
+     */
+    private function resolveCircularState(float $distance, float $radius, bool $wasInside, float $buffer): bool
+    {
+        if ($wasInside) {
+            return $distance <= ($radius + $buffer);
+        }
+        return $distance <= max(0.0, $radius - $buffer);
+    }
+
+    private function processGeofences(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM): void
     {
         $geofences = $this->geoRepo->listActive($familyId);
         if (empty($geofences)) {
@@ -49,11 +79,12 @@ class GeofenceEngine
 
         // Load current states for this user
         $states = $this->loadGeofenceStates($userId);
+        $buffer = $this->hysteresisBuffer($accuracyM);
 
         foreach ($geofences as $gf) {
             $gfId = (int) $gf['id'];
             $wasInside = (bool) ($states[$gfId] ?? false);
-            $isInside = $this->isInsideGeofence($lat, $lng, $gf);
+            $isInside = $this->isInsideGeofence($lat, $lng, $gf, $wasInside, $buffer);
 
             if ($isInside === $wasInside) {
                 continue;
@@ -80,22 +111,22 @@ class GeofenceEngine
         $this->cache->deleteGeofenceState($userId);
     }
 
-    private function processPlaces(int $familyId, int $userId, float $lat, float $lng, string $userName): void
+    private function processPlaces(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM): void
     {
         $places = $this->placesRepo->listAll($familyId);
         if (empty($places)) {
             return;
         }
 
-        // Use geofence_state table with negative target_id to track place states
         $states = $this->loadPlaceStates($userId);
+        $buffer = $this->hysteresisBuffer($accuracyM);
 
         foreach ($places as $place) {
             $pId = (int) $place['id'];
             $wasInside = (bool) ($states[$pId] ?? false);
             $radius = (float) ($place['radius_m'] ?? 100);
             $distance = geo_haversineDistance((float) $place['lat'], (float) $place['lng'], $lat, $lng);
-            $isInside = $distance <= $radius;
+            $isInside = $this->resolveCircularState($distance, $radius, $wasInside, $buffer);
 
             if ($isInside === $wasInside) {
                 continue;
@@ -119,7 +150,7 @@ class GeofenceEngine
         }
     }
 
-    private function isInsideGeofence(float $lat, float $lng, array $gf): bool
+    private function isInsideGeofence(float $lat, float $lng, array $gf, bool $wasInside, float $buffer): bool
     {
         if ($gf['type'] === 'circle') {
             $distance = geo_haversineDistance(
@@ -128,7 +159,7 @@ class GeofenceEngine
                 $lat,
                 $lng
             );
-            return $distance <= (float) $gf['radius_m'];
+            return $this->resolveCircularState($distance, (float) $gf['radius_m'], $wasInside, $buffer);
         }
 
         if ($gf['type'] === 'polygon' && !empty($gf['polygon_json'])) {
@@ -136,11 +167,29 @@ class GeofenceEngine
                 ? json_decode($gf['polygon_json'], true)
                 : $gf['polygon_json'];
             if (is_array($polygon) && count($polygon) >= 3) {
-                return geo_isPointInPolygon($lat, $lng, $polygon);
+                return geo_isPointInPolygon($lat, $lng, $this->normalizePolygon($polygon));
             }
         }
 
         return false;
+    }
+
+    /**
+     * The frontend stores polygon vertices as [lat, lng] numeric pairs, but
+     * geo_isPointInPolygon reads ['lat']/['lng'] keys — so every polygon
+     * geofence silently never matched. Accept both shapes.
+     */
+    private function normalizePolygon(array $polygon): array
+    {
+        $out = [];
+        foreach ($polygon as $p) {
+            if (isset($p['lat'], $p['lng'])) {
+                $out[] = ['lat' => (float) $p['lat'], 'lng' => (float) $p['lng']];
+            } elseif (isset($p[0], $p[1])) {
+                $out[] = ['lat' => (float) $p[0], 'lng' => (float) $p[1]];
+            }
+        }
+        return $out;
     }
 
     private function loadGeofenceStates(int $userId): array
@@ -186,28 +235,21 @@ class GeofenceEngine
 
     private function loadPlaceStates(int $userId): array
     {
-        // Reuse geofence_state with a convention: place states use negative geofence_id
-        // This avoids another table. Alternatively, store in events-only approach.
-        // For simplicity, use a separate query on tracking_events to determine last known state.
+        // Persistent per-user place state (tracking_place_state). The old
+        // implementation inferred state from tracking_events in the last 24h,
+        // so anyone who stayed at a place longer than a day re-fired
+        // "arrived" every 24h and never fired "left".
         $stmt = $this->db->prepare("
-            SELECT
-                JSON_EXTRACT(meta_json, '$.place_id') as place_id,
-                event_type
-            FROM tracking_events
+            SELECT place_id, is_inside
+            FROM tracking_place_state
             WHERE user_id = ?
-              AND event_type IN ('arrive_place', 'leave_place')
-              AND occurred_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
-            ORDER BY occurred_at DESC
         ");
         $stmt->execute([$userId]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $states = [];
         foreach ($rows as $row) {
-            $pId = (int) ($row['place_id'] ?? 0);
-            if ($pId && !isset($states[$pId])) {
-                $states[$pId] = $row['event_type'] === 'arrive_place';
-            }
+            $states[(int) $row['place_id']] = (bool) $row['is_inside'];
         }
 
         return $states;
@@ -215,7 +257,18 @@ class GeofenceEngine
 
     private function updatePlaceState(int $familyId, int $placeId, int $userId, bool $isInside): void
     {
-        // Place state is tracked via events only (no separate state table needed)
-        // The loadPlaceStates method reads the latest event to determine state.
+        $now = gmdate('Y-m-d H:i:s');
+        $enterCol = $isInside ? $now : null;
+        $exitCol = $isInside ? null : $now;
+
+        $stmt = $this->db->prepare("
+            INSERT INTO tracking_place_state (family_id, place_id, user_id, is_inside, last_entered_at, last_exited_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                is_inside = VALUES(is_inside),
+                last_entered_at = IF(VALUES(is_inside) = 1, VALUES(last_entered_at), last_entered_at),
+                last_exited_at = IF(VALUES(is_inside) = 0, VALUES(last_exited_at), last_exited_at)
+        ");
+        $stmt->execute([$familyId, $placeId, $userId, (int) $isInside, $enterCol, $exitCol]);
     }
 }

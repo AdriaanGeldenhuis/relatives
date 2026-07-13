@@ -102,10 +102,12 @@ require_once __DIR__ . '/../../shared/components/header.php';
                 $userName = e($meta['user_name'] ?? $ev['user_name'] ?? 'Unknown');
                 $targetName = e($meta['geofence_name'] ?? $meta['place_name'] ?? $meta['name'] ?? 'Unknown');
                 $time = $ev['occurred_at'] ?? $ev['created_at'] ?? '';
-                $timeFormatted = $time ? date('M j, g:i A', strtotime($time)) : '';
+                // occurred_at is UTC; render it in the server's local zone.
+                $timeTs = $time ? strtotime($time . ' UTC') : false;
+                $timeFormatted = $timeTs ? date('M j, g:i A', $timeTs) : '';
                 $timeAgo = '';
-                if ($time) {
-                    $diff = time() - strtotime($time);
+                if ($timeTs) {
+                    $diff = time() - $timeTs;
                     if ($diff < 60) $timeAgo = 'just now';
                     elseif ($diff < 3600) $timeAgo = floor($diff / 60) . 'm ago';
                     elseif ($diff < 86400) $timeAgo = floor($diff / 3600) . 'h ago';
@@ -204,15 +206,19 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 loadBtn.disabled = false;
                 loadingEl.classList.remove('active');
 
-                if (!data.ok || !data.events || data.events.length === 0) {
+                // API envelope is {success, message, data} (core/Response.php)
+                // — the old data.ok/data.events keys never existed, so "Load
+                // more" always reported no-more-events after the first page.
+                var events = (data.success && data.data) || [];
+                if (events.length === 0) {
                     noMore = true;
                     loadContainer.style.display = 'none';
                     return;
                 }
 
-                offset += data.events.length;
+                offset += events.length;
 
-                data.events.forEach(function(ev) {
+                events.forEach(function(ev) {
                     var meta = {};
                     if (ev.meta_json) {
                         try { meta = JSON.parse(ev.meta_json); } catch(e) {}
@@ -247,7 +253,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                     timeline.insertAdjacentHTML('beforeend', html);
                 });
 
-                if (data.events.length < limit) {
+                if (events.length < limit) {
                     noMore = true;
                     loadContainer.style.display = 'none';
                 }
@@ -262,7 +268,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     function formatTimeAgo(dateStr) {
         if (!dateStr) return '';
-        var diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+        // Server timestamps are MySQL "Y-m-d H:i:s" in UTC with no zone
+        // marker: bare new Date() parses them as LOCAL time (hours of skew)
+        // and Safari rejects the space-separated form entirely (NaN).
+        var ts = new Date(dateStr.replace(' ', 'T') + 'Z').getTime();
+        if (isNaN(ts)) return '';
+        var diff = (Date.now() - ts) / 1000;
+        if (diff < 0) diff = 0;
         if (diff < 60) return 'just now';
         if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
         if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';

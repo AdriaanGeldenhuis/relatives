@@ -27,6 +27,19 @@ if (count($locations) > $maxBatch) {
 $trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 $settings = $settingsRepo->get($ctx->familyId);
+
+// Mode 0 = Off: the family explicitly disabled tracking, so honour it —
+// accept nothing, store nothing. Returning success with mode 0 in
+// server_settings lets devices back off instead of retrying.
+if ((int) ($settings['mode'] ?? 1) === 0) {
+    Response::success([
+        'processed' => 0,
+        'stored' => 0,
+        'results' => [],
+        'server_settings' => ['mode' => 0],
+    ], 'tracking_disabled');
+}
+
 $locationRepo = new LocationRepo($db, $trackingCache);
 $eventsRepo = new EventsRepo($db);
 $alertsRepo = new AlertsRepo($db, $trackingCache);
@@ -48,6 +61,7 @@ $motionGate = new MotionGate(
 $validator = new TrackingValidator();
 $results = [];
 $storedCount = 0;
+$lastStored = null;
 
 foreach ($locations as $i => $input) {
     if (!is_array($input)) {
@@ -93,10 +107,11 @@ foreach ($locations as $i => $input) {
         $locationRepo->insertHistory($ctx->familyId, $ctx->userId, $loc, $motion['motion_state']);
     }
 
-    // Process geofences on last item only to avoid excessive event processing
-    if ($i === array_key_last($locations)) {
-        $geofenceEngine->process($ctx->familyId, $ctx->userId, $loc['lat'], $loc['lng'], $ctx->name);
-    }
+    // Remember the newest successfully-stored fix; geofences are evaluated
+    // once after the loop. Keying off array_key_last meant that if the final
+    // element was invalid, low-accuracy or a duplicate, NO geofence
+    // processing ran for the whole batch and every enter/exit event was lost.
+    $lastStored = $loc;
 
     $storedCount++;
     $results[] = [
@@ -105,6 +120,17 @@ foreach ($locations as $i => $input) {
         'motion_state' => $motion['motion_state'],
         'stored_history' => $motion['store_history'],
     ];
+}
+
+if ($lastStored !== null) {
+    $geofenceEngine->process(
+        $ctx->familyId,
+        $ctx->userId,
+        $lastStored['lat'],
+        $lastStored['lng'],
+        $ctx->name,
+        $lastStored['accuracy_m'] ?? null
+    );
 }
 
 Response::success([

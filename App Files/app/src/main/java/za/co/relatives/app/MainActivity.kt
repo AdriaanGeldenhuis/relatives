@@ -45,6 +45,7 @@ import com.android.billingclient.api.QueryPurchasesParams
 import za.co.relatives.app.data.TrackingStore
 import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.tracking.FamilyPoller
+import za.co.relatives.app.tracking.OemBatteryHelper
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
 import za.co.relatives.app.tracking.TrackingRestartWorker
@@ -288,7 +289,13 @@ class MainActivity : ComponentActivity() {
         if (batteryPromptShown || isFinishing || isDestroyed) return
         try {
             val pm = getSystemService(POWER_SERVICE) as PowerManager
-            if (pm.isIgnoringBatteryOptimizations(packageName)) return
+            if (pm.isIgnoringBatteryOptimizations(packageName)) {
+                // Android-level exemption alone does NOT stop Huawei/Honor/
+                // MIUI-style battery managers from killing the service —
+                // those need their own autostart/app-launch toggle.
+                OemBatteryHelper.maybeShowGuidance(this, prefs)
+                return
+            }
             batteryPromptShown = true
             AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setTitle("Keep tracking alive")
@@ -312,8 +319,11 @@ class MainActivity : ComponentActivity() {
                         } catch (_: Exception) {
                         }
                     }
+                    OemBatteryHelper.maybeShowGuidance(this, prefs)
                 }
-                .setNegativeButton("Not now", null)
+                .setNegativeButton("Not now") { _, _ ->
+                    OemBatteryHelper.maybeShowGuidance(this, prefs)
+                }
                 .show()
         } catch (e: Exception) {
             Log.w(TAG, "Battery exemption prompt failed", e)

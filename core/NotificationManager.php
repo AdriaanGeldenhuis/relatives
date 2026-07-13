@@ -101,12 +101,17 @@ class NotificationManager {
             // the notification is still stored above so the user finds it in
             // the app afterwards (previously the whole notification was
             // dropped and could never be seen).
+            // Callers that deliver their own push (e.g. tracking wake, which
+            // sends a direct data-only FCM) pass send_push=false to store the
+            // in-app row without a duplicate push.
             $priority = $data['priority'] ?? self::PRIORITY_NORMAL;
             $quietBlocked = $priority !== self::PRIORITY_URGENT
                 && $priority !== self::PRIORITY_HIGH
                 && $this->isQuietHours($data['user_id'], $data['type']);
 
-            if ($quietBlocked) {
+            if (($data['send_push'] ?? true) === false) {
+                // Skip push entirely; row already stored above.
+            } elseif ($quietBlocked) {
                 $this->logDelivery($notificationId, $data['user_id'], 'push', 'failed', 'Quiet hours');
             } elseif ($this->isPushEnabled($data['user_id'], $data['type'])) {
                 $this->sendPushNotification($notificationId, $data);

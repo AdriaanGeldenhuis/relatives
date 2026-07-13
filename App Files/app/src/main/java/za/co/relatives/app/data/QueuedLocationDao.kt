@@ -26,6 +26,15 @@ interface QueuedLocationDao {
     @Query("DELETE FROM queued_locations WHERE sent = 1")
     suspend fun deleteSent()
 
+    /**
+     * Age-based expiry: drop points older than [cutoffMillis] regardless of
+     * send state. A week-old fix is worthless on a live map, and this is the
+     * ONLY thing that may discard unsent points — a flaky connection must
+     * never cause data loss the way a retry-count cull did.
+     */
+    @Query("DELETE FROM queued_locations WHERE timestamp < :cutoffMillis")
+    suspend fun deleteOlderThan(cutoffMillis: Long)
+
     @Query(
         """
         DELETE FROM queued_locations WHERE client_event_id IN (

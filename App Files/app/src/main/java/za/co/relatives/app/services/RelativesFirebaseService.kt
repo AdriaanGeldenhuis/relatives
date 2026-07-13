@@ -5,6 +5,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import za.co.relatives.app.R
 import za.co.relatives.app.RelativesApplication
+import za.co.relatives.app.tracking.TrackingRestartWorker
 import za.co.relatives.app.tracking.TrackingService
 import za.co.relatives.app.utils.NotificationHelper
 
@@ -101,10 +102,22 @@ class RelativesFirebaseService : FirebaseMessagingService() {
                 // (not start()) so a racing user disable always wins.
                 Log.d(TAG, "Keepalive wake: ensuring TrackingService is running")
                 TrackingService.revive(this)
+                // The push also re-kicks the watchdog: on OEMs that throttle
+                // the 15-min periodic schedule (Huawei/Honor especially) the
+                // cron keepalive is effectively the scheduler, and the worker
+                // captures a fix if the service revival above was refused.
+                TrackingRestartWorker.enqueue(this)
             } else {
                 // A family member tapped "Wake": burst mode + immediate fix.
                 Log.d(TAG, "Wake tracking: triggering motion mode")
                 TrackingService.motionStarted(this)
+                // Belt and braces: motionStarted swallows the Android 12+
+                // background-FGS refusal, and on OEM-restricted devices that
+                // refusal is the NORM, not the exception — the wake then did
+                // nothing at all. The force-fix worker captures and uploads
+                // one fresh fix regardless of whether the service could start,
+                // so the family always gets an updated dot from a wake.
+                TrackingRestartWorker.enqueueWakeFix(this)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Wake tracking failed", e)

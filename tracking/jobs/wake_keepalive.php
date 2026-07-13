@@ -89,9 +89,15 @@ $failed = 0;
 
 foreach ($targets as $t) {
     // Silent data-only wake; the sender already marks Android priority high.
+    // TTL matches the 10-min cron cadence — an undelivered keepalive is
+    // superseded by the next run, so FCM must not queue them for weeks, and
+    // the collapse key keeps at most one pending per device.
     $result = $fcm->send($t['token'], [], [
         'type' => 'wake_tracking',
         'keepalive' => '1',
+    ], [
+        'ttl' => '600s',
+        'collapse_key' => 'wake_keepalive',
     ]);
 
     if ($result === 'invalid_token') {
