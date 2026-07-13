@@ -20,7 +20,7 @@ if (empty($activePage) || $activePage === 'index.php') {
 $appVersion = '12.4.0';
 // Use static cache version - bump this when deploying CSS/JS changes
 // DO NOT use time() as it defeats browser caching!
-$cacheVersion = '12.9.0';
+$cacheVersion = '12.10.0';
 $buildTime = $cacheVersion;
 
 // Avatar cache-busting: use file modification time so browsers fetch the new image after upload
@@ -47,7 +47,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#667eea">
+    <meta name="theme-color" content="#06070f">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -95,18 +95,22 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         
         body {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background:
+                radial-gradient(120% 90% at 50% -20%, #141838 0%, transparent 60%),
+                #06070f;
             min-height: 100vh;
             color: white;
             overflow-x: hidden;
             padding-bottom: var(--footer-height) !important;
             -webkit-font-smoothing: antialiased;
         }
-        
+
         .app-loader {
             position: fixed;
             inset: 0;
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background:
+                radial-gradient(120% 90% at 50% -20%, #141838 0%, transparent 60%),
+                #06070f;
             z-index: 99999;
             display: flex;
             align-items: center;
@@ -156,7 +160,10 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             width: 100%;
             height: 100%;
             max-width: none;
-            background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
+            background:
+                radial-gradient(90% 60% at 15% 0%, rgba(124, 92, 246, 0.18) 0%, transparent 55%),
+                radial-gradient(80% 50% at 90% 100%, rgba(244, 114, 182, 0.1) 0%, transparent 60%),
+                #0b0d1a;
             z-index: 1999;
             opacity: 0;
             visibility: hidden;
@@ -197,7 +204,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             font-weight: 900;
             color: white;
             font-family: 'Space Grotesk', sans-serif;
-            background: linear-gradient(135deg, #fff 0%, #667eea 50%, #764ba2 100%);
+            background: linear-gradient(120deg, #fff 0%, #a78bfa 45%, #f472b6 80%, #fb923c 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -240,9 +247,9 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             justify-content: center;
             gap: 4px;
             padding: clamp(8px, 1.2vh, 14px) 6px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: 14px;
             color: rgba(255, 255, 255, 0.9);
             text-decoration: none;
             font-weight: 600;
@@ -263,15 +270,16 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         }
 
         .mobile-nav-link.active {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
-            border: 1px solid rgba(102, 126, 234, 0.5);
+            background: linear-gradient(120deg, rgba(167, 139, 250, 0.26), rgba(244, 114, 182, 0.18));
+            border: 1px solid rgba(167, 139, 250, 0.55);
             color: white;
             font-weight: 700;
+            box-shadow: 0 4px 16px rgba(167, 139, 250, 0.2);
         }
 
         .mobile-nav-link.active .nav-icon {
             transform: scale(1.1);
-            filter: drop-shadow(0 0 8px rgba(102, 126, 234, 0.6));
+            filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.7));
         }
 
         .nav-icon {
@@ -370,8 +378,8 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             bottom: 100%;
             left: 0;
             right: 0;
-            background: rgba(15, 12, 41, 0.98);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: #10132a;
+            border: 1px solid rgba(255, 255, 255, 0.18);
             border-radius: 12px;
             margin-bottom: 8px;
             padding: 8px;
@@ -479,10 +487,11 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             position: sticky;
             top: 0;
             z-index: 1000;
-            background: var(--glass-medium);
-            backdrop-filter: blur(40px) saturate(180%);
-            border-bottom: 1px solid var(--glass-border);
-            box-shadow: var(--shadow-md);
+            background: rgba(11, 13, 26, 0.78);
+            backdrop-filter: blur(24px) saturate(160%);
+            -webkit-backdrop-filter: blur(24px) saturate(160%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
             animation: slideDown 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
         
@@ -546,8 +555,8 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             width: 44px;
             height: 44px;
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.15);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.14);
             color: white;
             font-size: 20px;
             cursor: pointer;
@@ -555,9 +564,10 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             position: relative;
             transition: all var(--transition-bounce);
         }
-        
+
         .header-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
+            background: rgba(167, 139, 250, 0.2);
+            border-color: rgba(167, 139, 250, 0.55);
             transform: translateY(-2px) scale(1.05);
             box-shadow: var(--shadow-md);
         }
@@ -586,7 +596,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             align-items: center;
             justify-content: center;
             padding: 0 6px;
-            border: 2px solid rgba(102, 126, 234, 1);
+            border: 2px solid #0b0d1a;
             box-shadow: 0 4px 12px rgba(255, 71, 87, 0.5);
             animation: badgePulse 2s ease-in-out infinite;
         }
