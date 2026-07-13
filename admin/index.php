@@ -221,51 +221,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Set page metadata
 $pageTitle = 'Admin Panel';
-$pageCSS = ['/admin/css/admin.css'];
+$pageCSS = [
+    '/shared/css/aurora.css',
+    '/admin/css/admin.css'
+];
 $pageJS = ['/admin/js/admin.js'];
 
 // Include header
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Animated Background -->
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-a"></div>
+    <div class="aurora-blob aurora-b"></div>
+    <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="shooting-star"></div>
+    <div class="aurora-grid"></div>
 </div>
 
 <!-- Main Content -->
 <main class="main-content">
-    <div class="container">
-        
-        <!-- Hero Header -->
-        <section class="hero-section">
-            <div class="greeting-card">
-                <div class="greeting-time"><?php echo ucfirst($user['role']); ?> Panel</div>
-                <h1 class="greeting-text">
-                    <span class="greeting-icon">⚙️</span>
-                    <span class="greeting-name"><?php echo htmlspecialchars($family['name']); ?></span>
-                </h1>
-                <p class="greeting-subtitle">Complete control over your family hub</p>
+    <div class="hub">
 
-                <!-- Quick Actions -->
-                <div class="quick-actions">
-                    <button onclick="showInviteModal()" class="quick-action-btn">
-                        <span class="qa-icon">📨</span>
-                        <span>Invite Member</span>
-                    </button>
-                    <button onclick="copyInviteCode()" class="quick-action-btn">
-                        <span class="qa-icon">📋</span>
-                        <span>Copy Code</span>
-                    </button>
-                    <a href="/home/" class="quick-action-btn">
-                        <span class="qa-icon">🏠</span>
-                        <span>Home</span>
-                    </a>
-                </div>
+        <!-- Compact page header -->
+        <header class="page-head" style="--glow:#fb7185; --page-glow: rgba(251, 113, 133, 0.13)">
+            <span class="ph-glyph" aria-hidden="true">⚙️</span>
+            <div class="ph-titles">
+                <h1><?php echo htmlspecialchars($family['name']); ?></h1>
+                <p class="ph-sub"><?php echo ucfirst($user['role']); ?> panel · <?php echo $stats['active_members']; ?> active member<?php echo $stats['active_members'] === 1 ? '' : 's'; ?></p>
             </div>
-        </section>
-   
+            <div class="ph-actions">
+                <button onclick="showInviteModal()" class="pill-btn primary">
+                    <span aria-hidden="true">📨</span> Invite member
+                </button>
+                <button onclick="copyInviteCode()" class="pill-btn">
+                    <span aria-hidden="true">📋</span> Copy code
+                </button>
+                <?php if ($user['role'] === 'owner'): ?>
+                <a href="/admin/plans-public.php" class="pill-btn">
+                    <span aria-hidden="true">⚡</span> Plans
+                </a>
+                <?php endif; ?>
+            </div>
+        </header>
+
         <!-- Subscription Status Banner (OWNERS ONLY) -->
         <?php if ($user['role'] === 'owner'): ?>
         <?php
@@ -274,117 +276,86 @@ require_once __DIR__ . '/../shared/components/header.php';
         $status = $subscriptionManager->getFamilySubscriptionStatus($user['family_id']);
         $trialInfo = $subscriptionManager->getTrialInfo($user['family_id']);
         ?>
-        
+
         <?php if ($status['status'] === 'trial'): ?>
-            <!-- TRIAL BANNER -->
-            <section class="subscription-banner">
-                <div class="banner-card glass-card" style="background: linear-gradient(135deg, rgba(67, 233, 123, 0.2), rgba(56, 249, 215, 0.2)); border: 2px solid rgba(67, 233, 123, 0.5); padding: 30px; text-align: center;">
-                    <div style="font-size: 48px; margin-bottom: 15px;">🎁</div>
-                    <h2 style="color: white; font-size: 24px; font-weight: 900; margin-bottom: 10px;">
-                        You're on a 3-day free trial
-                    </h2>
-                    <?php
-                    $trialEnd = new DateTime($trialInfo['ends_at']);
-                    $now = new DateTime();
-                    $diff = $now->diff($trialEnd);
-                    $daysLeft = max(0, $diff->days);
-                    ?>
-                    <p style="color: rgba(255, 255, 255, 0.9); font-size: 16px; margin-bottom: 20px;">
-                        Trial ends: <strong><?php echo $trialEnd->format('F j, Y \a\t g:i A'); ?></strong>
-                        <?php if ($daysLeft <= 1): ?>
-                            <br><span style="color: #ff6b6b; font-weight: 800;">⚠️ Less than <?php echo max(1, $daysLeft); ?> day left!</span>
-                        <?php endif; ?>
-                    </p>
-                    <a href="/admin/plans-public.php" class="btn btn-primary btn-large" style="display: inline-flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 24px;">⚡</span>
-                        <span>View Subscription Plans</span>
-                    </a>
+            <?php
+            $trialEnd = new DateTime($trialInfo['ends_at']);
+            $now = new DateTime();
+            $diff = $now->diff($trialEnd);
+            $daysLeft = max(0, $diff->days);
+            ?>
+            <section class="sub-banner trial">
+                <span class="sub-banner-icon" aria-hidden="true">🎁</span>
+                <div class="sub-banner-copy">
+                    <strong>You're on a 3-day free trial</strong>
+                    <span>Ends <?php echo $trialEnd->format('j F, H:i'); ?><?php if ($daysLeft <= 1): ?> · <em class="sub-urgent">less than a day left!</em><?php endif; ?></span>
                 </div>
+                <a href="/admin/plans-public.php" class="pill-btn primary">
+                    <span aria-hidden="true">⚡</span> View plans
+                </a>
             </section>
-        
+
         <?php elseif ($status['status'] === 'locked' || $status['status'] === 'expired'): ?>
-            <!-- LOCKED/EXPIRED BANNER -->
-            <section class="subscription-banner">
-                <div class="banner-card glass-card" style="background: linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(238, 90, 111, 0.2)); border: 2px solid rgba(255, 107, 107, 0.5); padding: 30px; text-align: center;">
-                    <div style="font-size: 48px; margin-bottom: 15px;">🔒</div>
-                    <h2 style="color: white; font-size: 24px; font-weight: 900; margin-bottom: 10px;">
-                        Your trial has ended
-                    </h2>
-                    <p style="color: rgba(255, 255, 255, 0.9); font-size: 16px; margin-bottom: 20px;">
-                        Subscribe now to continue using all Relatives features
-                    </p>
-                    <a href="/admin/plans-public.php" class="btn btn-primary btn-large" style="display: inline-flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 24px;">⚡</span>
-                        <span>Subscribe Now</span>
-                    </a>
+            <section class="sub-banner locked">
+                <span class="sub-banner-icon" aria-hidden="true">🔒</span>
+                <div class="sub-banner-copy">
+                    <strong>Your trial has ended</strong>
+                    <span>Subscribe now to keep using all Relatives features</span>
                 </div>
+                <a href="/admin/plans-public.php" class="pill-btn primary">
+                    <span aria-hidden="true">⚡</span> Subscribe
+                </a>
             </section>
-        
+
         <?php elseif ($status['status'] === 'active'): ?>
-            <!-- ACTIVE SUBSCRIPTION BANNER -->
-            <section class="subscription-banner">
-                <div class="banner-card glass-card" style="background: linear-gradient(135deg, rgba(81, 207, 102, 0.2), rgba(55, 178, 77, 0.2)); border: 2px solid rgba(81, 207, 102, 0.5); padding: 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px;">
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <div style="font-size: 32px;">✓</div>
-                        <div>
-                            <div style="color: white; font-size: 18px; font-weight: 800;">
-                                Active Subscription: <?php echo htmlspecialchars($status['plan_code'] ?? 'Premium'); ?>
-                            </div>
-                            <div style="color: rgba(255, 255, 255, 0.8); font-size: 14px;">
-                                Renews: <?php echo date('F j, Y', strtotime($status['current_period_end'])); ?>
-                            </div>
-                        </div>
-                    </div>
-                    <a href="/admin/plans-public.php" class="btn btn-secondary" style="flex-shrink: 0;">
-                        View Details
-                    </a>
+            <section class="sub-banner active-sub">
+                <span class="sub-banner-icon" aria-hidden="true">✓</span>
+                <div class="sub-banner-copy">
+                    <strong><?php echo htmlspecialchars($status['plan_code'] ?? 'Premium'); ?> subscription active</strong>
+                    <span>Renews <?php echo date('j F Y', strtotime($status['current_period_end'])); ?></span>
                 </div>
+                <a href="/admin/plans-public.php" class="pill-btn">Details</a>
             </section>
         <?php endif; ?>
         <?php endif; ?>
 
-        <!-- Quick Stats Grid -->
-        <section class="stats-section">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <span class="stat-icon">👥</span>
-                    <div class="stat-number"><?php echo $stats['active_members']; ?></div>
-                    <div class="stat-label">Active Members</div>
-                </div>
-
-                <div class="stat-card">
-                    <span class="stat-icon">🛒</span>
-                    <div class="stat-number"><?php echo $stats['pending_shopping_items']; ?></div>
-                    <div class="stat-label">Pending Items</div>
-                </div>
-
-                <div class="stat-card">
-                    <span class="stat-icon">📝</span>
-                    <div class="stat-number"><?php echo $stats['total_notes']; ?></div>
-                    <div class="stat-label">Family Notes</div>
-                </div>
-
-                <div class="stat-card">
-                    <span class="stat-icon">📅</span>
-                    <div class="stat-number"><?php echo $stats['upcoming_events']; ?></div>
-                    <div class="stat-label">Upcoming Events</div>
-                </div>
+        <!-- Quick Stats -->
+        <section class="admin-stats-bar">
+            <div class="stat-item">
+                <span class="stat-icon" aria-hidden="true">👥</span>
+                <span class="stat-value"><?php echo $stats['active_members']; ?></span>
+                <span class="stat-label">Members</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-icon" aria-hidden="true">🛒</span>
+                <span class="stat-value"><?php echo $stats['pending_shopping_items']; ?></span>
+                <span class="stat-label">To buy</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-icon" aria-hidden="true">📝</span>
+                <span class="stat-value"><?php echo $stats['total_notes']; ?></span>
+                <span class="stat-label">Notes</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-icon" aria-hidden="true">📅</span>
+                <span class="stat-value"><?php echo $stats['upcoming_events']; ?></span>
+                <span class="stat-label">Events, 7d</span>
             </div>
         </section>
 
         <!-- Family Settings -->
-        <section class="admin-section">
+        <section class="admin-section panel" style="--glow:#38bdf8">
             <h2 class="section-title">
-                <span class="title-icon">🏠</span>
+                <span class="title-icon" aria-hidden="true">🏠</span>
                 Family Settings
             </h2>
-            
+
             <div class="settings-grid">
                 <!-- Family Name -->
-                <div class="setting-card glass-card">
-                    <div class="setting-icon">📝</div>
+                <div class="setting-card">
+                    <div class="setting-icon" aria-hidden="true">📝</div>
                     <div class="setting-content">
-                        <div class="setting-label">Family Name</div>
+                        <div class="setting-label">Family name</div>
                         <div class="setting-value" id="familyNameDisplay">
                             <?php echo htmlspecialchars($family['name']); ?>
                         </div>
@@ -397,14 +368,12 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
 
                 <!-- Invite Code -->
-                <div class="setting-card glass-card">
-                    <div class="setting-icon">🎫</div>
+                <div class="setting-card">
+                    <div class="setting-icon" aria-hidden="true">🎫</div>
                     <div class="setting-content">
-                        <div class="setting-label">Invite Code</div>
+                        <div class="setting-label">Invite code</div>
                         <div class="setting-value">
-                            <code class="invite-code-display" id="inviteCodeDisplay">
-                                <?php echo htmlspecialchars($family['invite_code']); ?>
-                            </code>
+                            <code class="invite-code-display" id="inviteCodeDisplay"><?php echo htmlspecialchars($family['invite_code']); ?></code>
                         </div>
                     </div>
                     <div class="setting-actions">
@@ -420,8 +389,8 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
 
                 <!-- Timezone -->
-                <div class="setting-card glass-card">
-                    <div class="setting-icon">🌍</div>
+                <div class="setting-card">
+                    <div class="setting-icon" aria-hidden="true">🌍</div>
                     <div class="setting-content">
                         <div class="setting-label">Timezone</div>
                         <div class="setting-value" id="timezoneDisplay">
@@ -436,12 +405,12 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
 
                 <!-- Created Date -->
-                <div class="setting-card glass-card">
-                    <div class="setting-icon">📆</div>
+                <div class="setting-card">
+                    <div class="setting-icon" aria-hidden="true">📆</div>
                     <div class="setting-content">
                         <div class="setting-label">Created</div>
                         <div class="setting-value">
-                            <?php echo date('F j, Y', strtotime($family['created_at'])); ?>
+                            <?php echo date('j F Y', strtotime($family['created_at'])); ?>
                         </div>
                     </div>
                 </div>
@@ -449,21 +418,18 @@ require_once __DIR__ . '/../shared/components/header.php';
         </section>
 
         <!-- Family Members -->
-        <section class="admin-section">
+        <section class="admin-section panel" style="--glow:#f472b6">
             <div class="section-header">
                 <h2 class="section-title">
-                    <span class="title-icon">👥</span>
+                    <span class="title-icon" aria-hidden="true">👥</span>
                     Family Members
                     <span class="member-count"><?php echo count($members); ?></span>
                 </h2>
-                <button onclick="showInviteModal()" class="btn btn-primary">
-                    + Invite Member
-                </button>
             </div>
 
             <div class="members-grid">
                 <?php foreach ($members as $member): ?>
-                    <div class="member-card glass-card <?php echo $member['status']; ?>" data-user-id="<?php echo $member['id']; ?>">
+                    <div class="member-card <?php echo $member['status']; ?>" data-user-id="<?php echo $member['id']; ?>">
                         <div class="member-header">
                             <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
                                 <img src="<?php echo avatarUrl($member['id']); ?>"
@@ -489,19 +455,16 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                         <div class="member-stats-grid">
                             <div class="mini-stat">
-                                <div class="mini-stat-icon">🛒</div>
                                 <div class="mini-stat-value"><?php echo $member['items_added']; ?></div>
-                                <div class="mini-stat-label">Items</div>
+                                <div class="mini-stat-label">🛒 Items</div>
                             </div>
                             <div class="mini-stat">
-                                <div class="mini-stat-icon">📝</div>
                                 <div class="mini-stat-value"><?php echo $member['notes_created']; ?></div>
-                                <div class="mini-stat-label">Notes</div>
+                                <div class="mini-stat-label">📝 Notes</div>
                             </div>
                             <div class="mini-stat">
-                                <div class="mini-stat-icon">📅</div>
                                 <div class="mini-stat-value"><?php echo $member['events_created']; ?></div>
-                                <div class="mini-stat-label">Events</div>
+                                <div class="mini-stat-label">📅 Events</div>
                             </div>
                         </div>
 
@@ -509,19 +472,19 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <div class="member-actions">
                             <?php if ($user['role'] === 'owner' && $member['role'] !== 'owner'): ?>
                                 <select onchange="changeUserRole(<?php echo $member['id']; ?>, this.value)" class="role-select">
-                                    <option value="">Change Role...</option>
+                                    <option value="">Change role...</option>
                                     <option value="member" <?php echo $member['role'] === 'member' ? 'selected' : ''; ?>>Member</option>
                                     <option value="admin" <?php echo $member['role'] === 'admin' ? 'selected' : ''; ?>>Admin</option>
                                 </select>
                             <?php endif; ?>
 
                             <?php if ($member['status'] === 'active'): ?>
-                                <button onclick="toggleUserStatus(<?php echo $member['id']; ?>, 'disabled', <?php echo json_encode($member['full_name']); ?>)"
+                                <button onclick="toggleUserStatus(<?php echo $member['id']; ?>, 'disabled', <?php echo htmlspecialchars(json_encode($member['full_name'])); ?>)"
                                         class="btn btn-sm btn-danger">
                                     Deactivate
                                 </button>
                             <?php else: ?>
-                                <button onclick="toggleUserStatus(<?php echo $member['id']; ?>, 'active', <?php echo json_encode($member['full_name']); ?>)"
+                                <button onclick="toggleUserStatus(<?php echo $member['id']; ?>, 'active', <?php echo htmlspecialchars(json_encode($member['full_name'])); ?>)"
                                         class="btn btn-sm btn-success">
                                     Activate
                                 </button>
@@ -534,10 +497,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <?php endif; ?>
 
                         <div class="member-footer">
-                            <small>Joined <?php echo date('M j, Y', strtotime($member['created_at'])); ?></small>
+                            <small>Joined <?php echo date('j M Y', strtotime($member['created_at'])); ?></small>
                             <?php if ($member['last_activity']): ?>
                                 <small class="last-activity">
-                                    Last active: <?php echo date('M j, g:i A', strtotime($member['last_activity'])); ?>
+                                    Active <?php echo date('j M, H:i', strtotime($member['last_activity'])); ?>
                                 </small>
                             <?php endif; ?>
                         </div>
@@ -547,22 +510,22 @@ require_once __DIR__ . '/../shared/components/header.php';
         </section>
 
         <!-- Recent Activity -->
-        <section class="admin-section">
+        <section class="admin-section panel" style="--glow:#38bdf8">
             <h2 class="section-title">
-                <span class="title-icon">📊</span>
+                <span class="title-icon" aria-hidden="true">🛰️</span>
                 Recent Activity
             </h2>
 
-            <div class="activity-timeline glass-card">
+            <div class="activity-timeline">
                 <?php if (empty($recentActivity)): ?>
                     <div class="empty-state">
-                        <div class="empty-icon">📭</div>
+                        <div class="empty-icon" aria-hidden="true">📭</div>
                         <p>No recent activity</p>
                     </div>
                 <?php else: ?>
                     <?php foreach ($recentActivity as $activity): ?>
                         <div class="activity-item">
-                            <div class="activity-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#667eea'); ?>">
+                            <div class="activity-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#8b5cf6'); ?>">
                                 <img src="<?php echo avatarUrl($activity['user_id']); ?>"
                                      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                                      style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
@@ -575,7 +538,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                     <strong><?php echo htmlspecialchars($activity['full_name'] ?? 'Someone'); ?></strong>
                                     <?php echo htmlspecialchars(str_replace('_', ' ', $activity['action'])); ?>
                                     <?php if ($activity['entity_type']): ?>
-                                        <span class="activity-entity">(<?php echo htmlspecialchars($activity['entity_type']); ?>)</span>
+                                        <span class="activity-entity"><?php echo htmlspecialchars($activity['entity_type']); ?></span>
                                     <?php endif; ?>
                                 </div>
                                 <div class="activity-time">
@@ -583,7 +546,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                     $time = new DateTime($activity['created_at']);
                                     $now = new DateTime();
                                     $diff = $now->diff($time);
-                                    
+
                                     if ($diff->d > 0) {
                                         echo $diff->d . ' day' . ($diff->d > 1 ? 's' : '') . ' ago';
                                     } elseif ($diff->h > 0) {
@@ -610,10 +573,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 <!-- Invite Modal -->
 <div id="inviteModal" class="modal">
     <div class="modal-content">
-        <button onclick="closeModal('inviteModal')" class="modal-close">&times;</button>
         <div class="modal-header">
-            <div class="modal-icon">📨</div>
-            <h2>Invite Family Member</h2>
+            <h2>📨 Invite Family Member</h2>
+            <button onclick="closeModal('inviteModal')" class="modal-close">&times;</button>
         </div>
         <div class="modal-body">
             <?php
@@ -627,15 +589,15 @@ require_once __DIR__ . '/../shared/components/header.php';
             </p>
 
             <div class="invite-code-box">
-                <code id="inviteLinkDisplay" style="font-size: 0.85rem; word-break: break-all;"><?php echo htmlspecialchars($inviteLink); ?></code>
+                <code id="inviteLinkDisplay"><?php echo htmlspecialchars($inviteLink); ?></code>
             </div>
 
-            <button onclick="copyInviteLink()" class="btn btn-primary btn-block" style="margin-top: 15px;">
+            <button onclick="copyInviteLink()" class="btn btn-primary btn-block">
                 🔗 Copy Invite Link
             </button>
 
-            <div class="invite-instructions" style="margin-top: 20px;">
-                <h3>How to invite:</h3>
+            <div class="invite-instructions">
+                <h3>How to invite</h3>
                 <ol>
                     <li>Copy the link above</li>
                     <li>Send it via WhatsApp, SMS, or email</li>
@@ -650,19 +612,18 @@ require_once __DIR__ . '/../shared/components/header.php';
 <!-- Edit Family Name Modal -->
 <div id="editFamilyNameModal" class="modal">
     <div class="modal-content">
-        <button onclick="closeModal('editFamilyNameModal')" class="modal-close">&times;</button>
         <div class="modal-header">
-            <div class="modal-icon">✏️</div>
-            <h2>Edit Family Name</h2>
+            <h2>✏️ Edit Family Name</h2>
+            <button onclick="closeModal('editFamilyNameModal')" class="modal-close">&times;</button>
         </div>
         <div class="modal-body">
             <form id="editFamilyNameForm" onsubmit="saveFamilyName(event)">
                 <div class="form-group">
                     <label>Family Name</label>
-                    <input type="text" id="newFamilyName" class="form-input" 
+                    <input type="text" id="newFamilyName" class="form-control form-input"
                            value="<?php echo htmlspecialchars($family['name']); ?>" required>
                 </div>
-                <div class="form-actions">
+                <div class="modal-actions form-actions">
                     <button type="submit" class="btn btn-primary">Save Changes</button>
                     <button type="button" onclick="closeModal('editFamilyNameModal')" class="btn btn-secondary">Cancel</button>
                 </div>
@@ -674,16 +635,15 @@ require_once __DIR__ . '/../shared/components/header.php';
 <!-- Edit Timezone Modal -->
 <div id="editTimezoneModal" class="modal">
     <div class="modal-content">
-        <button onclick="closeModal('editTimezoneModal')" class="modal-close">&times;</button>
         <div class="modal-header">
-            <div class="modal-icon">🌍</div>
-            <h2>Edit Timezone</h2>
+            <h2>🌍 Edit Timezone</h2>
+            <button onclick="closeModal('editTimezoneModal')" class="modal-close">&times;</button>
         </div>
         <div class="modal-body">
             <form id="editTimezoneForm" onsubmit="saveTimezone(event)">
                 <div class="form-group">
                     <label>Timezone</label>
-                    <select id="newTimezone" class="form-input" required>
+                    <select id="newTimezone" class="form-control form-input" required>
                         <?php
                         $timezones = [
                             'Africa/Johannesburg' => 'South Africa (SAST)',
@@ -695,9 +655,9 @@ require_once __DIR__ . '/../shared/components/header.php';
                             'Asia/Tokyo' => 'Tokyo (JST)',
                             'Australia/Sydney' => 'Sydney (AEST/AEDT)'
                         ];
-                        
+
                         $currentTZ = $family['timezone'] ?? 'Africa/Johannesburg';
-                        
+
                         foreach ($timezones as $tz => $label) {
                             $selected = $tz === $currentTZ ? 'selected' : '';
                             echo "<option value=\"$tz\" $selected>$label</option>";
@@ -705,7 +665,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         ?>
                     </select>
                 </div>
-                <div class="form-actions">
+                <div class="modal-actions form-actions">
                     <button type="submit" class="btn btn-primary">Save Changes</button>
                     <button type="button" onclick="closeModal('editTimezoneModal')" class="btn btn-secondary">Cancel</button>
                 </div>

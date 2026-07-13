@@ -175,16 +175,24 @@ try {
 
 $pageTitle = 'Schedule';
 $activePage = 'schedule';
-$pageCSS = ['/schedule/css/schedule.css'];
+$pageCSS = [
+    '/shared/css/aurora.css',
+    '/schedule/css/schedule.css'
+];
 $pageJS = ['/schedule/js/schedule.js'];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Animated Background -->
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-a"></div>
+    <div class="aurora-blob aurora-b"></div>
+    <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="shooting-star"></div>
+    <div class="aurora-grid"></div>
 </div>
 
 <!-- Active Focus Mode Overlay -->
@@ -214,46 +222,36 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <!-- Main Content -->
 <main class="main-content">
-    <div class="container">
-        
-        <!-- Hero Section (Same as notes style) -->
-        <div class="hero-section">
-            <div class="greeting-card">
-                <div class="greeting-time"><?php echo date('l, F j, Y'); ?></div>
-                <h1 class="greeting-text">
-                    <span class="greeting-icon">⏰</span>
-                    <span class="greeting-name">My Schedule</span>
-                </h1>
-                <p class="greeting-subtitle">Smart time management & productivity tracking</p>
-                
-                <div class="quick-actions">
-                    <button onclick="showQuickAdd()" class="quick-action-btn">
-                        <span class="qa-icon">➕</span>
-                        <span>Add Event</span>
-                    </button>
-                    <button onclick="startFocusMode()" class="quick-action-btn focus-btn">
-                        <span class="qa-icon">🎯</span>
-                        <span>Focus Mode</span>
-                    </button>
-                    <button onclick="toggleBulkMode()" class="quick-action-btn" id="bulkModeBtn">
-                        <span class="qa-icon">☑️</span>
-                        <span>Bulk</span>
-                    </button>
-                    <button onclick="showTemplates()" class="quick-action-btn">
-                        <span class="qa-icon">📋</span>
-                        <span>Templates</span>
-                    </button>
-                    <button onclick="showAnalytics()" class="quick-action-btn">
-                        <span class="qa-icon">📊</span>
-                        <span>Analytics</span>
-                    </button>
-                    <button onclick="exportSchedule()" class="quick-action-btn">
-                        <span class="qa-icon">📤</span>
-                        <span>Export</span>
-                    </button>
-                </div>
+    <div class="hub">
+
+        <!-- Compact page header -->
+        <header class="page-head" style="--glow:#f472b6; --page-glow: rgba(244, 114, 182, 0.13)">
+            <span class="ph-glyph" aria-hidden="true">⏰</span>
+            <div class="ph-titles">
+                <h1>Schedule</h1>
+                <p class="ph-sub"><?php echo $doneEvents; ?>/<?php echo $totalEvents; ?> done · <?php echo date('D, j M', strtotime($selectedDate)); ?></p>
             </div>
-        </div>
+            <div class="ph-actions">
+                <button onclick="showQuickAdd()" class="pill-btn primary">
+                    <span aria-hidden="true">＋</span> Add event
+                </button>
+                <button onclick="startFocusMode()" class="pill-btn">
+                    <span aria-hidden="true">🎯</span> Focus
+                </button>
+                <button onclick="toggleBulkMode()" class="pill-btn" id="bulkModeBtn">
+                    <span aria-hidden="true">☑️</span> Select
+                </button>
+                <button onclick="showTemplates()" class="pill-btn">
+                    <span aria-hidden="true">📋</span> Templates
+                </button>
+                <button onclick="showAnalytics()" class="pill-btn">
+                    <span aria-hidden="true">📊</span> Analytics
+                </button>
+                <button onclick="exportSchedule()" class="pill-btn">
+                    <span aria-hidden="true">📤</span> Export
+                </button>
+            </div>
+        </header>
 
         <!-- View Mode Switcher (Styled like notes filter) -->
         <div class="search-filter-section">

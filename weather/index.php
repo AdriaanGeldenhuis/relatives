@@ -54,74 +54,76 @@ try {
 
 $pageTitle = 'Weather';
 $activePage = 'weather';
-$pageCSS = ['/weather/css/weather.css'];
+$pageCSS = [
+    '/shared/css/aurora.css',
+    '/weather/css/weather.css'
+];
 $pageJS = ['/weather/js/weather.js'];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Animated Background -->
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-a"></div>
+    <div class="aurora-blob aurora-b"></div>
+    <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="shooting-star"></div>
+    <div class="aurora-grid"></div>
 </div>
 
 <!-- Main Content -->
 <main class="main-content">
-    <div class="container">
+    <div class="hub">
 
-        <!-- Hero Section (Same as Schedule) -->
-        <div class="hero-section">
-            <div class="greeting-card">
-                <div class="greeting-time"><?php echo date('l, F j, Y'); ?></div>
-                <h1 class="greeting-text">
-                    <span class="greeting-icon">🌤️</span>
-                    <span class="greeting-name">Weather Center</span>
-                </h1>
-                <p class="greeting-subtitle">Real-time forecasts & weather insights</p>
+        <!-- Compact page header -->
+        <header class="page-head" style="--glow:#38bdf8; --page-glow: rgba(56, 189, 248, 0.14)">
+            <span class="ph-glyph" aria-hidden="true">🌤️</span>
+            <div class="ph-titles">
+                <h1>Weather</h1>
+                <p class="ph-sub"><?php echo date('l, j F'); ?></p>
+            </div>
+            <div class="ph-actions" id="weatherActions" style="display: none;">
+                <button onclick="WeatherWidget.getInstance().refresh()" class="pill-btn">
+                    <span aria-hidden="true">🔄</span> Refresh
+                </button>
+                <button onclick="WeatherWidget.getInstance().toggleUnits()" class="pill-btn">
+                    <span aria-hidden="true">🌡️</span> Units
+                </button>
+                <button onclick="WeatherWidget.getInstance().shareWeather()" class="pill-btn">
+                    <span aria-hidden="true">📤</span> Share
+                </button>
+            </div>
+        </header>
 
-                <!-- Location Search (Compact) -->
-                <div class="location-search">
-                    <div class="search-input-wrapper">
-                        <span class="search-icon">🔍</span>
-                        <input
-                            type="text"
-                            id="locationSearch"
-                            placeholder="Search city..."
-                            autocomplete="off"
-                        >
-                        <button id="useCurrentLocation" class="location-btn" title="Use current location">
-                            <span>📍</span>
-                        </button>
-                    </div>
-                    <div id="searchResults" class="search-results" style="display: none;"></div>
+        <!-- Current conditions hero -->
+        <section class="weather-hero">
+            <div class="location-search">
+                <div class="search-input-wrapper">
+                    <span class="search-icon" aria-hidden="true">🔍</span>
+                    <input
+                        type="text"
+                        id="locationSearch"
+                        placeholder="Search city..."
+                        autocomplete="off"
+                    >
+                    <button id="useCurrentLocation" class="location-btn" title="Use current location">
+                        <span>📍</span>
+                    </button>
                 </div>
+                <div id="searchResults" class="search-results" style="display: none;"></div>
+            </div>
 
-                <!-- Current Weather Display -->
-                <div id="currentWeather" class="current-weather">
-                    <div class="weather-loading">
-                        <div class="loading-spinner">☁️</div>
-                        <p><?php echo $userLocation ? 'Loading weather...' : 'Search for a location'; ?></p>
-                    </div>
-                </div>
-
-                <!-- Quick Actions (Same style as Schedule) -->
-                <div class="quick-actions" id="weatherActions" style="display: none;">
-                    <button onclick="WeatherWidget.getInstance().refresh()" class="quick-action-btn">
-                        <span class="qa-icon">🔄</span>
-                        <span>Refresh</span>
-                    </button>
-                    <button onclick="WeatherWidget.getInstance().toggleUnits()" class="quick-action-btn">
-                        <span class="qa-icon">🌡️</span>
-                        <span>Units</span>
-                    </button>
-                    <button onclick="WeatherWidget.getInstance().shareWeather()" class="quick-action-btn">
-                        <span class="qa-icon">📤</span>
-                        <span>Share</span>
-                    </button>
+            <!-- Current Weather Display -->
+            <div id="currentWeather" class="current-weather">
+                <div class="weather-loading">
+                    <div class="loading-spinner">☁️</div>
+                    <p><?php echo $userLocation ? 'Loading weather...' : 'Search for a location'; ?></p>
                 </div>
             </div>
-        </div>
+        </section>
 
         <!-- Today's Weather Summary Card -->
         <div class="today-card glass-card" id="weatherStats" style="display: none;">
@@ -262,22 +264,22 @@ require_once __DIR__ . '/../shared/components/header.php';
             <button onclick="WeatherWidget.getInstance().closeShareModal()" class="modal-close">&times;</button>
         </div>
         <div class="modal-body">
-            <p style="margin-bottom: 16px; color: rgba(255,255,255,0.8);">Choose export format:</p>
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-                <button onclick="WeatherWidget.getInstance().exportWeatherPDF()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; background: linear-gradient(135deg, #667eea, #764ba2); color: white; transition: all 0.2s ease;">
-                    <span style="font-size: 1.25rem;">📄</span>
+            <p class="modal-description">Choose export format:</p>
+            <div class="share-options">
+                <button onclick="WeatherWidget.getInstance().exportWeatherPDF()" class="btn btn-primary">
+                    <span>📄</span>
                     <span>Export as PDF</span>
                 </button>
-                <button onclick="WeatherWidget.getInstance().exportWeatherCSV()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; background: rgba(255,255,255,0.15); color: white; transition: all 0.2s ease;">
-                    <span style="font-size: 1.25rem;">📊</span>
+                <button onclick="WeatherWidget.getInstance().exportWeatherCSV()" class="btn btn-secondary">
+                    <span>📊</span>
                     <span>Export as CSV</span>
                 </button>
-                <button onclick="WeatherWidget.getInstance().exportWeatherText()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; background: rgba(255,255,255,0.15); color: white; transition: all 0.2s ease;">
-                    <span style="font-size: 1.25rem;">📝</span>
+                <button onclick="WeatherWidget.getInstance().exportWeatherText()" class="btn btn-secondary">
+                    <span>📝</span>
                     <span>Export as Text</span>
                 </button>
-                <button onclick="WeatherWidget.getInstance().shareWeatherWhatsApp()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; background: #25D366; color: white; transition: all 0.2s ease;">
-                    <span style="font-size: 1.25rem;">💬</span>
+                <button onclick="WeatherWidget.getInstance().shareWeatherWhatsApp()" class="btn btn-whatsapp">
+                    <span>💬</span>
                     <span>Share to WhatsApp</span>
                 </button>
             </div>

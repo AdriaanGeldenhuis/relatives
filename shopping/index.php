@@ -1,7 +1,7 @@
 <?php
 /**
- * RELATIVES - SHOPPING LIST
- * Clean view-only version - All logic moved to API
+ * RELATIVES - SHOPPING LIST v4
+ * Aurora command-center style - All logic in API
  */
 
 require_once __DIR__ . '/../core/session_boot.php';
@@ -75,8 +75,8 @@ $categories = [
 
 // Get family members for assignment
 $stmt = $db->prepare("
-    SELECT id, full_name, avatar_color 
-    FROM users 
+    SELECT id, full_name, avatar_color
+    FROM users
     WHERE family_id = ? AND status = 'active'
     ORDER BY full_name
 ");
@@ -97,10 +97,14 @@ $totalItems = count($currentList['items']);
 $pendingItems = count(array_filter($currentList['items'], fn($i) => $i['status'] === 'pending'));
 $boughtItems = count(array_filter($currentList['items'], fn($i) => $i['status'] === 'bought'));
 $totalPrice = array_sum(array_column(array_filter($currentList['items'], fn($i) => $i['status'] === 'pending'), 'price'));
+$percentage = $totalItems > 0 ? round(($boughtItems / $totalItems) * 100) : 0;
 
 // Set page metadata
 $pageTitle = 'Shopping';
-$pageCSS = ['/shopping/css/shopping.css'];
+$pageCSS = [
+    '/shared/css/aurora.css',
+    '/shopping/css/shopping.css'
+];
 $pageJS = [
     '/shopping/js/shopping.js',
     '/shopping/js/bulk.js'
@@ -110,30 +114,54 @@ $pageJS = [
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Animated Background -->
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-a"></div>
+    <div class="aurora-blob aurora-b"></div>
+    <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="shooting-star"></div>
+    <div class="aurora-grid"></div>
 </div>
 
 <!-- Main Content -->
 <main class="main-content">
-    <div class="container">
-        
-        <!-- Hero Section -->
-        <div class="hero-section">
-            <div class="greeting-card">
-                <div class="greeting-time"><?php echo date('l, F j, Y'); ?></div>
-                <h1 class="greeting-text">
-                    <span class="greeting-icon">🛒</span>
-                    <span class="greeting-name">Shopping Lists</span>
-                </h1>
-                <p class="greeting-subtitle">Smart family shopping with AI</p>
+    <div class="hub">
 
+        <!-- Compact page header -->
+        <header class="page-head" style="--glow:#fbbf24; --page-glow: rgba(251, 191, 36, 0.14)">
+            <span class="ph-glyph" aria-hidden="true">🛒</span>
+            <div class="ph-titles">
+                <h1>Shopping</h1>
+                <p class="ph-sub">
+                    <?php if ($totalItems > 0): ?>
+                        <?php echo $pendingItems; ?> to buy
+                        <?php if ($totalPrice > 0): ?> · ±R<?php echo number_format($totalPrice, 2); ?><?php endif; ?>
+                    <?php else: ?>
+                        <?php echo date('l, j F'); ?>
+                    <?php endif; ?>
+                </p>
             </div>
-        </div>
+            <?php if ($totalItems > 0): ?>
+            <div class="mini-ring" style="--pct: <?php echo $percentage; ?>" title="<?php echo $boughtItems; ?> of <?php echo $totalItems; ?> bought">
+                <span class="mr-core"><?php echo $percentage; ?>%</span>
+            </div>
+            <?php endif; ?>
+            <div class="ph-actions">
+                <button onclick="showAddItemModal()" class="pill-btn primary">
+                    <span aria-hidden="true">＋</span> Add item
+                </button>
+                <button onclick="toggleBulkMode()" id="bulkModeBtn" class="pill-btn" title="Select multiple items">
+                    <span aria-hidden="true">☑️</span> Select
+                </button>
+                <button onclick="exportList()" class="pill-btn" title="Share or export this list">
+                    <span aria-hidden="true">📤</span> Share
+                </button>
+            </div>
+        </header>
 
-        <!-- Lists Tabs -->
+        <!-- List tabs -->
         <div class="lists-section">
             <div class="lists-tabs">
                 <?php foreach ($lists as $list): ?>
@@ -170,30 +198,29 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </div>
                 <?php endforeach; ?>
                 <button onclick="showCreateListModal()" class="list-tab-add">
-                    <span class="list-icon">+</span>
+                    <span class="list-icon">＋</span>
                     <span class="list-name">New</span>
                 </button>
             </div>
         </div>
 
-
         <!-- Bulk Actions Bar (Hidden by default) -->
-        <div id="bulkActionsBar" class="bulk-actions-bar glass-card" style="display: none;">
+        <div id="bulkActionsBar" class="bulk-actions-bar" style="display: none;">
             <div class="bulk-info">
-                <span id="bulkSelectedCount">0</span> items selected
+                <span id="bulkSelectedCount">0</span> selected
             </div>
             <div class="bulk-buttons">
                 <button onclick="bulkMarkBought()" class="btn btn-success btn-sm">
                     <span class="btn-icon">✓</span>
-                    <span>Mark Bought</span>
+                    <span>Bought</span>
                 </button>
                 <button onclick="showBulkCategoryModal()" class="btn btn-secondary btn-sm">
                     <span class="btn-icon">📁</span>
-                    <span>Move Category</span>
+                    <span>Category</span>
                 </button>
                 <button onclick="showBulkAssignModal()" class="btn btn-secondary btn-sm">
                     <span class="btn-icon">👤</span>
-                    <span>Assign To</span>
+                    <span>Assign</span>
                 </button>
                 <button onclick="toggleBulkMode()" class="btn btn-secondary btn-sm">
                     <span class="btn-icon">✕</span>
@@ -204,73 +231,65 @@ require_once __DIR__ . '/../shared/components/header.php';
 
         <!-- Shopping Items -->
         <div class="shopping-content">
-            
+
             <?php if (empty($currentList['items'])): ?>
                 <!-- Empty State -->
-                <div class="empty-state glass-card">
+                <div class="empty-state panel">
                     <div class="empty-icon">🛒</div>
                     <h2>Your list is empty</h2>
-                    <p>Add items using voice, the form above, or quick-add from frequently bought</p>
-                </div>
-                
-            <?php else: ?>
-                
-                <!-- List Stats -->
-                <div class="list-stats glass-card">
-                    <div class="stat-item">
-                        <div class="stat-label">Total Items</div>
-                        <div class="stat-value"><?php echo $totalItems; ?></div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Pending</div>
-                        <div class="stat-value stat-pending"><?php echo $pendingItems; ?></div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Bought</div>
-                        <div class="stat-value stat-bought"><?php echo $boughtItems; ?></div>
-                    </div>
-                    <?php if ($totalPrice > 0): ?>
-                        <div class="stat-item">
-                            <div class="stat-label">Estimated Total</div>
-                            <div class="stat-value stat-price">R<?php echo number_format($totalPrice, 2); ?></div>
-                        </div>
-                    <?php endif; ?>
+                    <p>Add your first item and the family sees it instantly</p>
+                    <button onclick="showAddItemModal()" class="pill-btn primary">＋ Add first item</button>
                 </div>
 
-                <!-- Progress Bar -->
-                <div class="list-actions glass-card">
-                    <div class="list-progress">
-                        <?php 
-                        $percentage = $totalItems > 0 ? round(($boughtItems / $totalItems) * 100) : 0;
-                        ?>
-                        <div class="progress-text">
-                            <span class="progress-icon">✓</span>
-                            <?php echo $boughtItems; ?> of <?php echo $totalItems; ?> items bought (<?php echo $percentage; ?>%)
+            <?php else: ?>
+
+                <!-- Progress + stats strip -->
+                <div class="list-overview panel">
+                    <div class="list-actions" style="display: flex;">
+                        <div class="list-progress">
+                            <div class="progress-text">
+                                <span class="progress-icon">✓</span>
+                                <?php echo $boughtItems; ?> of <?php echo $totalItems; ?> items bought (<?php echo $percentage; ?>%)
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: <?php echo $percentage; ?>%"></div>
+                            </div>
                         </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: <?php echo $percentage; ?>%"></div>
+                        <div class="action-buttons">
+                            <button onclick="clearBought()" class="btn btn-secondary btn-sm" id="clearBoughtBtn" <?php echo $boughtItems === 0 ? 'disabled' : ''; ?>>
+                                <span class="btn-icon">🗑️</span>
+                                <span>Clear bought</span>
+                                <?php if ($boughtItems > 0): ?>
+                                    <span class="badge"><?php echo $boughtItems; ?></span>
+                                <?php endif; ?>
+                            </button>
                         </div>
                     </div>
-                    
-                    <div class="action-buttons">
-                        <button onclick="clearBought()" class="btn btn-secondary btn-sm" id="clearBoughtBtn" <?php echo $boughtItems === 0 ? 'disabled' : ''; ?>>
-                            <span class="btn-icon">🗑️</span>
-                            <span>Clear Bought</span>
-                            <?php if ($boughtItems > 0): ?>
-                                <span class="badge"><?php echo $boughtItems; ?></span>
-                            <?php endif; ?>
-                        </button>
-                        <button onclick="exportList()" class="btn btn-secondary btn-sm">
-                            <span class="btn-icon">📥</span>
-                            <span>Export</span>
-                        </button>
+
+                    <div class="list-stats" style="display: grid;">
+                        <div class="stat-item">
+                            <div class="stat-value"><?php echo $totalItems; ?></div>
+                            <div class="stat-label">Items</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value stat-pending"><?php echo $pendingItems; ?></div>
+                            <div class="stat-label">To buy</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value stat-bought"><?php echo $boughtItems; ?></div>
+                            <div class="stat-label">Bought</div>
+                        </div>
+                        <div class="stat-item" <?php echo $totalPrice > 0 ? '' : 'style="display: none;"'; ?>>
+                            <div class="stat-value stat-price">R<?php echo number_format($totalPrice, 2); ?></div>
+                            <div class="stat-label">Estimated</div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Items by Category -->
                 <div class="categories-grid">
                     <?php foreach ($itemsByCategory as $categoryKey => $categoryItems): ?>
-                        <div class="category-section glass-card" data-category="<?php echo $categoryKey; ?>">
+                        <div class="category-section" data-category="<?php echo $categoryKey; ?>">
                             <div class="category-header">
                                 <span class="category-icon"><?php echo $categories[$categoryKey]['icon']; ?></span>
                                 <span class="category-name"><?php echo $categories[$categoryKey]['name']; ?></span>
@@ -279,21 +298,21 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                             <div class="items-list">
                                 <?php foreach ($categoryItems as $item): ?>
-                                    <div class="item-card <?php echo $item['status']; ?>" 
+                                    <div class="item-card <?php echo $item['status']; ?>"
                                          data-item-id="<?php echo $item['id']; ?>"
                                          data-item-name="<?php echo htmlspecialchars($item['name']); ?>">
-                                        
+
                                         <!-- Bulk Select Checkbox (Hidden by default) -->
                                         <div class="item-bulk-select" style="display: none;">
-                                            <input 
-                                                type="checkbox" 
+                                            <input
+                                                type="checkbox"
                                                 class="bulk-checkbox"
                                                 data-item-id="<?php echo $item['id']; ?>">
                                         </div>
 
                                         <div class="item-checkbox">
-                                            <input 
-                                                type="checkbox" 
+                                            <input
+                                                type="checkbox"
                                                 id="item_<?php echo $item['id']; ?>"
                                                 <?php echo $item['status'] === 'bought' ? 'checked' : ''; ?>
                                                 onchange="toggleItem(<?php echo $item['id']; ?>)">
@@ -302,20 +321,20 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                                         <div class="item-content">
                                             <div class="item-name"><?php echo htmlspecialchars($item['name']); ?></div>
-                                            
+
                                             <div class="item-details">
                                                 <?php if ($item['qty']): ?>
                                                     <span class="item-qty"><?php echo htmlspecialchars($item['qty']); ?></span>
                                                 <?php endif; ?>
-                                                
+
                                                 <?php if ($item['price']): ?>
-                                                    <span class="item-price" 
+                                                    <span class="item-price"
                                                           onclick="showPriceHistory('<?php echo htmlspecialchars($item['name']); ?>')"
                                                           title="Click to see price history">
                                                         R<?php echo number_format($item['price'], 2); ?>
                                                     </span>
                                                 <?php endif; ?>
-                                                
+
                                                 <?php if ($item['store']): ?>
                                                     <span class="item-store"><?php echo htmlspecialchars($item['store']); ?></span>
                                                 <?php endif; ?>
@@ -323,18 +342,18 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                                             <div class="item-meta">
                                                 <span class="item-added-by">
-                                                    Added by <?php echo htmlspecialchars($item['added_by_name'] ?? 'Unknown'); ?>
+                                                    <?php echo htmlspecialchars($item['added_by_name'] ?? 'Unknown'); ?>
                                                 </span>
-                                                
+
                                                 <?php if ($item['assigned_to']): ?>
                                                     <span class="item-assigned">
-                                                        • Assigned to <?php echo htmlspecialchars($item['assigned_to_name']); ?>
+                                                        → <?php echo htmlspecialchars($item['assigned_to_name']); ?>
                                                     </span>
                                                 <?php endif; ?>
-                                                
+
                                                 <?php if ($item['bought_at']): ?>
                                                     <span class="item-bought-at">
-                                                        • Bought <?php echo date('g:i A', strtotime($item['bought_at'])); ?>
+                                                        ✓ <?php echo date('H:i', strtotime($item['bought_at'])); ?>
                                                     </span>
                                                 <?php endif; ?>
                                             </div>
@@ -345,7 +364,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                                 <button class="item-action-btn gear-btn"
                                                         onclick="toggleGearMenu(event, <?php echo $item['id']; ?>)"
                                                         title="Options">
-                                                    ⚙️
+                                                    ⋯
                                                 </button>
                                                 <div class="gear-dropdown" id="gearMenu_<?php echo $item['id']; ?>">
                                                     <button onclick="editItem(<?php echo $item['id']; ?>); closeAllGearMenus();" class="gear-option">
@@ -365,7 +384,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         </div>
                     <?php endforeach; ?>
                 </div>
-                
+
             <?php endif; ?>
         </div>
     </div>
@@ -382,12 +401,16 @@ require_once __DIR__ . '/../shared/components/header.php';
         </div>
         <div class="modal-body">
             <form id="addItemForm" onsubmit="submitAddItem(event)">
-                <div class="form-group">
+                <div class="form-group suggestions-anchor">
                     <label>Item Name</label>
                     <input type="text" id="itemName" class="form-control"
                            placeholder="e.g., 2L Milk, 1kg Potatoes"
                            autocomplete="off"
+                           <?php if ($voicePrefillContent): ?>value="<?php echo htmlspecialchars($voicePrefillContent); ?>"<?php endif; ?>
                            required>
+                    <div id="suggestions" class="suggestions-dropdown" style="display: none;">
+                        <div id="suggestionsList"></div>
+                    </div>
                 </div>
 
                 <div class="form-row">
@@ -416,7 +439,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <!-- Frequent Items Quick Add -->
                 <?php if (!empty($frequentItems)): ?>
                 <div class="frequent-items-modal">
-                    <div class="frequent-title">Quick add:</div>
+                    <div class="frequent-title">Quick add</div>
                     <div class="frequent-chips">
                         <?php foreach (array_slice($frequentItems, 0, 6) as $item): ?>
                             <button type="button"
@@ -448,10 +471,10 @@ require_once __DIR__ . '/../shared/components/header.php';
         <div class="modal-body">
             <form id="listForm">
                 <input type="hidden" id="listId" value="">
-                
+
                 <div class="form-group">
                     <label>List Name</label>
-                    <input type="text" id="listName" class="form-control" 
+                    <input type="text" id="listName" class="form-control"
                            placeholder="e.g., Woolworths, Weekly Groceries" required>
                 </div>
 
@@ -497,7 +520,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         <div class="modal-body">
             <form id="editItemForm">
                 <input type="hidden" id="editItemId" value="">
-                
+
                 <div class="form-group">
                     <label>Item Name</label>
                     <input type="text" id="editItemName" class="form-control" required>
@@ -638,7 +661,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             <p class="modal-description">
                 Share this list with anyone:
             </p>
-            
+
             <div class="share-link-display">
                 <input type="text" id="shareLink" class="form-control" readonly>
                 <button onclick="copyShareLink()" class="btn btn-primary">
@@ -648,7 +671,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
 
             <div class="share-methods">
-                <p class="share-methods-title">Share via:</p>
+                <p class="share-methods-title">Share via</p>
                 <div class="share-buttons">
                     <button onclick="shareViaWhatsApp()" class="btn btn-success btn-sm">
                         WhatsApp
@@ -657,7 +680,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
 
             <div class="export-options">
-                <p class="share-methods-title">Export as:</p>
+                <p class="share-methods-title">Export as</p>
                 <div class="share-buttons">
                     <button onclick="exportListAs('pdf')" class="btn btn-secondary btn-sm">
                         📄 PDF
@@ -672,7 +695,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
 
             <div class="analytics-link">
-                <p class="share-methods-title">Insights:</p>
+                <p class="share-methods-title">Insights</p>
                 <div class="share-buttons">
                     <button onclick="closeModal('shareModal'); showAnalytics();" class="btn btn-primary btn-sm">
                         📊 View Analytics
@@ -691,6 +714,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 document.addEventListener('DOMContentLoaded', function() {
     const itemNameInput = document.getElementById('itemName');
     if (itemNameInput && itemNameInput.value) {
+        if (typeof showModal === 'function') showModal('addItemModal');
         itemNameInput.focus();
         itemNameInput.select();
         if (typeof showToast === 'function') {

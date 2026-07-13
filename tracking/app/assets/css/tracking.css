@@ -8,31 +8,32 @@
 /* ============================================
    CSS VARIABLES
    ============================================ */
+/* Aurora theme tokens (aligned with /shared/css/aurora.css) */
 :root {
-    --trk-primary: #667eea;
-    --trk-primary-dark: #764ba2;
-    --trk-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --trk-pink: #f093fb;
-    --trk-pink-dark: #f5576c;
-    --trk-pink-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    --trk-green: #43e97b;
-    --trk-yellow: #f9d423;
-    --trk-red: #ff4757;
-    --trk-glass: rgba(255, 255, 255, 0.12);
-    --trk-glass-heavy: rgba(255, 255, 255, 0.18);
-    --trk-glass-border: rgba(255, 255, 255, 0.25);
-    --trk-glass-bg: rgba(20, 20, 40, 0.85);
-    --trk-panel-bg: rgba(15, 15, 35, 0.92);
-    --trk-card-bg: rgba(255, 255, 255, 0.08);
-    --trk-card-border: rgba(255, 255, 255, 0.12);
-    --trk-text: #ffffff;
-    --trk-text-muted: rgba(255, 255, 255, 0.6);
-    --trk-text-dim: rgba(255, 255, 255, 0.4);
+    --trk-primary: #a78bfa;
+    --trk-primary-dark: #f472b6;
+    --trk-gradient: linear-gradient(120deg, #a78bfa 0%, #f472b6 55%, #fb923c 100%);
+    --trk-pink: #f472b6;
+    --trk-pink-dark: #fb7185;
+    --trk-pink-gradient: linear-gradient(135deg, #f472b6 0%, #fb7185 100%);
+    --trk-green: #34d399;
+    --trk-yellow: #fbbf24;
+    --trk-red: #fb7185;
+    --trk-glass: rgba(255, 255, 255, 0.07);
+    --trk-glass-heavy: rgba(255, 255, 255, 0.12);
+    --trk-glass-border: rgba(255, 255, 255, 0.14);
+    --trk-glass-bg: rgba(11, 13, 26, 0.85);
+    --trk-panel-bg: rgba(11, 13, 26, 0.94);
+    --trk-card-bg: rgba(255, 255, 255, 0.05);
+    --trk-card-border: rgba(255, 255, 255, 0.09);
+    --trk-text: #f5f6fb;
+    --trk-text-muted: rgba(233, 236, 250, 0.72);
+    --trk-text-dim: rgba(226, 231, 250, 0.45);
     --trk-radius: 16px;
     --trk-radius-sm: 12px;
-    --trk-radius-lg: 24px;
-    --trk-transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --trk-bounce: 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --trk-radius-lg: 22px;
+    --trk-transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    --trk-bounce: 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
     --trk-panel-width: 340px;
     --trk-topbar-height: 48px;
     --trk-footer-offset: 100px;
@@ -817,7 +818,7 @@ body.tracking-page .menu-backdrop {
     align-items: center;
     gap: 6px;
     padding: 8px 14px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: var(--trk-gradient);
     color: #fff;
     border: none;
     border-radius: 8px;
@@ -840,7 +841,7 @@ body.tracking-page .menu-backdrop {
     left: 0;
     right: 0;
     z-index: 55;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--trk-gradient);
     padding: 16px 20px;
     display: none;
     align-items: center;

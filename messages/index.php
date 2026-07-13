@@ -51,6 +51,7 @@ $pageTitle = 'Family Chat';
 $activePage = 'messages';
 
 $pageCSS = [
+    '/shared/css/aurora.css',
     '/messages/css/messages.css',
     '/messages/css/messages-enhanced.css'
 ];
@@ -63,15 +64,19 @@ $pageJS = [
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Animated Background -->
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-a"></div>
+    <div class="aurora-blob aurora-b"></div>
+    <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="aurora-grid"></div>
 </div>
 
 <!-- Main Content -->
 <main class="main-content">
-    <div class="container">
+    <div class="hub">
         <div class="messages-container">
             
             <!-- Sidebar -->

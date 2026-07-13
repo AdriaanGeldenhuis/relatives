@@ -1,902 +1,340 @@
 /**
  * ============================================
- * RELATIVES v3.1 - HOME JAVASCRIPT
- * Mobile-First Native App Optimized
- * WITH ENHANCED WEATHER WIDGET (Rain % Included)
- * ============================================ */
+ * RELATIVES v4.1 - HOME (FAMILY COMMAND CENTER)
+ * Day-ring clock · live countdowns · weather ·
+ * cursor spotlight · count-ups
+ * ============================================
+ */
 
-console.log('🏠 Home JavaScript v3.1 loading...');
+(function () {
+    'use strict';
 
-// ============================================
-// MOBILE DETECTION & OPTIMIZATION
-// ============================================
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-const isNativeApp = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
-console.log('📱 Device Info:', { isMobile, isNativeApp, isTouchDevice });
-
-// ============================================
-// PARTICLE SYSTEM - DISABLED FOR PERFORMANCE
-// Canvas hidden via CSS, class is a no-op stub
-// ============================================
-class ParticleSystem {
-    constructor(canvasId) {
-        // Disabled - canvas hidden via CSS for performance
-        this.animationId = null;
+    // Flag @property support so the rotating hero border only runs where it animates smoothly
+    if (window.CSS && typeof CSS.registerProperty === 'function') {
+        document.documentElement.classList.add('has-props');
     }
-    animate() {
-        // No-op: particle system disabled for performance
+
+    // ============================================
+    // DAY-RING CLOCK (fills as the day passes)
+    // ============================================
+    var hmEl = document.getElementById('clockHM');
+    var secEl = document.getElementById('clockSec');
+    var ringEl = document.getElementById('clockRing');
+    var capEl = document.getElementById('dayCap');
+    var dateEl = document.getElementById('heroDate');
+
+    function tick() {
+        var now = new Date();
+
+        if (hmEl) hmEl.textContent = pad(now.getHours()) + ':' + pad(now.getMinutes());
+        if (secEl) secEl.textContent = pad(now.getSeconds());
+
+        var pct = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 864;
+        if (ringEl) ringEl.style.setProperty('--day', pct.toFixed(2));
+        if (capEl) capEl.textContent = Math.round(pct) + '% of today';
     }
-}
 
-// ============================================
-// HOME WEATHER WIDGET (ENHANCED WITH RAIN %)
-// ============================================
-var HomeWeatherWidgetInstance = null;
-
-function HomeWeatherWidget() {
-    if (HomeWeatherWidgetInstance) return HomeWeatherWidgetInstance;
-
-    this.weatherData = null;
-    this.location = null;
-    this.container = document.getElementById('homeWeatherWidget');
-
-    HomeWeatherWidgetInstance = this;
-    this.init();
-}
-
-HomeWeatherWidget.getInstance = function() {
-    if (!HomeWeatherWidgetInstance) {
-        HomeWeatherWidgetInstance = new HomeWeatherWidget();
-    }
-    return HomeWeatherWidgetInstance;
-};
-
-HomeWeatherWidget.prototype.init = function() {
-    var self = this;
-    if (!this.container) return;
-
-    console.log('🌤️ Initializing Home Weather Widget...');
-
-    // Check for user location from tracking
-    if (window.USER_LOCATION && window.USER_LOCATION.lat && window.USER_LOCATION.lng) {
-        console.log('📍 Using tracked location:', window.USER_LOCATION);
-        this.location = {
-            lat: window.USER_LOCATION.lat,
-            lng: window.USER_LOCATION.lng
-        };
-        this.loadWeather();
-    } else {
-        console.log('📍 No tracked location, trying browser location...');
-        this.requestBrowserLocation();
-    }
-};
-
-HomeWeatherWidget.prototype.requestBrowserLocation = function() {
-    var self = this;
-    if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
-            function(position) {
-                self.location = {
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude
-                };
-                self.loadWeather();
-            },
-            function(error) {
-                console.warn('Geolocation error:', error);
-                self.showManualSearch();
-            }
-        );
-    } else {
-        this.showManualSearch();
-    }
-};
-
-HomeWeatherWidget.prototype.showManualSearch = function() {
-    if (!this.container) return;
-
-    this.container.innerHTML =
-        '<div class="weather-manual-search">' +
-            '<div class="wms-icon">🌍</div>' +
-            '<h3>Location Access Needed</h3>' +
-            '<p>Enable location services or search for your city to view weather</p>' +
-            '<a href="/weather/" class="wms-btn">' +
-                '<span>🔍</span>' +
-                '<span>Search Weather</span>' +
-            '</a>' +
-        '</div>';
-};
-
-HomeWeatherWidget.prototype.loadWeather = function() {
-    var self = this;
-    if (!this.location) return Promise.resolve();
-
-    return Promise.all([
-        fetch('/weather/api/api.php?action=current&lat=' + this.location.lat + '&lon=' + this.location.lng),
-        fetch('/weather/api/api.php?action=forecast&lat=' + this.location.lat + '&lon=' + this.location.lng)
-    ]).then(function(responses) {
-        var currentRes = responses[0];
-        var forecastRes = responses[1];
-
-        if (!currentRes.ok) {
-            throw new Error('HTTP ' + currentRes.status);
+    function tickDate() {
+        if (dateEl) {
+            dateEl.textContent = new Date().toLocaleDateString('en-ZA', {
+                weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+            });
         }
+    }
 
-        return currentRes.json().then(function(data) {
-            if (data.error) {
-                throw new Error(data.error);
-            }
+    tick();
+    tickDate();
+    setInterval(tick, 1000);
+    setInterval(tickDate, 60000);
 
-            self.weatherData = data;
+    // ============================================
+    // LIVE EVENT COUNTDOWNS ("In 38 min" ticks down)
+    // ============================================
+    function refreshEventTimes() {
+        var rows = document.querySelectorAll('.event-row[data-epoch]');
+        if (!rows.length) return;
 
-            // Get today's high/low from forecast
-            if (forecastRes.ok) {
-                return forecastRes.json().then(function(forecastData) {
-                    if (forecastData.forecast && forecastData.forecast[0]) {
-                        self.weatherData.temp_high = forecastData.forecast[0].temp_max;
-                        self.weatherData.temp_low = forecastData.forecast[0].temp_min;
-                    }
-                    self.render();
-                    console.log('✅ Weather loaded:', data);
-                });
+        var now = Date.now();
+        var todayKey = new Date().toDateString();
+        var tomorrowKey = new Date(now + 86400000).toDateString();
+
+        rows.forEach(function (row) {
+            var when = row.querySelector('.event-when');
+            if (!when) return;
+
+            var d = new Date(parseInt(row.dataset.epoch, 10) * 1000);
+            var diff = d.getTime() - now;
+            var hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
+            var label, tone = '';
+
+            if (diff <= 0) {
+                label = 'Now';
+                tone = 'is-urgent';
+            } else if (diff < 3600000) {
+                label = 'In ' + Math.ceil(diff / 60000) + ' min';
+                tone = 'is-urgent';
+            } else if (d.toDateString() === todayKey) {
+                label = 'Today ' + hm;
+                tone = 'is-today';
+            } else if (d.toDateString() === tomorrowKey) {
+                label = 'Tomorrow ' + hm;
             } else {
-                self.render();
-                console.log('✅ Weather loaded:', data);
+                label = d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + hm;
             }
-        });
-    }).catch(function(error) {
-        console.error('Weather load error:', error);
-        self.showError();
-    });
-};
 
-HomeWeatherWidget.prototype.render = function() {
-    var self = this;
-    if (!this.container || !this.weatherData) return;
-
-    var weather = this.weatherData;
-    var sunrise = new Date(weather.sunrise * 1000);
-    var sunset = new Date(weather.sunset * 1000);
-    var now = new Date();
-    var isDaytime = now >= sunrise && now <= sunset;
-
-    var weatherEmoji = this.getWeatherEmoji(weather.condition, isDaytime);
-
-    // Calculate rain probability (from clouds and humidity)
-    var rainProbability = this.calculateRainProbability(weather);
-
-    var hiloHtml = weather.temp_high !== undefined ?
-        '<div class="wwc-hilo">' +
-            '<span class="wwc-hi">H: ' + weather.temp_high + '°</span>' +
-            '<span class="wwc-lo">L: ' + weather.temp_low + '°</span>' +
-        '</div>' : '';
-
-    var rainClass = rainProbability >= 70 ? 'high-chance' : (rainProbability >= 40 ? 'medium-chance' : 'low-chance');
-
-    this.container.innerHTML =
-        '<div class="weather-widget-content" onclick="window.location.href=\'/weather/\'">' +
-            '<div class="wwc-header">' +
-                '<div class="wwc-location">' +
-                    '<span class="wwc-location-icon">📍</span>' +
-                    '<span class="wwc-location-name">' + weather.location + '</span>' +
-                '</div>' +
-                '<a href="/weather/" class="wwc-full-link" onclick="event.stopPropagation()">' +
-                    '<span>View Full Forecast</span>' +
-                    '<span class="wwc-arrow">→</span>' +
-                '</a>' +
-            '</div>' +
-            '<div class="wwc-main">' +
-                '<div class="wwc-current">' +
-                    '<div class="wwc-icon">' + weatherEmoji + '</div>' +
-                    '<div class="wwc-temp-group">' +
-                        '<div class="wwc-temp">' + weather.temperature + '°</div>' +
-                        '<div class="wwc-feels">Feels like ' + weather.feels_like + '°</div>' +
-                        hiloHtml +
-                    '</div>' +
-                '</div>' +
-                '<div class="wwc-description">' + weather.description + '</div>' +
-                '<div class="wwc-details-grid">' +
-                    '<div class="wwc-detail wwc-detail-rain ' + rainClass + '">' +
-                        '<div class="wwc-detail-icon">💧</div>' +
-                        '<div class="wwc-detail-content">' +
-                            '<div class="wwc-detail-label">Rain Chance</div>' +
-                            '<div class="wwc-detail-value">' + rainProbability + '%</div>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="wwc-detail">' +
-                        '<div class="wwc-detail-icon">💧</div>' +
-                        '<div class="wwc-detail-content">' +
-                            '<div class="wwc-detail-label">Humidity</div>' +
-                            '<div class="wwc-detail-value">' + weather.humidity + '%</div>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="wwc-detail">' +
-                        '<div class="wwc-detail-icon">💨</div>' +
-                        '<div class="wwc-detail-content">' +
-                            '<div class="wwc-detail-label">Wind</div>' +
-                            '<div class="wwc-detail-value">' + weather.wind_speed + ' km/h</div>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="wwc-detail">' +
-                        '<div class="wwc-detail-icon">☁️</div>' +
-                        '<div class="wwc-detail-content">' +
-                            '<div class="wwc-detail-label">Cloud Cover</div>' +
-                            '<div class="wwc-detail-value">' + weather.clouds + '%</div>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="wwc-detail">' +
-                        '<div class="wwc-detail-icon">🌅</div>' +
-                        '<div class="wwc-detail-content">' +
-                            '<div class="wwc-detail-label">Sunrise</div>' +
-                            '<div class="wwc-detail-value">' + sunrise.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) + '</div>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="wwc-detail">' +
-                        '<div class="wwc-detail-icon">🌇</div>' +
-                        '<div class="wwc-detail-content">' +
-                            '<div class="wwc-detail-label">Sunset</div>' +
-                            '<div class="wwc-detail-value">' + sunset.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) + '</div>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>' +
-            '</div>' +
-            '<div class="wwc-footer">' +
-                '<div class="wwc-powered">Powered by OpenWeather</div>' +
-                '<div class="wwc-updated">Updated: ' + new Date().toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) + '</div>' +
-            '</div>' +
-        '</div>';
-
-    // Animate in
-    setTimeout(function() {
-        if (self.container) {
-            self.container.classList.add('loaded');
-        }
-    }, 100);
-};
-
-HomeWeatherWidget.prototype.calculateRainProbability = function(weather) {
-    // Calculate rain probability based on multiple factors
-    var probability = 0;
-
-    // Check if it's already raining
-    var condition = weather.condition.toLowerCase();
-    if (condition.indexOf('rain') !== -1 || condition.indexOf('drizzle') !== -1) {
-        return 100;
-    }
-    if (condition.indexOf('thunder') !== -1 || condition.indexOf('storm') !== -1) {
-        return 95;
-    }
-
-    // Base calculation on clouds and humidity
-    var cloudFactor = weather.clouds * 0.4; // 40% weight
-    var humidityFactor = (weather.humidity - 50) * 0.6; // 60% weight (normalized from 50%)
-
-    probability = Math.max(0, Math.min(100, cloudFactor + humidityFactor));
-
-    // Adjust based on conditions
-    if (condition.indexOf('overcast') !== -1) {
-        probability += 15;
-    } else if (condition.indexOf('partly') !== -1 || condition.indexOf('scattered') !== -1) {
-        probability += 5;
-    } else if (condition.indexOf('clear') !== -1 || condition.indexOf('sunny') !== -1) {
-        probability = Math.min(probability, 20);
-    }
-
-    // Cap at 100%
-    return Math.min(100, Math.round(probability));
-};
-
-HomeWeatherWidget.prototype.showError = function() {
-    if (!this.container) return;
-
-    this.container.innerHTML =
-        '<div class="weather-widget-error">' +
-            '<div class="wwe-icon">⚠️</div>' +
-            '<h3>Weather Unavailable</h3>' +
-            '<p>Unable to load weather data. Please try again later.</p>' +
-            '<button onclick="HomeWeatherWidget.getInstance().init()" class="wwe-retry">' +
-                '<span>🔄</span>' +
-                '<span>Retry</span>' +
-            '</button>' +
-        '</div>';
-};
-
-HomeWeatherWidget.prototype.getWeatherEmoji = function(condition, isDaytime) {
-    if (isDaytime === undefined) isDaytime = true;
-    var lower = condition.toLowerCase();
-
-    if (lower.indexOf('clear') !== -1 || lower.indexOf('sunny') !== -1) {
-        return isDaytime ? '☀️' : '🌙';
-    }
-    if (lower.indexOf('partly') !== -1 && lower.indexOf('cloud') !== -1) {
-        return isDaytime ? '⛅' : '☁️';
-    }
-    if (lower.indexOf('overcast') !== -1 || lower.indexOf('cloudy') !== -1) {
-        return '☁️';
-    }
-    if (lower.indexOf('drizzle') !== -1) {
-        return '🌦️';
-    }
-    if (lower.indexOf('rain') !== -1) {
-        if (lower.indexOf('heavy') !== -1) return '🌧️';
-        if (lower.indexOf('light') !== -1) return '🌦️';
-        return '🌧️';
-    }
-    if (lower.indexOf('thunder') !== -1 || lower.indexOf('storm') !== -1) {
-        return '⛈️';
-    }
-    if (lower.indexOf('snow') !== -1) {
-        return '❄️';
-    }
-    if (lower.indexOf('mist') !== -1 || lower.indexOf('fog') !== -1 || lower.indexOf('haze') !== -1) {
-        return '🌫️';
-    }
-    if (lower.indexOf('wind') !== -1) {
-        return '💨';
-    }
-
-    return isDaytime ? '🌤️' : '🌙';
-};
-
-HomeWeatherWidget.prototype.getVoiceSummary = function() {
-    var self = this;
-    if (!this.weatherData) {
-        return this.loadWeather().then(function() {
-            return self._getVoiceSummaryText();
+            when.textContent = label;
+            row.classList.remove('is-urgent', 'is-today');
+            if (tone) row.classList.add(tone);
         });
     }
-    return Promise.resolve(this._getVoiceSummaryText());
-};
 
-HomeWeatherWidget.prototype._getVoiceSummaryText = function() {
-    if (!this.weatherData) {
-        return "Weather information is not available right now.";
+    refreshEventTimes();
+    setInterval(refreshEventTimes, 30000);
+
+    // ============================================
+    // CURSOR SPOTLIGHT (desktop pointers only)
+    // ============================================
+    if (window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches) {
+        document.querySelectorAll('.spot').forEach(function (el) {
+            el.addEventListener('pointermove', function (e) {
+                var r = el.getBoundingClientRect();
+                el.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+                el.style.setProperty('--my', (e.clientY - r.top) + 'px');
+            });
+        });
     }
 
-    var w = this.weatherData;
-    var location = w.location || 'your location';
-    var rainChance = this.calculateRainProbability(w);
+    // ============================================
+    // WEATHER STRIP (inside the hero card)
+    // ============================================
+    var weather = {
+        el: document.getElementById('heroWeather'),
+        location: null,
+        loadedAt: 0,
 
-    return 'Current weather in ' + location + ': ' + w.temperature + ' degrees and ' + w.description + '. ' +
-           'Feels like ' + w.feels_like + ' degrees. ' +
-           'Humidity is ' + w.humidity + ' percent with ' + w.wind_speed + ' kilometers per hour winds. ' +
-           'Rain probability is ' + rainChance + ' percent.';
-};
+        init: function () {
+            if (!this.el) return;
 
-// ============================================
-// NUMBER ANIMATION (OPTIMIZED)
-// ============================================
-function animateNumber(element, start, end, duration) {
-    const startTime = performance.now();
-    const range = end - start;
-    
-    function updateNumber(currentTime) {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        const easeOutElastic = (t) => {
-            const c4 = (2 * Math.PI) / 3;
-            return t === 0 ? 0 : t === 1 ? 1 :
-                Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
-        };
-        
-        const current = Math.floor(start + range * easeOutElastic(progress));
-        element.textContent = current;
-        
-        if (progress < 1) {
-            requestAnimationFrame(updateNumber);
-        } else {
-            element.textContent = end;
+            if (window.USER_LOCATION && window.USER_LOCATION.lat && window.USER_LOCATION.lng) {
+                this.location = { lat: window.USER_LOCATION.lat, lng: window.USER_LOCATION.lng };
+                this.load();
+            } else if ('geolocation' in navigator) {
+                var self = this;
+                navigator.geolocation.getCurrentPosition(
+                    function (pos) {
+                        self.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                        self.load();
+                    },
+                    function () { self.renderFallback(); },
+                    { timeout: 8000, maximumAge: 600000 }
+                );
+            } else {
+                this.renderFallback();
+            }
+        },
+
+        load: function () {
+            var self = this;
+            if (!this.location) return;
+
+            var base = '/weather/api/api.php?lat=' + this.location.lat + '&lon=' + this.location.lng;
+
+            Promise.all([
+                fetch(base + '&action=current').then(function (r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                }),
+                fetch(base + '&action=forecast').then(function (r) {
+                    return r.ok ? r.json() : null;
+                }).catch(function () { return null; })
+            ]).then(function (results) {
+                var current = results[0];
+                var forecast = results[1];
+                if (!current || current.error) throw new Error(current && current.error);
+
+                if (forecast && forecast.forecast && forecast.forecast[0]) {
+                    current.temp_high = forecast.forecast[0].temp_max;
+                    current.temp_low = forecast.forecast[0].temp_min;
+                }
+
+                self.loadedAt = Date.now();
+                self.render(current);
+            }).catch(function (err) {
+                console.warn('Weather load failed:', err);
+                self.renderFallback();
+            });
+        },
+
+        rainChance: function (w) {
+            var condition = (w.condition || '').toLowerCase();
+            if (condition.indexOf('rain') !== -1 || condition.indexOf('drizzle') !== -1) return 100;
+            if (condition.indexOf('thunder') !== -1 || condition.indexOf('storm') !== -1) return 95;
+
+            var p = Math.max(0, Math.min(100, w.clouds * 0.4 + (w.humidity - 50) * 0.6));
+            if (condition.indexOf('overcast') !== -1) p += 15;
+            else if (condition.indexOf('clear') !== -1 || condition.indexOf('sunny') !== -1) p = Math.min(p, 20);
+            return Math.min(100, Math.round(p));
+        },
+
+        emoji: function (condition, day) {
+            var c = (condition || '').toLowerCase();
+            if (c.indexOf('clear') !== -1 || c.indexOf('sunny') !== -1) return day ? '☀️' : '🌙';
+            if (c.indexOf('partly') !== -1 && c.indexOf('cloud') !== -1) return day ? '⛅' : '☁️';
+            if (c.indexOf('overcast') !== -1 || c.indexOf('cloud') !== -1) return '☁️';
+            if (c.indexOf('drizzle') !== -1) return '🌦️';
+            if (c.indexOf('rain') !== -1) return '🌧️';
+            if (c.indexOf('thunder') !== -1 || c.indexOf('storm') !== -1) return '⛈️';
+            if (c.indexOf('snow') !== -1) return '❄️';
+            if (c.indexOf('mist') !== -1 || c.indexOf('fog') !== -1 || c.indexOf('haze') !== -1) return '🌫️';
+            if (c.indexOf('wind') !== -1) return '💨';
+            return day ? '🌤️' : '🌙';
+        },
+
+        render: function (w) {
+            var now = new Date();
+            var day = true;
+            if (w.sunrise && w.sunset) {
+                day = now >= new Date(w.sunrise * 1000) && now <= new Date(w.sunset * 1000);
+            }
+
+            var rain = this.rainChance(w);
+            var hilo = '';
+            if (w.temp_high !== undefined) {
+                hilo = '<span class="wx-hilo"><span class="hi">H ' + w.temp_high + '°</span> · <span class="lo">L ' + w.temp_low + '°</span></span>';
+            }
+
+            this.el.innerHTML =
+                '<div class="wx-now">' +
+                    '<span class="wx-emoji" aria-hidden="true">' + this.emoji(w.condition, day) + '</span>' +
+                    '<span class="wx-temp">' + w.temperature + '°</span>' +
+                    '<span class="wx-meta">' +
+                        '<span class="wx-desc">' + w.description + '</span>' +
+                        hilo +
+                    '</span>' +
+                '</div>' +
+                '<div class="wx-stats">' +
+                    '<span class="wx-stat' + (rain >= 60 ? ' rain-high' : '') + '">☔ ' + rain + '%</span>' +
+                    '<span class="wx-stat">💨 ' + w.wind_speed + ' km/h</span>' +
+                    '<span class="wx-stat">📍 ' + w.location + '</span>' +
+                '</div>' +
+                '<span class="wx-arrow" aria-hidden="true">→</span>';
+        },
+
+        renderFallback: function () {
+            if (!this.el) return;
+            this.el.innerHTML =
+                '<span class="wx-fallback">' +
+                    '<span aria-hidden="true">🌍</span>' +
+                    '<span>Tap for the full weather forecast</span>' +
+                '</span>' +
+                '<span class="wx-arrow" aria-hidden="true">→</span>';
         }
-    }
-    
-    requestAnimationFrame(updateNumber);
-}
+    };
 
-// ============================================
-// 3D TILT EFFECT (MOBILE-SAFE)
-// ============================================
-class TiltEffect {
-    constructor(element) {
-        // Disable tilt on mobile for performance
-        if (isMobile || isTouchDevice) {
-            return;
+    weather.init();
+
+    // Refresh weather when the app returns to the foreground (stale after 10 min)
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && weather.location && Date.now() - weather.loadedAt > 600000) {
+            weather.load();
         }
-        
-        this.element = element;
-        this.width = element.offsetWidth;
-        this.height = element.offsetHeight;
-        this.settings = {
-            max: 12,
-            perspective: 1200,
-            scale: 1.05,
-            speed: 400,
-            easing: 'cubic-bezier(0.03, 0.98, 0.52, 0.99)',
-            glare: true
-        };
-        
-        this.init();
-    }
-    
-    init() {
-        this.element.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg)';
-        this.element.style.transition = `transform ${this.settings.speed}ms ${this.settings.easing}`;
-        
-        if (this.settings.glare && !this.element.querySelector('.tilt-glare')) {
-            const glare = document.createElement('div');
-            glare.className = 'tilt-glare';
-            glare.style.cssText = `
-                position: absolute;
-                inset: 0;
-                background: linear-gradient(135deg, 
-                    rgba(255,255,255,0) 0%, 
-                    rgba(255,255,255,0.1) 50%, 
-                    rgba(255,255,255,0) 100%);
-                opacity: 0;
-                pointer-events: none;
-                transition: opacity ${this.settings.speed}ms ${this.settings.easing};
-                border-radius: inherit;
-            `;
-            this.element.style.position = 'relative';
-            this.element.appendChild(glare);
-        }
-        
-        this.element.addEventListener('mouseenter', () => this.onMouseEnter());
-        this.element.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.element.addEventListener('mouseleave', () => this.onMouseLeave());
-    }
-    
-    onMouseEnter() {
-        this.width = this.element.offsetWidth;
-        this.height = this.element.offsetHeight;
-        
-        const glare = this.element.querySelector('.tilt-glare');
-        if (glare) glare.style.opacity = '1';
-    }
-    
-    onMouseMove(e) {
-        const rect = this.element.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        const percentX = (x / this.width) - 0.5;
-        const percentY = (y / this.height) - 0.5;
-        
-        const tiltX = percentY * this.settings.max;
-        const tiltY = -percentX * this.settings.max;
-        
-        this.element.style.transform = `
-            perspective(${this.settings.perspective}px) 
-            rotateX(${tiltX}deg) 
-            rotateY(${tiltY}deg) 
-            scale3d(${this.settings.scale}, ${this.settings.scale}, ${this.settings.scale})
-        `;
-        
-        const glare = this.element.querySelector('.tilt-glare');
-        if (glare) {
-            const angle = Math.atan2(percentY, percentX) * (180 / Math.PI);
-            glare.style.background = `
-                linear-gradient(${angle + 45}deg, 
-                    rgba(255,255,255,0) 0%, 
-                    rgba(255,255,255,0.15) 50%, 
-                    rgba(255,255,255,0) 100%)
-            `;
-        }
-    }
-    
-    onMouseLeave() {
-        this.element.style.transform = `
-            perspective(${this.settings.perspective}px) 
-            rotateX(0deg) 
-            rotateY(0deg) 
-            scale3d(1, 1, 1)
-        `;
-        
-        const glare = this.element.querySelector('.tilt-glare');
-        if (glare) glare.style.opacity = '0';
-    }
-}
-
-// ============================================
-// AI ASSISTANT (ENHANCED)
-// ============================================
-var AIAssistantInstance = null;
-
-function AIAssistant() {
-    if (AIAssistantInstance) return AIAssistantInstance;
-    this.insights = [];
-    AIAssistantInstance = this;
-    this.init();
-}
-
-AIAssistant.getInstance = function() {
-    if (!AIAssistantInstance) {
-        AIAssistantInstance = new AIAssistant();
-    }
-    return AIAssistantInstance;
-};
-
-AIAssistant.prototype.init = function() {
-    var self = this;
-    console.log('🤖 Initializing AI Assistant...');
-    this.generateInsights().then(function() {
-        console.log('✅ AI Assistant initialized');
     });
-};
 
-AIAssistant.prototype.generateInsights = function() {
-    var self = this;
-    var insightsEl = document.getElementById('aiInsights');
-    if (!insightsEl) return Promise.resolve();
+    // ============================================
+    // COUNT-UP NUMBERS (with a spring pop at the end)
+    // ============================================
+    function countUp(el) {
+        var target = parseInt(el.dataset.count, 10) || 0;
+        if (target === 0) { el.textContent = '0'; return; }
 
-    return new Promise(function(resolve) {
-        setTimeout(resolve, 1000);
-    }).then(function() {
-        var shoppingEl = document.querySelector('[href="/shopping/"] .stat-number');
-        var eventsEl = document.querySelector('[href="/calendar/"] .stat-number');
-        var messagesEl = document.querySelector('[href="/messages/"] .stat-number');
-        var completedEl = document.querySelector('[onclick*="Analytics"] .stat-number');
+        var duration = 900;
+        var start = performance.now();
 
-        // Read from data-count attribute (actual values), not textContent (animated "0")
-        var stats = {
-            shopping: parseInt((shoppingEl && shoppingEl.dataset.count) || 0),
-            events: parseInt((eventsEl && eventsEl.dataset.count) || 0),
-            messages: parseInt((messagesEl && messagesEl.dataset.count) || 0),
-            completed: parseInt((completedEl && completedEl.dataset.count) || 0)
-        };
-
-        self.insights = [];
-
-        if (stats.shopping > 10) {
-            self.insights.push({
-                icon: '🛒',
-                text: 'You have ' + stats.shopping + ' pending shopping items. Consider grouping by store.',
-                category: 'Shopping',
-                priority: 'high'
-            });
-        } else if (stats.shopping > 0) {
-            self.insights.push({
-                icon: '🛒',
-                text: stats.shopping + ' items on your shopping list. Well organized!',
-                category: 'Shopping',
-                priority: 'low'
-            });
-        }
-
-        if (stats.events > 0) {
-            self.insights.push({
-                icon: '📅',
-                text: stats.events + ' upcoming events this week. Stay on schedule!',
-                category: 'Calendar',
-                priority: 'medium'
-            });
-        } else {
-            self.insights.push({
-                icon: '📅',
-                text: 'Your calendar is clear this week. Time to relax or plan ahead.',
-                category: 'Calendar',
-                priority: 'low'
-            });
-        }
-
-        if (stats.messages > 5) {
-            self.insights.push({
-                icon: '💬',
-                text: stats.messages + ' unread messages waiting. Your family is active!',
-                category: 'Messages',
-                priority: 'high'
-            });
-        }
-
-        if (stats.completed > 20) {
-            self.insights.push({
-                icon: '🔥',
-                text: 'Amazing! ' + stats.completed + ' tasks completed this week. You\'re on fire!',
-                category: 'Productivity',
-                priority: 'high'
-            });
-        }
-
-        var hour = new Date().getHours();
-        if (hour >= 9 && hour < 12) {
-            self.insights.push({
-                icon: '☕',
-                text: 'Morning peak productivity! Perfect time for important tasks.',
-                category: 'Productivity',
-                priority: 'medium'
-            });
-        } else if (hour >= 17 && hour < 20) {
-            self.insights.push({
-                icon: '👨‍👩‍👧‍👦',
-                text: 'Family time! Perfect moment to connect and share your day.',
-                category: 'Family',
-                priority: 'medium'
-            });
-        } else if (hour >= 22 || hour < 6) {
-            self.insights.push({
-                icon: '🌙',
-                text: 'Late night browsing? Don\'t forget to get enough rest!',
-                category: 'Wellness',
-                priority: 'low'
-            });
-        }
-
-        var day = new Date().getDay();
-        if (day === 0 || day === 6) {
-            self.insights.push({
-                icon: '🎉',
-                text: 'It\'s the weekend! Great time for family activities or relaxation.',
-                category: 'Family',
-                priority: 'medium'
-            });
-        }
-
-        // Add weather insight if available
-        var weatherWidget = HomeWeatherWidget.getInstance();
-        if (weatherWidget.weatherData) {
-            var temp = weatherWidget.weatherData.temperature;
-            var rainChance = weatherWidget.calculateRainProbability(weatherWidget.weatherData);
-
-            if (rainChance >= 70) {
-                self.insights.push({
-                    icon: '☔',
-                    text: 'High rain probability (' + rainChance + '%). Don\'t forget your umbrella!',
-                    category: 'Weather',
-                    priority: 'high'
-                });
-            } else if (temp > 30) {
-                self.insights.push({
-                    icon: '🌡️',
-                    text: 'It\'s ' + temp + '°C outside! Stay hydrated and avoid peak sun hours.',
-                    category: 'Weather',
-                    priority: 'high'
-                });
-            } else if (temp < 10) {
-                self.insights.push({
-                    icon: '🥶',
-                    text: 'Cold day at ' + temp + '°C. Bundle up if heading outdoors!',
-                    category: 'Weather',
-                    priority: 'medium'
-                });
+        function frame(t) {
+            var p = Math.min((t - start) / duration, 1);
+            var eased = 1 - Math.pow(1 - p, 3);
+            el.textContent = Math.round(target * eased);
+            if (p < 1) {
+                requestAnimationFrame(frame);
+            } else {
+                el.classList.add('pop');
             }
         }
 
-        self.renderInsights();
-    });
-};
-
-AIAssistant.prototype.renderInsights = function() {
-    var insightsEl = document.getElementById('aiInsights');
-    if (!insightsEl || this.insights.length === 0) return;
-
-    var html = '';
-    for (var i = 0; i < this.insights.length; i++) {
-        var insight = this.insights[i];
-        html += '<div class="insight-item insight-' + insight.priority + '" style="animation-delay: ' + (i * 0.1) + 's">' +
-            '<span class="insight-icon">' + insight.icon + '</span>' +
-            '<div>' +
-                '<div class="insight-text">' + insight.text + '</div>' +
-                '<span class="insight-category">' + insight.category + '</span>' +
-            '</div>' +
-        '</div>';
+        requestAnimationFrame(frame);
     }
-    insightsEl.innerHTML = html;
-};
 
-AIAssistant.openSmartSearch = function() {
-    AIAssistant.showToast('🔍 Smart Search coming soon!', 'info');
-};
+    var counters = document.querySelectorAll('[data-count]');
+    if ('IntersectionObserver' in window) {
+        var seen = new WeakSet();
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting && !seen.has(entry.target)) {
+                    seen.add(entry.target);
+                    countUp(entry.target);
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.2 });
+        counters.forEach(function (el) { observer.observe(el); });
 
-AIAssistant.generateSuggestions = function() {
-    var suggestions = [
-        '💡 Create a shopping list for the weekend',
-        '📅 Schedule a family movie night',
-        '📝 Write a note about meal planning',
-        '🎂 Add upcoming birthdays to calendar',
-        '🏃 Plan outdoor family activities'
-    ];
-
-    var random = suggestions[Math.floor(Math.random() * suggestions.length)];
-    AIAssistant.showToast(random, 'info');
-};
-
-AIAssistant.openAnalytics = function() {
-    AIAssistant.showToast('📊 Advanced Analytics coming soon!', 'info');
-};
-
-AIAssistant.showToast = function(message, type) {
-    if (type === undefined) type = 'info';
-    var toasts = document.querySelectorAll('.home-toast');
-    for (var i = 0; i < toasts.length; i++) {
-        toasts[i].parentNode.removeChild(toasts[i]);
+        // Safety net: whatever hasn't animated after 4s just shows its value
+        setTimeout(function () {
+            counters.forEach(function (el) {
+                if (!seen.has(el)) {
+                    seen.add(el);
+                    observer.unobserve(el);
+                    el.textContent = parseInt(el.dataset.count, 10) || 0;
+                }
+            });
+        }, 4000);
+    } else {
+        counters.forEach(countUp);
     }
-    var toast = document.createElement('div');
-    toast.className = 'home-toast toast-' + type;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(function() { toast.classList.add('show'); }, 10);
-    setTimeout(function() {
-        toast.classList.remove('show');
-        setTimeout(function() {
-            if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
-            }
-        }, 300);
-    }, 3000);
-};
 
-AIAssistant.prototype.showToast = function(message, type) {
-    AIAssistant.showToast(message, type);
-};
+    // ============================================
+    // INVITE LINK COPY
+    // ============================================
+    function notify(message, type) {
+        if (window.Toast && window.Toast[type]) {
+            window.Toast[type](message);
+        }
+    }
 
-// ============================================
-// INVITE LINK COPY FUNCTION
-// ============================================
-function copyInviteLink() {
-    try {
-        // Get link from hidden input on home page or from inviteLinkDisplay
-        const homeInput = document.getElementById('homeInviteLink');
-        const displayEl = document.getElementById('inviteLinkDisplay');
-        const link = homeInput ? homeInput.value : (displayEl ? displayEl.textContent.trim() : '');
-
+    window.copyInviteLink = function () {
+        var input = document.getElementById('homeInviteLink');
+        var link = input ? input.value : '';
         if (!link) {
-            Toast.error('Invite link not found');
+            notify('Invite link not found', 'error');
             return;
         }
 
-        // Copy using textarea method (works in WebViews)
-        const ta = document.createElement('textarea');
+        // textarea + execCommand works inside WebViews where the async API doesn't
+        var ta = document.createElement('textarea');
         ta.value = link;
         ta.style.position = 'fixed';
         ta.style.left = '-9999px';
-        ta.style.top = '0';
         ta.setAttribute('readonly', '');
         document.body.appendChild(ta);
         ta.select();
         ta.setSelectionRange(0, 99999);
 
-        let success = false;
-        try {
-            success = document.execCommand('copy');
-        } catch (e) {
-            success = false;
-        }
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
         document.body.removeChild(ta);
 
-        if (success) {
-            Toast.success('📨 Invite link copied!');
-        } else {
-            // Try clipboard API as backup
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(link).then(function() {
-                    Toast.success('📨 Invite link copied!');
-                }).catch(function() {
-                    Toast.info('Long-press to copy the link');
-                });
-            } else {
-                Toast.info('Long-press to copy the link');
-            }
-        }
-    } catch (err) {
-        console.log('copyInviteLink error:', err);
-        Toast.info('Long-press to copy the link');
-    }
-}
-
-// ============================================
-// INITIALIZATION
-// ============================================
-let particleSystem = null;
-
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('🏠 Initializing Home Page...');
-    
-    // Initialize particle system (desktop only for performance)
-    if (!isMobile) {
-        particleSystem = new ParticleSystem('particles');
-    }
-    
-    // Animate stat numbers
-    document.querySelectorAll('.stat-number[data-count]').forEach(element => {
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting && !element.classList.contains('animated')) {
-                    const target = parseInt(element.dataset.count);
-                    animateNumber(element, 0, target, 2000);
-                    element.classList.add('animated');
-                }
+        if (ok) {
+            notify('📨 Invite link copied!', 'success');
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).then(function () {
+                notify('📨 Invite link copied!', 'success');
+            }).catch(function () {
+                notify('Long-press to copy the link', 'info');
             });
-        });
-        observer.observe(element);
-    });
-    
-    // Initialize tilt effects
-    document.querySelectorAll('[data-tilt]').forEach(card => new TiltEffect(card));
-    
-    // Initialize AI Assistant
-    new AIAssistant();
-    
-    // Initialize Weather Widget
-    new HomeWeatherWidget();
-    
-    // Animate greeting name
-    const greetingName = document.querySelector('.greeting-name');
-    if (greetingName) {
-        const text = greetingName.textContent;
-        greetingName.textContent = '';
-        text.split('').forEach((char, index) => {
-            const span = document.createElement('span');
-            span.textContent = char;
-            span.style.display = 'inline-block';
-            span.style.animation = `letterPop 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) ${index * 0.05}s backwards`;
-            greetingName.appendChild(span);
-        });
-    }
-    
-    console.log('✅ Home Page Initialized');
-});
-
-// Modal handling
-document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('modal')) {
-        e.target.classList.remove('active');
-    }
-});
-
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        document.querySelectorAll('.modal.active').forEach(modal => modal.classList.remove('active'));
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        AIAssistant.openSmartSearch();
-    }
-});
-
-// Update time display
-function updateTime() {
-    const timeElement = document.querySelector('.greeting-time');
-    if (!timeElement) return;
-    const now = new Date();
-    const newText = now.toLocaleDateString('en-ZA', { 
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-    });
-    if (timeElement.textContent !== newText) {
-        timeElement.style.opacity = '0';
-        setTimeout(() => {
-            timeElement.textContent = newText;
-            timeElement.style.opacity = '1';
-        }, 300);
-    }
-}
-updateTime();
-setInterval(updateTime, 30000);
-
-// Visibility change handling for native apps
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        // Pause animations when app is in background
-        if (particleSystem && particleSystem.animationId) {
-            cancelAnimationFrame(particleSystem.animationId);
+        } else {
+            notify('Long-press to copy the link', 'info');
         }
-    } else {
-        // Resume animations when app comes to foreground
-        if (particleSystem && !particleSystem.animationId) {
-            particleSystem.animate();
-        }
-        // Refresh weather data
-        const weatherWidget = HomeWeatherWidget.getInstance();
-        if (weatherWidget) {
-            weatherWidget.loadWeather();
-        }
-    }
-});
-
-// Expose to window
-window.AIAssistant = AIAssistant;
-window.HomeWeatherWidget = HomeWeatherWidget;
-
-console.log('✅ Home JavaScript v3.1 loaded');
+    };
+})();

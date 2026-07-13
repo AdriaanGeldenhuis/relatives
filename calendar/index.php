@@ -509,73 +509,79 @@ $doneEvents = count(array_filter($events, fn($e) => $e['status'] === 'done'));
 
 $pageTitle = 'Calendar';
 $activePage = 'calendar';
-$pageCSS = ['/calendar/css/calendar.css'];
+$pageCSS = [
+    '/shared/css/aurora.css',
+    '/calendar/css/calendar.css'
+];
 $pageJS = ['/calendar/js/calendar.js'];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-a"></div>
+    <div class="aurora-blob aurora-b"></div>
+    <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="shooting-star"></div>
+    <div class="aurora-grid"></div>
 </div>
 
 <main class="main-content">
-    <div class="container">
-        
-        <section class="hero-section">
-            <div class="greeting-card">
-                <div class="greeting-time"><?php echo date('l, F j, Y'); ?></div>
-                <h1 class="greeting-text">
-                    <span class="greeting-icon">📅</span>
-                    <span class="greeting-name"><?php echo $monthName; ?></span>
-                </h1>
-                <p class="greeting-subtitle">Your family's schedule at a glance</p>
+    <div class="hub">
 
-                <div class="quick-actions">
-                    <button onclick="showCreateEventModal()" class="quick-action-btn">
-                        <span class="qa-icon">➕</span>
-                        <span class="qa-text">Add Event</span>
-                    </button>
-                    <button onclick="goToToday()" class="quick-action-btn">
-                        <span class="qa-icon">📍</span>
-                        <span class="qa-text">Today</span>
-                    </button>
-                    <button onclick="syncGoogleCalendar()" class="quick-action-btn">
-                        <span class="qa-icon">🔄</span>
-                        <span class="qa-text">Sync</span>
-                    </button>
+        <!-- Compact page header -->
+        <header class="page-head" style="--glow:#34d399; --page-glow: rgba(52, 211, 153, 0.13)">
+            <span class="ph-glyph" aria-hidden="true">📅</span>
+            <div class="ph-titles">
+                <h1>Calendar</h1>
+                <p class="ph-sub"><?php echo $totalEvents; ?> event<?php echo $totalEvents === 1 ? '' : 's'; ?> in <?php echo $monthName; ?></p>
+            </div>
+            <div class="ph-actions">
+                <button onclick="showCreateEventModal()" class="pill-btn primary">
+                    <span aria-hidden="true">＋</span> Add event
+                </button>
+                <button onclick="goToToday()" class="pill-btn">
+                    <span aria-hidden="true">📍</span> Today
+                </button>
+                <button onclick="syncGoogleCalendar()" class="pill-btn" title="Sync with Google Calendar">
+                    <span aria-hidden="true">🔄</span> Sync
+                </button>
+            </div>
+        </header>
+
+        <!-- Month navigation + view switch, one compact row -->
+        <div class="calendar-controls">
+            <div class="month-navigator">
+                <button onclick="navigateCalendar(-1)" class="nav-btn" aria-label="Previous month">
+                    <span class="nav-icon">←</span>
+                </button>
+
+                <div class="month-display">
+                    <h2 id="currentMonthDisplay"><?php echo $monthName; ?></h2>
                 </div>
-            </div>
-        </section>
 
-        <div class="view-switcher glass-card">
-            <button class="view-btn active" onclick="switchView('month')" data-tilt>
-                <span class="view-icon">📅</span>
-                <span class="view-text">Month</span>
-            </button>
-            <button class="view-btn" onclick="switchView('week')" data-tilt>
-                <span class="view-icon">📆</span>
-                <span class="view-text">Week</span>
-            </button>
-            <button class="view-btn" onclick="switchView('day')" data-tilt>
-                <span class="view-icon">📋</span>
-                <span class="view-text">Day</span>
-            </button>
-        </div>
-
-        <div class="month-navigator glass-card">
-            <button onclick="navigateCalendar(-1)" class="nav-btn" data-tilt>
-                <span class="nav-icon">←</span>
-            </button>
-            
-            <div class="month-display">
-                <h2 id="currentMonthDisplay"><?php echo $monthName; ?></h2>
+                <button onclick="navigateCalendar(1)" class="nav-btn" aria-label="Next month">
+                    <span class="nav-icon">→</span>
+                </button>
             </div>
-            
-            <button onclick="navigateCalendar(1)" class="nav-btn" data-tilt>
-                <span class="nav-icon">→</span>
-            </button>
+
+            <div class="view-switcher">
+                <button class="view-btn active" onclick="switchView('month')">
+                    <span class="view-icon">📅</span>
+                    <span class="view-text">Month</span>
+                </button>
+                <button class="view-btn" onclick="switchView('week')">
+                    <span class="view-icon">📆</span>
+                    <span class="view-text">Week</span>
+                </button>
+                <button class="view-btn" onclick="switchView('day')">
+                    <span class="view-icon">📋</span>
+                    <span class="view-text">Day</span>
+                </button>
+            </div>
         </div>
 
         <div class="calendar-layout">

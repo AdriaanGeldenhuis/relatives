@@ -180,50 +180,50 @@ function formatTimeAgo($secondsAgo) {
 
 $pageTitle = 'Notifications';
 $activePage = 'notifications';
-$cacheVersion = '10.1.0'; // v10.1.0 - AJAX navigation (no page refresh)
+$pageCSS = [
+    '/shared/css/aurora.css',
+    '/notifications/css/notifications.css'
+];
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<link rel="stylesheet" href="/notifications/css/notifications.css?v=<?php echo $cacheVersion; ?>">
-
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-a"></div>
+    <div class="aurora-blob aurora-b"></div>
+    <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="shooting-star"></div>
+    <div class="aurora-grid"></div>
 </div>
 
 <main class="main-content">
-    <div class="container">
+    <div class="hub">
 
-        <!-- Hero Section (Same as Schedule) -->
-        <div class="hero-section">
-            <div class="greeting-card">
-                <div class="greeting-time"><?php echo date('l, F j, Y'); ?></div>
-                <h1 class="greeting-text">
-                    <span class="greeting-icon">🔔</span>
-                    <span class="greeting-name">Notifications</span>
-                </h1>
-                <p class="greeting-subtitle">Stay updated with your family activities</p>
-
-                <div class="quick-actions">
-                    <?php if ($unreadCount > 0): ?>
-                        <button onclick="markAllRead()" class="quick-action-btn">
-                            <span class="qa-icon">✓</span>
-                            <span>Mark Read</span>
-                        </button>
-                    <?php endif; ?>
-                    <?php if (!empty($notifications)): ?>
-                        <button onclick="showClearConfirm()" class="quick-action-btn">
-                            <span class="qa-icon">🗑️</span>
-                            <span>Clear</span>
-                        </button>
-                    <?php endif; ?>
-                    <button onclick="showPreferences()" class="quick-action-btn">
-                        <span class="qa-icon">⚙️</span>
-                        <span>Settings</span>
-                    </button>
-                </div>
+        <!-- Compact page header -->
+        <header class="page-head" style="--glow:#fbbf24; --page-glow: rgba(251, 191, 36, 0.13)">
+            <span class="ph-glyph" aria-hidden="true">🔔</span>
+            <div class="ph-titles">
+                <h1>Notifications</h1>
+                <p class="ph-sub"><?php echo $unreadCount > 0 ? $unreadCount . ' unread' : "You're all caught up"; ?></p>
             </div>
-        </div>
+            <div class="ph-actions quick-actions">
+                <?php if ($unreadCount > 0): ?>
+                    <button onclick="markAllRead()" class="pill-btn primary">
+                        <span aria-hidden="true">✓</span> Mark read
+                    </button>
+                <?php endif; ?>
+                <?php if (!empty($notifications)): ?>
+                    <button onclick="showClearConfirm()" class="pill-btn">
+                        <span aria-hidden="true">🗑️</span> Clear
+                    </button>
+                <?php endif; ?>
+                <button onclick="showPreferences()" class="pill-btn">
+                    <span aria-hidden="true">⚙️</span> Settings
+                </button>
+            </div>
+        </header>
 
         <!-- Filter Section (Same as Schedule) -->
         <div class="search-filter-section">
