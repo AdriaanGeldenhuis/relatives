@@ -20,7 +20,7 @@ if (empty($activePage) || $activePage === 'index.php') {
 $appVersion = '12.4.0';
 // Use static cache version - bump this when deploying CSS/JS changes
 // DO NOT use time() as it defeats browser caching!
-$cacheVersion = '12.7.0';
+$cacheVersion = '12.8.0';
 $buildTime = $cacheVersion;
 
 // Avatar cache-busting: use file modification time so browsers fetch the new image after upload

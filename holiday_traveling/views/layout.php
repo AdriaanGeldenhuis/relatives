@@ -15,13 +15,24 @@ $pageTitle = $pageTitle ?? 'Holiday & Traveling';
 $pageCSS = $pageCSS ?? [];
 $pageJS = $pageJS ?? [];
 
-// Always include module CSS
-array_unshift($pageCSS, '/holiday_traveling/assets/css/holiday.css');
+// Always include module CSS (aurora theme first)
+array_unshift($pageCSS, '/shared/css/aurora.css', '/holiday_traveling/assets/css/holiday.css');
 
 // Get user data for header
 $user = HT_Auth::user();
 ?>
 <?php require __DIR__ . '/../../shared/components/header.php'; ?>
+
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+    <div class="aurora-blob aurora-a"></div>
+    <div class="aurora-blob aurora-b"></div>
+    <div class="aurora-blob aurora-c"></div>
+    <div class="stars stars-a"></div>
+    <div class="stars stars-b"></div>
+    <div class="shooting-star"></div>
+    <div class="aurora-grid"></div>
+</div>
 
 <main class="ht-main">
     <div class="ht-container">
