@@ -71,6 +71,7 @@ class TrackingService : Service() {
         const val ACTION_STOP = "za.co.relatives.app.tracking.STOP"
         const val ACTION_MOTION_STARTED = "za.co.relatives.app.tracking.MOTION_STARTED"
         const val ACTION_MOTION_STOPPED = "za.co.relatives.app.tracking.MOTION_STOPPED"
+        const val ACTION_REVIVE = "za.co.relatives.app.tracking.REVIVE"
 
         private const val CHANNEL_ID = "tracking_channel"
         private const val NOTIFICATION_ID = 9001
@@ -95,6 +96,15 @@ class TrackingService : Service() {
             private set
 
         fun start(context: Context) = safeStart(context, ACTION_START)
+
+        /**
+         * Revive tracking WITHOUT re-persisting the enabled flag — for the
+         * watchdog and FCM keepalive. Unlike [start] (a user action that
+         * asserts "on"), a revive must never win a race against the user
+         * tapping disable: onStartCommand re-checks the persisted flag and
+         * shuts down if the user turned tracking off in the meantime.
+         */
+        fun revive(context: Context) = safeStart(context, ACTION_REVIVE)
 
         /**
          * Stop tracking. Persists the disabled flag first so that even if the
@@ -287,7 +297,9 @@ class TrackingService : Service() {
                 }
             }
             else -> {
-                // Null intent = START_STICKY restart after process death.
+                // Null intent (START_STICKY restart after process death) and
+                // ACTION_REVIVE (watchdog / FCM keepalive) share the same
+                // contract: resume only if the user still has tracking on.
                 if (enabled && hasPermission) {
                     doStart()
                 } else {
@@ -401,6 +413,11 @@ class TrackingService : Service() {
         applyMode(Mode.IDLE, force = true)
         lastIdleEnqueueTime = System.currentTimeMillis()
         registerActivityTransitions()
+        // Arm the periodic watchdog: WorkManager survives the process, so
+        // when the OS kills this service the watchdog restarts it (or at
+        // least captures a fix) instead of tracking staying dead until the
+        // user reopens the app.
+        TrackingRestartWorker.enqueuePeriodic(this)
     }
 
     private fun doStop() {
@@ -570,7 +587,11 @@ class TrackingService : Service() {
     private fun buildLocationRequest(mode: Mode): LocationRequest {
         val battery = getBatteryBucket()
         if (battery == BatteryBucket.CRITICAL) {
-            return LocationRequest.Builder(Priority.PRIORITY_PASSIVE, 5 * 60 * 1000L).build()
+            // LOW_POWER, not PASSIVE: a passive request only piggybacks on
+            // OTHER apps' location requests, so on a low-battery phone with
+            // nothing else using GPS it produced zero fixes indefinitely —
+            // the user simply vanished from the family map below 10%.
+            return LocationRequest.Builder(Priority.PRIORITY_LOW_POWER, 5 * 60 * 1000L).build()
         }
         if (battery == BatteryBucket.LOW) {
             return LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 3 * 60 * 1000L)
@@ -639,6 +660,11 @@ class TrackingService : Service() {
         val now = System.currentTimeMillis()
         lastEnqueueTime = now
         if (currentMode == Mode.IDLE) lastIdleEnqueueTime = now
+        // Persisted heartbeat for the watchdog: "when did this device last
+        // capture a fix" must survive process death (TrackingStore's copy is
+        // in-memory only).
+        getSharedPreferences("relatives_prefs", MODE_PRIVATE)
+            .edit().putLong("last_fix_time", now).apply()
         store.markEnqueued(location)
         val entity = QueuedLocationEntity(
             lat = location.latitude, lng = location.longitude,
