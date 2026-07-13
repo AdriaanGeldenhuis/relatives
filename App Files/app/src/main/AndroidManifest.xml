@@ -30,6 +30,10 @@
     <!-- Boot completed to restart tracking -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Ask the user to exclude the app from battery optimisation so the
+         tracking service survives Doze / OEM battery killers -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application
         android:name=".RelativesApplication"
         android:allowBackup="true"

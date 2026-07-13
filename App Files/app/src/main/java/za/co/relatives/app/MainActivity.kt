@@ -9,6 +9,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -45,6 +47,7 @@ import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.tracking.FamilyPoller
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
+import za.co.relatives.app.tracking.TrackingRestartWorker
 import za.co.relatives.app.tracking.TrackingService
 import za.co.relatives.app.utils.PreferencesManager
 import java.net.CookieHandler
@@ -176,6 +179,16 @@ class MainActivity : ComponentActivity() {
         // Poll only while the app is actually in the foreground.
         familyPoller.start()
 
+        // Complete an enable flow whose activity was recreated mid-grant:
+        // the background-location Settings round-trip destroys the activity,
+        // losing PermissionGate's in-memory callback — the user granted
+        // everything yet tracking stayed off until they tapped Enable again.
+        if (prefs.pendingTrackingEnable && permissionGate.hasForegroundLocation()) {
+            prefs.pendingTrackingEnable = false
+            prefs.trackingEnabled = true
+            maybeRequestBatteryExemption()
+        }
+
         // Resume tracking if the user has it enabled but the service is not
         // running (system kill, reboot on Android 15+ where BootReceiver may
         // not start a location service, permission round-trips, etc.).
@@ -247,11 +260,63 @@ class MainActivity : ComponentActivity() {
      * Permission only requested when user explicitly taps "Enable live location".
      */
     fun startTrackingWithPermissions() {
+        // Survive activity recreation during the permission flow: onResume
+        // completes the enable if this callback never fires.
+        prefs.pendingTrackingEnable = true
         permissionGate.requestTracking { granted ->
+            prefs.pendingTrackingEnable = false
             if (granted) {
                 prefs.trackingEnabled = true
                 TrackingService.start(this)
+                TrackingRestartWorker.enqueuePeriodic(this)
+                maybeRequestBatteryExemption()
             }
+        }
+    }
+
+    /**
+     * Ask Android to exclude the app from battery optimisation — without
+     * this, most devices kill the tracking service after an hour or two
+     * (the "works for a while then stops until I reopen tracking" symptom),
+     * and being on the allowlist also legalises restarting the service from
+     * the background. Asked at most once per app session, only when not
+     * already exempt.
+     */
+    private var batteryPromptShown = false
+
+    private fun maybeRequestBatteryExemption() {
+        if (batteryPromptShown || isFinishing || isDestroyed) return
+        try {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            if (pm.isIgnoringBatteryOptimizations(packageName)) return
+            batteryPromptShown = true
+            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Keep tracking alive")
+                .setMessage(
+                    "Android stops location sharing after an hour or two " +
+                        "unless Relatives is excluded from battery " +
+                        "optimisation. Allow this so your family can always " +
+                        "see you on the map.",
+                )
+                .setPositiveButton("Allow") { _, _ ->
+                    try {
+                        startActivity(
+                            Intent(
+                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:$packageName"),
+                            ),
+                        )
+                    } catch (_: Exception) {
+                        try {
+                            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                .setNegativeButton("Not now", null)
+                .show()
+        } catch (e: Exception) {
+            Log.w(TAG, "Battery exemption prompt failed", e)
         }
     }
 
@@ -266,7 +331,9 @@ class MainActivity : ComponentActivity() {
             if (granted && !prefs.trackingEnabled) {
                 prefs.trackingEnabled = true
                 TrackingService.start(this)
+                TrackingRestartWorker.enqueuePeriodic(this)
             }
+            if (granted) maybeRequestBatteryExemption()
             answer(granted)
         }
     }

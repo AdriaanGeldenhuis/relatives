@@ -75,7 +75,7 @@ class RelativesFirebaseService : FirebaseMessagingService() {
         Log.d(TAG, "Message received: type=$type data=$data")
 
         when (type) {
-            "wake_tracking" -> handleWakeTracking()
+            "wake_tracking" -> handleWakeTracking(keepalive = data["keepalive"] == "1")
             else -> handleVisibleNotification(type, data, message.notification)
         }
     }
@@ -93,7 +93,7 @@ class RelativesFirebaseService : FirebaseMessagingService() {
      * service and the wake must be ignored (previously this crashed every
      * family device that had never enabled tracking).
      */
-    private fun handleWakeTracking() {
+    private fun handleWakeTracking(keepalive: Boolean) {
         if (!TrackingService.isTrackingEnabled(this)) {
             Log.d(TAG, "Wake tracking ignored: tracking not enabled on this device")
             return
@@ -109,9 +109,20 @@ class RelativesFirebaseService : FirebaseMessagingService() {
             Log.d(TAG, "Wake tracking ignored: no background location and service not running")
             return
         }
-        Log.d(TAG, "Wake tracking: triggering motion mode")
         try {
-            TrackingService.motionStarted(this)
+            if (keepalive) {
+                // Server cron keepalive: this high-priority push grants a
+                // temporary background-start exemption, so a service the OS
+                // killed can be revived here. Quiet IDLE restart only — a
+                // GPS burst every cron tick would drain the battery. revive()
+                // (not start()) so a racing user disable always wins.
+                Log.d(TAG, "Keepalive wake: ensuring TrackingService is running")
+                TrackingService.revive(this)
+            } else {
+                // A family member tapped "Wake": burst mode + immediate fix.
+                Log.d(TAG, "Wake tracking: triggering motion mode")
+                TrackingService.motionStarted(this)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Wake tracking failed", e)
         }

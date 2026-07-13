@@ -28,6 +28,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_IDLE_HEARTBEAT_SECONDS = "idle_heartbeat_seconds"
         private const val KEY_BURST_INTERVAL = "burst_interval"
         private const val KEY_SESSION_TOKEN = "session_token"
+        private const val KEY_PENDING_TRACKING_ENABLE = "pending_tracking_enable"
         private const val KEY_NOTIFICATION_COUNT = "notification_count"
         private const val KEY_LAST_UPLOAD_TIME = "last_upload_time"
         private const val KEY_FCM_TOKEN = "fcm_token"
@@ -80,6 +81,16 @@ class PreferencesManager(context: Context) {
     var sessionToken: String?
         get() = prefs.getString(KEY_SESSION_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_SESSION_TOKEN, value).apply()
+
+    /**
+     * The user tapped "Enable live location" but the permission flow's
+     * in-memory callback may be lost to activity recreation (background-
+     * location Settings trip). MainActivity.onResume completes the enable
+     * when this is set and permission ended up granted.
+     */
+    var pendingTrackingEnable: Boolean
+        get() = prefs.getBoolean(KEY_PENDING_TRACKING_ENABLE, false)
+        set(value) = prefs.edit().putBoolean(KEY_PENDING_TRACKING_ENABLE, value).apply()
 
     // ── User / family identity ───────────────────────────────────────────
 
