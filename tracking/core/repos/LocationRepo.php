@@ -20,12 +20,8 @@ class LocationRepo
      */
     public function upsertCurrent(int $userId, int $familyId, array $loc, string $motionState): void
     {
-        // Is this fix newer than what we already hold? Two uploaders run
-        // concurrently by design (the WebView page POSTs location.php while
-        // the native service batches to batch.php), and a retried batch
-        // replays points recorded seconds apart. Without a guard the LAST
-        // write wins, so an older or out-of-order fix could regress the live
-        // position to a stale location.
+        // Different devices can upload concurrently, and offline batches can
+        // replay earlier fixes. Preserve the newest recorded position.
         $existing = $this->getCurrent($userId);
         $isNewer = $existing === null
             || !isset($existing['recorded_at'])
@@ -75,8 +71,7 @@ class LocationRepo
             ]);
         }
 
-        // Invalidate family snapshot
-        $this->cache->deleteFamilySnapshot($familyId);
+
     }
 
     /**
@@ -105,44 +100,37 @@ class LocationRepo
      */
     public function getFamilyCurrentLocations(int $familyId): array
     {
-        // Check cache
-        $cached = $this->cache->getFamilySnapshot($familyId);
-        if ($cached !== null) {
-            return $cached;
-        }
-
         $stmt = $this->db->prepare("
             SELECT u.id AS user_id, u.full_name AS name, u.avatar_color, u.has_avatar,
                    tc.lat, tc.lng, tc.accuracy_m, tc.speed_mps,
                    tc.bearing_deg, tc.altitude_m, tc.motion_state,
                    tc.recorded_at, tc.updated_at, tc.device_id, tc.platform
             FROM users u
-            LEFT JOIN tracking_current tc ON tc.user_id = u.id
+            LEFT JOIN tracking_current tc ON tc.user_id = u.id AND u.location_sharing = 1
             WHERE u.family_id = ? AND u.status = 'active'
             ORDER BY tc.updated_at DESC
         ");
         $stmt->execute([$familyId]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $this->cache->setFamilySnapshot($familyId, $rows);
-        return $rows;
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
      * Get location history for a user within a time range
      */
-    public function getHistory(int $familyId, int $userId, string $from, string $to, int $limit = 500): array
+    public function getHistory(int $familyId, int $userId, string $from, string $to, int $viewerId, int $limit = 500): array
     {
         $stmt = $this->db->prepare("
-            SELECT lat, lng, accuracy_m, speed_mps, bearing_deg, altitude_m,
-                   motion_state, recorded_at
-            FROM tracking_locations
-            WHERE family_id = ? AND user_id = ?
-              AND recorded_at BETWEEN ? AND ?
-            ORDER BY recorded_at ASC
+            SELECT t.lat, t.lng, t.accuracy_m, t.speed_mps, t.bearing_deg, t.altitude_m,
+                   t.motion_state, t.recorded_at
+            FROM tracking_locations t
+            JOIN users u ON u.id = t.user_id AND u.family_id = t.family_id AND u.status = 'active'
+            WHERE t.family_id = ? AND t.user_id = ?
+              AND (u.location_sharing = 1 OR u.id = ?)
+              AND t.recorded_at BETWEEN ? AND ?
+            ORDER BY t.recorded_at ASC
             LIMIT ?
         ");
-        $stmt->execute([$familyId, $userId, $from, $to, $limit]);
+        $stmt->execute([$familyId, $userId, $viewerId, $from, $to, $limit]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 

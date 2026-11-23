@@ -31,136 +31,89 @@ try {
     exit;
 }
 
-// Get privacy settings
-$privacySettings = [
-    'location_sharing' => true,
-    'show_online_status' => true,
-    'show_last_seen' => true,
-    'allow_messages' => true,
-];
+require_once __DIR__ . '/../core/CSRF.php';
 
-try {
-    $stmt = $db->prepare("SELECT * FROM user_privacy_settings WHERE user_id = ?");
-    $stmt->execute([$user['id']]);
-    $savedSettings = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if ($savedSettings) {
-        $privacySettings = array_merge($privacySettings, $savedSettings);
-    }
-} catch (Exception $e) {
-    error_log('Privacy settings error: ' . $e->getMessage());
-}
-
-// Get active sessions
-$activeSessions = [];
-try {
-    $stmt = $db->prepare("
-        SELECT id, device_info, ip_address, created_at, last_active
-        FROM user_sessions
-        WHERE user_id = ? AND expires_at > NOW()
-        ORDER BY last_active DESC
-        LIMIT 10
-    ");
-    $stmt->execute([$user['id']]);
-    $activeSessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (Exception $e) {
-    error_log('Sessions fetch error: ' . $e->getMessage());
-}
-
+$csrfToken = CSRF::generate();
+$currentTokenHash = hash('sha256', $_SESSION['session_token']);
+$settingsQuery = $db->prepare("
+    SELECT u.location_sharing,
+           COALESCE(p.show_online_status, 1) AS show_online_status,
+           COALESCE(p.show_last_seen, 1) AS show_last_seen,
+           COALESCE(p.allow_messages, 1) AS allow_messages
+    FROM users u
+    LEFT JOIN user_privacy_settings p ON p.user_id = u.id
+    WHERE u.id = ?
+");
 $error = '';
 $success = '';
 
-// Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        $action = $_POST['action'] ?? '';
-
-        if ($action === 'save_privacy') {
-            $newSettings = [
-                'location_sharing' => isset($_POST['location_sharing']),
-                'show_online_status' => isset($_POST['show_online_status']),
-                'show_last_seen' => isset($_POST['show_last_seen']),
-                'allow_messages' => isset($_POST['allow_messages']),
-            ];
-
-            // Create table if not exists
-            $db->exec("CREATE TABLE IF NOT EXISTS user_privacy_settings (
-                user_id INT PRIMARY KEY,
-                location_sharing TINYINT(1) DEFAULT 1,
-                show_online_status TINYINT(1) DEFAULT 1,
-                show_last_seen TINYINT(1) DEFAULT 1,
-                allow_messages TINYINT(1) DEFAULT 1,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )");
-
-            $stmt = $db->prepare("
-                INSERT INTO user_privacy_settings
-                (user_id, location_sharing, show_online_status, show_last_seen, allow_messages)
-                VALUES (?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                location_sharing = VALUES(location_sharing),
-                show_online_status = VALUES(show_online_status),
-                show_last_seen = VALUES(show_last_seen),
-                allow_messages = VALUES(allow_messages)
-            ");
-
-            $stmt->execute([
-                $user['id'],
-                $newSettings['location_sharing'] ? 1 : 0,
-                $newSettings['show_online_status'] ? 1 : 0,
-                $newSettings['show_last_seen'] ? 1 : 0,
-                $newSettings['allow_messages'] ? 1 : 0,
-            ]);
-
-            $privacySettings = $newSettings;
-            $success = 'Privacy settings saved!';
-        }
-
-        if ($action === 'logout_session') {
-            $sessionId = (int)($_POST['session_id'] ?? 0);
-            if ($sessionId > 0) {
-                $stmt = $db->prepare("DELETE FROM user_sessions WHERE id = ? AND user_id = ?");
-                $stmt->execute([$sessionId, $user['id']]);
-                $success = 'Session terminated successfully.';
-
-                // Refresh sessions list
+    $token = $_POST['csrf_token'] ?? null;
+    if (!is_string($token) || !CSRF::validate($token)) {
+        http_response_code(403);
+        $error = 'Reload the page and try again.';
+    } else {
+        try {
+            $action = $_POST['action'] ?? '';
+            if ($action === 'save_privacy') {
+                $sharing = isset($_POST['location_sharing']) ? 1 : 0;
+                $db->beginTransaction();
+                $stmt = $db->prepare('UPDATE users SET location_sharing = ? WHERE id = ?');
+                $stmt->execute([$sharing, $user['id']]);
                 $stmt = $db->prepare("
-                    SELECT id, device_info, ip_address, created_at, last_active
-                    FROM user_sessions
-                    WHERE user_id = ? AND expires_at > NOW()
-                    ORDER BY last_active DESC
-                    LIMIT 10
+                    INSERT INTO user_privacy_settings
+                        (user_id, location_sharing, show_online_status, show_last_seen, allow_messages)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        location_sharing = VALUES(location_sharing),
+                        show_online_status = VALUES(show_online_status),
+                        show_last_seen = VALUES(show_last_seen),
+                        allow_messages = VALUES(allow_messages)
                 ");
-                $stmt->execute([$user['id']]);
-                $activeSessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $stmt->execute([
+                    $user['id'], $sharing,
+                    (int) isset($_POST['show_online_status']),
+                    (int) isset($_POST['show_last_seen']),
+                    (int) isset($_POST['allow_messages']),
+                ]);
+                if ($sharing === 0) {
+                    $stmt = $db->prepare('DELETE FROM tracking_current WHERE user_id = ?');
+                    $stmt->execute([$user['id']]);
+                }
+                $db->commit();
+                $success = 'Privacy settings saved.';
+            } elseif ($action === 'logout_session') {
+                $sessionId = (int) ($_POST['session_id'] ?? 0);
+                $stmt = $db->prepare('DELETE FROM sessions WHERE id = ? AND user_id = ? AND session_token <> ?');
+                $stmt->execute([$sessionId, $user['id'], $currentTokenHash]);
+                $success = 'Other session signed out.';
+            } elseif ($action === 'logout_all') {
+                $stmt = $db->prepare('DELETE FROM sessions WHERE user_id = ? AND session_token <> ?');
+                $stmt->execute([$user['id'], $currentTokenHash]);
+                $success = 'All other sessions signed out.';
             }
+        } catch (PDOException $exception) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            error_log('Privacy update error: ' . $exception->getMessage());
+            $error = 'An error occurred. Please try again.';
         }
-
-        if ($action === 'logout_all') {
-            // Logout all sessions except current
-            $currentToken = $_SESSION['session_token'] ?? '';
-            $stmt = $db->prepare("DELETE FROM user_sessions WHERE user_id = ? AND session_token != ?");
-            $stmt->execute([$user['id'], $currentToken]);
-            $success = 'All other sessions have been logged out.';
-
-            // Refresh sessions list
-            $stmt = $db->prepare("
-                SELECT id, device_info, ip_address, created_at, last_active
-                FROM user_sessions
-                WHERE user_id = ? AND expires_at > NOW()
-                ORDER BY last_active DESC
-                LIMIT 10
-            ");
-            $stmt->execute([$user['id']]);
-            $activeSessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        }
-
-    } catch (Exception $e) {
-        error_log('Privacy update error: ' . $e->getMessage());
-        $error = 'An error occurred. Please try again.';
     }
 }
+
+$settingsQuery->execute([$user['id']]);
+$privacySettings = $settingsQuery->fetch();
+$stmt = $db->prepare("
+    SELECT id, user_agent AS device_info, INET6_NTOA(ip) AS ip_address, created_at,
+           session_token = ? AS is_current
+    FROM sessions
+    WHERE user_id = ? AND expires_at > NOW()
+    ORDER BY is_current DESC, created_at DESC
+    LIMIT 10
+");
+$stmt->execute([$currentTokenHash, $user['id']]);
+$activeSessions = $stmt->fetchAll();
 
 $pageTitle = 'Privacy & Security';
 $pageCSS = ['/profile/css/profile.css'];
@@ -193,6 +146,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         <!-- Privacy Settings -->
         <form method="POST">
             <input type="hidden" name="action" value="save_privacy">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
 
             <div class="settings-section">
                 <div class="settings-section-title">
@@ -202,7 +156,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <div class="toggle-row">
                     <div class="toggle-info">
                         <div class="toggle-label">Location Sharing</div>
-                        <div class="toggle-description">Share your location with family members</div>
+                        <div class="toggle-description">Allow family members to see your position and available history</div>
                     </div>
                     <label class="toggle-switch">
                         <input type="checkbox" name="location_sharing" <?php echo $privacySettings['location_sharing'] ? 'checked' : ''; ?>>
@@ -328,13 +282,14 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <div style="font-size: 11px; color: rgba(255, 255, 255, 0.5); margin-top: 4px;">
                                     <?php echo htmlspecialchars($session['ip_address'] ?? 'Unknown IP'); ?>
                                     &bull;
-                                    Last active: <?php echo isset($session['last_active']) ? date('M j, g:i a', strtotime($session['last_active'])) : 'Unknown'; ?>
+                                    Signed in: <?php echo isset($session['created_at']) ? date('M j, g:i a', strtotime($session['created_at'])) : 'Unknown'; ?>
                                 </div>
                             </div>
                         </div>
-                        <?php if ($session['id'] != ($_SESSION['current_session_id'] ?? 0)): ?>
+                        <?php if (!$session['is_current']): ?>
                             <form method="POST" style="margin: 0;">
                                 <input type="hidden" name="action" value="logout_session">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                                 <input type="hidden" name="session_id" value="<?php echo $session['id']; ?>">
                                 <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">
                                     Logout
@@ -349,6 +304,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php if (count($activeSessions) > 1): ?>
                     <form method="POST" style="margin-top: 15px;">
                         <input type="hidden" name="action" value="logout_all">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                         <button type="submit" class="btn btn-danger btn-block" onclick="return confirm('Logout from all other devices?')">
                             Logout All Other Sessions
                         </button>
@@ -382,6 +338,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 </main>
 
 <script>
+<?php if ($success === 'Privacy settings saved.' && !$privacySettings['location_sharing']): ?>
+    window.TrackingBridge?.stopTracking();
+<?php endif; ?>
 // ============================================
 // DEVICE PERMISSIONS MANAGEMENT
 // ============================================
@@ -555,6 +514,11 @@ async function checkLocationPermission() {
 }
 
 async function requestLocationPermission() {
+    if (window.TrackingBridge || /\bRelativesAndroid\//.test(navigator.userAgent)) {
+        window.location.href = '/tracking/app/';
+        return;
+    }
+
     const statusEl = document.getElementById('locationStatus');
     const btnEl = document.getElementById('btnRequestLocation');
 

@@ -18,20 +18,32 @@ if ((int) ($familySettings['mode'] ?? 1) === 0) {
     Response::error('tracking_disabled', 409);
 }
 
-// One wake per user per 60s: each wake fans a high-priority FCM out to every
-// family device and triggers a GPS burst on each — unthrottled, one user
-// could hold the whole family's phones in high-accuracy mode.
-$wakeKey = 'tracking:wake_rl:' . $ctx->userId;
-if ($cache->available()) {
+// Reserve a single refresh per family, including concurrent requests.
+if (!$cache->available()) {
+    Response::error('refresh_temporarily_unavailable', 503);
+}
+$wakeKey = 'tracking:wake_rl:family:' . $ctx->familyId;
+$lock = $db->prepare('SELECT GET_LOCK(?, 0)');
+$lock->execute([$wakeKey]);
+if ((int) $lock->fetchColumn() !== 1) {
+    Response::error('rate_limited', 429);
+}
+try {
     $lastWake = $cache->get($wakeKey);
-    if ($lastWake) {
-        Response::json([
-            'success' => false,
-            'error' => 'rate_limited',
-            'retry_after' => max(1, 60 - (time() - (int) $lastWake)),
-        ], 429);
-    }
-    $cache->set($wakeKey, time(), 60);
+    $reserved = $lastWake === null && $cache->set($wakeKey, time(), 60);
+} finally {
+    $release = $db->prepare('SELECT RELEASE_LOCK(?)');
+    $release->execute([$wakeKey]);
+}
+if ($lastWake !== null) {
+    Response::json([
+        'success' => false,
+        'error' => 'rate_limited',
+        'retry_after' => max(1, 60 - (time() - (int) $lastWake)),
+    ], 429);
+}
+if (!$reserved) {
+    Response::error('refresh_temporarily_unavailable', 503);
 }
 
 if (!class_exists('FirebaseMessaging')) {
@@ -47,7 +59,7 @@ if (!class_exists('FirebaseMessaging')) {
 // Wake button "did nothing".
 try {
     $stmt = $db->prepare("
-        SELECT ft.id AS token_id, ft.token
+        SELECT ft.id AS token_id, ft.token, u.id AS user_id
         FROM users u
         JOIN fcm_tokens ft
             ON ft.user_id = u.id
@@ -75,13 +87,14 @@ $failed = 0;
 
 foreach ($targets as $t) {
     // No keepalive flag: the receiving app treats this as a user-initiated
-    // wake and triggers burst mode + an immediate high-accuracy fix.
+    // wake and requests one fresh fix.
     // 60s TTL + collapse key: a wake older than the rate-limit window is
     // useless, and an offline phone must never replay a night's worth of
-    // queued wakes as GPS bursts when it comes back online.
+    // queued wake requests when it comes back online.
     $result = $fcm->send($t['token'], [], [
         'type' => 'wake_tracking',
         'initiated_by' => (string) $ctx->userId,
+        'recipient_user_id' => (string) $t['user_id'],
     ], [
         'ttl' => '60s',
         'collapse_key' => 'wake_tracking',

@@ -1,6 +1,13 @@
 <?php
 declare(strict_types=1);
 
+if (str_contains($_SERVER['HTTP_USER_AGENT'] ?? '', 'RelativesAndroid/')) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'error' => 'Use Google Play to manage subscriptions.']);
+    exit;
+}
+
 require_once __DIR__ . '/../core/session_boot.php';
 
 header('Content-Type: application/json');

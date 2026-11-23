@@ -29,7 +29,8 @@ class SiteContext
      */
     public static function fromSession(PDO $db): ?self
     {
-        if (empty($_SESSION['user_id'])) {
+        $sessionToken = $_SESSION['session_token'] ?? null;
+        if (empty($_SESSION['user_id']) || !is_string($sessionToken) || $sessionToken === '') {
             return null;
         }
 
@@ -37,10 +38,11 @@ class SiteContext
             SELECT u.id, u.family_id, u.role, u.full_name AS name,
                    u.location_sharing, u.status
             FROM users u
+            JOIN sessions s ON s.user_id = u.id AND s.session_token = ? AND s.expires_at > NOW()
             WHERE u.id = ? AND u.status = 'active'
             LIMIT 1
         ");
-        $stmt->execute([$_SESSION['user_id']]);
+        $stmt->execute([hash('sha256', $sessionToken), $_SESSION['user_id']]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user) {

@@ -167,8 +167,19 @@ class SubscriptionManager {
         ];
     }
     
+    public const GOOGLE_PLAY_MONTHLY_PRODUCTS = [
+        'relatives.starter.monthly', 'relatives.family.monthly', 'relatives.big.monthly',
+    ];
+
+    public function googlePlayProducts(): array {
+        $stmt = $this->db->prepare('SELECT code FROM plans WHERE is_active = 1 AND code IN (?, ?, ?)');
+        $stmt->execute(self::GOOGLE_PLAY_MONTHLY_PRODUCTS);
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+
     /**
-     * Activate subscription from native store
+     * Commit an already verified entitlement. Serialize replays of the same
+     * token so two families cannot claim an existing purchase concurrently.
      */
     public function activateSubscription(
         int $familyId,
@@ -176,88 +187,139 @@ class SubscriptionManager {
         string $productId,
         string $purchaseToken,
         array $verificationResult
-    ): array {
-        if (!$verificationResult['ok'] || $verificationResult['status'] !== 'active') {
-            throw new Exception('Subscription verification failed');
+    ): void {
+        if (($verificationResult['ok'] ?? false) !== true || $verificationResult['status'] !== 'active') {
+            throw new DomainException('Purchase has no active entitlement.');
         }
-        
-        $this->db->beginTransaction();
-        
+        $lockName = hash('sha256', 'relatives:purchase:' . $provider . ':' . $purchaseToken);
+        $lock = $this->db->prepare('SELECT GET_LOCK(?, 5)');
+        $lock->execute([$lockName]);
+        if ((int) $lock->fetchColumn() !== 1) {
+            throw new RuntimeException('Could not lock purchase.');
+        }
+
         try {
-            // Check if subscription already exists
-            $stmt = $this->db->prepare("
-                SELECT id FROM subscriptions 
-                WHERE family_id = ? AND provider = ? AND store_purchase_token = ?
-            ");
-            $stmt->execute([$familyId, $provider, $purchaseToken]);
-            $existingId = $stmt->fetchColumn();
-            
-            if ($existingId) {
-                // Update existing
-                $stmt = $this->db->prepare("
-                    UPDATE subscriptions 
-                    SET store_product_id = ?,
-                        store_order_id = ?,
-                        status = 'active',
-                        expires_at = ?,
-                        last_verified_at = NOW(),
-                        updated_at = NOW()
-                    WHERE id = ?
-                ");
-                $stmt->execute([
-                    $productId,
-                    $verificationResult['order_id'] ?? null,
-                    $verificationResult['expiry_time'],
-                    $existingId
-                ]);
-            } else {
-                // Insert new
-                $stmt = $this->db->prepare("
-                    INSERT INTO subscriptions (
-                        family_id, provider, store_product_id, store_purchase_token, 
-                        store_order_id, plan_id, platform, platform_subscription_id,
-                        platform_product_id, status, started_at, expires_at,
-                        last_verified_at, created_at
-                    ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 'active', NOW(), ?, NOW(), NOW())
-                ");
-                
-                $platform = $provider === 'google_play' ? 'google' : 'apple';
-                
-                $stmt->execute([
-                    $familyId,
-                    $provider,
-                    $productId,
-                    $purchaseToken,
-                    $verificationResult['order_id'] ?? null,
-                    $platform,
-                    $verificationResult['order_id'] ?? $purchaseToken,
-                    $productId,
-                    $verificationResult['expiry_time']
-                ]);
+            $this->db->beginTransaction();
+            $find = $this->db->prepare('
+                SELECT id, family_id, plan_id FROM subscriptions
+                WHERE provider = ? AND BINARY store_purchase_token = ?
+                FOR UPDATE
+            ');
+            $find->execute([$provider, $purchaseToken]);
+            $existing = $find->fetchAll();
+            foreach ($existing as $record) {
+                if ((int) $record['family_id'] !== $familyId) {
+                    throw new DomainException('Purchase is linked to another family.');
+                }
             }
-            
-            // Log payment
-            $stmt = $this->db->prepare("
-                INSERT INTO payment_history (
-                    family_id, provider, external_id, external_raw, 
-                    amount_cents, currency, status, created_at
-                ) VALUES (?, ?, ?, ?, 0, 'ZAR', 'successful', NOW())
+
+            if ($provider === 'google_play') {
+                $account = $verificationResult['account_id'] ?? null;
+                // Old purchases can be restored against their existing server association.
+                if ($account === null ? !$existing :
+                    !is_string($account) || !hash_equals(GooglePlayVerifier::familyAccountId($familyId), $account)) {
+                    throw new DomainException('Purchase was not made for this family.');
+                }
+            }
+
+            $plan = $this->db->prepare('SELECT id FROM plans WHERE code = ? AND is_active = 1');
+            $plan->execute([$productId]);
+            $planId = $plan->fetchColumn();
+            if ($planId === false) {
+                $planId = $existing[0]['plan_id'] ?? null;
+            }
+            if ($planId === null) {
+                throw new DomainException('Purchase plan is unavailable.');
+            }
+
+            $expiry = $verificationResult['expiry_time'];
+            $start = $verificationResult['start_time'] ?? null;
+            $order = $verificationResult['order_id'] ?? null;
+            if ($existing) {
+                $write = $this->db->prepare("
+                    UPDATE subscriptions SET store_product_id = ?, store_order_id = ?, plan_id = ?,
+                        status = 'active', expires_at = ?, last_verified_at = NOW()
+                    WHERE provider = ? AND BINARY store_purchase_token = ? AND family_id = ?
+                ");
+                $write->execute([$productId, $order, $planId, $expiry, $provider, $purchaseToken, $familyId]);
+            } else {
+                $write = $this->db->prepare("
+                    INSERT INTO subscriptions (
+                        family_id, provider, store_product_id, store_purchase_token, store_order_id,
+                        plan_id, status, current_period_start, expires_at, last_verified_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, NOW())
+                ");
+                $write->execute([$familyId, $provider, $productId, $purchaseToken, $order, $planId, $start, $expiry]);
+            }
+
+            $family = $this->db->prepare("
+                UPDATE families SET current_plan_id = ?, billing_platform = ?,
+                    subscription_status = 'active', subscription_expires_at = ?
+                WHERE id = ? AND (subscription_expires_at IS NULL OR subscription_expires_at <= ?)
             ");
-            
-            $stmt->execute([
-                $familyId,
-                $provider,
-                $verificationResult['order_id'] ?? null,
-                json_encode($verificationResult['raw'] ?? [])
-            ]);
-            
+            $family->execute([$planId, $provider, $expiry, $familyId, $expiry]);
             $this->db->commit();
-            
-            return ['ok' => true, 'status' => 'active'];
-            
-        } catch (Exception $e) {
-            $this->db->rollBack();
-            throw $e;
+        } catch (Throwable $error) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $error;
+        } finally {
+            $release = $this->db->prepare('SELECT RELEASE_LOCK(?)');
+            $release->execute([$lockName]);
         }
     }
+
+    /** Revoke a Google Play entitlement after a successful store-state check. */
+    public function expireGooglePlaySubscription(int $subscriptionId, string $verifiedExpiry): void {
+        $this->db->beginTransaction();
+        try {
+            $find = $this->db->prepare("
+                SELECT id, family_id, plan_id, expires_at FROM subscriptions
+                WHERE id = ? AND provider = 'google_play' FOR UPDATE
+            ");
+            $find->execute([$subscriptionId]);
+            $previous = $find->fetch();
+            if (!$previous) {
+                $this->db->commit();
+                return;
+            }
+
+            $update = $this->db->prepare("
+                UPDATE subscriptions SET status = IF(? > NOW(), 'paused', 'expired'),
+                    expires_at = ?, last_verified_at = NOW()
+                WHERE id = ?
+            ");
+            $update->execute([$verifiedExpiry, $verifiedExpiry, $subscriptionId]);
+
+            $active = $this->db->prepare("
+                SELECT plan_id, provider, expires_at FROM subscriptions
+                WHERE family_id = ? AND status = 'active' AND expires_at > NOW()
+                    AND provider IN ('google_play', 'apple_app_store')
+                ORDER BY expires_at DESC LIMIT 1
+            ");
+            $active->execute([$previous['family_id']]);
+            $replacement = $active->fetch();
+            $family = $this->db->prepare("
+                UPDATE families SET current_plan_id = ?, billing_platform = ?,
+                    subscription_status = ?, subscription_expires_at = ?
+                WHERE id = ? AND billing_platform = 'google_play'
+                    AND current_plan_id <=> ? AND subscription_expires_at <=> ?
+            ");
+            $family->execute([
+                $replacement['plan_id'] ?? null,
+                $replacement['provider'] ?? 'none',
+                $replacement ? 'active' : 'expired',
+                $replacement['expires_at'] ?? null,
+                $previous['family_id'], $previous['plan_id'], $previous['expires_at'],
+            ]);
+            $this->db->commit();
+        } catch (Throwable $error) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $error;
+        }
+    }
+
 }

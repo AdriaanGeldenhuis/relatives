@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 
+if (str_contains($_SERVER['HTTP_USER_AGENT'] ?? '', 'RelativesAndroid/')) {
+    header('Location: /profile/subscription.php', true, 303);
+    exit;
+}
+
 require_once __DIR__ . '/../core/session_boot.php';
 
 if (!isset($_SESSION['user_id'])) {

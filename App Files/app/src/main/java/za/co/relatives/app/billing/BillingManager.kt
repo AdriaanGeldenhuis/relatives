@@ -9,6 +9,7 @@ import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ProductDetails
+import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
@@ -63,6 +64,9 @@ class BillingManager(context: Context) {
     private val _purchaseState = MutableStateFlow<PurchaseState>(PurchaseState.Idle)
     val purchaseState: StateFlow<PurchaseState> = _purchaseState.asStateFlow()
 
+    private val _queryComplete = MutableStateFlow(false)
+    val queryComplete: StateFlow<Boolean> = _queryComplete.asStateFlow()
+
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
@@ -76,7 +80,8 @@ class BillingManager(context: Context) {
 
     private val billingClient: BillingClient = BillingClient.newBuilder(context.applicationContext)
         .setListener(purchasesUpdatedListener)
-        .enablePendingPurchases()
+        .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
+        .enableAutoServiceReconnection()
         .build()
 
     // ------------------------------------------------------------------ //
@@ -94,6 +99,7 @@ class BillingManager(context: Context) {
             return
         }
 
+        _queryComplete.value = false
         billingClient.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) {
@@ -103,6 +109,7 @@ class BillingManager(context: Context) {
                 } else {
                     Log.e(TAG, "Billing setup failed: ${result.debugMessage}")
                     _isConnected.value = false
+                    _queryComplete.value = true
                 }
             }
 
@@ -115,9 +122,7 @@ class BillingManager(context: Context) {
 
     /** Release resources. Call from onDestroy. */
     fun destroy() {
-        if (billingClient.isReady) {
-            billingClient.endConnection()
-        }
+        billingClient.endConnection()
     }
 
     // ------------------------------------------------------------------ //
@@ -137,13 +142,14 @@ class BillingManager(context: Context) {
             .setProductList(productList)
             .build()
 
-        billingClient.queryProductDetailsAsync(params) { result, detailsList ->
-            if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                _productDetails.value = detailsList
-                Log.d(TAG, "Queried ${detailsList.size} product details")
+        billingClient.queryProductDetailsAsync(params) { result, query ->
+            _productDetails.value = if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                query.productDetailsList.filter { monthlyOffer(it) != null }
             } else {
-                Log.e(TAG, "Product details query failed: ${result.debugMessage}")
+                Log.w(TAG, "Product details query failed: ${result.responseCode}")
+                emptyList()
             }
+            _queryComplete.value = true
         }
     }
 
@@ -156,19 +162,17 @@ class BillingManager(context: Context) {
      *
      * @param activity The foreground activity required by the billing API.
      * @param details  The [ProductDetails] for the chosen subscription tier.
-     * @param offerToken The offer token from the subscription offer. If null,
-     *   the first available offer is used.
+     * @param accountId The opaque, server-issued family account binding.
      * @return The [BillingResult] from `launchBillingFlow`.
      */
     fun launchPurchaseFlow(
         activity: Activity,
         details: ProductDetails,
-        offerToken: String? = null
+        accountId: String
     ): BillingResult {
         _purchaseState.value = PurchaseState.Pending
 
-        val token = offerToken
-            ?: details.subscriptionOfferDetails?.firstOrNull()?.offerToken
+        val token = monthlyOffer(details)?.offerToken
             ?: run {
                 val msg = "No offer token available for ${details.productId}"
                 Log.e(TAG, msg)
@@ -188,9 +192,14 @@ class BillingManager(context: Context) {
 
         val flowParams = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(listOf(productDetailsParams))
+            .setObfuscatedAccountId(accountId)
             .build()
 
-        return billingClient.launchBillingFlow(activity, flowParams)
+        val result = billingClient.launchBillingFlow(activity, flowParams)
+        if (result.responseCode != BillingClient.BillingResponseCode.OK) {
+            handlePurchasesUpdated(result, null)
+        }
+        return result
     }
 
     // ------------------------------------------------------------------ //
@@ -205,7 +214,6 @@ class BillingManager(context: Context) {
             BillingClient.BillingResponseCode.OK -> {
                 purchases?.forEach { purchase ->
                     if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
-                        acknowledgePurchase(purchase)
                         _purchaseState.value = PurchaseState.Success(purchase)
                     } else if (purchase.purchaseState == Purchase.PurchaseState.PENDING) {
                         _purchaseState.value = PurchaseState.Pending
@@ -229,8 +237,11 @@ class BillingManager(context: Context) {
     /**
      * Acknowledge a purchase so Google does not auto-refund after 3 days.
      */
-    private fun acknowledgePurchase(purchase: Purchase) {
-        if (purchase.isAcknowledged) return
+    fun acknowledgeVerifiedPurchase(purchase: Purchase, completed: (Boolean) -> Unit) {
+        if (purchase.isAcknowledged) {
+            completed(true)
+            return
+        }
 
         val params = AcknowledgePurchaseParams.newBuilder()
             .setPurchaseToken(purchase.purchaseToken)
@@ -238,9 +249,10 @@ class BillingManager(context: Context) {
 
         billingClient.acknowledgePurchase(params) { result ->
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                Log.d(TAG, "Purchase acknowledged: ${purchase.orderId}")
+                completed(true)
             } else {
-                Log.e(TAG, "Failed to acknowledge purchase: ${result.debugMessage}")
+                Log.w(TAG, "Failed to acknowledge purchase: ${result.responseCode}")
+                completed(false)
             }
         }
     }
@@ -264,14 +276,6 @@ class BillingManager(context: Context) {
             billingClient.queryPurchasesAsync(params) { result, purchases ->
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                     Log.d(TAG, "Found ${purchases.size} existing purchase(s)")
-                    // Acknowledge any un-acknowledged purchases.
-                    purchases.forEach { purchase ->
-                        if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED &&
-                            !purchase.isAcknowledged
-                        ) {
-                            acknowledgePurchase(purchase)
-                        }
-                    }
                     cont.resume(purchases)
                 } else {
                     Log.e(TAG, "Query purchases failed: ${result.debugMessage}")
@@ -280,22 +284,18 @@ class BillingManager(context: Context) {
             }
         }
 
-    /**
-     * Helper to find [ProductDetails] by product ID.
-     */
-    fun getProductById(productId: String): ProductDetails? {
-        return _productDetails.value.find { it.productId == productId }
+    fun getFormattedPrice(details: ProductDetails): String? =
+        monthlyOffer(details)?.pricingPhases?.pricingPhaseList?.singleOrNull()?.formattedPrice
+
+    fun clearPurchaseState() {
+        _purchaseState.value = PurchaseState.Idle
     }
 
-    /**
-     * Format a human-readable price string for the given product's first offer.
-     */
-    fun getFormattedPrice(details: ProductDetails): String? {
-        return details.subscriptionOfferDetails
-            ?.firstOrNull()
-            ?.pricingPhases
-            ?.pricingPhaseList
-            ?.firstOrNull()
-            ?.formattedPrice
-    }
+    // Display and purchase the same auto-renewing monthly base plan.
+    private fun monthlyOffer(details: ProductDetails): ProductDetails.SubscriptionOfferDetails? =
+        details.subscriptionOfferDetails?.firstOrNull { offer ->
+            val phase = offer.pricingPhases.pricingPhaseList.singleOrNull()
+            offer.offerId == null && phase?.billingPeriod == "P1M" &&
+                phase.recurrenceMode == ProductDetails.RecurrenceMode.INFINITE_RECURRING
+        }
 }

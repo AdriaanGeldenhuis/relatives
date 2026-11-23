@@ -1,6 +1,12 @@
 package za.co.relatives.app.network
 
 import android.content.Context
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
+import java.io.IOException
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -48,7 +54,8 @@ object NetworkClient {
      */
     fun setSessionCookie(domain: String, name: String, value: String) {
         val cookie = Cookie.Builder()
-            .domain(domain)
+            .hostOnlyDomain(domain)
+            .secure()
             .name(name)
             .value(value)
             .path("/")
@@ -94,7 +101,7 @@ object NetworkClient {
 
                 override fun loadForRequest(url: HttpUrl): List<Cookie> {
                     return synchronized(cookieStore) {
-                        cookieStore[url.host].orEmpty().toList()
+                        cookieStore[url.host].orEmpty().filter { it.expiresAt > System.currentTimeMillis() && it.matches(url) }
                     }
                 }
             })
@@ -116,3 +123,20 @@ object NetworkClient {
         }
     }
 }
+
+
+/** Close the response and cancel the socket when its owning coroutine stops. */
+internal suspend fun Call.readTextResponse(): Pair<Int, String?> =
+    suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation { cancel() }
+        enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                continuation.resumeWithException(e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val result = runCatching { response.use { it.code to it.body?.string() } }
+                continuation.resumeWith(result)
+            }
+        })
+    }

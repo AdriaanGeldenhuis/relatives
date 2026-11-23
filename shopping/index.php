@@ -730,7 +730,7 @@ document.addEventListener('DOMContentLoaded', function() {
 window.currentListId = <?php echo $currentListId; ?>;
 window.currentUser = <?php echo json_encode([
     'id' => $user['id'],
-    'name' => $user['full_name']
+    'name' => $user['name']
 ]); ?>;
 window.allItems = <?php echo json_encode($currentList['items']); ?>;
 window.categories = <?php echo json_encode($categories); ?>;

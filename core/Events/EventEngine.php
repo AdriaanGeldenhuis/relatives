@@ -321,7 +321,7 @@ class EventEngine {
     // END FOCUS SESSION
     // ============================================
 
-    public function endFocus(int $eventId, int $rating = null): array {
+    public function endFocus(int $eventId, ?int $rating = null): array {
         $event = $this->getById($eventId);
         if (!$event) {
             return ['success' => false, 'error' => 'Event not found'];
@@ -490,7 +490,7 @@ class EventEngine {
     // CONFLICT DETECTION
     // ============================================
 
-    public function checkConflicts(string $startsAt, string $endsAt, int $userId = null, int $excludeId = null): ?array {
+    public function checkConflicts(string $startsAt, string $endsAt, ?int $userId = null, ?int $excludeId = null): ?array {
         $userId = $userId ?? $this->userId;
 
         $sql = "

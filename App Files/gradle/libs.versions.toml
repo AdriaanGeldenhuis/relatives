@@ -14,11 +14,15 @@ activityCompose = "1.12.0"
 composeBom = "2025.10.01"
 playServicesLocation = "21.3.0"
 okhttp = "4.12.0"
-billingKtx = "7.1.1"
+billingKtx = "8.3.0"
+webkit = "1.15.0"
+fragment = "1.8.9"
 gson = "2.10.1"
 workRuntimeKtx = "2.10.1"
 
 [libraries]
+androidx-fragment = { group = "androidx.fragment", name = "fragment", version.ref = "fragment" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

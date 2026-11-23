@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import za.co.relatives.app.tracking.TrackingService
+import za.co.relatives.app.tracking.WatchdogAlarmReceiver
 
 /**
  * Restarts [TrackingService] after device boot or app update,
@@ -25,20 +26,15 @@ class BootReceiver : BroadcastReceiver() {
         )
         if (intent.action !in validActions) return
 
-        val prefs = context.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
-        val enabled = prefs.getBoolean("tracking_enabled", false)
-
-        if (enabled &&
+        WatchdogAlarmReceiver.cancel(context)
+        if (TrackingService.isTrackingEnabled(context) &&
             TrackingService.hasLocationPermission(context) &&
             TrackingService.canReviveFromBackground(context)
         ) {
-            // On Android 15+ a BOOT_COMPLETED receiver may not start a
-            // location foreground service; TrackingService.start() swallows
-            // the refusal and MainActivity re-starts tracking on next open.
-            // Without background location a boot-started service would get
-            // no fixes at all, so that case also waits for the next app open.
+            // Android may defer or refuse a background restart. In that case
+            // the app resumes sharing when the user next opens it.
             Log.i(TAG, "Tracking was enabled, restarting service after boot")
-            TrackingService.start(context)
+            TrackingService.revive(context)
         }
     }
 }

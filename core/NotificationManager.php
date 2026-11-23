@@ -168,6 +168,7 @@ class NotificationManager {
                 'type' => $data['type'],
                 'action_url' => $data['action_url'] ?? '/'
             ], $data['data'] ?? []);
+            $fcmData['recipient_user_id'] = (string) $data['user_id'];
 
             // Send to all tokens
             foreach ($tokens as $tokenData) {

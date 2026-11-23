@@ -63,10 +63,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ob_end_clean();
             }
             
-            // Get session token
-            $sessionToken = $result['session_token'] ?? '';
-            $userId = $_SESSION['user_id'] ?? '';
-            
             // Output login success page with IMPROVED redirect
             ?>
 <!DOCTYPE html>
@@ -238,30 +234,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             console.log('✅ Login success - initializing redirect...');
             
             var redirected = false;
-            var userId = '<?php echo addslashes($userId); ?>';
-            var sessionToken = '<?php echo addslashes($sessionToken); ?>';
             
             // Prevent back button
             if (window.history && window.history.pushState) {
                 window.history.replaceState(null, null, window.location.href);
-            }
-            
-            // Android WebView integration
-            if (window.Android && typeof Android.setAuthData === 'function') {
-                try {
-                    console.log('📱 Setting Android auth data...');
-                    Android.setAuthData(userId, sessionToken);
-                    
-                    // Get FCM token
-                    setTimeout(function() {
-                        if (typeof Android.getFCMToken === 'function') {
-                            console.log('🔔 Getting FCM token...');
-                            Android.getFCMToken();
-                        }
-                    }, 100);
-                } catch (e) {
-                    console.error('⚠️ Android integration error:', e);
-                }
             }
             
             // Where to land after login (validated server-side: internal path only)

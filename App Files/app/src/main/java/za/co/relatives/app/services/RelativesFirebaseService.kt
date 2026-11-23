@@ -5,9 +5,9 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import za.co.relatives.app.R
 import za.co.relatives.app.RelativesApplication
-import za.co.relatives.app.tracking.TrackingRestartWorker
 import za.co.relatives.app.tracking.TrackingService
 import za.co.relatives.app.utils.NotificationHelper
+import za.co.relatives.app.utils.PreferencesManager
 
 /**
  * Firebase Cloud Messaging service for the Relatives app.
@@ -18,8 +18,7 @@ import za.co.relatives.app.utils.NotificationHelper
  * Supported notification types:
  * - `message`, `shopping`, `calendar`, `schedule`, `tracking`, `weather`,
  *   `note`, `system` -- displayed as a visible notification with optional deep link.
- * - `wake_tracking` -- silently triggers WAKE mode on [TrackingService]
- *   without showing any notification to the user.
+ * - `wake_tracking` -- shows a family refresh notice and requests one fix if sharing is active.
  */
 class RelativesFirebaseService : FirebaseMessagingService() {
 
@@ -54,12 +53,16 @@ class RelativesFirebaseService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         val data = message.data
+        if (!PreferencesManager(this).isPushRecipient(data["recipient_user_id"])) return
         val type = data["type"] ?: "system"
 
-        Log.d(TAG, "Message received: type=$type data=$data")
+        Log.d(TAG, "Message received: type=$type")
 
         when (type) {
-            "wake_tracking" -> handleWakeTracking(keepalive = data["keepalive"] == "1")
+            "wake_tracking" -> handleWakeTracking(
+                keepalive = data["keepalive"] == "1",
+                expedited = message.priority == RemoteMessage.PRIORITY_HIGH,
+            )
             else -> handleVisibleNotification(type, data, message.notification)
         }
     }
@@ -68,60 +71,20 @@ class RelativesFirebaseService : FirebaseMessagingService() {
     //  Wake tracking (silent)
     // ------------------------------------------------------------------ //
 
-    /**
-     * Silently trigger a WAKE location fix without showing any notification.
-     * Used when another family member taps "Wake" on the tracking screen.
-     *
-     * Only acts when this device has tracking enabled AND location permission —
-     * otherwise the service cannot legally run as a location foreground
-     * service and the wake must be ignored (previously this crashed every
-     * family device that had never enabled tracking).
-     */
-    private fun handleWakeTracking(keepalive: Boolean) {
-        if (!TrackingService.isTrackingEnabled(this)) {
-            Log.d(TAG, "Wake tracking ignored: tracking not enabled on this device")
+    private fun handleWakeTracking(keepalive: Boolean, expedited: Boolean) {
+        if (!TrackingService.isTrackingEnabled(this) ||
+            !TrackingService.hasLocationPermission(this) ||
+            !TrackingService.canShowTrackingNotification(this) ||
+            !TrackingService.canReviveFromBackground(this)
+        ) return
+
+        if (keepalive) {
+            if (!TrackingService.isRunning) TrackingService.revive(this)
             return
         }
-        if (!TrackingService.hasLocationPermission(this)) {
-            Log.d(TAG, "Wake tracking ignored: no location permission")
-            return
-        }
-        if (!TrackingService.canReviveFromBackground(this)) {
-            // A service *started* from the background without background
-            // location never receives fixes — it would just sit in MOVING
-            // mode with a notification, burning battery for nothing.
-            Log.d(TAG, "Wake tracking ignored: no background location and service not running")
-            return
-        }
-        try {
-            if (keepalive) {
-                // Server cron keepalive: this high-priority push grants a
-                // temporary background-start exemption, so a service the OS
-                // killed can be revived here. Quiet IDLE restart only — a
-                // GPS burst every cron tick would drain the battery. revive()
-                // (not start()) so a racing user disable always wins.
-                Log.d(TAG, "Keepalive wake: ensuring TrackingService is running")
-                TrackingService.revive(this)
-                // The push also re-kicks the watchdog: on OEMs that throttle
-                // the 15-min periodic schedule (Huawei/Honor especially) the
-                // cron keepalive is effectively the scheduler, and the worker
-                // captures a fix if the service revival above was refused.
-                TrackingRestartWorker.enqueue(this)
-            } else {
-                // A family member tapped "Wake": burst mode + immediate fix.
-                Log.d(TAG, "Wake tracking: triggering motion mode")
-                TrackingService.motionStarted(this)
-                // Belt and braces: motionStarted swallows the Android 12+
-                // background-FGS refusal, and on OEM-restricted devices that
-                // refusal is the NORM, not the exception — the wake then did
-                // nothing at all. The force-fix worker captures and uploads
-                // one fresh fix regardless of whether the service could start,
-                // so the family always gets an updated dot from a wake.
-                TrackingRestartWorker.enqueueWakeFix(this)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Wake tracking failed", e)
-        }
+
+        TrackingService.showFamilyRefreshNotification(this)
+        TrackingService.requestWakeFix(this, expedited)
     }
 
     // ------------------------------------------------------------------ //

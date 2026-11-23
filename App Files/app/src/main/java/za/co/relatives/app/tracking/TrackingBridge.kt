@@ -1,143 +1,72 @@
 package za.co.relatives.app.tracking
 
-import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import androidx.webkit.JavaScriptReplyProxy
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import org.json.JSONObject
 import za.co.relatives.app.MainActivity
 
-/**
- * TrackingBridge — JavaScript interface exposed as `window.TrackingBridge`.
- *
- * UI actions:
- *   startTracking  → PermissionGate → TrackingService.start
- *   stopTracking   → TrackingService.stop
- *   getCachedFamily → TrackingStore dump to JS for Mapbox render
- *   wakeAllDevices → TrackingService.wake (FCM push via server)
- *   getTrackingMode → returns "enabled" / "disabled" / "no_permission"
- *
- * All mutating methods dispatch to the UI thread via [MainActivity.runOnUiThread].
- * Read-only methods return synchronously (lightweight SharedPreferences reads).
- */
-class TrackingBridge(private val activity: MainActivity) {
+/** Accept commands only from the trusted top-level document displaying the relevant feature. */
+internal class TrackingBridge(private val activity: MainActivity) {
+    companion object {
+        private val ALLOWED_ORIGINS = setOf("https://www.relatives.co.za", "https://relatives.co.za")
+    }
 
-    /**
-     * Run [action] on the UI thread, swallowing any exception. Bridge calls
-     * originate from the WebView's JavaBridge thread and can land while the
-     * activity is finishing (e.g. dialog on a dead window) — nothing a web
-     * page triggers may ever crash the app.
-     */
-    private inline fun safeOnUiThread(crossinline action: () -> Unit) {
-        activity.runOnUiThread {
-            try {
-                action()
-            } catch (e: Exception) {
-                android.util.Log.w("TrackingBridge", "Bridge call failed", e)
+    fun install(webView: WebView) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
+
+        WebViewCompat.addWebMessageListener(webView, "RelativesNative", ALLOWED_ORIGINS) {
+                view, message, origin, isMainFrame, reply ->
+            if (!isMainFrame || !activity.isCurrentTrustedPage(view, origin)) return@addWebMessageListener
+            val command = message.data ?: return@addWebMessageListener
+            val path = view.url?.let { android.net.Uri.parse(it).path }
+            if (command == "notifications" && path?.startsWith("/notifications/") == true) {
+                activity.requestNotificationPermission()
+            } else if (command == "stop" && (path == "/profile/privacy.php" || path == "/legal/delete-account.php")) {
+                activity.stopTrackingService()
+            } else if (activity.isTrackingMap(view.url)) {
+                handleTrackingCommand(command, reply)
             }
         }
+        val script = activity.assets.open("tracking-bridge.js").bufferedReader().use { it.readText() }
+        WebViewCompat.addDocumentStartJavaScript(webView, script, ALLOWED_ORIGINS)
     }
 
-    /**
-     * Returns cached family member locations as a JSON string.
-     * The map JS uses this to render pins immediately without waiting
-     * for the next API poll — this is the cache-to-render pipeline.
-     */
-    @JavascriptInterface
-    fun getCachedFamily(): String {
-        return try {
-            activity.trackingStore.familyLocationsJson()
-        } catch (e: Exception) {
-            "[]"
+    private fun handleTrackingCommand(command: String, reply: JavaScriptReplyProxy) {
+        when (command) {
+            "state" -> sendState(reply)
+            "start" -> activity.startTrackingWithPermissions { sendState(reply) }
+            "stop" -> {
+                activity.stopTrackingService()
+                sendState(reply)
+            }
+            "refresh_device" -> activity.wakeAllDevices()
+            "map_visible" -> {
+                activity.onTrackingScreenVisible()
+                sendState(reply)
+            }
+            "map_hidden" -> activity.onTrackingScreenHidden()
+            "navigation" -> sendReply(
+                reply, JSONObject().put("type", "navigation").put("allowed", activity.prepareWebNavigation()),
+            )
         }
     }
 
-    /**
-     * Start tracking. Goes through PermissionGate first —
-     * prominent disclosure → foreground permission → background → start service.
-     */
-    @JavascriptInterface
-    fun startTracking() {
-        safeOnUiThread {
-            activity.startTrackingWithPermissions()
-        }
+    private fun sendState(reply: JavaScriptReplyProxy) {
+        val store = activity.trackingStore
+        val state = JSONObject().put("type", "state")
+            .put("mode", activity.getTrackingMode())
+            .put("cacheAge", store.familyCacheAgeMillis())
+            .put("family", store.familyLocationsJson())
+        sendReply(reply, state)
     }
 
-    /**
-     * Stop tracking. Immediately stops the foreground service.
-     */
-    @JavascriptInterface
-    fun stopTracking() {
-        safeOnUiThread {
-            activity.stopTrackingService()
-        }
-    }
-
-    /**
-     * Returns the current tracking state:
-     *  - "enabled"       — tracking is on and permissions granted
-     *  - "disabled"      — user has turned tracking off
-     *  - "no_permission" — location permission not yet granted
-     */
-    @JavascriptInterface
-    fun getTrackingMode(): String {
-        return try {
-            activity.getTrackingMode()
-        } catch (e: Exception) {
-            "disabled"
-        }
-    }
-
-    /**
-     * Returns true when tracking is enabled AND permission is granted.
-     */
-    @JavascriptInterface
-    fun isTrackingEnabled(): Boolean {
-        return try {
-            activity.isTrackingActive()
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    /**
-     * Send a wake push to all family devices via the server.
-     * Triggers WAKE (burst) mode on receiving devices.
-     */
-    @JavascriptInterface
-    fun wakeAllDevices() {
-        safeOnUiThread {
-            activity.wakeAllDevices()
-        }
-    }
-
-    /**
-     * Request notification permission (Android 13+).
-     * Called when the user visits the notifications page so they can
-     * receive push notifications.
-     */
-    @JavascriptInterface
-    fun requestNotificationPermission() {
-        safeOnUiThread {
-            activity.requestNotificationPermission()
-        }
-    }
-
-    /**
-     * Notify native side that the tracking map screen is now visible.
-     * Triggers faster polling and a location boost.
-     */
-    @JavascriptInterface
-    fun onTrackingScreenVisible() {
-        safeOnUiThread {
-            activity.onTrackingScreenVisible()
-        }
-    }
-
-    /**
-     * Notify native side that the tracking map screen is now hidden.
-     * Reverts to slower background polling.
-     */
-    @JavascriptInterface
-    fun onTrackingScreenHidden() {
-        safeOnUiThread {
-            activity.onTrackingScreenHidden()
+    private fun sendReply(reply: JavaScriptReplyProxy, payload: JSONObject) {
+        // The permission prompt can outlive the WebView document that opened it.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            runCatching { reply.postMessage(payload.toString()) }
         }
     }
 }

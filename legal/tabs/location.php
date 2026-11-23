@@ -1,7 +1,5 @@
 <div class="doc-header">
     <h2 class="doc-title">Location Tracking Policy</h2>
-    <p class="doc-badge">Required for Android Approval</p>
-    <p class="doc-updated">Last Updated: January 15, 2025</p>
 </div>
 
 <div class="doc-body">
@@ -28,37 +26,26 @@
     <h4>Foreground Location</h4>
     <p>Collected when the user:</p>
     <ul>
-        <li>Opens the Tracking section in the app or browser</li>
+        <li>Enables location sharing in the browser or Android app</li>
         <li>Opens any feature that requires their current position</li>
     </ul>
     
     <h4>Background Location (Native App Only)</h4>
-    <p>Collected ONLY if:</p>
-    <ul>
-        <li>The user installs the native app</li>
-        <li>The user explicitly grants "Allow all the time" permission</li>
-        <li>The device allows background activity (battery saver not blocking)</li>
-    </ul>
-    
-    <p>Background updates are used to:</p>
-    <ul>
-        <li>Keep family members aware of each other's movement</li>
-        <li>Update location even when the app is closed</li>
-        <li>Maintain accurate safety information</li>
-    </ul>
-    
+    <p>When you enable Android location sharing, Relatives can collect location while the app is closed or the screen is off. The ongoing Location Tracking notification shows that sharing is active and lets you stop it. If you grant the optional “Allow all the time” permission, Android can also allow location sharing to resume after an interruption and handle a family refresh when the app is closed.</p>
+
     <h3>3. User Control</h3>
     <p>Users can:</p>
     <ul>
         <li>Disable location permissions at any time</li>
-        <li>Stop background tracking</li>
+        <li>Stop this device in the family map or ongoing Location Tracking notification</li>
+        <li>Turn off account-wide sharing in Privacy &amp; Security</li>
         <li>Remove the app</li>
         <li>Ask the family admin to remove them from the group</li>
     </ul>
     
     <h3>4. Who Sees Location Data</h3>
     <p class="highlight">Only members of the same family group can view your location in the app.</p>
-    <p>We never publish, sell, or transfer location data outside the family group.</p>
+    <p>Coordinates are sent to our map service when you request directions. See the <a href="/legal/privacy.php">Relatives Privacy Policy</a> for details.</p>
     
     <h3>5. Accuracy Disclaimer</h3>
     <p>GPS accuracy varies based on:</p>

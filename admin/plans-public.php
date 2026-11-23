@@ -238,7 +238,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         
                         <div class="plan-cta">
                             <!-- Deep link button - only works in native app -->
-                            <a href="relatives://subscription" 
+                            <a href="<?= str_contains($_SERVER['HTTP_USER_AGENT'] ?? '', 'RelativesAndroid/') ? '/upgrade/' : 'relatives://subscription' ?>"
                                class="btn btn-primary btn-large" 
                                style="display: inline-flex; align-items: center; gap: 10px; text-decoration: none; margin-bottom: 15px;">
                                 <span style="font-size: 24px;">⚡</span>

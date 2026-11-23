@@ -405,23 +405,18 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var markers = {};
     var initialFitDone = false;
 
-    // Fetch family members periodically
+    function showMembers(members) {
+        _members = members;
+        renderMembers(_members);
+        updateMarkers(_members);
+        if (!initialFitDone && fitMapToFamily(_members)) initialFitDone = true;
+    }
+
     function fetchMembers() {
         fetch(window.TrackingConfig.apiBase + '/current.php', { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (data.success && data.data) {
-                    _members = data.data;
-                    renderMembers(_members);
-                    updateMarkers(_members);
-                    // Only latch the auto-fit once it actually framed someone;
-                    // fitMapToFamily returns true when it had points. Otherwise
-                    // the first poll (everyone still has_location=false) would
-                    // burn the one-shot fit and the map never centres.
-                    if (!initialFitDone && fitMapToFamily(_members)) {
-                        initialFitDone = true;
-                    }
-                }
+                if (data.success && Array.isArray(data.data)) showMembers(data.data);
             })
             .catch(function(err) {
                 console.error('[Tracking] Fetch error:', err);
@@ -851,12 +846,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         updateNavStep();
         updateNavRemaining();
 
-        // Start watching position for auto-advance
-        if (navigator.geolocation) {
-            _navWatchId = navigator.geolocation.watchPosition(onNavPosition, function(e) {
-                console.warn('[Nav] Geolocation error:', e.message);
-            }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 5000 });
-        }
+        startNavigationWatch();
 
         // Zoom to first step area
         if (map && _navSteps[0] && _navSteps[0].location) {
@@ -867,6 +857,33 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 duration: 1000
             });
         }
+    }
+
+    var navigationRequested = false;
+    function startNavigationWatch() {
+        if (!_navActive || document.hidden || !navigator.geolocation || _navWatchId !== null || navigationRequested) return;
+        function beginWatch() {
+            if (!_navActive || document.hidden || _navWatchId !== null) return;
+            _navWatchId = navigator.geolocation.watchPosition(onNavPosition, function(e) {
+                console.warn('[Nav] Geolocation error:', e.message);
+            }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 5000 });
+        }
+
+        if (window.TrackingBridge?.prepareNavigation) {
+            navigationRequested = true;
+            window.TrackingBridge.prepareNavigation().then(function(allowed) {
+                navigationRequested = false;
+                if (allowed) beginWatch();
+            });
+        } else {
+            beginWatch();
+        }
+    }
+
+    function stopNavigationWatch() {
+        if (_navWatchId === null) return;
+        navigator.geolocation.clearWatch(_navWatchId);
+        _navWatchId = null;
     }
 
     function updateNavStep() {
@@ -934,10 +951,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     function endNavigation() {
         _navActive = false;
 
-        if (_navWatchId !== null) {
-            navigator.geolocation.clearWatch(_navWatchId);
-            _navWatchId = null;
-        }
+        stopNavigationWatch();
 
         document.getElementById('navHeader').classList.remove('active');
         document.getElementById('navBottom').classList.remove('active');
@@ -1097,7 +1111,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Consent dialog logic (localStorage can throw in privacy modes)
     var consentOverlay = document.getElementById('consentOverlay');
     var hasConsent = null;
-    try { hasConsent = localStorage.getItem('tracking_consent'); } catch (e) {}
+    var browserShareLocation = true;
+    try {
+        hasConsent = localStorage.getItem('tracking_consent');
+        browserShareLocation = localStorage.getItem('tracking_browser_location') !== '0';
+    } catch (e) {}
 
     if (!hasConsent) {
         setTimeout(function() {
@@ -1113,9 +1131,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         // Honour the "Location Sharing" toggle in the dialog. In the app the
         // OS permission flow already governs sharing, so this only gates the
         // browser upload path.
-        var shareLoc = document.getElementById('consentLocation');
-        if (!isNativeApp && navigator.geolocation && (!shareLoc || shareLoc.checked)) {
-            startBrowserTracking();
+        if (!isNativeApp) {
+            var shareLoc = document.getElementById('consentLocation');
+            browserShareLocation = !shareLoc || shareLoc.checked;
+            try { localStorage.setItem('tracking_browser_location', browserShareLocation ? '1' : '0'); } catch (e) {}
+            if (browserShareLocation) startBrowserTracking();
+            else stopBrowserTracking();
         }
     });
 
@@ -1155,142 +1176,71 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // environment has been detected (see startPolling below).
 
     // ── TRACKING INTEGRATION ─────────────────────────────────────
-    // Detect environment: Android app (TrackingBridge) vs regular browser
-    var isNativeApp = typeof window.TrackingBridge !== 'undefined';
-    console.log('[Tracking] Environment:', isNativeApp ? 'Android App (native bridge)' : 'Browser');
+    var nativeBridge = window.TrackingBridge;
+    var isNativeApp = !!nativeBridge || /\bRelativesAndroid\//.test(navigator.userAgent);
 
-    if (isNativeApp) {
-        // ── NATIVE ANDROID APP ──────────────────────────────────
-        console.log('[Tracking] Native bridge detected');
-
-        // Tell native side the tracking screen is visible (triggers fast polling)
-        try { window.TrackingBridge.onTrackingScreenVisible(); } catch(e) {}
-
-        // Check tracking mode
-        var mode = 'unknown';
-        try { mode = window.TrackingBridge.getTrackingMode(); } catch(e) {}
-        console.log('[Tracking] Native tracking mode:', mode);
-
-        if (mode !== 'enabled') {
-            showEnableLocationButton();
-        }
-
-        // Notify when leaving tracking screen
-        window.addEventListener('beforeunload', function() {
-            try { window.TrackingBridge.onTrackingScreenHidden(); } catch(e) {}
-        });
-
-        // Listen for visibility changes to toggle native polling speed
+    if (nativeBridge) {
+        if (!document.hidden) nativeBridge.onTrackingScreenVisible();
+        showNativeSharingButton();
+        window.addEventListener('relativestrackingstate', function(event) { updateNativeSharingButton(event.detail); });
+        window.addEventListener('beforeunload', function() { nativeBridge.onTrackingScreenHidden(); });
         document.addEventListener('visibilitychange', function() {
-            try {
-                if (document.visibilityState === 'visible') {
-                    window.TrackingBridge.onTrackingScreenVisible();
-                } else {
-                    window.TrackingBridge.onTrackingScreenHidden();
-                }
-            } catch(e) {}
+            if (document.hidden) nativeBridge.onTrackingScreenHidden();
+            else nativeBridge.onTrackingScreenVisible();
         });
+    } else if (isNativeApp) {
+        setOwnStatus('Update Android System WebView to enable live location sharing.');
     }
 
-    // ── BROWSER GEOLOCATION ─────────────────────────────────
-    // Upload the current user's position whenever the tracking page is open.
-    // In the app this uploads via the WebView's own geolocation with platform
-    // 'android-webview'; that is the reliable path that makes family members
-    // actually see each other while viewing the map, independent of the
-    // background TrackingService. The 10s throttle in uploadPosition() keeps
-    // battery/GPS in check.
-    //
-    // In a plain BROWSER, gate the upload on the in-page consent: the consent
-    // dialog was purely decorative before — the page uploaded the user's
-    // position on the first fix regardless of consent, and kept uploading
-    // after they tapped "Not Now". In the native app, the OS permission flow
-    // (PermissionGate) is the consent, so start immediately there.
-    //
-    // These state vars MUST be declared before this gate: startBrowserTracking
-    // guards on browserWatchId, and `var` hoisting would leave it `undefined`
-    // (not null) here, making the guard reject the very first start.
+    // The native service owns location sharing in the Android app.
+    // A standalone browser may share its position after the user consents.
     var lastUploadTime = 0;
-    var uploadPending = false;
+    var uploadTimer = null;
     var latestPos = null;
     var browserWatchId = null;
 
-    if (navigator.geolocation) {
-        if (isNativeApp || hasConsent === '1') {
-            startBrowserTracking();
-        }
-        // Otherwise startBrowserTracking() is called from the consentAccept
-        // handler once the user agrees.
+    if (!isNativeApp && hasConsent === '1' && browserShareLocation) {
+        startBrowserTracking();
     }
 
-    // Show an "Enable Live Location" button in the tracking toolbar
-    function showEnableLocationButton() {
+    function showNativeSharingButton() {
         var toolbar = document.querySelector('.tracking-toolbar');
         if (!toolbar) return;
-        var btn = document.createElement('button');
-        btn.className = 'tracking-toolbar-btn enable-location-btn';
-        btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
-        btn.style.cssText = 'background:#667eea;color:#fff;border:none;padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;';
-        var enableLabel = '<svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px"><circle cx="12" cy="12" r="3"></circle><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"></path></svg> Enable Live Location';
-        btn.onclick = function() {
-            try {
-                window.TrackingBridge.startTracking();
-                btn.textContent = 'Enabling...';
-                // The native permission flow (disclosure dialog + OS prompts +
-                // a Settings round-trip) takes far longer than one 3s check,
-                // so poll for ~40s and also re-check when the user returns to
-                // the page after granting. Only reset the button on real
-                // failure — never leave it stuck on "Enabling...".
-                var tries = 0;
-                var poll = setInterval(function() {
-                    tries++;
-                    var mode = '';
-                    try { mode = window.TrackingBridge.getTrackingMode(); } catch(e) {}
-                    if (mode === 'enabled') {
-                        clearInterval(poll);
-                        document.removeEventListener('visibilitychange', onVis);
-                        btn.remove();
-                        showToast('Live location enabled', 'success');
-                    } else if (tries >= 20) {
-                        clearInterval(poll);
-                        document.removeEventListener('visibilitychange', onVis);
-                        btn.innerHTML = enableLabel;
-                    }
-                }, 2000);
-                var onVis = function() {
-                    if (!document.hidden) {
-                        var mode = '';
-                        try { mode = window.TrackingBridge.getTrackingMode(); } catch(e) {}
-                        if (mode === 'enabled') {
-                            clearInterval(poll);
-                            document.removeEventListener('visibilitychange', onVis);
-                            btn.remove();
-                            showToast('Live location enabled', 'success');
-                        }
-                    }
-                };
-                document.addEventListener('visibilitychange', onVis);
-            } catch(e) {
-                console.warn('[Tracking] startTracking failed:', e);
-                btn.innerHTML = enableLabel;
-            }
+        var button = document.createElement('button');
+        button.id = 'nativeLocationSharing';
+        button.type = 'button';
+        button.className = 'tracking-toolbar-btn enable-location-btn';
+        button.onclick = function() {
+            if (nativeBridge.getTrackingMode() === 'enabled') nativeBridge.stopTracking();
+            else nativeBridge.startTracking();
+            setTimeout(updateNativeSharingButton, 1000);
         };
-        toolbar.insertBefore(btn, toolbar.firstChild);
+        toolbar.insertBefore(button, toolbar.firstChild);
+        updateNativeSharingButton();
+    }
+
+    function updateNativeSharingButton(nextMode) {
+        var button = document.getElementById('nativeLocationSharing');
+        if (!button) return;
+        var mode = nextMode || nativeBridge.getTrackingMode();
+        button.disabled = mode === 'loading';
+        button.textContent = mode === 'enabled' ? 'Stop sharing' : (mode === 'paused' ? 'Resume sharing' : 'Enable live location');
     }
 
     // ── BROWSER GEOLOCATION ──────────────────────────────────────
     // (State vars declared above the geolocation gate — see note there.)
 
     function uploadPosition(pos) {
+        if (browserWatchId === null) return;
         // Always upload the FRESHEST fix: during the 10s throttle window,
         // watchPosition keeps firing; the old code captured the first fix and
         // discarded every newer one, so a moving user uploaded a stale point.
         if (pos) latestPos = pos;
         var now = Date.now();
         if (now - lastUploadTime < 10000) {
-            if (!uploadPending) {
-                uploadPending = true;
-                setTimeout(function() {
-                    uploadPending = false;
+            if (uploadTimer === null) {
+                uploadTimer = setTimeout(function() {
+                    uploadTimer = null;
                     if (latestPos) uploadPosition(latestPos);
                 }, 10000 - (now - lastUploadTime));
             }
@@ -1307,8 +1257,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             bearing_deg: pos.coords.heading || null,
             altitude_m: pos.coords.altitude || null,
             recorded_at: new Date(pos.timestamp).toISOString().slice(0, 19).replace('T', ' '),
-            platform: isNativeApp ? 'android-webview' : 'web',
-            device_id: isNativeApp ? 'android' : 'browser'
+            platform: 'web',
+            device_id: 'browser'
         };
         fetch(window.TrackingConfig.apiBase + '/location.php', {
             method: 'POST',
@@ -1320,7 +1270,6 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         }).then(function(res) {
             var data = res.data || {};
             if (data.success) {
-                console.log('[Tracking] Position uploaded:', payload.lat, payload.lng, 'accuracy:', payload.accuracy_m + 'm');
                 fetchMembers();
             } else if (res.status === 403) {
                 // location_sharing disabled server-side — stop trying and tell
@@ -1341,7 +1290,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function startBrowserTracking() {
-        if (!navigator.geolocation || browserWatchId !== null) return;
+        if (isNativeApp || !navigator.geolocation || browserWatchId !== null) return;
         browserWatchId = navigator.geolocation.watchPosition(uploadPosition, function(err) {
             console.warn('[Tracking] Geolocation error:', err.message);
             if (err.code === 1) { // PERMISSION_DENIED
@@ -1358,16 +1307,21 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             navigator.geolocation.clearWatch(browserWatchId);
             browserWatchId = null;
         }
+        if (uploadTimer !== null) {
+            clearTimeout(uploadTimer);
+            uploadTimer = null;
+        }
+        latestPos = null;
     }
 
-    // ── MEMBER POLLING ───────────────────────────────────────────
-    // Native app: the Kotlin FamilyPoller does the network polling; this page
-    // just reads its in-memory cache (free — no network, no battery) and
-    // reconciles against the API once a minute as a fallback.
-    // Browser: poll the API directly every 10s.
-    // Both modes stop completely while the page is hidden.
+    // The Android app fetches family positions while the map is visible.
+    // Use the web API as a fallback if the native cache stops refreshing.
     var memberPollTimer = null;
     var bridgeCacheTimer = null;
+    var lastBridgeJson = null;
+    var lastFallbackAt = 0;
+    var nativeActivationAt = 0;
+    var hasCacheAge = !!nativeBridge && typeof nativeBridge.getFamilyCacheAgeMillis === 'function';
 
     // Old APK versions emit a different key set from getCachedFamily();
     // normalize so both shapes render.
@@ -1394,19 +1348,23 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function readBridgeCache() {
-        if (!isNativeApp) return;
         try {
-            var cachedJson = window.TrackingBridge.getCachedFamily();
-            if (!cachedJson) return;
-            var cached = JSON.parse(cachedJson);
-            if (cached && cached.length > 0) {
-                _members = cached.map(normalizeCachedMember);
-                renderMembers(_members);
-                updateMarkers(_members);
-                if (!initialFitDone) {
-                    initialFitDone = true;
-                    fitMapToFamily(_members);
+            if (hasCacheAge && window.TrackingBridge.getFamilyCacheAgeMillis() > 45000) {
+                var now = Date.now();
+                if (now - nativeActivationAt >= 20000 && now - lastFallbackAt >= 60000) {
+                    lastFallbackAt = now;
+                    lastBridgeJson = null;
+                    fetchMembers();
                 }
+                return;
+            }
+
+            var cachedJson = window.TrackingBridge.getCachedFamily();
+            if (!cachedJson || cachedJson === lastBridgeJson) return;
+            var cached = JSON.parse(cachedJson);
+            if (Array.isArray(cached) && (hasCacheAge || cached.length > 0)) {
+                lastBridgeJson = cachedJson;
+                showMembers(cached.map(normalizeCachedMember));
             }
         } catch (e) {
             console.warn('[Tracking] Cache read error:', e);
@@ -1415,11 +1373,17 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     function startPolling() {
         stopPolling();
-        if (isNativeApp) {
+        if (document.hidden) return;
+        if (nativeBridge) {
+            nativeActivationAt = Date.now();
             readBridgeCache();
-            fetchMembers();
             bridgeCacheTimer = setInterval(readBridgeCache, 5000);
-            memberPollTimer = setInterval(fetchMembers, 60000);
+
+            // Older builds only expose a cache snapshot, without freshness.
+            if (!hasCacheAge) {
+                fetchMembers();
+                memberPollTimer = setInterval(fetchMembers, 60000);
+            }
         } else {
             fetchMembers();
             memberPollTimer = setInterval(fetchMembers, 10000);
@@ -1434,8 +1398,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
             startPolling();
+            startNavigationWatch();
         } else {
             stopPolling();
+            stopNavigationWatch();
         }
     });
 

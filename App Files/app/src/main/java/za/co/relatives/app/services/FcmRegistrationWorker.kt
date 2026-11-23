@@ -11,7 +11,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import za.co.relatives.app.network.ApiClient
+import za.co.relatives.app.network.ApiException
 import za.co.relatives.app.utils.PreferencesManager
 
 /**
@@ -34,6 +36,10 @@ class FcmRegistrationWorker(
         private const val WORK_NAME = "fcm_token_registration"
         private const val MAX_ATTEMPTS = 6
 
+        fun cancel(ctx: Context) {
+            WorkManager.getInstance(ctx).cancelUniqueWork(WORK_NAME)
+        }
+
         fun enqueue(ctx: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -52,19 +58,21 @@ class FcmRegistrationWorker(
 
     override suspend fun doWork(): Result {
         val prefs = PreferencesManager(applicationContext)
-        val token = prefs.fcmToken
-        if (token.isNullOrBlank()) return Result.success()
+        val token = prefs.fcmToken ?: return Result.success()
+        val session = prefs.sessionToken ?: return Result.success()
 
         return try {
-            ApiClient(applicationContext).registerFcmToken(token)
-            Log.d(TAG, "FCM token registered with backend")
+            val registration = ApiClient(applicationContext).registerFcmToken(token, session)
+            val recipient = registration.get("recipient_user_id")?.asString ?: return Result.failure()
+            prefs.bindPushRecipient(session, recipient)
             Result.success()
-        } catch (e: Exception) {
-            // Typically 401 (not logged in yet) or offline. Retry a few
-            // times; beyond that MainActivity.syncFcmToken registers on the
-            // next app open.
-            Log.w(TAG, "FCM token registration failed (attempt $runAttemptCount)", e)
-            if (runAttemptCount >= MAX_ATTEMPTS) Result.failure() else Result.retry()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "FCM registration failed (attempt $runAttemptCount)")
+            if ((error is ApiException && error.httpCode == 401) || runAttemptCount >= MAX_ATTEMPTS) {
+                Result.failure()
+            } else Result.retry()
         }
     }
 }

@@ -1,0 +1,31 @@
+html {
+    color-scheme: light dark;
+    font-family: system-ui, sans-serif;
+    line-height: 1.55;
+}
+
+main {
+    max-width: 45rem;
+    margin: 2rem auto;
+    padding: 0 1.25rem 2rem;
+}
+
+form {
+    display: grid;
+    gap: 0.75rem;
+    max-width: 26rem;
+}
+
+input, button {
+    font: inherit;
+}
+
+input[type="password"], button {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0.55rem;
+}
+
+button {
+    cursor: pointer;
+}

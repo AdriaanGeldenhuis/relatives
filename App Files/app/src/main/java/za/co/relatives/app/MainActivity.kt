@@ -2,15 +2,13 @@ package za.co.relatives.app
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.AlertDialog
-import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
+import android.os.SystemClock
+import android.graphics.Bitmap
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -32,29 +30,18 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withResumed
 import com.google.firebase.messaging.FirebaseMessaging
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import za.co.relatives.app.network.ApiClient
-import com.android.billingclient.api.BillingClient
-import com.android.billingclient.api.BillingClientStateListener
-import com.android.billingclient.api.BillingResult
-import com.android.billingclient.api.PendingPurchasesParams
-import com.android.billingclient.api.Purchase
-import com.android.billingclient.api.QueryPurchasesParams
 import za.co.relatives.app.data.TrackingStore
 import za.co.relatives.app.network.NetworkClient
+import za.co.relatives.app.services.FcmRegistrationWorker
 import za.co.relatives.app.tracking.FamilyPoller
-import za.co.relatives.app.tracking.OemBatteryHelper
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
-import za.co.relatives.app.tracking.TrackingRestartWorker
 import za.co.relatives.app.tracking.TrackingService
 import za.co.relatives.app.utils.PreferencesManager
-import java.net.CookieHandler
-import java.net.HttpCookie
-import java.net.URI
-import java.net.CookieManager as JavaNetCookieManager
+import za.co.relatives.app.ui.SubscriptionActivity
 
 /**
  * Single-activity host for the Relatives hybrid WebView app.
@@ -72,8 +59,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val WEB_URL = "https://www.relatives.co.za"
-        private const val SUBSCRIPTION_ACTIVITY_CLASS =
-            "za.co.relatives.app.ui.SubscriptionActivity"
+        private val TRUSTED_HOSTS = setOf("www.relatives.co.za", "relatives.co.za")
+        private val MAP_PATHS = setOf("/tracking/app", "/tracking/app/", "/tracking/app/index.php")
     }
 
     // ── Core modules ────────────────────────────────────────────────────
@@ -89,15 +76,10 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var root: FrameLayout
     private lateinit var webView: WebView
-    private var trialDialogShown = false
+    private var navigationPermissionUntil = 0L
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var pendingMediaRequest: PermissionRequest? = null
-
-    // ── Billing ─────────────────────────────────────────────────────────
-
-    private var billingClient: BillingClient? = null
-    private var hasActiveSubscription = false
 
     // ── Permission launchers (non-tracking, must be registered before onStart) ──
 
@@ -131,12 +113,10 @@ class MainActivity : ComponentActivity() {
         familyPoller = FamilyPoller(this, trackingStore)
 
         // Register all permission launchers BEFORE onStart
-        permissionGate.registerLaunchers()
         registerNonTrackingLaunchers()
 
         buildLayout()
         onBackPressedDispatcher.addCallback(this, backCallback)
-        connectBillingClient()
         enterImmersiveMode()
 
         // Restore WebView state when recreated (e.g. after background location
@@ -180,26 +160,12 @@ class MainActivity : ComponentActivity() {
         // Poll only while the app is actually in the foreground.
         familyPoller.start()
 
-        // Complete an enable flow whose activity was recreated mid-grant:
-        // the background-location Settings round-trip destroys the activity,
-        // losing PermissionGate's in-memory callback — the user granted
-        // everything yet tracking stayed off until they tapped Enable again.
-        if (prefs.pendingTrackingEnable && permissionGate.hasForegroundLocation()) {
-            prefs.pendingTrackingEnable = false
-            prefs.trackingEnabled = true
-            maybeRequestBatteryExemption()
-        }
-
-        // Resume tracking if the user has it enabled but the service is not
-        // running (system kill, reboot on Android 15+ where BootReceiver may
-        // not start a location service, permission round-trips, etc.).
-        // Starting a foreground service from a resumed activity is always
-        // allowed.
-        if (prefs.trackingEnabled &&
+        if (TrackingService.isTrackingEnabled(this) &&
             permissionGate.hasForegroundLocation() &&
+            TrackingService.canShowTrackingNotification(this) &&
             !TrackingService.isRunning
         ) {
-            TrackingService.start(this)
+            TrackingService.revive(this)
         }
     }
 
@@ -242,7 +208,6 @@ class MainActivity : ComponentActivity() {
         if (::permissionGate.isInitialized) {
             permissionGate.dismissDialogs()
         }
-        billingClient?.endConnection()
         if (::webView.isInitialized) {
             try {
                 webView.destroy()
@@ -256,128 +221,50 @@ class MainActivity : ComponentActivity() {
     //  TRACKING CONTROL (called by TrackingBridge)
     // ════════════════════════════════════════════════════════════════════
 
-    /**
-     * Start tracking through the PermissionGate.
-     * Permission only requested when user explicitly taps "Enable live location".
-     */
-    fun startTrackingWithPermissions() {
-        // Survive activity recreation during the permission flow: onResume
-        // completes the enable if this callback never fires.
-        prefs.pendingTrackingEnable = true
+    fun startTrackingWithPermissions(onResult: () -> Unit) {
+        syncNativeSession(webView.url)
+        val session = prefs.sessionToken
+        if (session.isNullOrBlank() || !isTrackingMap(webView.url)) {
+            onResult()
+            return
+        }
+
         permissionGate.requestTracking { granted ->
-            prefs.pendingTrackingEnable = false
-            if (granted) {
-                prefs.trackingEnabled = true
-                TrackingService.start(this)
-                TrackingRestartWorker.enqueuePeriodic(this)
-                maybeRequestBatteryExemption()
-            }
-        }
-    }
-
-    /**
-     * Ask Android to exclude the app from battery optimisation — without
-     * this, most devices kill the tracking service after an hour or two
-     * (the "works for a while then stops until I reopen tracking" symptom),
-     * and being on the allowlist also legalises restarting the service from
-     * the background. Asked at most once per app session, only when not
-     * already exempt.
-     */
-    private var batteryPromptShown = false
-
-    private fun maybeRequestBatteryExemption() {
-        if (batteryPromptShown || isFinishing || isDestroyed) return
-        try {
-            val pm = getSystemService(POWER_SERVICE) as PowerManager
-            if (pm.isIgnoringBatteryOptimizations(packageName)) {
-                // Android-level exemption alone does NOT stop Huawei/Honor/
-                // MIUI-style battery managers from killing the service —
-                // those need their own autostart/app-launch toggle.
-                OemBatteryHelper.maybeShowGuidance(this, prefs)
-                return
-            }
-            batteryPromptShown = true
-            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Keep tracking alive")
-                .setMessage(
-                    "Android stops location sharing after an hour or two " +
-                        "unless Relatives is excluded from battery " +
-                        "optimisation. Allow this so your family can always " +
-                        "see you on the map.",
-                )
-                .setPositiveButton("Allow") { _, _ ->
-                    try {
-                        startActivity(
-                            Intent(
-                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                Uri.parse("package:$packageName"),
-                            ),
-                        )
-                    } catch (_: Exception) {
-                        try {
-                            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                        } catch (_: Exception) {
-                        }
+            lifecycleScope.launch {
+                lifecycle.withResumed {
+                    if (granted && prefs.sessionToken == session && isTrackingMap(webView.url)) {
+                        TrackingService.start(this@MainActivity)
+                        permissionGate.requestMotionRecognition()
                     }
-                    OemBatteryHelper.maybeShowGuidance(this, prefs)
+                    onResult()
                 }
-                .setNegativeButton("Not now") { _, _ ->
-                    OemBatteryHelper.maybeShowGuidance(this, prefs)
-                }
-                .show()
-        } catch (e: Exception) {
-            Log.w(TAG, "Battery exemption prompt failed", e)
-        }
-    }
-
-    /**
-     * Ensure foreground location permission for the tracking web page's
-     * geolocation upload, then answer the WebView. On grant, also start the
-     * background service so the user's dot keeps moving when the app is
-     * closed — not only while the page is open.
-     */
-    private fun ensureLocationForWeb(answer: (Boolean) -> Unit) {
-        permissionGate.requestForegroundLocation { granted ->
-            if (granted && !prefs.trackingEnabled) {
-                prefs.trackingEnabled = true
-                TrackingService.start(this)
-                TrackingRestartWorker.enqueuePeriodic(this)
             }
-            if (granted) maybeRequestBatteryExemption()
-            answer(granted)
         }
     }
 
-    fun stopTrackingService() {
-        prefs.trackingEnabled = false
-        TrackingService.stop(this)
-    }
-
-    fun isTrackingActive(): Boolean =
-        prefs.trackingEnabled && permissionGate.hasForegroundLocation()
+    fun stopTrackingService() = TrackingService.stop(this)
 
     fun getTrackingMode(): String = when {
         !permissionGate.hasForegroundLocation() -> "no_permission"
-        prefs.trackingEnabled -> "enabled"
+        !TrackingService.canShowTrackingNotification(this) -> "notifications_disabled"
+        TrackingService.isTrackingEnabled(this) -> if (TrackingService.isRunning) "enabled" else "paused"
         else -> "disabled"
     }
 
-    fun requestNotificationPermission() {
-        permissionGate.requestNotifications()
-    }
+    fun requestNotificationPermission() = permissionGate.requestNotifications()
 
-    fun wakeAllDevices() {
-        // The web page POSTs /tracking/api/wake_devices.php itself to wake the
-        // rest of the family via FCM; here we only boost our own device, and
-        // only when tracking is actually on.
-        if (prefs.trackingEnabled && permissionGate.hasForegroundLocation()) {
-            TrackingService.motionStarted(this)
+    fun wakeAllDevices() = TrackingService.requestWakeFix(this)
+
+    fun prepareWebNavigation(): Boolean {
+        if (!isTrackingMap(webView.url) || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            return false
         }
+        navigationPermissionUntil = SystemClock.elapsedRealtime() + 5_000L
+        return true
     }
 
     fun onTrackingScreenVisible() {
         familyPoller.setActive(true)
-        familyPoller.pollNow()
     }
 
     fun onTrackingScreenHidden() {
@@ -440,84 +327,67 @@ class MainActivity : ComponentActivity() {
     private fun configureWebView() {
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
-            setAcceptThirdPartyCookies(webView, true)
+            setAcceptThirdPartyCookies(webView, false)
         }
 
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            databaseEnabled = true
             setGeolocationEnabled(true)
-            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-            allowFileAccess = true
+            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            allowFileAccess = false
             allowContentAccess = true
             mediaPlaybackRequiresUserGesture = false
-            javaScriptCanOpenWindowsAutomatically = true
+            javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
             useWideViewPort = true
             loadWithOverviewMode = true
             cacheMode = WebSettings.LOAD_DEFAULT
+            userAgentString = "$userAgentString RelativesAndroid/1"
         }
 
-        // Register the TrackingBridge (new clean bridge)
-        webView.addJavascriptInterface(TrackingBridge(this), "TrackingBridge")
+        TrackingBridge(this).install(webView)
 
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                familyPoller.setActive(false)
+                navigationPermissionUntil = 0L
+                val uri = url?.let(Uri::parse)
+                if (uri != null && !isTrustedUrl(uri)) {
+                    view?.stopLoading()
+                    return
+                }
+                if (uri?.path == "/logout.php") clearNativeSession()
+            }
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                extractSessionToken()
-                syncCookiesToNative()
-                // Make the session cookie durable immediately — most
-                // importantly right after the login page sets it.
+                if (view != webView || !isTrustedUrl(url?.let(Uri::parse))) return
+                syncNativeSession(url)
                 CookieManager.getInstance().flush()
-                syncFcmToken()
-
-                // Ask for notification permission once on first startup.
-                // Previously this was only asked inside the tracking-enable
-                // flow or on the /notifications page, so on Android 13+ most
-                // users were never prompted and the OS silently dropped every
-                // push notification.
-                maybeRequestNotificationPermissionOnce()
-
-                // Drive the poll rate from the real page URL. The page's own
-                // beforeunload/visibility signals are unreliable in a WebView,
-                // which used to leave the poller stuck in fast mode after
-                // navigating away from the tracking map.
-                familyPoller.setActive(url?.contains("/tracking") == true)
-
-                // Prompt for notification permission when the user visits the
-                // notifications page — all logic stays inside the APK.
-                if (url?.contains("/notifications") == true) {
-                    requestNotificationPermission()
-                }
+                if (Uri.parse(url).path !in setOf("/", "/login.php", "/logout.php")) syncFcmToken()
+                familyPoller.setActive(isTrackingMap(url))
             }
 
             override fun shouldOverrideUrlLoading(
                 view: WebView?,
                 request: WebResourceRequest?,
             ): Boolean {
-                val uri = request?.url ?: return false
-                val internal = isRelativesHost(uri.host)
-
-                // Tracking pages (/tracking/app/*) load in this WebView like
-                // every other page — the web dashboard guards its own session
-                // (redirects to /login.php itself). The native tracking UI
-                // was removed: it could crash or bounce in ways the web page
-                // cannot, and the WebView's renderer-crash handling below
-                // already covers the heavy map page.
-
-                // Host check, not substring: "evil.com/relatives.co.za" must
-                // NOT stay inside this WebView — TrackingBridge is exposed to
-                // every page loaded here.
-                if (internal) return false
-                if (!request.isForMainFrame) return true // cancel foreign subframe navigations
-                return try {
-                    startActivity(Intent(Intent.ACTION_VIEW, uri))
-                    true
-                } catch (e: Exception) {
-                    Log.w(TAG, "No handler for external url: $uri", e)
-                    true
+                val uri = request?.url ?: return true
+                if (isTrustedUrl(uri)) {
+                    if (uri.path == "/logout.php") clearNativeSession()
+                    if (isWebCheckout(uri)) {
+                        if (request.isForMainFrame) openSubscriptionScreen()
+                        return true
+                    }
+                    return false
                 }
+                if (!request.isForMainFrame || !request.hasGesture() ||
+                    uri.scheme !in setOf("https", "mailto", "tel")
+                ) return true
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+                return true
             }
 
             override fun onRenderProcessGone(
@@ -562,28 +432,23 @@ class MainActivity : ComponentActivity() {
                 origin: String?,
                 callback: GeolocationPermissions.Callback?,
             ) {
-                val originHost = origin?.let { runCatching { Uri.parse(it).host }.getOrNull() }
-                if (!isRelativesHost(originHost)) {
+                if (origin == null || !isCurrentTrustedPage(webView, Uri.parse(origin)) ||
+                    !isTrackingMap(webView.url) || SystemClock.elapsedRealtime() >= navigationPermissionUntil
+                ) {
                     callback?.invoke(origin, false, false)
                     return
                 }
-                if (permissionGate.hasForegroundLocation()) {
-                    callback?.invoke(origin, true, false)
-                    return
-                }
-                // The tracking page asked for location but the app has no OS
-                // location permission yet. Request it now — THIS is what makes
-                // the Android permission prompt appear — then answer the
-                // WebView with the result. Without this the page silently got
-                // "denied" and no one's position could ever upload.
-                ensureLocationForWeb { granted ->
-                    callback?.invoke(origin, granted, false)
+                navigationPermissionUntil = 0L
+                permissionGate.requestForegroundLocation { granted ->
+                    callback?.invoke(origin, granted && isTrackingMap(webView.url), false)
                 }
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {
                 request ?: return
-                if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                if (isCurrentTrustedPage(webView, request.origin) &&
+                    request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+                ) {
                     pendingMediaRequest = request
                     handleMicrophonePermission()
                 } else {
@@ -611,23 +476,16 @@ class MainActivity : ComponentActivity() {
         loadDeepLink(actionUrl)
     }
 
-    /**
-     * Navigate to a notification deep link. Only relatives.co.za URLs may
-     * load this way — loadUrl bypasses shouldOverrideUrlLoading and this
-     * WebView carries TrackingBridge, so a hostile action_url in a pushed
-     * payload must not reach a foreign page. If the renderer died while
-     * backgrounded, queue the URL for the rebuild in onResume instead of
-     * loading it into a dead view.
-     */
     private fun loadDeepLink(actionUrl: String) {
-        val resolved = resolveUrl(actionUrl)
-        val host = runCatching { Uri.parse(resolved).host }.getOrNull()
-        val target = if (isRelativesHost(host)) {
-            resolved
-        } else {
-            Log.w(TAG, "Refusing non-relatives deep link: $actionUrl")
-            WEB_URL
+        val uri = Uri.parse(if (actionUrl.startsWith("/") && !actionUrl.startsWith("//")) {
+            "$WEB_URL$actionUrl"
+        } else actionUrl)
+        if (isTrustedUrl(uri) && isWebCheckout(uri)) {
+            openSubscriptionScreen()
+            return
         }
+
+        val target = if (isTrustedUrl(uri)) uri.toString() else WEB_URL
         if (pendingRecreateUrl != null) {
             pendingRecreateUrl = target
         } else {
@@ -635,16 +493,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun resolveUrl(path: String): String =
-        if (path.startsWith("http")) path else "$WEB_URL$path"
+    private fun isTrustedUrl(uri: Uri?): Boolean =
+        uri?.scheme == "https" && uri.host in TRUSTED_HOSTS &&
+            uri.encodedUserInfo == null && uri.port in setOf(-1, 443)
 
-    /**
-     * True only for relatives.co.za and its subdomains. A plain substring
-     * check would also match attacker URLs like evil.com/relatives.co.za and
-     * keep them inside the TrackingBridge-armed WebView.
-     */
-    private fun isRelativesHost(host: String?): Boolean =
-        host == "relatives.co.za" || host?.endsWith(".relatives.co.za") == true
+    fun isCurrentTrustedPage(view: WebView, origin: Uri): Boolean {
+        val document = view.url?.let(Uri::parse)
+        return view == webView && isTrustedUrl(document) && isTrustedUrl(origin) &&
+            document?.host == origin.host
+    }
+
+    fun isTrackingMap(url: String?): Boolean =
+        url?.let { Uri.parse(it).let { uri -> isTrustedUrl(uri) && uri.path in MAP_PATHS } } == true
+
+    private fun isWebCheckout(uri: Uri): Boolean =
+        uri.path == "/upgrade" || uri.path?.startsWith("/upgrade/") == true
+
+    private fun openSubscriptionScreen() {
+        startActivity(Intent(this, SubscriptionActivity::class.java))
+    }
 
     // ════════════════════════════════════════════════════════════════════
     //  IMMERSIVE MODE
@@ -705,7 +572,7 @@ class MainActivity : ComponentActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            pendingMediaRequest?.grant(pendingMediaRequest?.resources)
+            pendingMediaRequest?.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
             pendingMediaRequest = null
         } else {
             microphoneLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -716,200 +583,49 @@ class MainActivity : ComponentActivity() {
     //  COOKIE SYNC & SESSION TOKEN
     // ════════════════════════════════════════════════════════════════════
 
-    /**
-     * Hosts the session cookie may live under. Reading only the www URL
-     * missed a host-only cookie set while the WebView was on the apex domain,
-     * leaving native API calls unauthenticated; OkHttp's store is keyed by
-     * exact host, so the cookie is registered under both.
-     */
-    private val cookieHosts = listOf("www.relatives.co.za", "relatives.co.za")
-
-    private fun syncCookiesToNative() {
-        val javaManager = (CookieHandler.getDefault() as? JavaNetCookieManager)
-            ?: JavaNetCookieManager().also { CookieHandler.setDefault(it) }
-        cookieHosts.forEach { host ->
-            val url = "https://$host"
-            val raw = CookieManager.getInstance().getCookie(url) ?: return@forEach
-            val uri = URI.create(url)
-            raw.split(";").forEach { segment ->
-                val trimmed = segment.trim()
-                if (trimmed.isNotEmpty()) {
-                    runCatching {
-                        HttpCookie.parse("Set-Cookie: $trimmed").forEach { cookie ->
-                            javaManager.cookieStore.add(uri, cookie)
-                        }
-                    }
-                    // Also push to OkHttp so native services (FamilyPoller,
-                    // LocationUploadWorker) can authenticate independently of
-                    // whatever page the WebView is currently showing. Cookies
-                    // stay scoped to the host they were read from — mirroring
-                    // them across hosts let a stale apex-host session
-                    // overwrite the fresh www one (extractSessionToken below
-                    // handles the session cookie cross-host, www first).
-                    val parts = trimmed.split("=", limit = 2)
-                    if (parts.size == 2) {
-                        NetworkClient.setSessionCookie(host, parts[0].trim(), parts[1].trim())
-                    }
-                }
-            }
+    private fun syncNativeSession(url: String?) {
+        val uri = url?.let(Uri::parse) ?: return
+        if (!isTrustedUrl(uri)) return
+        val cookie = CookieManager.getInstance().getCookie("https://${uri.host}")
+            ?.split(';')?.map(String::trim)?.firstOrNull { it.startsWith("RELATIVES_SESSION=") }
+            ?.substringAfter('=')?.takeIf { it.matches(Regex("[A-Za-z0-9,-]{16,256}")) }
+        if (prefs.sessionToken != cookie) {
+            clearNativeSession()
+            prefs.sessionToken = cookie
         }
+        if (cookie != null) {
+            NetworkClient.setSessionCookie("www.relatives.co.za", "RELATIVES_SESSION", cookie)
+        }
+    }
+
+    private fun clearNativeSession() {
+        if (prefs.sessionToken != null) TrackingService.stop(this)
+        prefs.clearSession()
+        FcmRegistrationWorker.cancel(this)
+        trackingStore.clearFamilyLocations()
+        NetworkClient.clearCookies()
+        fcmTokenSynced = false
     }
 
     // ── FCM token registration ──────────────────────────────────────────
 
     private var fcmTokenSynced = false
 
-    /**
-     * Register this device's FCM token with the backend once a page has
-     * loaded (i.e. once session cookies exist). FirebaseMessagingService's
-     * onNewToken usually fires before the user has logged in, so its 401'd
-     * registration was never retried — leaving the device unreachable for
-     * pushes and tracking wakes.
-     */
     private fun syncFcmToken() {
+        val session = prefs.sessionToken ?: return
         if (fcmTokenSynced) return
         fcmTokenSynced = true
-        try {
-            FirebaseMessaging.getInstance().token
-                .addOnSuccessListener { token ->
-                    if (token.isNullOrBlank()) {
-                        fcmTokenSynced = false
-                        return@addOnSuccessListener
-                    }
+        FirebaseMessaging.getInstance().token
+            .addOnSuccessListener { token ->
+                if (prefs.sessionToken == session && !token.isNullOrBlank()) {
                     prefs.fcmToken = token
-                    lifecycleScope.launch(Dispatchers.IO) {
-                        try {
-                            ApiClient(applicationContext).registerFcmToken(token)
-                            Log.d(TAG, "FCM token registered with backend")
-                        } catch (e: Exception) {
-                            // Not logged in yet or offline — retry on a later page load.
-                            fcmTokenSynced = false
-                            Log.w(TAG, "FCM token registration failed (will retry)", e)
-                        }
-                    }
-                }
-                .addOnFailureListener { e ->
-                    // Async token fetch failure (no network, Play Services busy)
-                    // must also re-arm the retry.
+                    FcmRegistrationWorker.enqueue(this)
+                } else if (prefs.sessionToken == session) {
                     fcmTokenSynced = false
-                    Log.w(TAG, "FCM token fetch failed (will retry)", e)
-                }
-        } catch (e: Exception) {
-            fcmTokenSynced = false
-            Log.w(TAG, "FCM token fetch failed", e)
-        }
-    }
-
-    private fun extractSessionToken() {
-        // ONLY the real session cookie. Matching loose names like "token" or
-        // "phpsessid" let an unrelated cookie be persisted and later replayed
-        // as RELATIVES_SESSION by NetworkClient.seedFromPreferences, breaking
-        // background auth.
-        val targetNames = setOf("relatives_session")
-        cookieHosts.forEach { host ->
-            val raw = CookieManager.getInstance().getCookie("https://$host") ?: return@forEach
-            raw.split(";").forEach { segment ->
-                val parts = segment.trim().split("=", limit = 2)
-                if (parts.size == 2 && parts[0].trim().lowercase() in targetNames) {
-                    val cookieName = parts[0].trim()
-                    val cookieValue = parts[1].trim()
-                    // A different session id means a different login (logout +
-                    // re-login, or another family member taking over the
-                    // device): re-register the FCM token under the new
-                    // session, otherwise pushes keep going to the old user.
-                    if (prefs.sessionToken != cookieValue) {
-                        fcmTokenSynced = false
-                    }
-                    prefs.sessionToken = cookieValue
-                    // Push to OkHttp so background workers authenticate
-                    // even after the WebView navigates away from /tracking/
-                    cookieHosts.forEach { storeHost ->
-                        NetworkClient.setSessionCookie(storeHost, cookieName, cookieValue)
-                    }
-                    return
                 }
             }
-        }
-    }
-
-    /**
-     * One-time startup offer of the Android 13+ notification permission.
-     * PermissionGate.requestNotifications() already no-ops when the
-     * permission is granted or the OS predates runtime notification
-     * permission; the pref only stops the dialog from nagging on every
-     * launch after a "Not now".
-     */
-    private fun maybeRequestNotificationPermissionOnce() {
-        if (prefs.notificationPromptShown) return
-        // Don't burn the one-time flag if the dialog can't actually appear.
-        if (isFinishing || isDestroyed) return
-        prefs.notificationPromptShown = true
-        requestNotificationPermission()
-    }
-
-    // ════════════════════════════════════════════════════════════════════
-    //  BILLING / SUBSCRIPTION
-    // ════════════════════════════════════════════════════════════════════
-
-    private fun connectBillingClient() {
-        try {
-            billingClient = BillingClient.newBuilder(this)
-                .setListener { _, _ -> }
-                .enablePendingPurchases(
-                    PendingPurchasesParams.newBuilder().enableOneTimeProducts().build(),
-                )
-                .build()
-
-            billingClient?.startConnection(object : BillingClientStateListener {
-                override fun onBillingSetupFinished(result: BillingResult) {
-                    if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                        querySubscriptionStatus()
-                    }
-                }
-                override fun onBillingServiceDisconnected() {}
-            })
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "BillingClient init failed", e)
-        }
-    }
-
-    private fun querySubscriptionStatus() {
-        val params = QueryPurchasesParams.newBuilder()
-            .setProductType(BillingClient.ProductType.SUBS)
-            .build()
-        billingClient?.queryPurchasesAsync(params) { result, purchases ->
-            if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                hasActiveSubscription = purchases.any { p ->
-                    p.purchaseState == Purchase.PurchaseState.PURCHASED
-                }
-                if (!hasActiveSubscription && !trialDialogShown) {
-                    runOnUiThread { showTrialDialog() }
-                }
+            .addOnFailureListener {
+                if (prefs.sessionToken == session) fcmTokenSynced = false
             }
-        }
-    }
-
-    private fun showTrialDialog() {
-        if (trialDialogShown || isFinishing || isDestroyed) return
-        trialDialogShown = true
-
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.trial_dialog_title))
-            .setMessage(getString(R.string.trial_dialog_message))
-            .setPositiveButton(getString(R.string.trial_dialog_subscribe)) { dialog, _ ->
-                dialog.dismiss()
-                openSubscriptionScreen()
-            }
-            .setNegativeButton(getString(R.string.trial_dialog_close)) { dialog, _ ->
-                dialog.dismiss()
-            }
-            .setCancelable(true)
-            .show()
-    }
-
-    private fun openSubscriptionScreen() {
-        startActivity(Intent().apply {
-            component = ComponentName(this@MainActivity, SUBSCRIPTION_ACTIVITY_CLASS)
-        })
     }
 }

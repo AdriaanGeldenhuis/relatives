@@ -4,6 +4,11 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../core/bootstrap.php';
 
 header('Content-Type: application/json');
+header('Cache-Control: no-store');
+
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    Response::error('method_not_allowed', 405);
+}
 
 try {
     $auth = new Auth($db);
@@ -18,7 +23,8 @@ try {
     // Get family subscription details
     $stmt = $db->prepare("
         SELECT 
-            s.*,
+            s.id, s.provider, s.store_product_id, s.plan_id, s.status,
+            s.current_period_start, s.expires_at, s.cancelled_at,
             f.name as family_name,
             f.created_at as family_created_at
         FROM subscriptions s
@@ -53,8 +59,19 @@ try {
     $stmt->execute([$user['family_id']]);
     $payments = $stmt->fetchAll();
     
+    $familyId = (int) $user['family_id'];
+    $owner = $db->prepare('SELECT owner_user_id FROM families WHERE id = ?');
+    $owner->execute([$familyId]);
+    $canManage = (int) $owner->fetchColumn() === (int) $user['id'];
+    $google = new GooglePlayVerifier();
+
     echo json_encode([
         'ok' => true,
+        'can_manage' => $canManage,
+        'google_play' => $canManage && $google->isConfigured() ? [
+            'account_id' => GooglePlayVerifier::familyAccountId($familyId),
+            'product_ids' => $subscriptionManager->googlePlayProducts(),
+        ] : null,
         'subscription' => $subscription ?: null,
         'status' => $status,
         'trial' => $trialInfo,
