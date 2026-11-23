@@ -226,7 +226,7 @@ class ReminderEngine {
     // MARK AS FAILED (FOR RETRY)
     // ============================================
 
-    public function markAsFailed(int $reminderId, string $error = null): bool {
+    public function markAsFailed(int $reminderId, ?string $error = null): bool {
         // Calculate exponential backoff: 2^retry_count minutes
         $stmt = $this->db->prepare("SELECT retry_count FROM event_reminders WHERE id = ?");
         $stmt->execute([$reminderId]);

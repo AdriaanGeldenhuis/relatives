@@ -6,13 +6,6 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
-# ── WebView JavaScript interface ──────────────────────────────────────
-# TrackingBridge is injected into WebView via addJavascriptInterface.
-# R8 must not rename or remove any @JavascriptInterface methods.
--keepclassmembers class za.co.relatives.app.tracking.TrackingBridge {
-    @android.webkit.JavascriptInterface <methods>;
-}
-
 # ── Gson ──────────────────────────────────────────────────────────────
 # Gson uses reflection to serialise/deserialise.
 -keepattributes Signature

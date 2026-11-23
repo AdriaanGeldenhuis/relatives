@@ -14,8 +14,8 @@ interface QueuedLocationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: QueuedLocationEntity)
 
-    @Query("SELECT * FROM queued_locations WHERE sent = 0 ORDER BY timestamp ASC LIMIT :limit")
-    suspend fun getUnsent(limit: Int = 100): List<QueuedLocationEntity>
+    @Query("SELECT * FROM queued_locations WHERE consent_scope = :scope AND sent = 0 ORDER BY timestamp ASC LIMIT :limit")
+    suspend fun getUnsent(scope: String, limit: Int = 100): List<QueuedLocationEntity>
 
     @Query("UPDATE queued_locations SET sent = 1 WHERE client_event_id = :id")
     suspend fun markSent(id: String)
@@ -46,6 +46,9 @@ interface QueuedLocationDao {
     )
     suspend fun trimToMaxSize(maxSize: Int = 300)
 
-    @Query("SELECT COUNT(*) FROM queued_locations WHERE sent = 0")
-    suspend fun unsentCount(): Int
+    @Query("DELETE FROM queued_locations WHERE consent_scope = :scope")
+    suspend fun deleteScope(scope: String)
+
+    @Query("SELECT COUNT(*) FROM queued_locations WHERE consent_scope = :scope AND sent = 0")
+    suspend fun unsentCount(scope: String): Int
 }

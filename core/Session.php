@@ -141,33 +141,11 @@ class Session {
             return null;
         }
         
-        // OPTIMIZATION: Use cached user data if available and recent (5 minutes)
-        if (isset($_SESSION['user_data_cached']) && 
-            $_SESSION['user_data_cached'] === true &&
-            isset($_SESSION['user_data_time']) &&
-            (time() - $_SESSION['user_data_time']) < 300) {
-            
-            // Extend session every 7 days
-            $age = time() - ($_SESSION['created_at'] ?? 0);
-            if ($age > (7 * 24 * 3600)) {
-                $this->extendSession();
-            }
-            
-            return [
-                'id' => $_SESSION['user_data']['id'],
-                'family_id' => $_SESSION['user_data']['family_id'],
-                'family_name' => $_SESSION['user_data']['family_name'],
-                'role' => $_SESSION['user_data']['role'],
-                'name' => $_SESSION['user_data']['name'],
-                'email' => $_SESSION['user_data']['email'],
-                'avatar_color' => $_SESSION['user_data']['avatar_color'],
-                'csrf_token' => $_SESSION['csrf_token']
-            ];
-        }
-        
+        // Check the session and current account status on each request so
+        // revoking a session on another device takes effect immediately.
         // Query database for fresh user data
         $stmt = $this->db->prepare("
-            SELECT s.*, 
+            SELECT s.user_id,
                    u.id, u.family_id, u.role, u.full_name as name, 
                    u.email, u.avatar_color, u.status,
                    f.name as family_name
@@ -189,12 +167,12 @@ class Session {
         }
         
         // Verify user ID matches
-        if ($session['user_id'] !== $_SESSION['user_id']) {
+        if ((int) $session['user_id'] !== (int) $_SESSION['user_id']) {
             $this->destroy();
             return null;
         }
         
-        // Cache user data for 5 minutes
+        // Keep the application identity available to older feature modules.
         $_SESSION['user_data'] = [
             'id' => $session['id'],
             'family_id' => $session['family_id'],
@@ -204,8 +182,6 @@ class Session {
             'email' => $session['email'],
             'avatar_color' => $session['avatar_color']
         ];
-        $_SESSION['user_data_cached'] = true;
-        $_SESSION['user_data_time'] = time();
         
         // Extend session every 7 days
         $age = time() - ($_SESSION['created_at'] ?? 0);

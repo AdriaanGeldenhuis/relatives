@@ -244,6 +244,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <!-- Main Content -->
 <main class="main-content">
+    <?php if ($user['role'] === 'admin' && (int) $user['family_id'] === 1): ?>
+        <p><a href="/admin/account-deletion.php">Account deletion requests</a></p>
+    <?php endif; ?>
     <div class="hub">
 
         <!-- Compact page header -->

@@ -391,7 +391,7 @@ class TemplateEngine {
     // DUPLICATE TEMPLATE
     // ============================================
 
-    public function duplicate(int $templateId, string $newName = null): int {
+    public function duplicate(int $templateId, ?string $newName = null): int {
         $template = $this->getById($templateId);
         if (!$template) {
             throw new InvalidArgumentException('Template not found');

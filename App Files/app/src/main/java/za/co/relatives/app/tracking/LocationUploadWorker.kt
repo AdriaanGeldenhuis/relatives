@@ -12,11 +12,14 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import kotlinx.coroutines.CancellationException
+import okhttp3.CookieJar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import za.co.relatives.app.data.TrackingStore
 import za.co.relatives.app.network.NetworkClient
+import za.co.relatives.app.network.readTextResponse
 import za.co.relatives.app.utils.PreferencesManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,12 +47,13 @@ class LocationUploadWorker(
         /** Points older than this are dropped unsent — worthless on a live map. */
         private const val MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
 
-        fun enqueue(context: Context) {
+        fun enqueue(context: Context, delaySeconds: Long = 0) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
             val request = OneTimeWorkRequestBuilder<LocationUploadWorker>()
                 .setConstraints(constraints)
+                .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
             WorkManager.getInstance(context)
@@ -59,7 +63,8 @@ class LocationUploadWorker(
 
     private val store = TrackingStore(applicationContext)
     private val gson = Gson()
-    private val http = NetworkClient.getInstance(applicationContext)
+    private val http = NetworkClient.getInstance(applicationContext).newBuilder()
+        .cookieJar(CookieJar.NO_COOKIES).followRedirects(false).build()
     private val prefs = PreferencesManager(applicationContext)
 
     // Server expects "recorded_at" as UTC "yyyy-MM-dd HH:mm:ss"; a raw epoch-ms
@@ -69,39 +74,41 @@ class LocationUploadWorker(
         timeZone = TimeZone.getTimeZone("UTC")
     }
 
-    override suspend fun doWork(): Result {
-        Log.d(TAG, "Upload starting (attempt $runAttemptCount)")
+    private enum class BatchOutcome { UPLOADED, BLOCKED, RETRY }
 
-        // Age-based expiry is the ONLY discard of unsent points. The previous
-        // retry-count cull deleted queued fixes after 5 attempts, but the
-        // retry counter was bumped on plain network timeouts too — a flaky or
-        // captive-portal connection silently ate a user's location history.
+    override suspend fun doWork(): Result {
+        val consent = prefs.trackingConsent() ?: return Result.success()
+        if (!TrackingService.canShowTrackingNotification(applicationContext)) return Result.success()
+
+        // Retain unsent fixes through transient network failures within the
+        // queue's age and size limits.
         store.expireOlderThan(System.currentTimeMillis() - MAX_AGE_MS)
 
         // Drain the whole queue (max 300 items ≈ 3 batches), not just the
         // first 100 — the queue trims oldest-first, so leaving points behind
         // loses history.
         repeat(3) {
-            val result = uploadBatch()
-            if (result !is Result.Success || store.unsentCount() == 0) {
-                return result
+            when (uploadBatch(consent)) {
+                BatchOutcome.UPLOADED -> if (store.unsentCount(consent.scope) == 0) return Result.success()
+                BatchOutcome.BLOCKED -> return Result.failure()
+                BatchOutcome.RETRY -> return Result.retry()
             }
         }
-        return Result.success()
+        return if (store.unsentCount(consent.scope) == 0) Result.success() else Result.retry()
     }
 
-    private suspend fun uploadBatch(): Result {
-        val batch = store.getUnsentLocations(100)
+    private suspend fun uploadBatch(consent: PreferencesManager.TrackingConsent): BatchOutcome {
+        val batch = store.getUnsentLocations(consent.scope)
         if (batch.isEmpty()) {
             store.cleanupSent()
-            return Result.success()
+            return BatchOutcome.UPLOADED
         }
 
-        val viable = batch
+        if (prefs.trackingConsent()?.scope != consent.scope) return BatchOutcome.BLOCKED
 
         return try {
             val deviceId = prefs.deviceUuid
-            val payload = viable.map { e ->
+            val payload = batch.map { e ->
                 mapOf(
                     "client_event_id" to e.clientEventId,
                     "lat" to e.lat,
@@ -122,39 +129,50 @@ class LocationUploadWorker(
 
             val request = Request.Builder()
                 .url(BATCH_URL)
+                .header("Cookie", "RELATIVES_SESSION=${consent.sessionCookie}")
                 .post(jsonBody.toRequestBody(JSON_MEDIA))
                 .build()
 
-            val response = http.newCall(request).execute()
-            val body = response.body?.string().orEmpty()
-
-            when (response.code) {
+            val (status, responseBody) = http.newCall(request).readTextResponse()
+            when (status) {
                 in 200..299 -> {
-                    viable.forEach { store.markSent(it.clientEventId) }
+                    val ack = gson.fromJson(responseBody, JsonObject::class.java)
+                    if (ack?.get("success")?.asBoolean != true) return BatchOutcome.RETRY
+                    if (ack.get("message")?.asString == "tracking_disabled") {
+                        if (prefs.trackingConsent()?.scope == consent.scope) TrackingService.stop(applicationContext)
+                        return BatchOutcome.BLOCKED
+                    }
+                    if (ack.getAsJsonObject("data")?.get("processed")?.asInt != batch.size) {
+                        return BatchOutcome.RETRY
+                    }
+
+                    batch.forEach { store.markSent(it.clientEventId) }
                     store.cleanupSent()
-                    store.lastUploadTime = System.currentTimeMillis()
-                    Log.d(TAG, "Uploaded ${viable.size} locations")
-                    Result.success()
+                    BatchOutcome.UPLOADED
                 }
-                401, 403 -> {
-                    // Not authenticated (cookie not synced yet). Keep the
-                    // queue intact; the next app open re-auths and re-runs.
-                    Log.w(TAG, "Auth failure (${response.code}), aborting")
-                    Result.failure()
+                401 -> {
+                    if (prefs.trackingConsent()?.scope == consent.scope) TrackingService.stop(applicationContext)
+                    BatchOutcome.BLOCKED
+                }
+                403 -> {
+                    val error = gson.fromJson(responseBody, JsonObject::class.java)?.get("error")
+                    if (error?.asString == "location_sharing_disabled" && prefs.trackingConsent()?.scope == consent.scope) {
+                        TrackingService.stop(applicationContext)
+                    }
+                    BatchOutcome.BLOCKED
                 }
                 else -> {
-                    // 5xx / 429 / anything else: transient. Retry with
-                    // WorkManager's backoff and KEEP the points — never
-                    // discard them for a server hiccup.
-                    Log.w(TAG, "Upload failed (${response.code}): $body")
-                    Result.retry()
+                    Log.w(TAG, "Upload failed ($status)")
+                    BatchOutcome.RETRY
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             // Network error (timeout, no connectivity, captive portal).
             // Retry; the points stay queued until they upload or age out.
             Log.e(TAG, "Upload exception", e)
-            Result.retry()
+            BatchOutcome.RETRY
         }
     }
 }

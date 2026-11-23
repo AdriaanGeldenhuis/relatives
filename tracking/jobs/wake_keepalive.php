@@ -5,9 +5,8 @@ declare(strict_types=1);
  * Tracking keep-alive wake push.
  *
  * Android kills the tracking foreground service after an hour or two
- * (Doze / OEM battery killers); the device then goes silent until the user
- * reopens the app. A high-priority data-only FCM message grants the app a
- * temporary background-start exemption, letting it revive the service.
+ * (Doze / OEM battery restrictions). Normal-priority maintenance hints
+ * are delivered when Android permits background work.
  *
  * Every run: find Android devices of active, location-sharing users in
  * families where tracking is on (mode 2 always; mode 1 only with a live
@@ -42,8 +41,7 @@ if (!class_exists('FirebaseMessaging')) {
 
 // A device is "quiet" when its last stored fix is older than this. Keep it
 // comfortably above the idle upload cadence (~10 min heartbeat) so healthy
-// devices are never pushed — Android deprioritises apps that receive
-// high-priority pushes without visible results.
+// devices do not receive maintenance pushes.
 $staleMinutes = 15;
 
 try {
@@ -88,15 +86,17 @@ $invalid = 0;
 $failed = 0;
 
 foreach ($targets as $t) {
-    // Silent data-only wake; the sender already marks Android priority high.
+    // Maintenance messages are delivered at normal priority.
     // TTL matches the 10-min cron cadence — an undelivered keepalive is
     // superseded by the next run, so FCM must not queue them for weeks, and
     // the collapse key keeps at most one pending per device.
     $result = $fcm->send($t['token'], [], [
         'type' => 'wake_tracking',
         'keepalive' => '1',
+        'recipient_user_id' => (string) $t['user_id'],
     ], [
         'ttl' => '600s',
+        'priority' => 'normal',
         'collapse_key' => 'wake_keepalive',
     ]);
 

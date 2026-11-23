@@ -17,14 +17,14 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityTransition
@@ -39,9 +39,18 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import za.co.relatives.app.MainActivity
 import za.co.relatives.app.R
-import za.co.relatives.app.data.QueuedLocationEntity
 import za.co.relatives.app.data.TrackingStore
+import za.co.relatives.app.utils.PreferencesManager
 
 /**
  * Foreground location service.
@@ -72,6 +81,8 @@ class TrackingService : Service() {
         const val ACTION_STOP = "za.co.relatives.app.tracking.STOP"
         const val ACTION_MOTION_STARTED = "za.co.relatives.app.tracking.MOTION_STARTED"
         const val ACTION_MOTION_STOPPED = "za.co.relatives.app.tracking.MOTION_STOPPED"
+        private const val ACTION_WAKE = "za.co.relatives.app.tracking.WAKE"
+        private const val ACTION_MOTION_PERMISSION = "za.co.relatives.app.tracking.MOTION_PERMISSION"
         const val ACTION_REVIVE = "za.co.relatives.app.tracking.REVIVE"
 
         private const val CHANNEL_ID = "tracking_channel"
@@ -80,18 +91,11 @@ class TrackingService : Service() {
         private const val GEOFENCE_RADIUS_M = 200f
         private const val GEOFENCE_ID = "idle_geofence"
 
-        private const val SPEED_MOVING_THRESHOLD = 1.0f
-        private const val DISTANCE_MOVING_THRESHOLD = 50f
-        private const val IDLE_TIMEOUT_MS = 2L * 60 * 1000
+        private const val MOVING_INTERVAL_MS = 30_000L
+        private const val IDLE_INTERVAL_MS = 5 * 60_000L
+        private const val FALLBACK_INTERVAL_MS = 2 * 60_000L
 
-        private const val MOTION_STOP_DEBOUNCE_MS = 30_000
-
-        private const val MOVING_INTERVAL_MS = 15_000L
-        private const val IDLE_INTERVAL_MS = 120_000L
-
-        /** A cached last-known fix older than this is ignored (stale). */
-        private const val FRESH_FIX_MAX_AGE_MS = 2L * 60 * 1000
-
+        private const val WAKE_COOLDOWN_MS = 30_000L
         private const val IDLE_ENQUEUE_INTERVAL_MS = 10L * 60 * 1000
 
         /** True while an instance is alive. Lets callers avoid start churn. */
@@ -99,7 +103,61 @@ class TrackingService : Service() {
         var isRunning = false
             private set
 
-        fun start(context: Context) = safeStart(context, ACTION_START)
+        fun start(context: Context) {
+            if (!hasLocationPermission(context) || !canShowTrackingNotification(context)) return
+            if (PreferencesManager(context).enableTracking()) safeStart(context, ACTION_START)
+        }
+
+        fun requestWakeFix(context: Context, expedited: Boolean = false) {
+            if (!isTrackingEnabled(context) || !hasLocationPermission(context) ||
+                !canShowTrackingNotification(context)
+            ) return
+            if (!requestRunningWake(context) && hasBackgroundLocation(context)) {
+                TrackingRestartWorker.enqueueWakeFix(context, expedited)
+            }
+        }
+
+        fun onMotionPermissionGranted(context: Context) {
+            if (isRunning) safeStart(context, ACTION_MOTION_PERMISSION)
+        }
+
+        fun showFamilyRefreshNotification(context: Context) {
+            createTrackingChannel(context)
+            val openTracking = PendingIntent.getActivity(
+                context, 9002,
+                Intent(context, MainActivity::class.java).putExtra("action_url", "/tracking/app/"),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val stop = PendingIntent.getService(
+                context, 0, Intent(context, TrackingService::class.java).setAction(ACTION_STOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(context.getString(R.string.notif_title_tracking))
+                .setContentText(context.getString(R.string.tracking_notif_refresh))
+                .setContentIntent(openTracking)
+                .setAutoCancel(true)
+                .addAction(0, context.getString(R.string.tracking_notif_stop), stop)
+                .setSilent(true)
+                .setTimeoutAfter(60_000L)
+                .build()
+            context.getSystemService(NotificationManager::class.java)?.notify(9002, notification)
+        }
+
+        private fun createTrackingChannel(context: Context) {
+            val channel = NotificationChannel(
+                CHANNEL_ID, context.getString(R.string.channel_tracking_name), NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = context.getString(R.string.channel_tracking_desc)
+                setShowBadge(false)
+                setSound(null, null)
+            }
+            context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
+        }
+
+        internal fun requestRunningWake(context: Context): Boolean =
+            isRunning && safeStart(context, ACTION_WAKE)
 
         /**
          * Revive tracking WITHOUT re-persisting the enabled flag — for the
@@ -108,26 +166,33 @@ class TrackingService : Service() {
          * tapping disable: onStartCommand re-checks the persisted flag and
          * shuts down if the user turned tracking off in the meantime.
          */
-        fun revive(context: Context) = safeStart(context, ACTION_REVIVE)
+        fun revive(context: Context) {
+            safeStart(context, ACTION_REVIVE)
+        }
 
         /**
          * Stop tracking. Persists the disabled flag first so that even if the
-         * stop intent cannot be delivered (background restrictions), every
-         * receiver and the service itself will see tracking as off and shut
-         * down on the next event.
+         * service is already stopped, subsequent events respect the disabled flag.
          */
         fun stop(context: Context) {
-            persistEnabled(context, false)
-            try {
-                context.startService(
-                    Intent(context, TrackingService::class.java).apply { action = ACTION_STOP },
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "Could not deliver stop intent (service will stop on next event)", e)
-            }
+            disableTracking(context)
+            context.stopService(Intent(context, TrackingService::class.java))
         }
 
-        fun motionStarted(context: Context) = safeStart(context, ACTION_MOTION_STARTED)
+        private fun disableTracking(context: Context) {
+            val prefs = PreferencesManager(context)
+            val previous = prefs.trackingConsent()
+            prefs.disableTracking()
+            if (previous != null) TrackingRestartWorker.discard(context, previous.scope)
+            TrackingRestartWorker.cancel(context)
+            WatchdogAlarmReceiver.cancel(context)
+            context.getSystemService(NotificationManager::class.java)?.cancel(9002)
+            WorkManager.getInstance(context).cancelUniqueWork(LocationUploadWorker.WORK_NAME)
+        }
+
+        fun motionStarted(context: Context) {
+            safeStart(context, ACTION_MOTION_STARTED)
+        }
 
         fun motionStopped(context: Context) {
             // Only meaningful if the service is already running; never worth
@@ -142,22 +207,28 @@ class TrackingService : Service() {
          * SecurityException. Tracking resumes the next time an allowed
          * trigger fires (app open, geofence/AR transition, FCM wake).
          */
-        private fun safeStart(context: Context, action: String) {
+        private fun safeStart(context: Context, action: String): Boolean {
+            if (!isTrackingEnabled(context) || !hasLocationPermission(context) ||
+                !canShowTrackingNotification(context)
+            ) return false
             val intent = Intent(context, TrackingService::class.java).apply { this.action = action }
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent)
-                } else {
-                    context.startService(intent)
-                }
+            return try {
+                context.startForegroundService(intent)
+                true
             } catch (e: Exception) {
                 Log.w(TAG, "Unable to start service for $action", e)
+                false
             }
         }
 
         fun isTrackingEnabled(context: Context): Boolean =
-            context.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
-                .getBoolean("tracking_enabled", false)
+            PreferencesManager(context).trackingConsent() != null
+
+        fun canShowTrackingNotification(context: Context): Boolean {
+            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
+            val manager = context.getSystemService(NotificationManager::class.java)
+            return manager?.getNotificationChannel(CHANNEL_ID)?.importance != NotificationManager.IMPORTANCE_NONE
+        }
 
         fun hasLocationPermission(context: Context): Boolean =
             ContextCompat.checkSelfPermission(
@@ -186,10 +257,6 @@ class TrackingService : Service() {
         fun canReviveFromBackground(context: Context): Boolean =
             isRunning || hasBackgroundLocation(context)
 
-        private fun persistEnabled(context: Context, enabled: Boolean) {
-            context.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
-                .edit().putBoolean("tracking_enabled", enabled).apply()
-        }
     }
 
     private enum class BatteryBucket { NORMAL, LOW, CRITICAL }
@@ -215,8 +282,19 @@ class TrackingService : Service() {
     private var initFailed = false
     private var currentMode = Mode.IDLE
     private var lastLocation: Location? = null
-    private var lastEnqueueTime = 0L
-    private var lastIdleEnqueueTime = 0L
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val handler = Handler(android.os.Looper.getMainLooper())
+    private val idleTimeout = Runnable { if (started) switchToIdle() }
+    private var lastMovementMs = 0L
+    private var lastQueuedMs: Long? = null
+    private var movementAnchor: Location? = null
+    private var lastFixNanos = Long.MIN_VALUE
+    private var lastQueuedFixNanos = Long.MIN_VALUE
+    private var wakeFix: Job? = null
+    private var lastWakeMs: Long? = null
+    private var platformIdleFixes: Job? = null
+    private var locationRequestGeneration = 0
+    private var activityTransitionsRegistered = false
     private var lastBatteryBucket: BatteryBucket? = null
     private var batteryReceiverRegistered = false
     private var activityTransitionPi: PendingIntent? = null
@@ -258,7 +336,7 @@ class TrackingService : Service() {
     // provider set changes so updates re-register once a provider returns.
     private val providersChangedReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
-            if (!hasGms && started) {
+            if (started) {
                 Log.d(TAG, "Location providers changed; re-applying fallback updates.")
                 applyMode(currentMode, force = true)
             }
@@ -270,10 +348,12 @@ class TrackingService : Service() {
         isRunning = true
         try {
             // Channel first: foreground promotion depends on it.
-            createNotificationChannel()
+            createTrackingChannel(this)
             hasGms = GmsSupport.available(this)
-            fusedClient = LocationServices.getFusedLocationProviderClient(this)
-            geofencingClient = LocationServices.getGeofencingClient(this)
+            if (hasGms) {
+                fusedClient = LocationServices.getFusedLocationProviderClient(this)
+                geofencingClient = LocationServices.getGeofencingClient(this)
+            }
             platformLocationManager = getSystemService(LOCATION_SERVICE) as? LocationManager
             store = TrackingStore(this)
         } catch (e: Exception) {
@@ -285,7 +365,7 @@ class TrackingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val enabled = isTrackingEnabled(this)
+        val enabled = isTrackingEnabled(this) && canShowTrackingNotification(this)
         val hasPermission = hasLocationPermission(this)
 
         // Stop requests arrive via plain startService (companion stop() and
@@ -310,46 +390,20 @@ class TrackingService : Service() {
             return START_NOT_STICKY
         }
 
+        if (!enabled || !hasPermission) {
+            doStop()
+            return START_NOT_STICKY
+        }
+        doStart()
         when (intent?.action) {
-            ACTION_START -> {
-                if (hasPermission) {
-                    persistEnabled(this, true)
-                    doStart()
-                } else {
-                    Log.w(TAG, "Start requested without location permission.")
-                    doStop()
-                    return START_NOT_STICKY
-                }
-            }
-            ACTION_MOTION_STARTED -> {
-                if (enabled && hasPermission) {
-                    doStart() // no-op when already started
-                    doMotionStarted()
-                } else {
-                    doStop()
-                    return START_NOT_STICKY
-                }
-            }
+            ACTION_MOTION_STARTED -> recordMovement(SystemClock.elapsedRealtime())
             ACTION_MOTION_STOPPED -> {
-                if (enabled && hasPermission) {
-                    doStart()
-                    doMotionStopped()
-                } else {
-                    doStop()
-                    return START_NOT_STICKY
+                if (SystemClock.elapsedRealtime() - lastMovementMs >= TrackingMotion.STILL_DEBOUNCE_MS) {
+                    switchToIdle()
                 }
             }
-            else -> {
-                // Null intent (START_STICKY restart after process death) and
-                // ACTION_REVIVE (watchdog / FCM keepalive) share the same
-                // contract: resume only if the user still has tracking on.
-                if (enabled && hasPermission) {
-                    doStart()
-                } else {
-                    doStop()
-                    return START_NOT_STICKY
-                }
-            }
+            ACTION_WAKE -> captureWakeFix()
+            ACTION_MOTION_PERMISSION -> registerActivityTransitions()
         }
         return START_STICKY
     }
@@ -359,7 +413,8 @@ class TrackingService : Service() {
     override fun onDestroy() {
         val enabled = isTrackingEnabled(this)
 
-        // Always stop active location callbacks (service is dying)
+        handler.removeCallbacks(idleTimeout)
+        serviceScope.cancel()
         stopLocationUpdates()
         unregisterBatteryReceiver()
         unregisterProvidersChangedReceiver()
@@ -384,7 +439,7 @@ class TrackingService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         if (isTrackingEnabled(this)) {
             Log.i(TAG, "Task removed with tracking on; flushing queue and scheduling restart check.")
-            scheduleUpload()
+            LocationUploadWorker.enqueue(this)
             TrackingRestartWorker.enqueue(this)
         }
         super.onTaskRemoved(rootIntent)
@@ -394,44 +449,29 @@ class TrackingService : Service() {
     //  Foreground promotion
     // ────────────────────────────────────────────────────────────────────
 
-    /**
-     * Fulfil the startForegroundService() contract. Returns false when the
-     * service could not be promoted (the caller must then stop the service).
-     *
-     * On Android 14+ promoting a location-type service without location
-     * permission throws SecurityException, so in that case we promote as a
-     * SHORT_SERVICE (needs no permission or manifest type) purely to satisfy
-     * the contract before an immediate shutdown.
-     */
     private fun promoteToForeground(hasPermission: Boolean): Boolean {
+        if (!hasPermission) return false
         if (isForeground) return true
         return try {
             val notification = buildNotification()
-            when {
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !hasPermission ->
-                    startForeground(
-                        NOTIFICATION_ID, notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
-                    )
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
-                    startForeground(
-                        NOTIFICATION_ID, notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-                    )
-                else -> startForeground(NOTIFICATION_ID, notification)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
             }
             isForeground = true
-            // A SHORT_SERVICE promotion only exists to satisfy the contract;
-            // report failure so the caller shuts down before its timeout.
-            hasPermission || Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-        } catch (e: Exception) {
-            Log.e(TAG, "startForeground failed", e)
+            true
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "Location foreground service was not allowed", error)
             false
         }
     }
 
     /** Stop cleanly without touching the persisted enabled flag. */
     private fun shutdown() {
+        started = false
+        handler.removeCallbacks(idleTimeout)
+        wakeFix?.cancel()
         stopLocationUpdates()
         unregisterBatteryReceiver()
         unregisterProvidersChangedReceiver()
@@ -457,73 +497,40 @@ class TrackingService : Service() {
         registerBatteryReceiver()
         registerProvidersChangedReceiver()
         applyMode(Mode.IDLE, force = true)
-        lastIdleEnqueueTime = System.currentTimeMillis()
         registerActivityTransitions()
-        // Arm the periodic watchdog: WorkManager survives the process, so
-        // when the OS kills this service the watchdog restarts it (or at
-        // least captures a fix) instead of tracking staying dead until the
-        // user reopens the app.
         TrackingRestartWorker.enqueuePeriodic(this)
-        // AlarmManager backstop for the same watchdog: Huawei/Honor/MIUI
-        // battery managers defer WorkManager jobs indefinitely once the app
-        // is backgrounded, while while-idle alarms still fire.
-        WatchdogAlarmReceiver.schedule(this)
+        WatchdogAlarmReceiver.cancel(this) // Cancel alarms left by an older app version.
     }
 
     private fun doStop() {
-        Log.i(TAG, "Stopping tracking")
-        started = false
-        persistEnabled(this, false)
-        unregisterActivityTransitions()
-        removeGeofence()
-        WatchdogAlarmReceiver.cancel(this)
+        disableTracking(this)
         shutdown()
     }
 
-    @SuppressLint("MissingPermission")
-    private fun doMotionStarted() {
-        Log.d(TAG, "Motion started event received")
+    private fun recordMovement(now: Long) {
+        lastMovementMs = now
         applyMode(Mode.MOVING)
-
-        // Force an immediate point upload on movement
-        try {
-            if (hasGms) {
-                fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                    .addOnSuccessListener { loc -> if (loc != null) enqueue(loc) }
-            } else {
-                // Fallback burst: the MOVING-mode updates registered above
-                // deliver the fresh fix; nudge with the last known position
-                // so the family sees SOMETHING move immediately — but only if
-                // it is recent. A stale cached point (device in a drawer for
-                // hours) would corrupt the state machine and upload a fix far
-                // from the real position stamped as "now".
-                platformLocationManager?.let { lm ->
-                    val provider = listOf(
-                        LocationManager.GPS_PROVIDER,
-                        LocationManager.NETWORK_PROVIDER,
-                    ).firstOrNull { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
-                    provider?.let { p ->
-                        lm.getLastKnownLocation(p)?.let { loc ->
-                            if (System.currentTimeMillis() - loc.time <= FRESH_FIX_MAX_AGE_MS) {
-                                onLocationReceived(loc)
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (_: SecurityException) {
-            Log.e(TAG, "Could not get current location on motion started: permission denied")
-        }
+        handler.removeCallbacks(idleTimeout)
+        handler.postDelayed(idleTimeout, TrackingMotion.IDLE_AFTER_MS)
     }
 
-    private fun doMotionStopped() {
-        val timeSinceLastMovement = System.currentTimeMillis() - lastEnqueueTime
-        if (currentMode != Mode.IDLE && timeSinceLastMovement < MOTION_STOP_DEBOUNCE_MS) {
-            Log.w(TAG, "Motion stopped event ignored (debounce). Still moving recently (${timeSinceLastMovement}ms ago).")
-            return
-        }
-        Log.i(TAG, "Motion stopped event received, switching to IDLE.")
+    private fun switchToIdle() {
+        handler.removeCallbacks(idleTimeout)
         applyMode(Mode.IDLE)
+    }
+
+    private fun captureWakeFix() {
+        if (wakeFix?.isActive == true) return
+        val now = SystemClock.elapsedRealtime()
+        if (lastWakeMs?.let { now - it < WAKE_COOLDOWN_MS } == true) return
+        lastWakeMs = now
+        wakeFix = serviceScope.launch {
+            val fix = TrackingFix.current(this@TrackingService, highAccuracy = getBatteryBucket() == BatteryBucket.NORMAL)
+            if (fix != null && acceptsFix(fix)) {
+                // A manual refresh updates the map without granting a moving-mode window.
+                enqueue(fix, SystemClock.elapsedRealtime(), urgent = true)
+            }
+        }
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -532,6 +539,7 @@ class TrackingService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun registerActivityTransitions() {
+        if (activityTransitionPi != null) return
         if (!hasGms) {
             Log.i(TAG, "No Play services; skipping activity recognition (interval fallback active).")
             return
@@ -550,17 +558,11 @@ class TrackingService : Service() {
             DetectedActivity.STILL,
             DetectedActivity.WALKING,
         )
-        val transitions = activities.flatMap { activity ->
-            listOf(
-                ActivityTransition.Builder()
-                    .setActivityType(activity)
-                    .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
-                    .build(),
-                ActivityTransition.Builder()
-                    .setActivityType(activity)
-                    .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
-                    .build(),
-            )
+        val transitions = activities.map { activity ->
+            ActivityTransition.Builder()
+                .setActivityType(activity)
+                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+                .build()
         }
         val request = ActivityTransitionRequest(transitions)
         val intent = Intent(this, ActivityTransitionsReceiver::class.java)
@@ -568,12 +570,29 @@ class TrackingService : Service() {
             this, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
         )
         ActivityRecognition.getClient(this).requestActivityTransitionUpdates(request, activityTransitionPi!!)
-            .addOnSuccessListener { Log.i(TAG, "Activity transitions registered") }
-            .addOnFailureListener { e -> Log.e(TAG, "Failed to register activity transitions", e) }
+            .addOnSuccessListener {
+                if (started && currentMode == Mode.IDLE) {
+                    activityTransitionsRegistered = true
+                    applyMode(Mode.IDLE, force = true)
+                } else if (started) {
+                    activityTransitionsRegistered = true
+                }
+            }
+            .addOnFailureListener { e ->
+                activityTransitionPi = null
+                Log.w(TAG, "Failed to register activity transitions", e)
+            }
     }
 
     private fun unregisterActivityTransitions() {
         if (!hasGms) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            activityTransitionPi?.cancel()
+            activityTransitionPi = null
+            return
+        }
         // After a process restart the field is null but the OLD registration
         // is still live in Play services. Rebuild the identical PendingIntent
         // (same request code + intent + flags → equal PI) so disabling
@@ -585,16 +604,21 @@ class TrackingService : Service() {
         try {
             ActivityRecognition.getClient(this).removeActivityTransitionUpdates(pi)
                 .addOnFailureListener { e -> Log.e(TAG, "Failed to unregister activity transitions", e) }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error unregistering activity transitions", e)
+        } catch (error: SecurityException) {
+            Log.w(TAG, "Activity recognition permission was revoked", error)
+        } finally {
+            pi.cancel()
+            activityTransitionPi = null
         }
-        activityTransitionPi = null
     }
 
     @SuppressLint("MissingPermission")
     private fun addIdleGeofence(location: Location) {
-        if (!hasGms) return
-        removeGeofence()
+        if (!hasGms || geofencePi != null || !hasBackgroundLocation(this) ||
+            !location.hasAccuracy() || location.accuracy > 100f ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
         val geofence = Geofence.Builder()
             .setRequestId(GEOFENCE_ID)
             .setCircularRegion(location.latitude, location.longitude, GEOFENCE_RADIUS_M)
@@ -602,6 +626,7 @@ class TrackingService : Service() {
             .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_EXIT)
             .build()
         val request = GeofencingRequest.Builder()
+            .setInitialTrigger(0)
             .addGeofence(geofence)
             .build()
         val intent = Intent(this, GeofenceReceiver::class.java)
@@ -610,8 +635,10 @@ class TrackingService : Service() {
         )
         try {
             geofencingClient.addGeofences(request, geofencePi!!)
-                .addOnSuccessListener { Log.i(TAG, "Idle geofence set at ${location.latitude},${location.longitude}") }
-                .addOnFailureListener { e -> Log.e(TAG, "Failed to add geofence", e) }
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "Failed to add idle geofence", e)
+                    // Interval updates remain the fallback for this idle window.
+                }
         } catch (e: SecurityException) {
             Log.e(TAG, "Geofence add rejected: permission missing", e)
         }
@@ -639,203 +666,159 @@ class TrackingService : Service() {
     //  Location modes
     // ────────────────────────────────────────────────────────────────────
 
+    @SuppressLint("MissingPermission")
     private fun applyMode(mode: Mode, force: Boolean = false) {
-        if (currentMode == mode && !force) return
-
-        if (mode == Mode.MOVING) {
-            lastEnqueueTime = System.currentTimeMillis()
-        }
-
+        if (!started || (currentMode == mode && !force)) return
+        val modeChanged = currentMode != mode
         currentMode = mode
         stopLocationUpdates()
+        val generation = locationRequestGeneration
 
         try {
-            if (hasGms) {
-                val request = buildLocationRequest(mode)
-                fusedClient.requestLocationUpdates(request, locationCallback, mainLooper)
-                Log.i(TAG, "Mode applied: $mode (interval=${request.intervalMillis}ms, force=$force)")
+            if (hasGms && ::fusedClient.isInitialized) {
+                fusedClient.requestLocationUpdates(buildLocationRequest(mode), locationCallback, mainLooper)
+                    .addOnFailureListener { error ->
+                        if (started && generation == locationRequestGeneration) {
+                            Log.w(TAG, "Fused location unavailable; using platform location", error)
+                            requestPlatformLocationUpdates(mode)
+                        }
+                    }
             } else {
                 requestPlatformLocationUpdates(mode)
-                Log.i(TAG, "Mode applied via LocationManager fallback: $mode (force=$force)")
             }
         } catch (e: SecurityException) {
-            Log.e(TAG, "Location permission missing, stopping service.", e)
-            doStop()
+            Log.w(TAG, "Location permission missing", e)
+            shutdown()
             return
         }
 
-        when (mode) {
-            Mode.IDLE -> lastLocation?.let { addIdleGeofence(it) }
-            Mode.MOVING -> removeGeofence()
-        }
-        updateNotification()
+        if (mode == Mode.IDLE) lastLocation?.takeIf(TrackingFix::isFresh)?.let(::addIdleGeofence)
+        if (modeChanged && mode == Mode.MOVING) removeGeofence()
+        if (modeChanged) updateNotification()
     }
 
-    /**
-     * Location updates without Google Play services: register directly with
-     * the platform [LocationManager]. GPS and network providers both feed
-     * [onLocationReceived]; the existing speed/distance checks there handle
-     * MOVING/IDLE transitions since geofence + activity recognition are
-     * unavailable on these devices.
-     */
     @SuppressLint("MissingPermission")
     private fun requestPlatformLocationUpdates(mode: Mode) {
-        val lm = platformLocationManager ?: return
-        val battery = getBatteryBucket()
-        val intervalMs = when {
-            battery == BatteryBucket.CRITICAL -> 5 * 60 * 1000L
-            battery == BatteryBucket.LOW -> 3 * 60 * 1000L
-            mode == Mode.MOVING -> MOVING_INTERVAL_MS
-            else -> IDLE_INTERVAL_MS
-        }
-        // GPS only in normal-battery MOVING mode; the network provider is the
-        // cheap always-on baseline that keeps the idle heartbeat alive. If
-        // network positioning is unavailable, GPS becomes the baseline no
-        // matter the battery state — a slow dot beats a vanished family member.
-        val networkOk = runCatching {
-            lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-        }.getOrDefault(false)
-        val gpsOk = runCatching {
-            lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
-        }.getOrDefault(false)
+        val manager = platformLocationManager ?: return
+        val interval = intervalFor(mode)
+        val network = manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        val gps = manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
 
-        val providers = mutableListOf<String>()
-        if (networkOk) providers.add(LocationManager.NETWORK_PROVIDER)
-        if (gpsOk && (providers.isEmpty() || (battery == BatteryBucket.NORMAL && mode == Mode.MOVING))) {
-            providers.add(LocationManager.GPS_PROVIDER)
-        }
-        if (providers.isEmpty()) {
-            Log.w(TAG, "No enabled location providers for fallback updates")
+        if (!network && gps && (mode == Mode.IDLE || getBatteryBucket() != BatteryBucket.NORMAL)) {
+            // A GPS-only phone gets short, cancellable fixes while idle.
+            platformIdleFixes = serviceScope.launch {
+                while (isActive && started && isTrackingEnabled(this@TrackingService)) {
+                    TrackingFix.current(this@TrackingService, highAccuracy = false, platformOnly = true)
+                        ?.let(::onLocationReceived)
+                    delay(interval)
+                }
+            }
             return
         }
-        providers.forEach { provider ->
-            lm.requestLocationUpdates(provider, intervalMs, 0f, lmListener, mainLooper)
+
+        val provider = when {
+            gps && mode == Mode.MOVING && getBatteryBucket() == BatteryBucket.NORMAL ->
+                LocationManager.GPS_PROVIDER
+            network -> LocationManager.NETWORK_PROVIDER
+            gps -> LocationManager.GPS_PROVIDER
+            else -> return
         }
-        lmUpdatesRegistered = true
+        try {
+            manager.requestLocationUpdates(provider, interval, 0f, lmListener, mainLooper)
+            lmUpdatesRegistered = true
+        } catch (error: SecurityException) {
+            Log.w(TAG, "Platform location permission missing", error)
+        }
     }
 
-    /**
-     * No minimum-displacement filters here, deliberately: with a distance
-     * filter, a stationary device receives NO callbacks at all, which (a)
-     * kept MOVING mode's high-accuracy GPS request active forever because the
-     * idle-revert check in [onLocationReceived] never ran, and (b) starved
-     * the 10-minute idle heartbeat so family members looked offline all day.
-     * Interval-based updates keep both alive; dedup happens in
-     * [TrackingStore.shouldEnqueue].
-     */
+    private fun intervalFor(mode: Mode): Long = when {
+        getBatteryBucket() == BatteryBucket.CRITICAL -> IDLE_INTERVAL_MS
+        getBatteryBucket() == BatteryBucket.LOW -> 3 * 60_000L
+        mode == Mode.MOVING -> MOVING_INTERVAL_MS
+        activityTransitionsRegistered -> IDLE_INTERVAL_MS
+        else -> FALLBACK_INTERVAL_MS
+    }
+
     private fun buildLocationRequest(mode: Mode): LocationRequest {
-        val battery = getBatteryBucket()
-        if (battery == BatteryBucket.CRITICAL) {
-            // LOW_POWER, not PASSIVE: a passive request only piggybacks on
-            // OTHER apps' location requests, so on a low-battery phone with
-            // nothing else using GPS it produced zero fixes indefinitely —
-            // the user simply vanished from the family map below 10%.
-            return LocationRequest.Builder(Priority.PRIORITY_LOW_POWER, 5 * 60 * 1000L).build()
-        }
-        if (battery == BatteryBucket.LOW) {
-            return LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 3 * 60 * 1000L)
-                .build()
-        }
-        return when (mode) {
-            Mode.MOVING -> LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, MOVING_INTERVAL_MS)
-                .setMaxUpdateDelayMillis(30_000L)
-                .build()
-            Mode.IDLE -> LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, IDLE_INTERVAL_MS)
-                .setMaxUpdateDelayMillis(2 * 60 * 1000L)
-                .build()
-        }
+        val interval = intervalFor(mode)
+        val priority = if (getBatteryBucket() == BatteryBucket.CRITICAL ||
+            (mode == Mode.IDLE && activityTransitionsRegistered)
+        ) Priority.PRIORITY_LOW_POWER else Priority.PRIORITY_BALANCED_POWER_ACCURACY
+
+        return LocationRequest.Builder(priority, interval)
+            .setMinUpdateIntervalMillis(interval)
+            .setMaxUpdateAgeMillis(0)
+            .setMaxUpdateDelayMillis(if (mode == Mode.MOVING) 2 * interval else interval)
+            .build()
     }
 
     private fun stopLocationUpdates() {
-        try {
-            fusedClient.removeLocationUpdates(locationCallback)
-        } catch (_: Exception) {
-        }
+        locationRequestGeneration++
+        platformIdleFixes?.cancel()
+        platformIdleFixes = null
+        if (::fusedClient.isInitialized) fusedClient.removeLocationUpdates(locationCallback)
         if (lmUpdatesRegistered) {
-            try {
-                platformLocationManager?.removeUpdates(lmListener)
-            } catch (_: Exception) {
-            }
+            platformLocationManager?.removeUpdates(lmListener)
             lmUpdatesRegistered = false
         }
     }
 
+    private fun acceptsFix(location: Location): Boolean {
+        if (!started) return false
+        if (!isTrackingEnabled(this) || !canShowTrackingNotification(this)) {
+            doStop()
+            return false
+        }
+        return TrackingFix.isFresh(location)
+    }
+
     private fun onLocationReceived(location: Location) {
-        val prev = lastLocation
-        if (currentMode == Mode.IDLE && prev != null) {
-            if (location.speed > SPEED_MOVING_THRESHOLD || prev.distanceTo(location) > DISTANCE_MOVING_THRESHOLD) {
-                Log.i(TAG, "Fallback motion detected, switching to MOVING")
-                applyMode(Mode.MOVING)
-            }
+        if (!acceptsFix(location) || location.elapsedRealtimeNanos <= lastFixNanos) return
+        lastFixNanos = location.elapsedRealtimeNanos
+        val now = SystemClock.elapsedRealtime()
+        if (currentMode == Mode.MOVING && now - lastMovementMs >= TrackingMotion.IDLE_AFTER_MS) {
+            switchToIdle()
         }
-
-        if (currentMode == Mode.MOVING && prev != null) {
-            if (prev.distanceTo(location) < 15f) {
-                if (System.currentTimeMillis() - lastEnqueueTime > IDLE_TIMEOUT_MS) {
-                    Log.i(TAG, "Appears stationary, reverting to IDLE")
-                    applyMode(Mode.IDLE)
-                }
-            } else {
-                lastEnqueueTime = System.currentTimeMillis()
-            }
-        }
-
-        if (currentMode == Mode.IDLE && geofencePi == null) {
-            addIdleGeofence(location)
-        }
-
-        lastLocation = location
-
-        if (store.shouldEnqueue(location)) {
-            enqueue(location)
-        } else {
-            maybeIdleEnqueue(location)
-        }
-    }
-
-    private fun maybeIdleEnqueue(location: Location) {
-        val now = System.currentTimeMillis()
-        if (now - lastIdleEnqueueTime >= IDLE_ENQUEUE_INTERVAL_MS) {
-            Log.d(TAG, "Periodic idle enqueue")
-            enqueue(location)
-            lastIdleEnqueueTime = now
-        }
-    }
-
-    private fun enqueue(location: Location) {
-        val now = System.currentTimeMillis()
-        lastEnqueueTime = now
-        if (currentMode == Mode.IDLE) lastIdleEnqueueTime = now
-        // Persisted heartbeat for the watchdog: "when did this device last
-        // capture a fix" must survive process death (TrackingStore's copy is
-        // in-memory only).
-        getSharedPreferences("relatives_prefs", MODE_PRIVATE)
-            .edit().putLong("last_fix_time", now).apply()
-        store.markEnqueued(location)
-        val entity = QueuedLocationEntity(
-            lat = location.latitude, lng = location.longitude,
-            accuracy = if (location.hasAccuracy()) location.accuracy else null,
-            altitude = if (location.hasAltitude()) location.altitude else null,
-            bearing = if (location.hasBearing()) location.bearing else null,
-            speed = if (location.hasSpeed()) location.speed else null,
-            speedKmh = if (location.hasSpeed()) location.speed * 3.6f else null,
-            isMoving = currentMode == Mode.MOVING,
-            batteryLevel = getBatteryLevel(),
-            timestamp = now,
+        val anchor = movementAnchor
+        val accuracy = location.takeIf(Location::hasAccuracy)?.accuracy
+        val moved = TrackingMotion.isMovement(
+            anchor?.distanceTo(location),
+            anchor?.accuracy,
+            accuracy,
+            location.takeIf(Location::hasSpeed)?.speed,
+            location.takeIf(Location::hasSpeedAccuracy)?.speedAccuracyMetersPerSecond,
         )
-        store.enqueueLocation(entity)
-        scheduleUpload()
+        if (accuracy != null && accuracy <= 100f && (anchor == null || moved)) {
+            movementAnchor = location
+        }
+        lastLocation = location
+        if (moved) recordMovement(now)
+        if (currentMode == Mode.IDLE) addIdleGeofence(location)
+
+        val lastQueued = lastQueuedMs
+        val heartbeatDue = lastQueued == null || now - lastQueued >= IDLE_ENQUEUE_INTERVAL_MS
+        if (heartbeatDue || (currentMode == Mode.MOVING && store.shouldEnqueue(location))) {
+            enqueue(location, now)
+        }
     }
 
-    private fun scheduleUpload() {
-        // Small delay + KEEP batches points captured close together into one
-        // POST instead of powering the radio up for every single fix.
-        val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-        val request = OneTimeWorkRequestBuilder<LocationUploadWorker>()
-            .setConstraints(constraints)
-            .setInitialDelay(15, java.util.concurrent.TimeUnit.SECONDS)
-            .build()
-        WorkManager.getInstance(this).enqueueUniqueWork(LocationUploadWorker.WORK_NAME, ExistingWorkPolicy.KEEP, request)
+    private fun enqueue(location: Location, now: Long, urgent: Boolean = false) {
+        val consent = PreferencesManager(this).trackingConsent() ?: return
+        if (location.elapsedRealtimeNanos <= lastQueuedFixNanos) {
+            if (urgent) LocationUploadWorker.enqueue(this)
+            return
+        }
+        lastQueuedFixNanos = location.elapsedRealtimeNanos
+        lastQueuedMs = now
+        store.markEnqueued(location)
+        val entity = TrackingFix.asQueueEntry(location, currentMode == Mode.MOVING, getBatteryLevel())
+        serviceScope.launch {
+            if (store.enqueueLocation(entity, consent.scope)) {
+                LocationUploadWorker.enqueue(this@TrackingService, if (urgent) 0 else 15)
+            } else if (lastQueuedFixNanos == location.elapsedRealtimeNanos) {
+                lastQueuedMs = null
+            }
+        }
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -846,7 +829,9 @@ class TrackingService : Service() {
         if (batteryReceiverRegistered) return
         try {
             ContextCompat.registerReceiver(
-                this, batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+                this, batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED).apply {
+                    addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+                },
                 ContextCompat.RECEIVER_NOT_EXPORTED,
             )
             batteryReceiverRegistered = true
@@ -865,7 +850,7 @@ class TrackingService : Service() {
     }
 
     private fun registerProvidersChangedReceiver() {
-        if (providersChangedRegistered || hasGms) return
+        if (providersChangedRegistered) return
         try {
             ContextCompat.registerReceiver(
                 this, providersChangedReceiver,
@@ -888,10 +873,11 @@ class TrackingService : Service() {
     }
 
     private fun getBatteryBucket(): BatteryBucket {
-        val level = getBatteryLevel() ?: return BatteryBucket.NORMAL
+        val level = getBatteryLevel() ?: 100
+        val powerSave = getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
         return when {
             level < 10 -> BatteryBucket.CRITICAL
-            level < 20 -> BatteryBucket.LOW
+            level < 20 || powerSave -> BatteryBucket.LOW
             else -> BatteryBucket.NORMAL
         }
     }
@@ -899,26 +885,12 @@ class TrackingService : Service() {
     private fun getBatteryLevel(): Int? {
         return (getSystemService(BATTERY_SERVICE) as? BatteryManager)
             ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            ?.takeIf { it in 0..100 }
     }
 
     // ────────────────────────────────────────────────────────────────────
     //  Notification
     // ────────────────────────────────────────────────────────────────────
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.channel_tracking_name),
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = getString(R.string.channel_tracking_desc)
-                setShowBadge(false)
-                setSound(null, null)
-            }
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        }
-    }
 
     private fun buildNotification(): Notification {
         val stopIntent = Intent(this, TrackingService::class.java).apply { action = ACTION_STOP }
@@ -932,7 +904,7 @@ class TrackingService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)

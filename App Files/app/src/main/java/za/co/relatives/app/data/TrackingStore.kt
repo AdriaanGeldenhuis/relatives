@@ -2,12 +2,9 @@ package za.co.relatives.app.data
 
 import android.content.Context
 import android.location.Location
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import za.co.relatives.app.utils.PreferencesManager
 
 /**
  * TrackingStore — single source of truth for all tracking data on the device.
@@ -24,8 +21,8 @@ import org.json.JSONObject
 class TrackingStore(context: Context) {
 
     private val appContext = context.applicationContext
+    private val prefs = PreferencesManager(appContext)
     private val dao = TrackingDatabase.getInstance(appContext).locationDao()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // ── In-memory family location cache ─────────────────────────────────
 
@@ -42,9 +39,14 @@ class TrackingStore(context: Context) {
         private var familyPollTime: Long = 0L
     }
 
-    /** Timestamp of the last family poll that actually changed data. */
-    val lastFamilyPollTime: Long
-        get() = familyPollTime
+    /** Age of the last successful fetch, including an unchanged map. */
+    fun familyCacheAgeMillis(): Long =
+        if (familyPollTime == 0L) Long.MAX_VALUE else android.os.SystemClock.elapsedRealtime() - familyPollTime
+
+    fun clearFamilyLocations() = synchronized(familyCache) {
+        familyCache.clear()
+        familyPollTime = 0
+    }
 
     data class MemberLocation(
         val memberId: String,
@@ -63,20 +65,11 @@ class TrackingStore(context: Context) {
         val hasAvatar: Boolean = false,
     )
 
-    /**
-     * Replace all family member locations atomically.
-     * Only updates [lastFamilyPollTime] if the data actually changed.
-     */
     fun putFamilyLocations(members: List<MemberLocation>) {
         synchronized(familyCache) {
-            val changed = members.size != familyCache.size ||
-                members.any { m ->
-                    val cached = familyCache[m.memberId]
-                    cached == null || cached.lat != m.lat || cached.lng != m.lng
-                }
             familyCache.clear()
             members.forEach { familyCache[it.memberId] = it }
-            if (changed) familyPollTime = System.currentTimeMillis()
+            familyPollTime = android.os.SystemClock.elapsedRealtime()
         }
     }
 
@@ -141,7 +134,7 @@ class TrackingStore(context: Context) {
      */
     fun shouldEnqueue(location: Location): Boolean {
         val prev = lastDeviceLocation ?: return true
-        val timeDelta = System.currentTimeMillis() - lastDeviceEnqueueTime
+        val timeDelta = android.os.SystemClock.elapsedRealtime() - lastDeviceEnqueueTime
         if (timeDelta < dedupTimeMs) return false
         val distance = prev.distanceTo(location)
         return distance >= dedupDistanceMetres
@@ -150,7 +143,7 @@ class TrackingStore(context: Context) {
     /** Record that we just enqueued this location. */
     fun markEnqueued(location: Location) {
         lastDeviceLocation = location
-        lastDeviceEnqueueTime = System.currentTimeMillis()
+        lastDeviceEnqueueTime = android.os.SystemClock.elapsedRealtime()
     }
 
     // ── Upload throttle ─────────────────────────────────────────────────
@@ -160,20 +153,25 @@ class TrackingStore(context: Context) {
 
     // ── Offline queue (Room-backed) ─────────────────────────────────────
 
-    fun enqueueLocation(entity: QueuedLocationEntity) {
-        scope.launch {
-            try {
-                dao.insert(entity)
-                dao.trimToMaxSize(300)
-            } catch (e: Exception) {
-                // A failed queue write (disk full, DB corruption) must never
-                // take the process down; the point is simply lost.
-                android.util.Log.w("TrackingStore", "Failed to queue location", e)
+    suspend fun enqueueLocation(entity: QueuedLocationEntity, scope: String): Boolean {
+        if (prefs.trackingConsent()?.scope != scope) return false
+        return try {
+            dao.insert(entity.copy(consentScope = scope))
+            if (prefs.trackingConsent()?.scope != scope) {
+                dao.deleteScope(scope)
+                return false
             }
+            dao.trimToMaxSize(300)
+            true
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w("TrackingStore", "Failed to queue location", error)
+            false
         }
     }
 
-    suspend fun getUnsentLocations(limit: Int = 100) = dao.getUnsent(limit)
+    suspend fun getUnsentLocations(scope: String, limit: Int = 100) = dao.getUnsent(scope, limit)
 
     suspend fun markSent(id: String) = dao.markSent(id)
 
@@ -184,5 +182,7 @@ class TrackingStore(context: Context) {
     /** Drop queued points older than [cutoffMillis] (age-based expiry). */
     suspend fun expireOlderThan(cutoffMillis: Long) = dao.deleteOlderThan(cutoffMillis)
 
-    suspend fun unsentCount() = dao.unsentCount()
+    suspend fun discardUnsentScope(scope: String) = dao.deleteScope(scope)
+
+    suspend fun unsentCount(scope: String) = dao.unsentCount(scope)
 }

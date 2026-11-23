@@ -37,4 +37,7 @@ data class QueuedLocationEntity(
     val retryCount: Int = 0,
 
     val sent: Boolean = false,
+
+    @ColumnInfo(name = "consent_scope")
+    val consentScope: String? = null,
 )

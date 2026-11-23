@@ -1,12 +1,10 @@
 <div class="doc-header">
-    <h2 class="doc-title">Privacy Policy</h2>
-    <p class="doc-updated">Last Updated: January 15, 2025</p>
+    <h1 class="doc-title">Relatives Privacy Policy</h1>
 </div>
 
 <div class="doc-body">
     <p class="doc-intro">This Privacy Policy explains how we collect, use, store, and protect your data when using the Relatives app ("the App").</p>
     
-    <p class="doc-warning">By using the App, you consent to the practices described below.</p>
     
     <h3>1. Information We Collect</h3>
     
@@ -14,7 +12,7 @@
     <ul>
         <li>Name</li>
         <li>Email</li>
-        <li>Password (encrypted)</li>
+        <li>Password hash</li>
         <li>Avatar color or image</li>
         <li>Family group ID</li>
     </ul>
@@ -30,13 +28,14 @@
     </ul>
     
     <h4>C. Location Data (Optional)</h4>
-    <p>Collected ONLY if the user grants permission:</p>
+    <p>Relatives collects location for family location sharing after you enable sharing and grant location permission. On Android, this includes when the app is closed or not in use while sharing is active. If you grant background access, the app can recover sharing after Android stops it and respond to a family member’s refresh request.</p>
     <ul>
         <li>GPS coordinates</li>
         <li>Accuracy radius</li>
-        <li>Timestamp</li>
+        <li>Time of the fix, movement, speed, altitude and heading when available</li>
     </ul>
-    <p class="highlight">Location is shared only within your family group.</p>
+    <p>Your family group can see shared positions and available history. When you ask for directions, the relevant coordinates are sent to a mapping provider (Mapbox or OSRM). Offline fixes may be held briefly on your device for delivery when your connection returns.</p>
+    <p>Use Stop sharing in the Android map or the Location Tracking notification to stop this device. Use Location Sharing in <a href="/profile/privacy.php">Privacy &amp; Security</a> to hide your position and history from family members and block new uploads across your account.</p>
     
     <h4>D. Device Information</h4>
     <ul>
@@ -84,7 +83,9 @@
                 <li>Hosting providers</li>
                 <li>Weather API</li>
                 <li>Map API</li>
-                <li>Messaging/notification services</li>
+                <li>Firebase Cloud Messaging for push delivery</li>
+                <li>Google Play or the applicable store for subscriptions and purchase verification</li>
+                <li>OpenAI when you use an AI feature, such as voice chat, to process the text or transcript you submit and the context needed for that response</li>
             </ul>
         </li>
     </ul>
@@ -93,7 +94,7 @@
     <h3>4. Data Storage & Security</h3>
     <p>We use:</p>
     <ul>
-        <li>Encrypted passwords</li>
+        <li>One-way password hashes</li>
         <li>Secure HTTPS connections</li>
         <li>Database protections</li>
         <li>Regular security reviews</li>
@@ -106,19 +107,19 @@
         <li>Your account is active</li>
         <li>Your family group exists</li>
     </ul>
-    <p>If the family admin deletes the family group, all related data is removed.</p>
+    <p>Family location history is kept according to the family tracking history setting. We may retain limited information where required for legal, billing, security, or fraud-prevention purposes.</p>
     
     <h3>6. Your Rights</h3>
     <p>You may:</p>
     <ul>
         <li>Request access to your data</li>
         <li>Request correction of inaccurate data</li>
-        <li>Request deletion of your account (family admin may need to approve)</li>
+        <li><a href="/legal/delete-account.php">Request deletion of your account and associated personal data</a></li>
         <li>Withdraw location permission at any time</li>
     </ul>
     
     <h3>7. Children's Privacy</h3>
-    <p>If a child under 13 uses the app, their guardian must supervise their use and manage permissions.</p>
+    <p>Location sharing is under the control of each user on their own device. Parents and guardians are responsible for deciding whether family members in their care should use Relatives.</p>
     
     <h3>8. Contact</h3>
     <p>For privacy concerns: <a href="mailto:privacy@relatives.co.za">privacy@relatives.co.za</a></p>

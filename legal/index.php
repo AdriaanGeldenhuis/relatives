@@ -4,6 +4,11 @@
  * Modular tab system with separate content files
  */
 
+if (($_GET['doc'] ?? null) === 'privacy') {
+    require __DIR__ . '/privacy.php';
+    exit;
+}
+
 require_once __DIR__ . '/../core/session_boot.php';
 
 if (!isset($_SESSION['user_id'])) {

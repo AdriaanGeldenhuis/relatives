@@ -28,15 +28,13 @@ class PreferencesManager(context: Context) {
         private const val KEY_IDLE_HEARTBEAT_SECONDS = "idle_heartbeat_seconds"
         private const val KEY_BURST_INTERVAL = "burst_interval"
         private const val KEY_SESSION_TOKEN = "session_token"
-        private const val KEY_PENDING_TRACKING_ENABLE = "pending_tracking_enable"
+        private const val KEY_TRACKING_COOKIE_HASH = "tracking_cookie_hash"
+        private const val KEY_TRACKING_SCOPE = "tracking_scope"
         private const val KEY_NOTIFICATION_COUNT = "notification_count"
         private const val KEY_LAST_UPLOAD_TIME = "last_upload_time"
         private const val KEY_FCM_TOKEN = "fcm_token"
-        private const val KEY_NOTIFICATION_PROMPT_SHOWN = "notification_prompt_shown"
-        private const val KEY_OEM_GUIDANCE_SHOWN = "oem_guidance_shown"
-        private const val KEY_FAMILY_ID = "family_id"
-        private const val KEY_USER_ID = "user_id"
-        private const val KEY_USER_NAME = "user_name"
+        private const val KEY_PUSH_RECIPIENT = "push_recipient"
+        private const val KEY_PUSH_COOKIE_HASH = "push_cookie_hash"
 
         // Defaults
         private const val DEFAULT_UPDATE_INTERVAL = 30        // seconds (MOVING mode)
@@ -58,9 +56,38 @@ class PreferencesManager(context: Context) {
 
     // ── Tracking configuration ─────────────────────────────────────────────
 
-    var trackingEnabled: Boolean
-        get() = prefs.getBoolean(KEY_TRACKING_ENABLED, false)
-        set(value) = prefs.edit().putBoolean(KEY_TRACKING_ENABLED, value).apply()
+    internal class TrackingConsent(val scope: String, val sessionCookie: String)
+
+    internal fun trackingConsent(): TrackingConsent? {
+        // Take one snapshot so a cookie change cannot combine two sessions.
+        val values = prefs.all
+        if (values[KEY_TRACKING_ENABLED] != true) return null
+        val cookie = values[KEY_SESSION_TOKEN] as? String ?: return null
+        val scope = values[KEY_TRACKING_SCOPE] as? String ?: return null
+        if (values[KEY_TRACKING_COOKIE_HASH] != fingerprint(cookie)) return null
+        return TrackingConsent(scope, cookie)
+    }
+
+    internal fun enableTracking(): Boolean {
+        val cookie = sessionToken?.takeIf(String::isNotBlank) ?: return false
+        if (trackingConsent() == null) {
+            prefs.edit()
+                .putBoolean(KEY_TRACKING_ENABLED, true)
+                .putString(KEY_TRACKING_COOKIE_HASH, fingerprint(cookie))
+                .putString(KEY_TRACKING_SCOPE, UUID.randomUUID().toString())
+                .apply()
+        }
+        return true
+    }
+
+    internal fun disableTracking() {
+        prefs.edit().putBoolean(KEY_TRACKING_ENABLED, false)
+            .remove(KEY_TRACKING_COOKIE_HASH).remove(KEY_TRACKING_SCOPE).apply()
+    }
+
+    private fun fingerprint(cookie: String): String = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(cookie.toByteArray(Charsets.UTF_8))
+        .let { java.util.Base64.getEncoder().encodeToString(it) }
 
     /** Interval (in seconds) for the MOVING tracking mode. */
     var updateInterval: Int
@@ -84,32 +111,20 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString(KEY_SESSION_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_SESSION_TOKEN, value).apply()
 
-    /**
-     * The user tapped "Enable live location" but the permission flow's
-     * in-memory callback may be lost to activity recreation (background-
-     * location Settings trip). MainActivity.onResume completes the enable
-     * when this is set and permission ended up granted.
-     */
-    var pendingTrackingEnable: Boolean
-        get() = prefs.getBoolean(KEY_PENDING_TRACKING_ENABLE, false)
-        set(value) = prefs.edit().putBoolean(KEY_PENDING_TRACKING_ENABLE, value).apply()
+    internal fun bindPushRecipient(cookie: String, recipient: String) {
+        if (sessionToken != cookie || !recipient.all(Char::isDigit) || recipient.isEmpty()) return
+        prefs.edit()
+            .putString(KEY_PUSH_COOKIE_HASH, fingerprint(cookie))
+            .putString(KEY_PUSH_RECIPIENT, recipient)
+            .apply()
+    }
 
-    // ── User / family identity ───────────────────────────────────────────
-
-    /** Family group ID from the backend. */
-    var familyId: String?
-        get() = prefs.getString(KEY_FAMILY_ID, null)
-        set(value) = prefs.edit().putString(KEY_FAMILY_ID, value).apply()
-
-    /** Logged-in user ID from the backend. */
-    var userId: String?
-        get() = prefs.getString(KEY_USER_ID, null)
-        set(value) = prefs.edit().putString(KEY_USER_ID, value).apply()
-
-    /** Logged-in user display name. */
-    var userName: String?
-        get() = prefs.getString(KEY_USER_NAME, null)
-        set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
+    internal fun isPushRecipient(recipient: String?): Boolean {
+        val values = prefs.all
+        val cookie = values[KEY_SESSION_TOKEN] as? String ?: return false
+        return recipient != null && values[KEY_PUSH_RECIPIENT] == recipient &&
+            values[KEY_PUSH_COOKIE_HASH] == fingerprint(cookie)
+    }
 
     // ── Notification bookkeeping ───────────────────────────────────────────
 
@@ -133,24 +148,6 @@ class PreferencesManager(context: Context) {
     var fcmToken: String?
         get() = prefs.getString(KEY_FCM_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_FCM_TOKEN, value).apply()
-
-    /**
-     * Whether the app has already offered the Android 13+ notification
-     * permission prompt on startup (it can still be re-offered from the
-     * notifications page or the tracking enable flow).
-     */
-    var notificationPromptShown: Boolean
-        get() = prefs.getBoolean(KEY_NOTIFICATION_PROMPT_SHOWN, false)
-        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_PROMPT_SHOWN, value).apply()
-
-    /**
-     * Whether the OEM battery-killer walkthrough (Huawei/Honor "App launch",
-     * Xiaomi autostart, …) has been offered. It can be re-forced from help
-     * flows when tracking keeps dying.
-     */
-    var oemGuidanceShown: Boolean
-        get() = prefs.getBoolean(KEY_OEM_GUIDANCE_SHOWN, false)
-        set(value) = prefs.edit().putBoolean(KEY_OEM_GUIDANCE_SHOWN, value).apply()
 
     // ── Server-driven configuration ────────────────────────────────────────
 
@@ -181,9 +178,8 @@ class PreferencesManager(context: Context) {
     fun clearSession() {
         prefs.edit()
             .remove(KEY_SESSION_TOKEN)
-            .remove(KEY_FAMILY_ID)
-            .remove(KEY_USER_ID)
-            .remove(KEY_USER_NAME)
+            .remove(KEY_PUSH_RECIPIENT)
+            .remove(KEY_PUSH_COOKIE_HASH)
             .apply()
     }
 }

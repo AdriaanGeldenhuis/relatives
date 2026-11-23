@@ -168,13 +168,18 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <span class="settings-link-arrow"></span>
             </a>
 
-            <a href="/legal/" class="settings-link">
+            <a href="/legal/privacy.php" class="settings-link">
                 <div class="settings-link-content">
                     <span class="settings-link-icon">Legal & Privacy Policy</span>
                 </div>
                 <span class="settings-link-arrow"></span>
             </a>
         </div>
+
+        <a href="/legal/delete-account.php" class="settings-link">
+            <span class="settings-link-content">Delete account</span>
+            <span class="settings-link-arrow"></span>
+        </a>
 
         <!-- Logout -->
         <a href="/logout.php" class="btn btn-danger btn-block" style="margin-top: 20px;">

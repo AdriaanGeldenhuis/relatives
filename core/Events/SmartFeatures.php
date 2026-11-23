@@ -208,7 +208,7 @@ class SmartFeatures {
      * Mark user as running late
      * Sends notifications to relevant parties
      */
-    public function markRunningLate(int $eventId, int $delayMinutes = 15, string $reason = null): bool {
+    public function markRunningLate(int $eventId, int $delayMinutes = 15, ?string $reason = null): bool {
         $event = $this->getEvent($eventId);
         if (!$event) return false;
 

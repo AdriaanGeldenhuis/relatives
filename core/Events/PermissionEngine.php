@@ -333,7 +333,7 @@ class PermissionEngine {
     /**
      * Reject event
      */
-    public function rejectEvent(int $eventId, string $reason = null): bool {
+    public function rejectEvent(int $eventId, ?string $reason = null): bool {
         if (!$this->canPerformAction($eventId, self::ACTION_APPROVE)) {
             return false;
         }

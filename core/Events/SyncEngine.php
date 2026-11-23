@@ -99,7 +99,7 @@ class SyncEngine {
     /**
      * Mark sync as failed
      */
-    public function markFailed(int $queueId, string $error = null): bool {
+    public function markFailed(int $queueId, ?string $error = null): bool {
         $stmt = $this->db->prepare("
             UPDATE event_sync_queue
             SET status = 'failed',

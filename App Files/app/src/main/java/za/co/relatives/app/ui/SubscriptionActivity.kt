@@ -1,14 +1,14 @@
 package za.co.relatives.app.ui
 
 import android.os.Bundle
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,9 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -30,7 +28,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,16 +35,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import za.co.relatives.app.RelativesApplication
 import za.co.relatives.app.billing.BillingManager
 import za.co.relatives.app.network.ApiClient
 import za.co.relatives.app.ui.theme.RelativesTheme
@@ -68,15 +63,19 @@ class SubscriptionActivity : ComponentActivity() {
 
     private lateinit var billingManager: BillingManager
     private lateinit var apiClient: ApiClient
-    private lateinit var prefs: PreferencesManager
+    private val prefs by lazy { PreferencesManager(this) }
+
+    private class BillingAccount(val familyId: Long, val accountId: String, val productIds: Set<String>, val session: String)
+    private var account by mutableStateOf<BillingAccount?>(null)
+    private var availabilityError by mutableStateOf<String?>(null)
+    private var verifying by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        prefs = (application as RelativesApplication).preferencesManager
         billingManager = BillingManager(this)
         apiClient = ApiClient(this)
 
-        billingManager.connect()
+        loadBillingAccount()
 
         setContent {
             RelativesTheme {
@@ -85,6 +84,39 @@ class SubscriptionActivity : ComponentActivity() {
         }
 
         observePurchases()
+    }
+
+    private fun loadBillingAccount() {
+        val session = prefs.sessionToken
+        availabilityError = null
+        if (session.isNullOrBlank()) {
+            availabilityError = "Sign in to Relatives to view plans."
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                val status = apiClient.getSubscriptionStatus()
+                val setup = status.get("google_play")?.takeIf { it.isJsonObject }?.asJsonObject
+                val id = setup?.get("account_id")?.asString
+                val familyId = status.getAsJsonObject("status")?.get("family_id")?.asLong
+                val products = setup?.getAsJsonArray("product_ids")?.map { it.asString }.orEmpty().toSet()
+
+                availabilityError = when {
+                    prefs.sessionToken != session || familyId == null -> "Sign in again to view plans."
+                    status.get("can_manage")?.asBoolean != true -> "The family owner manages this subscription."
+                    id == null || products.isEmpty() -> "Google Play plans are temporarily unavailable."
+                    else -> null
+                }
+                if (availabilityError == null && id != null && familyId != null) {
+                    account = BillingAccount(familyId, id, products, session)
+                    billingManager.connect()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                availabilityError = "Could not load subscription details. Check your connection and try again."
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -121,48 +153,35 @@ class SubscriptionActivity : ComponentActivity() {
      * the Relatives backend to activate the subscription for the family.
      */
     private fun verifyOnBackend(purchase: Purchase) {
+        val activeAccount = account ?: return
+        if (verifying || prefs.sessionToken != activeAccount.session) return
+        val productId = purchase.products.singleOrNull()?.takeIf { it in activeAccount.productIds } ?: return
+        verifying = true
         lifecycleScope.launch {
             try {
-                val familyId = prefs.familyId ?: ""
-                val productId = purchase.products.firstOrNull() ?: return@launch
-                val planCode = productIdToPlanCode(productId)
-
-                val result = apiClient.verifyPurchase(
-                    familyId = familyId,
-                    planCode = planCode,
-                    purchaseToken = purchase.purchaseToken
-                )
-
-                val success = result.has("success") && result.get("success").asBoolean
-                if (success) {
-                    Log.i(TAG, "Purchase verified on backend")
-                    Toast.makeText(
-                        this@SubscriptionActivity,
-                        "Subscription activated!",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    finish()
-                } else {
-                    val msg = result.get("message")?.asString ?: "Verification failed"
-                    Log.e(TAG, "Backend verification failed: $msg")
-                    Toast.makeText(this@SubscriptionActivity, msg, Toast.LENGTH_LONG).show()
+                val result = apiClient.verifyPurchase(activeAccount.familyId, productId, purchase.purchaseToken)
+                if (result.get("ok")?.asBoolean != true) error("Verification failed")
+                if (result.get("acknowledged")?.asBoolean == true) {
+                    Toast.makeText(this@SubscriptionActivity, "Subscription activated.", Toast.LENGTH_LONG).show()
+                    return@launch
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Backend verification error", e)
-                Toast.makeText(
-                    this@SubscriptionActivity,
-                    "Could not verify purchase. Please try again.",
-                    Toast.LENGTH_LONG
-                ).show()
+                billingManager.acknowledgeVerifiedPurchase(purchase) { acknowledged ->
+                    if (!isDestroyed) Toast.makeText(
+                        this@SubscriptionActivity,
+                        if (acknowledged) "Subscription activated." else "Subscription verified. Use Restore Purchases to complete it.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Purchase could not be verified")
+                Toast.makeText(this@SubscriptionActivity, "Could not verify purchase. Try Restore Purchases.", Toast.LENGTH_LONG).show()
+            } finally {
+                verifying = false
+                billingManager.clearPurchaseState()
             }
         }
-    }
-
-    private fun productIdToPlanCode(productId: String): String = when (productId) {
-        "relatives.starter.monthly" -> "starter"
-        "relatives.family.monthly" -> "family"
-        "relatives.big.monthly" -> "big"
-        else -> productId
     }
 
     // ------------------------------------------------------------------ //
@@ -174,15 +193,10 @@ class SubscriptionActivity : ComponentActivity() {
         val products by billingManager.productDetails.collectAsState()
         val purchaseState by billingManager.purchaseState.collectAsState()
         val connected by billingManager.isConnected.collectAsState()
+        val queryComplete by billingManager.queryComplete.collectAsState()
+        val availableProducts = products.filter { it.productId in account?.productIds.orEmpty() }
 
         var isRestoring by remember { mutableStateOf(false) }
-
-        // Attempt to restore purchases on first load.
-        LaunchedEffect(connected) {
-            if (connected) {
-                billingManager.queryProductDetails()
-            }
-        }
 
         Scaffold { paddingValues ->
             Surface(
@@ -210,7 +224,7 @@ class SubscriptionActivity : ComponentActivity() {
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Your free trial has ended. Subscribe to continue keeping your family connected.",
+                        text = "Monthly subscriptions renew through Google Play until canceled.",
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -218,62 +232,19 @@ class SubscriptionActivity : ComponentActivity() {
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    if (!connected || products.isEmpty()) {
+                    if (availabilityError != null) {
+                        Text(availabilityError.orEmpty(), textAlign = TextAlign.Center)
+                    } else if (account == null || !queryComplete) {
                         LoadingState()
+                    } else if (availableProducts.isEmpty()) {
+                        Text("No monthly plans are currently available on Google Play.")
                     } else {
-                        val isPurchasing = purchaseState is BillingManager.PurchaseState.Pending
+                        val isPurchasing = verifying || purchaseState is BillingManager.PurchaseState.Pending
 
-                        // Starter tier
-                        SubscriptionCard(
-                            title = "Starter",
-                            description = "For small families. Track up to 3 members.",
-                            features = listOf(
-                                "Up to 3 family members",
-                                "Real-time location sharing",
-                                "Push notifications"
-                            ),
-                            details = products.find { it.productId == "relatives.starter.monthly" },
-                            isHighlighted = false,
-                            isPurchasing = isPurchasing,
-                            onSubscribe = { details -> launchPurchase(details) }
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Family tier (highlighted)
-                        SubscriptionCard(
-                            title = "Family",
-                            description = "Most popular. Perfect for the whole family.",
-                            features = listOf(
-                                "Up to 6 family members",
-                                "Real-time location sharing",
-                                "Push notifications",
-                                "Shopping lists & calendar"
-                            ),
-                            details = products.find { it.productId == "relatives.family.monthly" },
-                            isHighlighted = true,
-                            isPurchasing = isPurchasing,
-                            onSubscribe = { details -> launchPurchase(details) }
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Big tier
-                        SubscriptionCard(
-                            title = "Big Family",
-                            description = "For larger households and extended family.",
-                            features = listOf(
-                                "Up to 12 family members",
-                                "Real-time location sharing",
-                                "Push notifications",
-                                "Shopping lists & calendar",
-                                "Priority support"
-                            ),
-                            details = products.find { it.productId == "relatives.big.monthly" },
-                            isHighlighted = false,
-                            isPurchasing = isPurchasing,
-                            onSubscribe = { details -> launchPurchase(details) }
-                        )
+                        availableProducts.forEach { details ->
+                            SubscriptionCard(details, isPurchasing, ::launchPurchase)
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -287,7 +258,8 @@ class SubscriptionActivity : ComponentActivity() {
                                     val existing = billingManager.queryExistingPurchases()
                                     if (existing.isNotEmpty()) {
                                         val active = existing.firstOrNull {
-                                            it.purchaseState == Purchase.PurchaseState.PURCHASED
+                                            it.purchaseState == Purchase.PurchaseState.PURCHASED &&
+                                                it.products.any { id -> id in account?.productIds.orEmpty() }
                                         }
                                         if (active != null) {
                                             verifyOnBackend(active)
@@ -316,7 +288,7 @@ class SubscriptionActivity : ComponentActivity() {
                                 }
                             }
                         },
-                        enabled = !isRestoring && connected,
+                        enabled = !isRestoring && !verifying && connected && account != null,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (isRestoring) {
@@ -326,6 +298,23 @@ class SubscriptionActivity : ComponentActivity() {
                         Text("Restore Purchases")
                     }
 
+                    OutlinedButton(
+                        onClick = {
+                            runCatching {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/account/subscriptions")))
+                            }.onFailure {
+                                Toast.makeText(this@SubscriptionActivity, "Open Google Play to manage your subscriptions.", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Manage subscriptions on Google Play") }
+                    OutlinedButton(
+                        onClick = {
+                            startActivity(Intent(this@SubscriptionActivity, za.co.relatives.app.MainActivity::class.java)
+                                .putExtra("action_url", "/legal/privacy.php"))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Relatives Privacy Policy") }
                     Spacer(modifier = Modifier.height(32.dp))
                 }
             }
@@ -353,142 +342,35 @@ class SubscriptionActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun SubscriptionCard(
-        title: String,
-        description: String,
-        features: List<String>,
-        details: ProductDetails?,
-        isHighlighted: Boolean,
-        isPurchasing: Boolean,
-        onSubscribe: (ProductDetails) -> Unit
-    ) {
-        val borderColor = if (isHighlighted) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.outlineVariant
-        }
-
-        val containerColor = if (isHighlighted) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-        } else {
-            MaterialTheme.colorScheme.surface
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = containerColor),
-            border = BorderStroke(
-                width = if (isHighlighted) 2.dp else 1.dp,
-                color = borderColor
-            ),
-            elevation = CardDefaults.cardElevation(
-                defaultElevation = if (isHighlighted) 4.dp else 1.dp
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-            ) {
-                if (isHighlighted) {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    ) {
-                        Text(
-                            text = "MOST POPULAR",
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-
+    private fun SubscriptionCard(details: ProductDetails, isPurchasing: Boolean, onSubscribe: (ProductDetails) -> Unit) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(details.name, style = MaterialTheme.typography.titleLarge)
+                val price = billingManager.getFormattedPrice(details)
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Price
-                val price = details?.let { billingManager.getFormattedPrice(it) }
-                Text(
-                    text = if (price != null) "$price/month" else "Loading...",
+                    text = price?.let { "$it per month" } ?: "Unavailable",
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Features list
-                features.forEach { feature ->
-                    Row(
-                        modifier = Modifier.padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "\u2713",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = feature,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
+                if (details.description.isNotBlank()) {
+                    Text(details.description, style = MaterialTheme.typography.bodyMedium)
                 }
-
                 Spacer(modifier = Modifier.height(16.dp))
-
                 Button(
-                    onClick = { details?.let { onSubscribe(it) } },
-                    enabled = details != null && !isPurchasing,
+                    onClick = { onSubscribe(details) },
+                    enabled = price != null && !isPurchasing,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = if (isHighlighted) {
-                        ButtonDefaults.buttonColors()
-                    } else {
-                        ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
                 ) {
-                    if (isPurchasing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    Text(
-                        text = if (isPurchasing) "Processing..." else "Subscribe",
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text(if (isPurchasing) "Processing…" else "Subscribe with Google Play")
                 }
             }
         }
     }
 
     private fun launchPurchase(details: ProductDetails) {
-        val result = billingManager.launchPurchaseFlow(this, details)
-        Log.d(TAG, "Launch billing flow result: ${result.responseCode}")
+        val activeAccount = account ?: return
+        if (prefs.sessionToken == activeAccount.session && details.productId in activeAccount.productIds) {
+            billingManager.launchPurchaseFlow(this, details, activeAccount.accountId)
+        }
     }
 }

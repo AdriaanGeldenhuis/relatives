@@ -15,6 +15,7 @@
 
 require_once __DIR__ . '/../../core/session_boot.php';
 header('Content-Type: application/json');
+header('Cache-Control: no-store');
 
 // Handle CORS for native apps. Host-based match: the old
 // strpos($origin, 'localhost') check also matched hostile origins like
@@ -52,7 +53,7 @@ $user = $auth->getCurrentUser();
 
 // Parse JSON body
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
-$token = trim($input['token'] ?? '');
+$token = is_string($input['token'] ?? null) ? trim($input['token']) : '';
 
 if (empty($token)) {
     http_response_code(400);
@@ -128,7 +129,8 @@ try {
         echo json_encode([
             'success' => true,
             'message' => 'Token registered',
-            'token_id' => $tokenId
+            'token_id' => $tokenId,
+            'recipient_user_id' => (string) $user['id']
         ]);
 
         // Log for debugging
