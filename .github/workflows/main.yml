@@ -1,1 +1,84 @@
+name: Deploy Relatives
 
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relatives-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Deploy web files over SSH
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          for name in SSH_HOST SSH_PORT SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS DEPLOY_PATH; do
+            if [[ -z ${!name} ]]; then
+              printf '::error::Missing repository Actions secret %s\n' "$name"
+              exit 1
+            fi
+          done
+          if [[ ! $SSH_HOST =~ ^[a-zA-Z0-9][a-zA-Z0-9.:-]*$ ||
+                ! $SSH_USER =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$ ||
+                ! $SSH_PORT =~ ^[0-9]{1,5}$ ]] ||
+             (( 10#$SSH_PORT < 1 || 10#$SSH_PORT > 65535 )); then
+            echo '::error::Check the SSH host, user, and port settings.'
+            exit 1
+          fi
+          if [[ ! $DEPLOY_PATH =~ ^/[a-zA-Z0-9._/-]+$ ||
+                $DEPLOY_PATH =~ ^/+$ ||
+                "$DEPLOY_PATH/" == *'/../'* || "$DEPLOY_PATH/" == *'/./'* ]]; then
+            echo '::error::DEPLOY_PATH must be an absolute path to the website directory.'
+            exit 1
+          fi
+
+          umask 077
+          temp=$(mktemp -d)
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$temp/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$temp/known_hosts"
+          cat > "$temp/ssh_config" <<EOF
+          Host relatives-production
+            HostName $SSH_HOST
+            Port $SSH_PORT
+            User $SSH_USER
+            IdentityFile $temp/key
+            IdentitiesOnly yes
+            BatchMode yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile $temp/known_hosts
+            ConnectTimeout 15
+          EOF
+
+          mkdir "$temp/site"
+          git archive HEAD | tar -x -C "$temp/site"
+          rsync -rtz --omit-dir-times --delay-updates --protect-args \
+            -e "ssh -F $temp/ssh_config" \
+            --exclude='/.github/' --exclude='/.git*' \
+            --exclude='/App Files/' --exclude='/docs/' \
+            --exclude='/migrations/' --exclude='*.sql' \
+            --exclude='/.env' --exclude='/.env.cache.php' \
+            --exclude='/config/' --exclude='/help/config.php' \
+            --exclude='logs/' --exclude='uploads/' --exclude='saves/' \
+            --exclude='/REBUILD_RECIPE.md' --exclude='/test_cache.php' \
+            "$temp/site/" "relatives-production:${DEPLOY_PATH%/}/"
