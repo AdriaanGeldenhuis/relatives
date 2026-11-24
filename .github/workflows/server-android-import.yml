@@ -1,0 +1,83 @@
+name: Import Android sources from hosting
+on:
+  push:
+    branches: [server-android-import]
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 2
+      - name: Copy the server project into a review branch
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          for name in SSH_HOST SSH_PORT SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS DEPLOY_PATH; do
+            [[ -n ${!name:-} ]] || { printf 'Missing Actions secret %s\n' "$name"; exit 1; }
+          done
+          [[ $SSH_HOST =~ ^[a-zA-Z0-9][a-zA-Z0-9.:-]*$ && $SSH_PORT =~ ^[0-9]{1,5}$ &&
+             $SSH_USER =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$ && $DEPLOY_PATH =~ ^/[a-zA-Z0-9._/-]+$ ]]
+          umask 077
+          temp=$(mktemp -d)
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$temp/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$temp/known_hosts"
+          cat > "$temp/config" <<CONFIG
+          Host relatives-hosting
+            HostName $SSH_HOST
+            Port $SSH_PORT
+            User $SSH_USER
+            IdentityFile $temp/key
+            IdentitiesOnly yes
+            BatchMode yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile $temp/known_hosts
+            ConnectTimeout 15
+          CONFIG
+          unset SSH_PRIVATE_KEY
+          git switch --detach HEAD^
+          mkdir "$temp/project"
+          rsync -rtz --protect-args -e "ssh -F $temp/config" \
+            --exclude='.git' --exclude='.gradle/' --exclude='.kotlin/' --exclude='build/' \
+            --exclude='.idea/' --exclude='.cxx/' --exclude='local.properties' \
+            --exclude='.env*' --exclude='.htaccess' --exclude='*key.properties' \
+            --exclude='*.jks' --exclude='*.keystore' --exclude='*.p12' --exclude='*.pem' \
+            --exclude='*.key' --exclude='*.apk' --exclude='*.aab' \
+            --exclude='*.zip' --exclude='*.tar*' --exclude='*.log' --exclude='*.sql' \
+            "relatives-hosting:${DEPLOY_PATH%/}/App Files/" "$temp/project/"
+          test -s "$temp/project/app/build.gradle.kts"
+          test -s "$temp/project/settings.gradle.kts"
+          test -s "$temp/project/app/src/main/AndroidManifest.xml"
+          test -s "$temp/project/gradle/wrapper/gradle-wrapper.jar"
+          rsync -rc --delete --filter='protect .htaccess' --filter='protect /.idea/***' "$temp/project/" 'App Files/'
+          git add -A -- 'App Files'
+          git diff --cached --check
+          python3 - <<'PY'
+          import re, subprocess
+          paths = subprocess.check_output(
+              ['git','diff','--cached','--name-only','-z','--diff-filter=ACMR']
+          ).split(b'\0')
+          signatures = re.compile(
+              rb'-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----|\bsk\.[A-Za-z0-9_-]{18,}\.[A-Za-z0-9_-]{12,}|'
+              rb'"type"\s*:\s*"service_account"|\bgithub_pat_[A-Za-z0-9_]{25,}|\bghp_[A-Za-z0-9]{30,}'
+          )
+          for path in filter(None, paths):
+              data = subprocess.check_output([b'git', b'show', b':' + path])
+              if len(data) >= 100 * 1024 * 1024 or signatures.search(data):
+                  raise SystemExit('Review required for imported file: ' + path.decode(errors='replace'))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit --allow-empty -m 'Import Android project from hosting server'
+          git push origin HEAD:refs/heads/server-android-snapshot
