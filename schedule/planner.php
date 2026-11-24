@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-function scheduleDate($value): ?DateTimeImmutable
+function scheduleDate(mixed $value): ?DateTimeImmutable
 {
     if (!is_string($value) || !preg_match('/^\d{4}-\d{2}-\d{2}$/D', $value)) {
         return null;
@@ -28,6 +28,49 @@ function scheduleTypes(): array
         'date' => ['name' => 'Special date', 'color' => '#a55474'],
         'reminder' => ['name' => 'Reminder', 'color' => '#876338'],
         'other' => ['name' => 'Other', 'color' => '#52654c']
+    ];
+}
+
+function scheduleFamilyMembers(PDO $db, int $familyId): array
+{
+    $stmt = $db->prepare("SELECT id, full_name FROM users WHERE family_id = ? AND status = 'active' ORDER BY full_name, id");
+    $stmt->execute([$familyId]);
+    return $stmt->fetchAll();
+}
+
+function scheduleActiveFocus(PDO $db, int $familyId, int $userId): ?array
+{
+    $stmt = $db->prepare("SELECT id, title, starts_at, ends_at, actual_start FROM events
+        WHERE family_id = ? AND user_id = ? AND status = 'in_progress' AND focus_mode = 1
+        ORDER BY actual_start DESC, id DESC LIMIT 1");
+    $stmt->execute([$familyId, $userId]);
+    return $stmt->fetch() ?: null;
+}
+
+function scheduleTemplates(): array
+{
+    return [
+        'Productive morning' => [
+            ['Morning study session', '08:00', '10:00', 'study'], ['Coffee break', '10:00', '10:15', 'break'],
+            ['Work block', '10:15', '12:00', 'work'], ['Lunch break', '12:00', '13:00', 'break'],
+        ],
+        'Deep work day' => [
+            ['Deep work session', '09:00', '11:00', 'focus'], ['Break', '11:00', '11:15', 'break'],
+            ['Deep work session', '11:15', '13:00', 'focus'], ['Lunch', '13:00', '14:00', 'break'],
+            ['Deep work session', '14:00', '16:00', 'focus'],
+        ],
+        'Study intensive' => [
+            ['Study block', '08:00', '10:00', 'study'], ['Break', '10:00', '10:15', 'break'],
+            ['Study block', '10:15', '12:15', 'study'], ['Lunch', '12:15', '13:00', 'break'],
+            ['Study block', '13:00', '15:00', 'study'], ['Break', '15:00', '15:15', 'break'],
+            ['Study block', '15:15', '17:00', 'study'],
+        ],
+        'Balanced day' => [
+            ['Morning work', '09:00', '11:00', 'work'], ['Break', '11:00', '11:15', 'break'],
+            ['Study session', '11:15', '13:00', 'study'], ['Lunch', '13:00', '14:00', 'break'],
+            ['Afternoon work', '14:00', '16:00', 'work'], ['Break', '16:00', '16:15', 'break'],
+            ['Personal time', '16:15', '17:00', 'todo'],
+        ],
     ];
 }
 
@@ -63,7 +106,7 @@ function scheduleEventVersion(array $event): string
     $fields = [];
     foreach (['title', 'starts_at', 'ends_at', 'notes', 'location', 'kind', 'all_day', 'assigned_to',
         'priority', 'color', 'reminder_minutes', 'focus_mode', 'status'] as $key) {
-        $fields[] = (string)$event[$key];
+        $fields[] = (string)($event[$key] ?? '');
     }
     $fields[] = $event['recurrence_rule'] ?: ($event['repeat_rule'] ?? '');
     return hash('sha256', serialize($fields));

@@ -9,6 +9,7 @@
     const content = $('calendarContent');
     const eventDialog = $('calendarEventDialog');
     const dateDialog = $('calendarDateDialog');
+    const filtersForm = $('calendarFilters');
     const dateText = new Intl.DateTimeFormat('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
     const shortDate = new Intl.DateTimeFormat('en-ZA', { day: 'numeric', month: 'short', timeZone: 'UTC' });
     const monthText = new Intl.DateTimeFormat('en-ZA', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -28,12 +29,15 @@
     const scheduleUrl = (date, id) => '/schedule/?' + new URLSearchParams(id ? { date, event: id } : { date });
     const noteUrl = id => '/notes/?note=' + encodeURIComponent(id);
 
-    function calendarUrl(date, view, ajax = false, event = null) {
+    function filters() {
+        return Object.fromEntries(['q', 'kind', 'assignee'].map(name => [name, filtersForm.elements[name].value.trim()])
+            .filter(([, value]) => value !== ''));
+    }
+
+    function calendarUrl(date, view, ajax = false, event = null, terms = filters()) {
         const params = new URLSearchParams({ date, view });
         if (ajax) params.set('ajax', '1');
-        for (const [key, id] of Object.entries({ q: 'calendarSearch', kind: 'calendarKind', assignee: 'calendarAssignee' })) {
-            if ($(id).value) params.set(key, $(id).value);
-        }
+        for (const [key, value] of Object.entries(terms)) params.set(key, value);
         if (event) params.set('event', event);
         return '/calendar/?' + params;
     }
@@ -69,41 +73,64 @@
     });
 
     function paint() {
-        const date = state.date;
-        const options = [...document.querySelectorAll('[data-calendar-view]')];
-        options.forEach(link => {
+        const { date, view: currentView, filters: terms } = state;
+        document.querySelectorAll('[data-calendar-view]').forEach(link => {
             const view = link.dataset.calendarView;
-            link.href = calendarUrl(date, view);
-            if (view === state.view) link.setAttribute('aria-current', 'page');
+            link.href = calendarUrl(date, view, false, null, terms);
+            if (view === currentView) link.setAttribute('aria-current', 'page');
             else link.removeAttribute('aria-current');
         });
-        $('calendarPrevious').setAttribute('aria-label', 'Previous ' + state.view);
-        $('calendarNext').setAttribute('aria-label', 'Next ' + state.view);
+        const previous = $('calendarPrevious');
+        const next = $('calendarNext');
+        previous.setAttribute('aria-label', 'Previous ' + currentView);
+        next.setAttribute('aria-label', 'Next ' + currentView);
+        previous.value = stepDate(date, currentView, -1);
+        next.value = stepDate(date, currentView, 1);
+        const dateForm = previous.form;
+        dateForm.elements.view.value = currentView;
+        dateForm.querySelectorAll('[data-date-filter]').forEach(input => input.remove());
+        for (const [name, value] of Object.entries(terms)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            input.dataset.dateFilter = '';
+            dateForm.append(input);
+        }
+        filtersForm.elements.date.value = date;
+        filtersForm.elements.view.value = currentView;
         $('calendarScheduleLink').href = scheduleUrl(date);
         $('calendarPeriod').textContent = state.view === 'month' ? monthText.format(dateValue(date)) :
             state.view === 'week' ? shortDate.format(dateValue(state.first)) + ' – ' + shortDate.format(dateValue(planner.shiftDate(state.end, -1))) :
                 dateText.format(dateValue(date));
-
     }
 
     async function loadCalendar(date, view, options = {}) {
         const { historyMode = 'push', focus = null, event = null } = options;
+        const terms = filters();
         navigation?.controller.abort();
         const controller = new AbortController();
         const request = { date, view, controller };
         navigation = request;
         content.setAttribute('aria-busy', 'true');
         try {
-            const response = await fetch(calendarUrl(date, view, true, event), { signal: controller.signal });
+            const response = await fetch(calendarUrl(date, view, true, event, terms), { signal: controller.signal });
+            if (response.status === 401) throw new Error('Sign in again to use Calendar.');
             if (!response.ok || response.redirected) throw new Error('Could not load the calendar.');
-            const next = await response.json();
+            const { html, ...next } = await response.json();
             if (navigation !== request) return false;
             const changed = next.date !== state.date || next.view !== state.view;
-            if (typeof next.html !== 'string' || !next.html.trim()) throw new Error('Could not update the calendar.');
+            if (typeof html !== 'string' || !html.trim() || !Array.isArray(next.events)) {
+                throw new Error('Could not update the calendar.');
+            }
             Object.assign(state, next);
-            content.innerHTML = next.html;
+            content.innerHTML = html;
             paint();
-            if (historyMode === 'push' && changed) history.pushState(null, '', calendarUrl(state.date, state.view));
+            if (historyMode === 'push') {
+                const url = calendarUrl(state.date, state.view, false, state.selectedEvent, state.filters);
+                if (changed) history.pushState(null, '', url);
+                else if (location.pathname + location.search !== url) history.replaceState(null, '', url);
+            }
             if (focus === 'period') $('calendarPeriod').focus({ preventScroll: true });
             if (focus === 'date') content.querySelector(`.calendar-cell-date[data-select-date="${state.date}"]`)?.focus({ preventScroll: true });
             if (next.notice) message(next.notice);
@@ -122,7 +149,7 @@
             return true;
         } catch (error) {
             if (error.name !== 'AbortError') {
-                if (historyMode === 'pop') location.assign(calendarUrl(date, view, false, event));
+                if (historyMode === 'pop') location.assign(calendarUrl(date, view, false, event, terms));
                 else message(error.message || 'Could not update the calendar.');
             }
             return false;
@@ -147,8 +174,7 @@
         else reloadCalendar();
     }
 
-    function shiftPeriod(direction) {
-        const { date, view } = navigation || state;
+    function stepDate(date, view, direction) {
         if (view === 'month') {
             const first = dateValue(date.slice(0, 7) + '-01');
             first.setUTCMonth(first.getUTCMonth() + direction);
@@ -156,10 +182,14 @@
             const month = first.getUTCMonth();
             const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
             first.setUTCDate(Math.min(lastDay, Number(date.slice(-2))));
-            loadCalendar(first.toISOString().slice(0, 10), view, { focus: 'period' });
-        } else {
-            loadCalendar(planner.shiftDate(date, direction * (view === 'week' ? 7 : 1)), view, { focus: 'period' });
+            return first.toISOString().slice(0, 10);
         }
+        return planner.shiftDate(date, direction * (view === 'week' ? 7 : 1));
+    }
+
+    function shiftPeriod(direction) {
+        const { date, view } = navigation || state;
+        loadCalendar(stepDate(date, view, direction), view, { focus: 'period' });
     }
 
     function renderEvent(event, date) {
@@ -188,7 +218,7 @@
             return [label, text];
         });
         $('calendarEventDetails').replaceChildren(...detail);
-        const notes = event.notes || event.description || '';
+        const notes = event.notes ?? event.description ?? '';
         $('calendarEventNotes').textContent = notes;
         $('calendarEventNotes').hidden = !notes;
         $('calendarEventSchedule').href = scheduleUrl(date, event.id);
@@ -345,12 +375,20 @@
         }
     });
 
-    for (const id of ['calendarSearch', 'calendarKind', 'calendarAssignee']) {
-        $(id).addEventListener('input', () => {
-            clearTimeout(filterTimer);
-            filterTimer = setTimeout(queueCalendarRefresh, id === 'calendarSearch' ? 180 : 0);
-        });
+    function applyFilters() {
+        const { date, view } = navigation || state;
+        loadCalendar(date, view);
     }
+
+    filtersForm.addEventListener('input', event => {
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(applyFilters, event.target.name === 'q' ? 180 : 0);
+    });
+    filtersForm.addEventListener('submit', event => {
+        event.preventDefault();
+        clearTimeout(filterTimer);
+        applyFilters();
+    });
     $('calendarPrevious').addEventListener('click', event => { event.preventDefault(); shiftPeriod(-1); });
     $('calendarNext').addEventListener('click', event => { event.preventDefault(); shiftPeriod(1); });
     $('calendarToday').addEventListener('click', event => {
@@ -370,7 +408,7 @@
         event.preventDefault();
         changeLink($('calendarNoteChoice').value, true);
     });
-    eventDialog.addEventListener('close', () => { opened = null; });
+    eventDialog.addEventListener('close', () => { if (!eventDialog.open) opened = null; });
 
     window.addEventListener('popstate', () => {
         const params = new URLSearchParams(location.search);
@@ -396,14 +434,12 @@
     });
 
     paint();
+    history.replaceState(null, '', calendarUrl(state.date, state.view, false, state.selectedEvent, state.filters));
     if (initial.notice) message(initial.notice);
     if (initial.selectedEvent && findEvent(initial.selectedEvent)) {
         openEvent(initial.selectedEvent, state.date);
         if ($('calendarEventFallback')) $('calendarEventFallback').hidden = eventDialog.open;
     }
-    else if (prefill) {
-        editor.open(null, prefill);
-        history.replaceState(null, '', calendarUrl(state.date, state.view));
-    }
+    else if (prefill) editor.open(null, prefill);
     content.closest('.calendar-main').dataset.enhanced = 'true';
 })();

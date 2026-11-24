@@ -11,8 +11,8 @@
                 <input name="title" id="eventTitle" class="form-control" maxlength="200" autocomplete="off" placeholder="What are you planning?" required autofocus>
             </div>
             <div class="form-row">
-                <div class="form-group"><label for="eventDate">Start date</label><input name="date" id="eventDate" type="date" class="form-control" required></div>
-                <div class="form-group"><label for="eventEndDate">End date</label><input name="end_date" id="eventEndDate" type="date" class="form-control" required></div>
+                <div class="form-group"><label for="eventDate">Start date</label><input name="date" id="eventDate" type="date" min="1000-01-01" max="9998-12-31" class="form-control" required></div>
+                <div class="form-group"><label for="eventEndDate">End date</label><input name="end_date" id="eventEndDate" type="date" max="9998-12-31" class="form-control" required></div>
             </div>
             <div class="form-group"><label class="option-toggle"><input id="eventAllDay" name="all_day" type="checkbox" value="1"> All day</label></div>
             <div class="form-row" id="eventTimeFields">

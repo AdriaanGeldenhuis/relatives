@@ -4,7 +4,6 @@ body.workspace-page[data-area="notes"] {
     --notes-ink: var(--family-ink);
     --notes-muted: var(--family-muted);
     --notes-green: var(--family-green);
-    --notes-lime: var(--family-lime);
     --notes-border: var(--family-line);
     --notes-display: var(--family-display);
     --footer-height: 56px;
@@ -427,6 +426,7 @@ body.workspace-page[data-area="notes"] {
     .notes-main { width: calc(100% - 34px); }
     .notes-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .notes-toolbar { flex-wrap: wrap; }
+    .notes-filters { flex-wrap: wrap; max-width: 100%; }
     .notes-search { flex: 1 0 220px; max-width: 100%; }
 }
 
@@ -434,7 +434,7 @@ body.workspace-page[data-area="notes"] {
     .notes-main { width: calc(100% - 24px); padding-top: 13px; }
     .notes-toolbar { margin-top: 12px; gap: 8px; padding-bottom: 10px; }
     .notes-search { width: 100%; flex-basis: 100%; order: -1; }
-    .notes-filters { max-width: 100%; flex-wrap: wrap; gap: 3px; padding: 3px; }
+    .notes-filters { gap: 3px; padding: 3px; }
     .notes-filters button { padding-inline: 6px; font-size: .75rem; }
     .notes-filters .notes-icon { display: none; }
     .notes-board-tools { margin: 11px 0; }

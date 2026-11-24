@@ -45,7 +45,7 @@ if (in_array($origin, $allowedOrigins, true)) {
 }
 
 // Handle OPTIONS preflight requests
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+if (($_SERVER['REQUEST_METHOD'] ?? null) === 'OPTIONS') {
     http_response_code(204);
     exit;
 }

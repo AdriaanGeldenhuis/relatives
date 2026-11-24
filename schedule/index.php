@@ -2,56 +2,74 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../core/session_boot.php';
-
-if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
-    exit;
-}
-
-require_once __DIR__ . '/../core/bootstrap.php';
-require_once __DIR__ . '/../core/CSRF.php';
 require_once __DIR__ . '/planner.php';
 
-$user = (new Auth($db))->getCurrentUser();
-if (!$user) {
-    header('Location: /login.php');
-    exit;
-}
+$ajax = ($_GET['ajax'] ?? null) === '1';
 header('Cache-Control: private, no-store');
 
-$day = scheduleDate($_GET['date'] ?? null) ?? new DateTimeImmutable('today');
-$selectedDate = $day->format('Y-m-d');
-$viewMode = ($_GET['view'] ?? null) === 'week' ? 'week' : 'day';
-$types = scheduleTypes();
-$csrfToken = CSRF::generate();
+$user = null;
+if (!empty($_SESSION['user_id'])) {
+    require_once __DIR__ . '/../core/bootstrap.php';
+    $user = (new Auth($db))->getCurrentUser();
+}
 
-$stmt = $db->prepare("SELECT id, full_name FROM users WHERE family_id = ? AND status = 'active' ORDER BY full_name");
-$stmt->execute([$user['family_id']]);
-$familyMembers = $stmt->fetchAll();
+if (!$user) {
+    unset($_SESSION['user_id']);
+    if ($ajax) {
+        http_response_code(401);
+        header('Content-Type: application/json; charset=utf-8');
+        echo scheduleJson(['error' => 'Sign in again to use Schedule.']);
+    } else {
+        header('Location: /login.php?redirect=%2Fschedule%2F');
+    }
+    exit;
+}
+
+require_once __DIR__ . '/../core/CSRF.php';
+require_once __DIR__ . '/../core/EventNoteLinks.php';
+$csrfToken = CSRF::generate();
+session_write_close();
+
+$familyId = (int)$user['family_id'];
+$day = scheduleDate($_GET['date'] ?? null) ?? new DateTimeImmutable('today');
+$viewMode = ($_GET['view'] ?? null) === 'week' ? 'week' : 'day';
+$selectedEvent = null;
+$notice = '';
+if (isset($_GET['event'])) {
+    $id = eventNoteId($_GET['event']);
+    $target = $id ? eventNotePreview($db, $familyId, $id) : null;
+    if ($target) {
+        $selectedEvent = (string)$id;
+        $viewMode = 'day';
+        if (!scheduleOnDay([$target], $day)) {
+            $day = scheduleDate(substr($target['starts_at'], 0, 10)) ?? $day;
+        }
+    } else {
+        $notice = 'This event is no longer available.';
+    }
+}
+$selectedDate = $day->format('Y-m-d');
+$types = scheduleTypes();
+
+$familyMembers = scheduleFamilyMembers($db, $familyId);
 $weekStart = $day->modify('monday this week');
-$weekEvents = scheduleEvents($db, (int)$user['family_id'], $weekStart, $weekStart->modify('+7 days'));
+$weekEvents = scheduleEvents($db, $familyId, $weekStart, $weekStart->modify('+7 days'));
 $events = scheduleOnDay($weekEvents, $day);
 foreach ($events as &$event) {
     $event['version'] = scheduleEventVersion($event);
 }
 unset($event);
 
-if (($_GET['ajax'] ?? null) === '1') {
+$activeFocusSession = scheduleActiveFocus($db, $familyId, (int)$user['id']);
+if ($ajax) {
     ob_start();
     require __DIR__ . '/agenda.php';
     $html = ob_get_clean();
     header('Content-Type: application/json; charset=utf-8');
-    echo scheduleJson(['html' => $html, 'events' => $events, 'date' => $selectedDate, 'view' => $viewMode]);
+    echo scheduleJson(['html' => $html, 'events' => $events, 'date' => $selectedDate, 'view' => $viewMode,
+        'activeFocusSession' => $activeFocusSession, 'selectedEvent' => $selectedEvent, 'notice' => $notice]);
     exit;
 }
-
-$stmt = $db->prepare("
-    SELECT id, title, starts_at, ends_at, actual_start
-    FROM events WHERE family_id = ? AND user_id = ? AND status = 'in_progress' AND focus_mode = 1
-    ORDER BY actual_start DESC, id DESC LIMIT 1
-");
-$stmt->execute([$user['family_id'], $user['id']]);
-$activeFocusSession = $stmt->fetch() ?: null;
 
 $pageTitle = 'Schedule';
 $pageCSS = ['/schedule/css/schedule.css?build=' . filemtime(__DIR__ . '/css/schedule.css')];
@@ -149,7 +167,11 @@ require_once __DIR__ . '/../shared/components/header.php';
 <dialog id="templatesModal" class="planner-modal">
     <div class="modal-content">
         <header class="modal-header"><h2>Schedule templates</h2><button type="button" class="modal-close" aria-label="Close" onclick="closeModal('templatesModal')">&times;</button></header>
-        <div class="modal-body" id="templatesContent"></div>
+        <div class="modal-body" id="templatesContent">
+            <?php foreach (scheduleTemplates() as $name => $slots): ?>
+                <button type="button" class="planner-control" data-template="<?= scheduleEscape($name) ?>" data-count="<?= count($slots) ?>"><?= scheduleEscape($name) ?> · <?= count($slots) ?> events</button>
+            <?php endforeach; ?>
+        </div>
     </div>
 </dialog>
 
@@ -190,7 +212,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <script type="application/json" id="scheduleData"><?= scheduleJson([
     'selectedDate' => $selectedDate, 'viewMode' => $viewMode, 'allEvents' => $events, 'types' => $types,
-    'csrf' => $csrfToken, 'activeFocusSession' => $activeFocusSession
+    'csrf' => $csrfToken, 'activeFocusSession' => $activeFocusSession, 'selectedEvent' => $selectedEvent, 'notice' => $notice
 ]) ?></script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

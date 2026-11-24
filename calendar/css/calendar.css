@@ -220,4 +220,6 @@
 
 .calendar-cell-date, .calendar-mini-event, .calendar-agenda-event { text-decoration: none; }
 .calendar-event-fallback { margin-bottom: 12px; }
-.calendar-main:not([data-enhanced]) :is([data-calendar-add], #calendarPick, .calendar-filters) { display: none; }
+.calendar-main:not([data-enhanced]) :is([data-calendar-add], #calendarPick),
+.calendar-main[data-enhanced] .calendar-apply-filters { display: none; }
+.calendar-apply-filters { justify-self: start; }

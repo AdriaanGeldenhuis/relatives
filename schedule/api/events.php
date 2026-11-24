@@ -6,7 +6,7 @@ require_once __DIR__ . '/../planner.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: private, no-store');
 
-function scheduleResponse(array $data, int $code = 200): void
+function scheduleResponse(array $data, int $code = 200): never
 {
     http_response_code($code);
     echo scheduleJson($data);
@@ -24,6 +24,7 @@ require_once __DIR__ . '/write.php';
 
 $user = (new Auth($db))->getCurrentUser();
 if (!$user) {
+    unset($_SESSION['user_id']);
     scheduleResponse(['success' => false, 'error' => 'Sign in again to use Schedule.'], 401);
 }
 $userId = (int)$user['id'];
@@ -128,10 +129,11 @@ try {
                 || !$event['ends_at'] || $event['ends_at'] <= $event['starts_at'] || $event['all_day']) {
                 throw new DomainException('This event is unavailable for focus. Assign it to yourself and set a time range.');
             }
-            $stmt = $db->prepare("UPDATE events SET status = 'in_progress', actual_start = NOW() WHERE id = ? AND family_id = ?");
-            $stmt->execute([$id, $familyId]);
+            $started = date('Y-m-d H:i:s');
+            $stmt = $db->prepare("UPDATE events SET status = 'in_progress', actual_start = ?, actual_end = NULL WHERE id = ? AND family_id = ?");
+            $stmt->execute([$started, $id, $familyId]);
             $event['status'] = 'in_progress';
-            $event['actual_start'] = date('Y-m-d H:i:s');
+            $event['actual_start'] = $started;
             $db->commit();
             scheduleResponse(['success' => true, 'event' => $event]);
 
@@ -242,13 +244,45 @@ try {
             $stmt->execute([...$values, $familyId, ...$ids]);
             scheduleResponse(['success' => true, 'count' => $stmt->rowCount()]);
 
+        case 'apply_template':
+            $date = scheduleDate(schedulePost('date'));
+            $slots = scheduleTemplates()[schedulePost('template')] ?? null;
+            if (!$date || !$slots) {
+                throw new DomainException('Choose a valid date and a schedule template.');
+            }
+            $day = $date->format('Y-m-d');
+            $types = scheduleTypes();
+            $created = [];
+            $db->beginTransaction();
+            foreach ($slots as [$title, $start, $end, $kind]) {
+                $startsAt = "$day $start:00";
+                $id = scheduleWriteEvent($db, $familyId, $userId, [
+                    'user_id' => $userId, 'title' => $title, 'kind' => $kind,
+                    'starts_at' => $startsAt, 'ends_at' => "$day $end:00",
+                    'focus_mode' => (int)($kind === 'focus'), 'color' => $types[$kind]['color'],
+                    'recurrence_rule' => null, 'actual_start' => null,
+                ], null);
+                $created[] = [$id, $title, $startsAt];
+            }
+            $db->commit();
+            try {
+                require_once __DIR__ . '/../../core/NotificationTriggers.php';
+                $triggers = new NotificationTriggers($db);
+                foreach ($created as [$id, $title, $startsAt]) {
+                    $triggers->onScheduleTaskCreated($id, $userId, $familyId, $title, date('j M Y \a\t H:i', strtotime($startsAt)));
+                }
+            } catch (Throwable $error) {
+                error_log('Schedule template notification failed: ' . $error->getMessage());
+            }
+            scheduleResponse(['success' => true, 'count' => count($created)]);
+
         case 'add_birthday':
             $name = trim(schedulePost('name'));
             $birthday = scheduleDate(schedulePost('date'));
             $notes = str_replace(["\r\n", "\r"], "\n", schedulePost('notes'));
             $color = schedulePost('color', '#e74c3c');
             if (!$birthday || $name === '' || !preg_match('/^.{1,180}$/usD', $name)
-                || strlen($notes) > 65535 || !preg_match('/^#[0-9a-f]{6}$/iD', $color)) {
+                || strlen($notes) > 65535 || !preg_match('//u', $notes) || !preg_match('/^#[0-9a-f]{6}$/iD', $color)) {
                 throw new DomainException('Enter a valid name, birth date and color.');
             }
             $today = new DateTimeImmutable('today');
@@ -264,7 +298,7 @@ try {
             $db->beginTransaction();
             $eventId = scheduleWriteEvent($db, $familyId, $userId, [
                 'user_id' => $userId, 'assigned_to' => null, 'title' => $name . "'s Birthday",
-                'kind' => 'birthday', 'notes' => $notes ?: null, 'starts_at' => $startsAt,
+                'kind' => 'birthday', 'notes' => $notes === '' ? null : $notes, 'starts_at' => $startsAt,
                 'ends_at' => $day->modify('+1 day')->format('Y-m-d H:i:s'), 'all_day' => 1,
                 'color' => $color, 'priority' => 'medium', 'reminder_minutes' => null,
                 'recurrence_rule' => 'yearly', 'focus_mode' => 0, 'actual_start' => null

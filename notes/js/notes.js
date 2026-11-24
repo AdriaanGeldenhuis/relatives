@@ -2,7 +2,8 @@
     'use strict';
 
     const $ = id => document.getElementById(id);
-    const { notes: initialNotes, csrf, prefill, maxPhotos, event: initialEvent, openNote: initialNote, linkNotice } = JSON.parse($('notesData').textContent);
+    const { notes: initialNotes, csrf, prefill, startNew, maxPhotos, uploadLimits,
+        event: initialEvent, openNote: initialNote, linkNotice } = JSON.parse($('notesData').textContent);
     const planner = window.RelativesPlanner;
     const notes = new Map(initialNotes.map(note => [note.id, note]));
     const colors = {
@@ -27,6 +28,7 @@
     const photoInput = $('notesPhotoInput');
     const saveButton = $('notesSave');
     const deleteButton = $('notesConfirmDelete');
+    const fileLimit = bytes => `${Math.floor(bytes / (1024 * 1024) * 10) / 10} MB`;
     const pending = new Set();
     let filter = 'all';
     let sourceEvent = null;
@@ -250,9 +252,9 @@
                 ? 'The attachments are too large. Try fewer or smaller files.'
                 : 'Notes could not reach the server. Try again.');
         }
-        if (!response.ok || !result.success) {
-            const error = new Error(result.error || 'Could not save this change.');
-            error.note = result.note;
+        if (!response.ok || !result?.success) {
+            const error = new Error(result?.error || 'Could not save this change.');
+            error.note = result?.note;
             error.missing = response.status === 404;
             throw error;
         }
@@ -284,7 +286,14 @@
         }
     }
 
-    function refreshLinkedNotes() {
+    function sameNote(previous, next) {
+        return previous && previous.version === next.version && previous.pinned === next.pinned
+            && previous.updated === next.updated && previous.author === next.author
+            && previous.avatar === next.avatar && previous.audio === next.audio
+            && JSON.stringify(previous.eventLinks) === JSON.stringify(next.eventLinks);
+    }
+
+    function refreshBoard() {
         clearTimeout(boardRefreshTimer);
         boardRefreshTimer = setTimeout(async () => {
             const revision = ++boardRevision;
@@ -293,13 +302,19 @@
                 if (!response.ok || response.redirected) return;
                 const data = await response.json();
                 if (!data.success || revision !== boardRevision) return;
+                const next = new Map(data.notes.map(note => {
+                    const previous = notes.get(note.id);
+                    return [note.id, sameNote(previous, note) ? previous : note];
+                }));
+                if (next.size === notes.size && [...next].every(([id, note]) => notes.get(id) === note)) return;
+                const displayed = notes.get(readerId);
                 notes.clear();
-                data.notes.forEach(note => notes.set(note.id, note));
+                next.forEach((note, id) => notes.set(id, note));
                 renderBoard();
                 if (reader.open && readerId) {
-                    const displayed = notes.get(readerId);
-                    if (displayed) renderReader(displayed);
-                    else reader.close();
+                    const latest = notes.get(readerId);
+                    if (!latest) reader.close();
+                    else if (latest !== displayed) renderReader(latest);
                 }
             } catch {
                 // The current board remains usable if a background refresh fails.
@@ -324,6 +339,8 @@
         if (action === 'set_task') {
             data.set('line', control.dataset.line);
             data.set('checked', control.checked ? '1' : '0');
+        } else {
+            data.set('pinned', note.pinned ? '0' : '1');
         }
         pending.add(note.id);
         control.disabled = true;
@@ -431,10 +448,15 @@
         } else if (sourceEvent) {
             data.set('event_id', sourceEvent.id);
         }
+        data.set('photo_count', String(photoFiles.length));
         photoFiles.forEach(({ file }) => data.append('images[]', file));
         if (editorType === 'voice' && !editing) {
             if (!recordedBlob) {
                 setNotice($('notesFormError'), 'Record a voice note first.');
+                return;
+            }
+            if (recordedBlob.size > uploadLimits.fileBytes) {
+                setNotice($('notesFormError'), `Record again to stay within the ${fileLimit(uploadLimits.fileBytes)} upload limit.`);
                 return;
             }
             const extension = recordedBlob.type.includes('mp4') ? 'm4a' : recordedBlob.type.includes('ogg') ? 'ogg' : 'webm';
@@ -474,7 +496,8 @@
         const lastSelected = selectionEnd > selectionStart && text[selectionEnd - 1] === '\n' ? selectionEnd - 1 : selectionEnd;
         const nextNewline = text.indexOf('\n', lastSelected);
         const end = nextNewline < 0 ? text.length : nextNewline;
-        const toTask = line => taskPrefix.test(line) ? line : '- [ ] ' + line.replace(bulletPrefix, '$1').trimStart();
+        const toTask = line => taskPrefix.test(line) || eventMarker.test(line)
+            ? line : '- [ ] ' + line.replace(bulletPrefix, '$1').trimStart();
         if (selectionStart !== selectionEnd) {
             const lines = text.slice(start, end).split('\n').map(line => line.trim() ? toTask(line) : line);
             bodyInput.setRangeText(lines.join('\n'), start, end, 'select');
@@ -527,20 +550,30 @@
     }
 
     function addPhotos(files) {
-        const message = [];
+        const messages = new Set();
+        let total = photoFiles.reduce((sum, { file }) => sum + file.size, 0);
         for (const file of files) {
             if (photoPaths.length + photoFiles.length >= maxPhotos) {
-                message.push('You can attach up to seven photos.');
+                messages.add(`You can attach up to ${maxPhotos} photos.`);
                 break;
             }
-            if (/^image\/(?:jpeg|png|gif|webp)$/.test(file.type) && file.size > 0 && file.size <= 10 * 1024 * 1024) {
-                photoFiles.push({ file, url: URL.createObjectURL(file) });
-            } else if (!message.length) {
-                message.push('Choose JPG, PNG, GIF or WebP photos up to 10 MB each.');
+            if (photoFiles.length >= uploadLimits.files) {
+                messages.add(`You can upload ${uploadLimits.files} photos at a time.`);
+                break;
             }
+            if (!/^image\/(?:jpeg|png|gif|webp)$/.test(file.type) || !file.size || file.size > uploadLimits.fileBytes) {
+                messages.add(`Choose JPG, PNG, GIF or WebP photos up to ${fileLimit(uploadLimits.fileBytes)} each.`);
+                continue;
+            }
+            if (total + file.size > uploadLimits.totalBytes) {
+                messages.add(`Keep this upload within ${fileLimit(uploadLimits.totalBytes)} or save the photos in batches.`);
+                continue;
+            }
+            total += file.size;
+            photoFiles.push({ file, url: URL.createObjectURL(file) });
         }
         renderPhotoPreviews();
-        setNotice($('notesFormError'), message.join(' '));
+        setNotice($('notesFormError'), [...messages].join(' '));
     }
 
     if (photoInput) {
@@ -679,7 +712,10 @@
                 recording.stream.getTracks().forEach(track => track.stop());
                 return;
             }
-            const recorder = new MediaRecorder(recording.stream);
+            // Reserve part of the limit for the audio container and variable bitrate.
+            const bitrate = Math.max(24000, Math.min(64000, Math.floor(uploadLimits.fileBytes * 8 / 660)));
+            const maxSeconds = Math.min(600, Math.floor(uploadLimits.fileBytes * 8 / bitrate * .9));
+            const recorder = new MediaRecorder(recording.stream, { audioBitsPerSecond: bitrate });
             recording.recorder = recorder;
             const chunks = [];
             recorder.addEventListener('dataavailable', event => {
@@ -710,7 +746,7 @@
             timer = setInterval(() => {
                 const seconds = Math.floor((Date.now() - start) / 1000);
                 $('notesTimer').value = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-                if (seconds >= 600 && recorder.state === 'recording') recorder.stop();
+                if (seconds >= maxSeconds && recorder.state === 'recording') recorder.stop();
             }, 250);
             $('notesRecordStatus').textContent = 'Recording…';
             updateRecordingControls();
@@ -869,18 +905,18 @@
     });
     window.addEventListener('relatives:note-created', event => refreshNote(event.detail, event.detail.id));
     window.addEventListener('storage', event => {
-        if (event.key === planner.noteSignal || event.key === planner.eventSignal) refreshLinkedNotes();
+        if (event.key === planner.noteSignal || event.key === planner.eventSignal) refreshBoard();
     });
-    window.addEventListener('relatives:event-saved', refreshLinkedNotes);
+    window.addEventListener('relatives:event-saved', refreshBoard);
     window.addEventListener('pageshow', event => {
-        if (event.persisted) refreshLinkedNotes();
+        if (event.persisted) refreshBoard();
     });
     updateLayout();
     if (initialNote) {
         const note = notes.get(initialNote);
         if (note) openNote(note);
         else notify('This note is no longer available.');
-    } else if (initialEvent || prefill) {
+    } else if (startNew && !linkNotice) {
         openEditor('text', null, prefill, initialEvent);
         history.replaceState(null, '', '/notes/');
     }

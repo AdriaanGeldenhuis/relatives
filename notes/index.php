@@ -5,43 +5,41 @@ require_once __DIR__ . '/../core/session_boot.php';
 require_once __DIR__ . '/store.php';
 
 $isPost = $_SERVER['REQUEST_METHOD'] === 'POST';
-if (!isset($_SESSION['user_id'])) {
-    if ($isPost) {
-        notesRespond(['success' => false, 'error' => 'Sign in again to save your changes.'], 401);
-    }
-    header('Location: /login.php');
-    exit;
-}
-
-require_once __DIR__ . '/../core/bootstrap.php';
-require_once __DIR__ . '/../core/CSRF.php';
-
-$user = (new Auth($db))->getCurrentUser();
-if (!$user) {
-    if ($isPost) {
-        notesRespond(['success' => false, 'error' => 'Sign in again to save your changes.'], 401);
-    }
-    header('Location: /login.php');
-    exit;
-}
-
+$ajax = ($_GET['ajax'] ?? null) === '1';
 header('Cache-Control: private, no-store');
+
+$user = null;
+if (!empty($_SESSION['user_id'])) {
+    require_once __DIR__ . '/../core/bootstrap.php';
+    $user = (new Auth($db))->getCurrentUser();
+}
+
+if (!$user) {
+    unset($_SESSION['user_id']);
+    if ($isPost || $ajax) {
+        notesRespond(['success' => false, 'error' => 'Sign in again to use Notes.'], 401);
+    }
+    header('Location: /login.php?redirect=%2Fnotes%2F');
+    exit;
+}
+
+require_once __DIR__ . '/../core/CSRF.php';
 $csrfToken = CSRF::generate();
-$imageCapacity = notesImageCapacity($db);
+session_write_close();
 if ($isPost) {
-    session_write_close();
-    notesHandlePost($db, $user, $imageCapacity, $csrfToken);
+    notesHandlePost($db, $user, $csrfToken);
 }
 
 $familyId = (int)$user['family_id'];
 $notes = notesBoardData($db, $familyId);
-if (($_GET['ajax'] ?? null) === '1') {
+if ($ajax) {
     notesRespond(['success' => true, 'notes' => $notes]);
 }
-$prefill = ($_GET['new'] ?? null) === '1' && is_string($_GET['content'] ?? null) ? $_GET['content'] : '';
+$startNew = ($_GET['new'] ?? null) === '1';
+$prefill = $startNew && is_string($_GET['content'] ?? null) ? $_GET['content'] : '';
 $event = null;
 $linkNotice = '';
-if (isset($_GET['event']) && ($_GET['new'] ?? null) === '1') {
+if ($startNew && isset($_GET['event'])) {
     $id = eventNoteId($_GET['event']);
     $event = $id ? eventNotePreview($db, $familyId, $id) : null;
     if (!$event) {
@@ -54,7 +52,7 @@ $pageTitle = 'Notes';
 $pageInlineStylesheets = [__DIR__ . '/css/notes.css'];
 $pageJS = ['/notes/js/notes.js'];
 $pageJSVersion = filemtime(__DIR__ . '/js/notes.js');
-$shoppingCount = 0;
+$imageCapacity = notesImageCapacity($db);
 
 function notesIcon(string $name): string
 {
@@ -149,10 +147,8 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <div class="notes-recorder-icon"><?= notesIcon('mic') ?></div>
                 <output id="notesTimer">00:00</output>
                 <div id="notesRecordStatus" role="status">Ready to record</div>
-                <div class="notes-recorder-controls">
-                    <button type="button" id="notesStartRecord" class="notes-button notes-button-primary">Start recording</button>
-                    <button type="button" id="notesStopRecord" class="notes-button notes-button-danger" hidden>Stop recording</button>
-                </div>
+                <button type="button" id="notesStartRecord" class="notes-button notes-button-primary">Start recording</button>
+                <button type="button" id="notesStopRecord" class="notes-button notes-button-danger" hidden>Stop recording</button>
                 <audio id="notesRecordingPreview" controls hidden></audio>
             </div>
             <label class="notes-field">Title <input name="title" id="notesTitle" maxlength="160" placeholder="Give it a title"></label>
@@ -209,16 +205,14 @@ require_once __DIR__ . '/../shared/components/header.php';
 </dialog>
 
 <dialog class="notes-gallery" id="notesGallery" aria-label="Note photos">
-    <div class="notes-gallery-layout">
-        <div class="notes-gallery-header">
-            <p id="notesGalleryCount" role="status"></p>
-            <button type="button" class="notes-icon-button" data-close aria-label="Close photos"><?= notesIcon('close') ?></button>
-        </div>
-        <div class="notes-gallery-stage">
-            <button type="button" class="notes-icon-button" id="notesPrevPhoto" aria-label="Previous photo"><?= notesIcon('chevron') ?></button>
-            <div class="notes-gallery-photo"><img id="notesGalleryImage" alt=""><p id="notesGalleryError" hidden>This photo is unavailable.</p></div>
-            <button type="button" class="notes-icon-button notes-gallery-next" id="notesNextPhoto" aria-label="Next photo"><?= notesIcon('chevron') ?></button>
-        </div>
+    <div class="notes-gallery-header">
+        <p id="notesGalleryCount" role="status"></p>
+        <button type="button" class="notes-icon-button" data-close aria-label="Close photos"><?= notesIcon('close') ?></button>
+    </div>
+    <div class="notes-gallery-stage">
+        <button type="button" class="notes-icon-button" id="notesPrevPhoto" aria-label="Previous photo"><?= notesIcon('chevron') ?></button>
+        <div class="notes-gallery-photo"><img id="notesGalleryImage" alt=""><p id="notesGalleryError" hidden>This photo is unavailable.</p></div>
+        <button type="button" class="notes-icon-button notes-gallery-next" id="notesNextPhoto" aria-label="Next photo"><?= notesIcon('chevron') ?></button>
     </div>
 </dialog>
 
@@ -232,7 +226,8 @@ require_once __DIR__ . '/../shared/components/header.php';
 </dialog>
 
 <script type="application/json" id="notesData"><?= json_encode(
-    ['notes' => $notes, 'csrf' => $csrfToken, 'prefill' => $prefill, 'maxPhotos' => NOTES_MAX_PHOTOS,
+    ['notes' => $notes, 'csrf' => $csrfToken, 'prefill' => $prefill, 'startNew' => $startNew,
+        'maxPhotos' => NOTES_MAX_PHOTOS, 'uploadLimits' => notesUploadLimits(),
         'event' => $event ? ['id' => (string)$event['id'], 'title' => $event['title']] : null,
         'openNote' => $openNote, 'linkNotice' => $linkNotice],
     JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR

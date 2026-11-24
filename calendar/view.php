@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 function calendarUrl(string $date, string $view, array $filters = [], ?int $event = null): string
 {
-    $params = ['date' => $date, 'view' => $view] + array_filter($filters, static fn($value) => $value !== '');
+    $params = ['date' => $date, 'view' => $view] + $filters;
     if ($event) $params['event'] = $event;
     return '/calendar/?' . http_build_query($params);
 }
@@ -20,12 +20,13 @@ function calendarStep(DateTimeImmutable $day, string $view, int $direction): str
 function calendarFilter(array $events, array $filters, array $types): array
 {
     $lower = static fn(string $value): string => function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value);
-    $words = preg_split('/\s+/u', $lower(trim($filters['q'])), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $words = preg_split('/\s+/u', $lower($filters['q'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) ?: [];
     return array_values(array_filter($events, static function (array $event) use ($filters, $types, $words, $lower): bool {
-        if ($filters['kind'] !== '' && $filters['kind'] !== $event['kind']) return false;
-        $assignee = $filters['assignee'];
+        if (isset($filters['kind']) && $filters['kind'] !== $event['kind']) return false;
+        $assignee = $filters['assignee'] ?? '';
         if ($assignee !== '' && ($assignee === 'unassigned' ? $event['assigned_to'] : (string)$event['assigned_to'] !== $assignee)) return false;
-        $text = $lower(implode(' ', [$event['title'], $event['notes'] ?: $event['description'], $event['location'],
+        if (!$words) return true;
+        $text = $lower(implode(' ', [$event['title'], $event['notes'] ?? $event['description'], $event['location'],
             $event['assigned_to_name'], $types[$event['kind']]['name'] ?? 'Other']));
         foreach ($words as $word) {
             if (!str_contains($text, $word)) return false;
@@ -62,7 +63,7 @@ function calendarRender(array $data, array $types, array $filters, DateTimeImmut
     $first = new DateTimeImmutable($data['first']);
     $end = new DateTimeImmutable($data['end']);
     $events = calendarFilter($data['events'], $filters, $types);
-    $hasFilters = (bool)array_filter($filters);
+    $hasFilters = (bool)$filters;
     if ($view === 'week'): ?>
         <div class="calendar-week">
             <?php for ($date = $first; $date < $end; $date = $date->modify('+1 day')):

@@ -2,10 +2,30 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../core/EventNoteLinks.php';
+require_once __DIR__ . '/../shared/components/avatar.php';
 
 const NOTES_DEFAULT_COLOR = '#ffffff';
 const NOTES_MAX_PHOTOS = 7;
 const NOTES_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+function notesUploadLimits(): array
+{
+    $bytes = static function (string $setting): int {
+        $value = trim((string)ini_get($setting));
+        return (int)$value * match (strtolower(substr($value, -1))) {
+            'g' => 1024 ** 3, 'm' => 1024 ** 2, 'k' => 1024, default => 1,
+        };
+    };
+    $maxBody = $bytes('post_max_size');
+    // Leave room for the note body and the multipart form fields.
+    $total = $maxBody > 0 ? max(0, $maxBody - 96 * 1024) : NOTES_MAX_PHOTOS * NOTES_MAX_UPLOAD_BYTES;
+    $maxFile = $bytes('upload_max_filesize');
+    return [
+        'fileBytes' => min(NOTES_MAX_UPLOAD_BYTES, $total, $maxFile > 0 ? $maxFile : NOTES_MAX_UPLOAD_BYTES),
+        'totalBytes' => $total,
+        'files' => min(NOTES_MAX_PHOTOS, (int)ini_get('max_file_uploads')),
+    ];
+}
 
 function notesImagePaths(?string $value): array
 {
@@ -24,6 +44,18 @@ function notesIsMediaPath($path): bool
 {
     return is_string($path)
         && preg_match('~^/(?:saves|uploads)/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+$~D', $path) === 1;
+}
+
+function notesIsPrivateMedia(string $path): bool
+{
+    return preg_match('~^/saves/notes-private/\d+/[a-f0-9]{12}\.(?:webp|webm|m4a|ogg)$~D', $path) === 1;
+}
+
+function notesMediaUrl(int $noteId, string $path): string
+{
+    return notesIsPrivateMedia($path) ? '/notes/api/media.php?' . http_build_query([
+        'note' => $noteId, 'file' => basename($path),
+    ]) : $path;
 }
 
 function notesPackImages(array $paths, int $maxLength): ?string
@@ -61,13 +93,12 @@ function notesVersion(array $note): string
 
 function notesClientData(array $note, array $eventTitles = []): array
 {
+    $noteId = (int)$note['id'];
     $audio = $note['audio_path'] ?? null;
     $audio = notesIsMediaPath($audio) && is_file(__DIR__ . '/..' . $audio) ? $audio : null;
     $userId = (int)$note['user_id'];
-    $avatar = '/saves/' . $userId . '/avatar/avatar.webp';
-    $avatarTime = $userId && is_file(__DIR__ . '/..' . $avatar) ? filemtime(__DIR__ . '/..' . $avatar) : false;
     return [
-        'id' => (string)$note['id'],
+        'id' => (string)$noteId,
         'type' => $note['type'],
         'title' => (string)$note['title'],
         'body' => str_replace(["\r\n", "\r"], "\n", (string)$note['body']),
@@ -75,19 +106,20 @@ function notesClientData(array $note, array $eventTitles = []): array
             eventNoteIds($note['body'])),
         'color' => $note['color'] ?: NOTES_DEFAULT_COLOR,
         'pinned' => (bool)$note['pinned'],
-        'images' => notesImagePaths($note['image_path'] ?? null),
-        'audio' => $audio,
+        'images' => array_map(static fn(string $path): string => notesMediaUrl($noteId, $path),
+            notesImagePaths($note['image_path'] ?? null)),
+        'audio' => $audio ? notesMediaUrl($noteId, $audio) : null,
         'author' => $note['full_name'] ?: 'Family member',
-        'avatar' => $avatarTime ? $avatar . '?v=' . $avatarTime : null,
+        'avatar' => $userId && is_file(avatarPath($userId)) ? avatarUrl($userId) : null,
         'created' => $note['created_at'] ? (new DateTimeImmutable($note['created_at']))->format(DATE_ATOM) : null,
         'updated' => $note['updated_at'] ? (new DateTimeImmutable($note['updated_at']))->format(DATE_ATOM) : null,
         'version' => notesVersion($note)
     ];
 }
 
-function notesSelect(PDO $db, int $familyId, ?int $noteId = null, bool $lock = false)
+function notesSelect(PDO $db, int $familyId, ?int $noteId = null, bool $lock = false): array|false
 {
-    $sql = 'SELECT n.*, u.full_name FROM notes n LEFT JOIN users u ON n.user_id = u.id WHERE n.family_id = ?';
+    $sql = 'SELECT n.*, u.full_name FROM notes n LEFT JOIN users u ON n.user_id = u.id AND n.family_id = u.family_id WHERE n.family_id = ?';
     if ($noteId === null) {
         $stmt = $db->prepare($sql . ' ORDER BY n.created_at DESC, n.id DESC');
         $stmt->execute([$familyId]);
@@ -166,10 +198,12 @@ function notesPhotos(): array
 
 function notesUploadMime(array $file): string
 {
-    if ($file['error'] === UPLOAD_ERR_INI_SIZE || $file['error'] === UPLOAD_ERR_FORM_SIZE || $file['size'] > NOTES_MAX_UPLOAD_BYTES) {
+    $limit = notesUploadLimits()['fileBytes'];
+    if (in_array($file['error'] ?? null, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) || ($file['size'] ?? 0) > $limit) {
         throw new DomainException('An attachment exceeds the file size limit.');
     }
-    if ($file['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($file['tmp_name']) || !$file['size']) {
+    if (($file['error'] ?? null) !== UPLOAD_ERR_OK || !is_string($file['tmp_name'] ?? null)
+        || !is_uploaded_file($file['tmp_name']) || empty($file['size'])) {
         throw new DomainException('The attachment did not upload. Choose it again.');
     }
     return (new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']) ?: '';
@@ -184,23 +218,48 @@ function notesMediaPath(string $directory, string $extension): string
     return $directory . '/' . bin2hex(random_bytes(6)) . '.' . $extension;
 }
 
-function notesSavePhoto(array $file, int $userId, array &$created): string
+function notesSavePhoto(array $file, int $userId, array &$created, bool $forCollage = false): string
 {
+    $mime = notesUploadMime($file);
+    $source = $file['tmp_name'];
+    $directory = $forCollage ? '/saves/' . $userId . '/notes' : '/saves/notes-private/' . $userId;
+    if ($forCollage && in_array($mime, ['image/heic', 'image/heif'], true) && class_exists('Imagick')) {
+        $image = new Imagick();
+        try {
+            $image->pingImage($source);
+            if ($image->getImageWidth() * $image->getImageHeight() > 24000000) {
+                throw new DomainException('Use a photo of up to 24 megapixels.');
+            }
+            $image->clear();
+            $image->readImage($source . '[0]');
+            $path = notesMediaPath($directory, 'webp');
+            $created[] = $path;
+            $image->setImageFormat('webp');
+            $image->setImageCompressionQuality(85);
+            if (!$image->writeImage(__DIR__ . '/..' . $path)) {
+                throw new RuntimeException('Unable to save note photo.');
+            }
+            return $path;
+        } finally {
+            $image->clear();
+        }
+    }
+
     $decoder = [
         'image/jpeg' => 'imagecreatefromjpeg',
         'image/png' => 'imagecreatefrompng',
         'image/gif' => 'imagecreatefromgif',
         'image/webp' => 'imagecreatefromwebp'
-    ][notesUploadMime($file)] ?? null;
-    $dimensions = $decoder ? @getimagesize($file['tmp_name']) : false;
+    ][$mime] ?? null;
+    $dimensions = $decoder ? @getimagesize($source) : false;
     if (!$dimensions || $dimensions[0] * $dimensions[1] > 24000000) {
         throw new DomainException('Use a JPG, PNG, GIF or WebP image of up to 24 megapixels.');
     }
-    $image = @$decoder($file['tmp_name']);
+    $image = @$decoder($source);
     if (!$image) {
         throw new DomainException('A photo could not be read. Choose another image.');
     }
-    $path = notesMediaPath('/saves/' . $userId . '/notes', 'webp');
+    $path = notesMediaPath($directory, 'webp');
     $filename = __DIR__ . '/..' . $path;
     $created[] = $path;
     imagepalettetotruecolor($image);
@@ -212,7 +271,7 @@ function notesSavePhoto(array $file, int $userId, array &$created): string
     return $path;
 }
 
-function notesSaveAudio(array $file, array &$created): string
+function notesSaveAudio(array $file, int $userId, array &$created): string
 {
     $extension = [
         'audio/webm' => 'webm',
@@ -226,7 +285,7 @@ function notesSaveAudio(array $file, array &$created): string
     if (!$extension) {
         throw new DomainException('The recording format is unsupported. Try recording again.');
     }
-    $path = notesMediaPath('/uploads/voice', $extension);
+    $path = notesMediaPath('/saves/notes-private/' . $userId, $extension);
     if (!move_uploaded_file($file['tmp_name'], __DIR__ . '/..' . $path)) {
         throw new RuntimeException('Unable to save note recording.');
     }
@@ -237,7 +296,7 @@ function notesSaveAudio(array $file, array &$created): string
 function notesRemoveMedia(array $paths): void
 {
     foreach (array_unique(array_filter($paths, 'notesIsMediaPath')) as $path) {
-        if (preg_match('~^/(?:saves/\d+/notes/|uploads/(?:notes|voice)/)[a-zA-Z0-9_-]+\.(?:webp|webm|m4a|ogg)$~D', $path)) {
+        if (notesIsPrivateMedia($path) || preg_match('~^/(?:saves/\d+/notes/|uploads/(?:notes|voice)/)[a-zA-Z0-9_-]+\.(?:webp|webm|m4a|ogg)$~D', $path)) {
             $file = __DIR__ . '/..' . $path;
             if (is_file($file) && !@unlink($file)) {
                 error_log('Could not remove a note attachment.');
@@ -246,7 +305,7 @@ function notesRemoveMedia(array $paths): void
     }
 }
 
-function notesRespond(array $result, int $status = 200): void
+function notesRespond(array $result, int $status = 200): never
 {
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
@@ -254,7 +313,7 @@ function notesRespond(array $result, int $status = 200): void
     exit;
 }
 
-function notesHandlePost(PDO $db, array $user, int $imageCapacity, string $token): void
+function notesHandlePost(PDO $db, array $user, string $token): never
 {
     if (!$_POST && !$_FILES) {
         notesRespond(['success' => false, 'error' => 'The request is empty or the attachments are too large.'], 413);
@@ -275,7 +334,10 @@ function notesHandlePost(PDO $db, array $user, int $imageCapacity, string $token
         }
 
         if ($action !== 'create_note') {
-            $noteId = (int)notesPost('note_id');
+            $noteId = eventNoteId(notesPost('note_id'));
+            if (!$noteId) {
+                throw new DomainException('Choose a valid note.');
+            }
             $db->beginTransaction();
             $note = notesSelect($db, $familyId, $noteId, true);
             if (!$note) {
@@ -293,6 +355,7 @@ function notesHandlePost(PDO $db, array $user, int $imageCapacity, string $token
         }
 
         if ($action === 'create_note' || $editing) {
+            $imageCapacity = notesImageCapacity($db);
             $type = $editing ? $note['type'] : notesPost('type', 'text');
             if (!in_array($type, ['text', 'voice'], true)) {
                 throw new DomainException('Choose a valid note type.');
@@ -303,12 +366,16 @@ function notesHandlePost(PDO $db, array $user, int $imageCapacity, string $token
             $audio = $note['audio_path'] ?? null;
             $paths = notesImagePaths($note['image_path'] ?? null);
             $photos = notesPhotos();
+            if (isset($_POST['photo_count']) && notesPost('photo_count') !== (string)count($photos)) {
+                throw new DomainException('Some photos did not reach the server. Try fewer files at a time.');
+            }
 
             if ($editing && isset($_POST['remove_images'])) {
                 if (!is_array($_POST['remove_images'])) {
                     throw new DomainException('Invalid attachment selection.');
                 }
-                $removed = array_values(array_intersect($paths, array_filter($_POST['remove_images'], 'is_string')));
+                $choices = array_filter($_POST['remove_images'], 'is_string');
+                $removed = array_filter($paths, static fn(string $path): bool => in_array(notesMediaUrl($noteId, $path), $choices, true));
                 $paths = array_values(array_diff($paths, $removed));
             }
             if ($photos && !$imageCapacity) {
@@ -327,7 +394,7 @@ function notesHandlePost(PDO $db, array $user, int $imageCapacity, string $token
                 if (!isset($_FILES['audio'])) {
                     throw new DomainException('Record a voice note first.');
                 }
-                $audio = notesSaveAudio($_FILES['audio'], $created);
+                $audio = notesSaveAudio($_FILES['audio'], $userId, $created);
             }
             $fields = ['title' => $title, 'body' => $body, 'color' => $color, 'audio_path' => $audio];
             if ($imageCapacity) {
@@ -357,8 +424,13 @@ function notesHandlePost(PDO $db, array $user, int $imageCapacity, string $token
             $removed = array_merge(notesImagePaths($note['image_path'] ?? null), [$note['audio_path']]);
             $db->prepare('DELETE FROM notes WHERE id = ? AND family_id = ?')->execute([$noteId, $familyId]);
         } elseif ($action === 'toggle_pin') {
+            $pin = notesPost('pinned');
+            if (!in_array($pin, ['', '0', '1'], true)) {
+                throw new DomainException('Choose a valid pin setting.');
+            }
+            $pinned = $pin === '' ? !(bool)$note['pinned'] : $pin === '1';
             $db->prepare('UPDATE notes SET pinned = ?, updated_at = updated_at WHERE id = ? AND family_id = ?')
-                ->execute([(int)(!(bool)$note['pinned']), $noteId, $familyId]);
+                ->execute([(int)$pinned, $noteId, $familyId]);
         } elseif ($action === 'set_task') {
             $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", (string)$note['body']));
             $index = filter_var(notesPost('line'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);

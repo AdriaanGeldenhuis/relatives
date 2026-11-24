@@ -3,14 +3,15 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../core/session_boot.php';
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
+    header('Location: /login.php?redirect=%2Fschedule%2Ftimeline%2F');
     exit;
 }
 require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../planner.php';
 $user = (new Auth($db))->getCurrentUser();
 if (!$user) {
-    header('Location: /login.php');
+    unset($_SESSION['user_id']);
+    header('Location: /login.php?redirect=%2Fschedule%2Ftimeline%2F');
     exit;
 }
 header('Cache-Control: private, no-store');
@@ -113,7 +114,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
                                 </button>
                             <?php endforeach; ?>
                             <?php if ($date === $today): ?>
-                                <div id="timelineNow" class="timeline-now" data-start="<?= $timelineStart ?>" data-end="<?= $timelineEnd ?>" data-date="<?= $date ?>" aria-hidden="true" hidden></div>
+                                <div id="timelineNow" class="timeline-now" data-start="<?= $timelineStart ?>" data-end="<?= $timelineEnd ?>" aria-hidden="true" hidden></div>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -146,7 +147,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
     'events' => array_map(static fn($item) => [
         'id' => (string)$item['id'], 'title' => $item['title'], 'time' => scheduleDayTime($item, $day),
         'kind' => $types[$item['kind']]['name'] ?? 'Other', 'status' => $item['status'],
-        'notes' => $item['notes'] ?: $item['description'], 'assigned' => $item['assigned_to_name']
+        'notes' => $item['notes'] ?? $item['description'], 'assigned' => $item['assigned_to_name']
     ], $events),
     'date' => $date
 ]) ?></script>

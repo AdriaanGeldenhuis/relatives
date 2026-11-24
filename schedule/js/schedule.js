@@ -1,7 +1,7 @@
 'use strict';
 
 const scheduleElement = id => document.getElementById(id);
-const scheduleState = window.ScheduleApp = JSON.parse(scheduleElement('scheduleData').textContent);
+const scheduleState = JSON.parse(scheduleElement('scheduleData').textContent);
 const planner = window.RelativesPlanner;
 const scheduleFilters = { scheduleSearch: '', scheduleStatus: 'all', scheduleAssignee: 'all' };
 const selectedEvents = new Set();
@@ -14,6 +14,7 @@ let focusSession = null;
 let focusTick = null;
 let focusPaused = null;
 let focusFinishing = false;
+let focusRevision = 0;
 let templateSaving = false;
 let scheduleToastTimeout;
 
@@ -62,25 +63,33 @@ function closeModal(id) {
     if (modal.dataset.saving !== '1') modal.close();
 }
 
-function scheduleUrl(date, view, ajax = false) {
+function scheduleUrl(date, view, ajax = false, event = null) {
     const params = new URLSearchParams({ date, view });
     if (ajax) params.set('ajax', '1');
+    if (event) params.set('event', event);
     return '/schedule/?' + params;
 }
 
 async function loadScheduleData(date = scheduleState.selectedDate, options = {}) {
-    const { view = scheduleState.viewMode, historyMode = 'push', focus = false } = options;
+    const { view = scheduleState.viewMode, historyMode = 'push', focus = false, event = null } = options;
     navigation?.controller.abort();
     const controller = new AbortController();
-    const request = { date, view, controller };
+    const request = { date, view, event, controller, focusRevision };
     navigation = request;
     const panel = scheduleElement('scheduleDatePanel');
     panel.setAttribute('aria-busy', 'true');
     try {
-        const response = await fetch(scheduleUrl(date, view, true), { signal: controller.signal });
+        const response = await fetch(scheduleUrl(date, view, true, event), { signal: controller.signal });
+        if (response.status === 401) throw new Error('Sign in again to use Schedule.');
         if (!response.ok || response.redirected) throw new Error('The day could not be loaded.');
         const data = await response.json();
         if (navigation !== request) return false;
+        const template = document.createElement('template');
+        template.innerHTML = data.html;
+        const nextPanel = template.content.firstElementChild;
+        if (nextPanel?.id !== 'scheduleDatePanel' || !Array.isArray(data.events)) {
+            throw new Error('The day could not be loaded.');
+        }
         const changed = data.date !== scheduleState.selectedDate || data.view !== scheduleState.viewMode;
         if (changed) {
             scheduleFilters.scheduleSearch = '';
@@ -90,27 +99,30 @@ async function loadScheduleData(date = scheduleState.selectedDate, options = {})
         scheduleState.selectedDate = data.date;
         scheduleState.viewMode = data.view;
         scheduleState.allEvents = data.events;
-        panel.outerHTML = data.html;
+        panel.replaceWith(nextPanel);
         applyScheduleFilters();
         renderBulkSelection();
-        if (changed && historyMode === 'push') {
-            history.pushState(null, '', scheduleUrl(data.date, data.view));
+        if (historyMode === 'push' && (changed || data.selectedEvent)) {
+            history.pushState(null, '', scheduleUrl(data.date, data.view, false, data.selectedEvent));
         }
+        if (request.focusRevision === focusRevision) syncFocus(data.activeFocusSession);
         if (focus) scheduleElement('scheduleDateHeading').focus({ preventScroll: true });
+        if (data.selectedEvent) editEvent(data.selectedEvent);
+        if (data.notice) showToast(data.notice, 'error');
         return true;
     } catch (error) {
         if (error.name !== 'AbortError') {
             if (historyMode === 'pop') {
-                location.assign(scheduleUrl(date, view));
+                location.assign(scheduleUrl(date, view, false, event));
             } else {
-                showToast('Could not refresh the agenda. Reload the page to see the latest changes.', 'error');
+                showToast(error.message || 'Could not refresh the agenda.', 'error');
             }
         }
         return false;
     } finally {
         if (navigation === request) {
             navigation = null;
-            scheduleElement('scheduleDatePanel').removeAttribute('aria-busy');
+            scheduleElement('scheduleDatePanel')?.removeAttribute('aria-busy');
             if (refreshQueued) {
                 refreshQueued = false;
                 refreshSchedule();
@@ -121,7 +133,7 @@ async function loadScheduleData(date = scheduleState.selectedDate, options = {})
 
 function refreshSchedule() {
     return loadScheduleData(navigation?.date || scheduleState.selectedDate, {
-        view: navigation?.view || scheduleState.viewMode
+        view: navigation?.view || scheduleState.viewMode, event: navigation?.event
     });
 }
 
@@ -152,7 +164,7 @@ window.addEventListener('popstate', () => {
     const params = new URLSearchParams(location.search);
     loadScheduleData(params.get('date') || planner.today().date, {
         view: params.get('view') === 'week' ? 'week' : 'day',
-        historyMode: 'pop', focus: true
+        historyMode: 'pop', focus: true, event: params.get('event')
     });
 });
 
@@ -165,10 +177,15 @@ function applyScheduleFilters() {
         if (scheduleElement(id)) scheduleElement(id).value = value;
     }
     const all = new Map(scheduleState.allEvents.map(event => [String(event.id), event]));
+    for (const id of selectedEvents) {
+        const event = all.get(id);
+        if (!event || (event.focus_mode && event.status === 'in_progress')) selectedEvents.delete(id);
+    }
     let visible = 0;
     document.querySelectorAll('.planner-event').forEach(row => {
         const event = all.get(row.dataset.eventId);
-        const text = [event.title, event.notes || event.description, event.assigned_to_name, scheduleState.types[event.kind]?.name]
+        const text = [event.title, event.notes ?? event.description, event.location,
+            event.assigned_to_name, scheduleState.types[event.kind]?.name]
             .join(' ').toLocaleLowerCase();
         const matchesStatus = status === 'all' || ((status === 'done') === (event.status === 'done'));
         const matchesAssignee = assignee === 'all' || (assignee === 'unassigned' ? !event.assigned_to : String(event.assigned_to) === assignee);
@@ -201,7 +218,8 @@ function toggleBulkMode() {
 }
 
 function selectVisibleEvents() {
-    document.querySelectorAll('.planner-event:not([hidden])').forEach(row => selectedEvents.add(row.dataset.eventId));
+    document.querySelectorAll('.planner-event:not([hidden]) .bulk-checkbox:enabled')
+        .forEach(checkbox => selectedEvents.add(checkbox.value));
     renderBulkSelection();
 }
 
@@ -230,7 +248,7 @@ function showBulkAssignModal() { showModal('bulkAssignModal'); }
 function applyBulkType(kind) { bulkAction('bulk_change_type', { kind }, 'bulkTypeModal'); }
 function applyBulkAssign(assign_to) { bulkAction('bulk_assign', { assign_to }, 'bulkAssignModal'); }
 function bulkDelete() {
-    if (confirm(`Delete ${selectedEvents.size} selected events from the family schedule?`)) bulkAction('bulk_delete');
+    if (confirm(`Delete ${selectedEvents.size} selected events from the family calendar and schedule?`)) bulkAction('bulk_delete');
 }
 
 async function toggleEvent(id, checkbox) {
@@ -259,7 +277,7 @@ async function toggleEvent(id, checkbox) {
 
 async function deleteEvent(id) {
     const event = scheduleEvent(id);
-    if (!event || savingEvents.has(String(id)) || !confirm(`Delete “${event.title}” from the family schedule?`)) return;
+    if (!event || savingEvents.has(String(id)) || !confirm(`Delete “${event.title}” from the family calendar and schedule?`)) return;
     savingEvents.add(String(id));
     try {
         await scheduleApi('delete', { event_id: id });
@@ -273,7 +291,7 @@ async function deleteEvent(id) {
 
 async function clearDone() {
     const count = scheduleState.allEvents.filter(event => event.status === 'done').length;
-    if (!count || bulkSaving || !confirm(`Remove ${count} completed ${count === 1 ? 'event' : 'events'} from the family schedule?`)) return;
+    if (!count || bulkSaving || !confirm(`Remove ${count} completed ${count === 1 ? 'event' : 'events'} from the family calendar and schedule?`)) return;
     bulkSaving = true;
     try {
         const result = await scheduleApi('clear_done', { date: scheduleState.selectedDate });
@@ -302,7 +320,13 @@ const eventEditor = planner.createEditor({
 function showQuickAdd() { eventEditor.open(); }
 function editEvent(id) {
     const event = scheduleEvent(id);
-    if (event) eventEditor.open(event);
+    if (!event) return;
+    if (event.focus_mode && event.status === 'in_progress') {
+        if (focusSession?.id === String(event.id)) startFocusMode();
+        else showToast('This focus session is still running.');
+        return;
+    }
+    eventEditor.open(event);
 }
 function duplicateEvent(id) {
     const event = scheduleEvent(id);
@@ -368,9 +392,20 @@ function updateFocusTimer() {
 
 function runFocus(event, open) {
     const duration = scheduleTime(event.ends_at) - scheduleTime(event.starts_at);
-    focusSession = { id: event.id, deadline: (scheduleTime(event.actual_start) || Date.now()) + Math.max(0, duration) };
+    const start = scheduleTime(event.actual_start) || Date.now();
+    focusRevision++;
+    focusSession = { id: String(event.id), start, deadline: start + (duration > 0 ? duration : 0) };
     focusPaused = null;
-    scheduleElement('focusPauseButton').textContent = 'Pause';
+    try {
+        const saved = JSON.parse(sessionStorage.getItem('relatives.schedule.focus'));
+        if (saved?.id === focusSession.id && saved.start === start && Number.isFinite(saved.deadline)) {
+            focusSession.deadline = saved.deadline;
+            focusPaused = Number.isFinite(saved.paused) && saved.paused > 0 ? saved.paused : null;
+        }
+    } catch {
+        // The timer remains usable when storage is unavailable.
+    }
+    scheduleElement('focusPauseButton').textContent = focusPaused === null ? 'Pause' : 'Resume';
     scheduleElement('focusTask').textContent = event.title;
     scheduleElement('scheduleFocusButton').textContent = 'Resume focus';
     clearInterval(focusTick);
@@ -380,6 +415,7 @@ function runFocus(event, open) {
 }
 
 function toggleFocusPause() {
+    if (!focusSession || !focusRemaining()) return;
     if (focusPaused === null) {
         focusPaused = focusRemaining();
         scheduleElement('focusPauseButton').textContent = 'Resume';
@@ -388,7 +424,31 @@ function toggleFocusPause() {
         focusPaused = null;
         scheduleElement('focusPauseButton').textContent = 'Pause';
     }
+    try {
+        sessionStorage.setItem('relatives.schedule.focus', JSON.stringify({ ...focusSession, paused: focusPaused }));
+    } catch {
+        // Keep the current timer state in this page.
+    }
     updateFocusTimer();
+}
+
+function clearFocus() {
+    focusRevision++;
+    clearInterval(focusTick);
+    focusSession = null;
+    focusPaused = null;
+    scheduleElement('scheduleFocusButton').textContent = 'Start focus';
+    closeModal('focusTimerModal');
+    closeModal('ratingModal');
+    try {
+        sessionStorage.removeItem('relatives.schedule.focus');
+    } catch {}
+}
+
+function syncFocus(event) {
+    if (event && focusSession?.id === String(event.id)) return;
+    if (focusSession) clearFocus();
+    if (event) runFocus(event, false);
 }
 
 function finishFocus() {
@@ -398,16 +458,14 @@ function finishFocus() {
 
 async function selectRating(rating) {
     if (!focusSession || focusFinishing) return;
+    const session = focusSession;
     focusFinishing = true;
     try {
-        await scheduleApi('end_focus', { event_id: focusSession.id, rating });
-        clearInterval(focusTick);
-        focusSession = null;
-        focusPaused = null;
-        scheduleElement('scheduleFocusButton').textContent = 'Start focus';
-        closeModal('ratingModal');
+        await scheduleApi('end_focus', { event_id: session.id, rating });
+        if (focusSession === session) clearFocus();
         if (await refreshSchedule()) showToast('Focus session completed.', 'success');
     } catch (error) {
+        await refreshSchedule();
         showToast(error.message, 'error');
     } finally {
         focusFinishing = false;
@@ -469,57 +527,18 @@ async function showAnalytics() {
     }
 }
 
-const scheduleTemplates = {
-    'Productive morning': [
-        ['Morning study session', '08:00', '10:00', 'study'], ['Coffee break', '10:00', '10:15', 'break'],
-        ['Work block', '10:15', '12:00', 'work'], ['Lunch break', '12:00', '13:00', 'break']
-    ],
-    'Deep work day': [
-        ['Deep work session', '09:00', '11:00', 'focus'], ['Break', '11:00', '11:15', 'break'],
-        ['Deep work session', '11:15', '13:00', 'focus'], ['Lunch', '13:00', '14:00', 'break'],
-        ['Deep work session', '14:00', '16:00', 'focus']
-    ],
-    'Study intensive': [
-        ['Study block', '08:00', '10:00', 'study'], ['Break', '10:00', '10:15', 'break'],
-        ['Study block', '10:15', '12:15', 'study'], ['Lunch', '12:15', '13:00', 'break'],
-        ['Study block', '13:00', '15:00', 'study'], ['Break', '15:00', '15:15', 'break'],
-        ['Study block', '15:15', '17:00', 'study']
-    ],
-    'Balanced day': [
-        ['Morning work', '09:00', '11:00', 'work'], ['Break', '11:00', '11:15', 'break'],
-        ['Study session', '11:15', '13:00', 'study'], ['Lunch', '13:00', '14:00', 'break'],
-        ['Afternoon work', '14:00', '16:00', 'work'], ['Break', '16:00', '16:15', 'break'],
-        ['Personal time', '16:15', '17:00', 'todo']
-    ]
-};
+function showTemplates() { showModal('templatesModal'); }
 
-function showTemplates() {
-    const content = scheduleElement('templatesContent');
-    content.replaceChildren(...Object.entries(scheduleTemplates).map(([name, slots]) => {
-        const button = document.createElement('button');
-        button.className = 'planner-control';
-        button.textContent = `${name} · ${slots.length} events`;
-        button.addEventListener('click', () => applyTemplate(name, slots));
-        return button;
-    }));
-    showModal('templatesModal');
-}
-
-async function applyTemplate(name, slots) {
+async function applyTemplate(template, eventCount) {
     const date = scheduleState.selectedDate;
-    if (templateSaving || !confirm(`Add ${slots.length} events from “${name}” on ${date}?`)) return;
+    if (templateSaving || !confirm(`Add ${eventCount} events from “${template}” on ${date}?`)) return;
     templateSaving = true;
     closeModal('templatesModal');
-    let count = 0;
     try {
-        for (const [title, start_time, end_time, kind] of slots) {
-            await scheduleApi('add', { title, date, start_time, end_time, kind, focus_mode: kind === 'focus' ? 1 : 0 });
-            count++;
-        }
+        const { count } = await scheduleApi('apply_template', { template, date });
         if (await refreshSchedule()) showToast(`Added ${count} events from the template.`, 'success');
     } catch (error) {
-        await refreshSchedule();
-        showToast(`Added ${count} of ${slots.length} events. ${error.message}`, 'error');
+        showToast(error.message, 'error');
     } finally {
         templateSaving = false;
     }
@@ -531,17 +550,14 @@ function getScheduleData() {
     const dayStart = scheduleTime(scheduleState.selectedDate + ' 00:00:00');
     const dayEnd = dayStart + 24 * 60 * 60 * 1000;
     return scheduleState.allEvents.map(event => {
-        const start = event.starts_at.slice(0, 10) === scheduleState.selectedDate ? event.starts_at.slice(11, 16) : '00:00';
-        const end = event.ends_at?.slice(0, 10) > scheduleState.selectedDate ? '24:00' : event.ends_at?.slice(11, 16);
-        const time = event.all_day ? 'All day' : end && end !== start ? start + '–' + end : start;
         const minutes = Math.floor((Math.min(dayEnd, scheduleTime(event.ends_at))
             - Math.max(dayStart, scheduleTime(event.starts_at))) / 60000);
         return {
-            name: event.title, time,
+            name: event.title, time: planner.timeOnDay(event, scheduleState.selectedDate),
             duration: !event.all_day && minutes > 0 ? formatScheduleDuration(minutes) : '',
             type: scheduleState.types[event.kind]?.name || 'Other',
             status: event.status === 'done' ? 'Done' : event.status === 'in_progress' ? 'In progress' : 'Pending',
-            notes: event.notes || event.description || ''
+            notes: event.notes ?? event.description ?? ''
         };
     });
 }
@@ -597,13 +613,17 @@ document.addEventListener('click', event => {
     const link = event.target.closest('[data-schedule-view]');
     if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.button === 0) {
         event.preventDefault();
-        const date = new URL(link.href).searchParams.get('date');
-        loadScheduleData(date, { view: link.dataset.scheduleView, focus: true });
+        const params = new URL(link.href).searchParams;
+        loadScheduleData(params.get('date'), { view: link.dataset.scheduleView, focus: true, event: params.get('event') });
     }
     if (event.target.matches('dialog.planner-modal')) closeModal(event.target.id);
     document.querySelectorAll('.planner-tools[open], .planner-event-menu[open]').forEach(menu => {
         if (!menu.contains(event.target)) menu.open = false;
     });
+});
+scheduleElement('templatesContent').addEventListener('click', event => {
+    const button = event.target.closest('[data-template]');
+    if (button) applyTemplate(button.dataset.template, button.dataset.count);
 });
 document.addEventListener('cancel', event => {
     if (event.target.dataset.saving === '1') event.preventDefault();
@@ -630,15 +650,9 @@ document.addEventListener('keydown', event => {
     }
     if (event.key === 'Escape' && bulkMode) toggleBulkMode();
 });
-if (scheduleState.activeFocusSession) runFocus(scheduleState.activeFocusSession, false);
-const scheduleInitialUrl = new URL(location.href);
-const scheduleInitialEvent = scheduleInitialUrl.searchParams.get('event');
-if (scheduleInitialEvent && scheduleState.viewMode === 'day') {
-    const event = scheduleEvent(scheduleInitialEvent);
-    if (event) eventEditor.open(event);
-    scheduleInitialUrl.searchParams.delete('event');
-    history.replaceState(null, '', scheduleInitialUrl);
-}
+syncFocus(scheduleState.activeFocusSession);
+if (scheduleState.selectedEvent) editEvent(scheduleState.selectedEvent);
+if (scheduleState.notice) showToast(scheduleState.notice, 'error');
 
 window.addEventListener('storage', event => {
     if (event.key !== planner.eventSignal) return;

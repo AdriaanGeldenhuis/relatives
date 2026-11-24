@@ -36,10 +36,9 @@ function scheduleEventIds(): array
     if (!is_array($ids) || !array_is_list($ids) || !$ids || count($ids) > 500) {
         throw new DomainException('Select between 1 and 500 events.');
     }
-    foreach ($ids as $id) {
-        if (!filter_var($id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])) {
-            throw new DomainException('Invalid event selection.');
-        }
+    $ids = array_map('eventNoteId', $ids);
+    if (in_array(null, $ids, true)) {
+        throw new DomainException('Invalid event selection.');
     }
     return array_values(array_unique($ids));
 }
@@ -107,7 +106,7 @@ function scheduleLockFocusUser(PDO $db, int $userId, int $familyId): void
 function scheduleFields(PDO $db, int $userId, int $familyId, ?array $original): array
 {
     $title = trim(schedulePost('title'));
-    $notes = str_replace(["\r\n", "\r"], "\n", schedulePost('notes', $original['notes'] ?? ''));
+    $notes = str_replace(["\r\n", "\r"], "\n", schedulePost('notes', $original['notes'] ?? $original['description'] ?? ''));
     $location = trim(schedulePost('location', $original['location'] ?? ''));
     if ($title === '' || !preg_match('/^.{1,200}$/usD', $title)) {
         throw new DomainException('Enter a title of up to 200 characters.');
@@ -122,14 +121,14 @@ function scheduleFields(PDO $db, int $userId, int $familyId, ?array $original): 
         throw new DomainException('Finish the focus session before editing it.');
     }
 
-    $allDay = !empty($_POST['all_day']);
-    $focus = !empty($_POST['focus_mode']);
+    $allDay = (bool)scheduleNumber('all_day', 0, 1);
+    $focus = (bool)scheduleNumber('focus_mode', 0, 1);
     $duration = scheduleNumber('focus_duration', 0, 120);
     $day = scheduleDate(schedulePost('date', date('Y-m-d')));
     $endDate = scheduleDate(schedulePost('end_date', schedulePost('date', date('Y-m-d'))));
-    if ($duration && !$original) {
-        if ($duration < 5) {
-            throw new DomainException('Choose a focus session of at least five minutes.');
+    if ($duration) {
+        if ($original || $duration < 5 || schedulePost('assigned_to') !== '' || schedulePost('repeat_rule') !== '') {
+            throw new DomainException('Start a one-time focus session of at least five minutes for yourself.');
         }
         scheduleLockFocusUser($db, $userId, $familyId);
         $start = new DateTimeImmutable();
@@ -195,7 +194,7 @@ function scheduleFields(PDO $db, int $userId, int $familyId, ?array $original): 
         'assigned_to' => $assignee,
         'title' => $title,
         'kind' => $kind,
-        'notes' => $notes === '' ? null : $notes,
+        'notes' => $notes === '' && ($original['description'] ?? '') === '' ? null : $notes,
         'location' => $location === '' ? null : $location,
         'starts_at' => $start->format('Y-m-d H:i:s'),
         'ends_at' => $end?->format('Y-m-d H:i:s'),
@@ -205,7 +204,7 @@ function scheduleFields(PDO $db, int $userId, int $familyId, ?array $original): 
         'reminder_minutes' => scheduleNumber('reminder_minutes', 0, 1440) ?: null,
         'recurrence_rule' => $rule ?: null,
         'focus_mode' => (int)$focus,
-        'actual_start' => $duration && !$original ? $start->format('Y-m-d H:i:s') : null
+        'actual_start' => $duration ? $start->format('Y-m-d H:i:s') : null
     ];
 }
 
@@ -260,11 +259,12 @@ function scheduleWriteEvent(PDO $db, int $familyId, int $userId, array $event, ?
                 for ($index = 1, $limit = $rule === 'yearly' ? 5 : 10; $index <= $limit; $index++) {
                     $intervals[scheduleOccurrence($oldStart, $rule, $index)->format('Y-m-d H:i:s')] = $index;
                 }
+                $seriesChanges = array_diff_assoc($event, $original);
                 foreach ($children as $child) {
                     if ($child['status'] !== 'pending' || $child['starts_at'] < $now || scheduleRule($child) !== $rule) {
                         continue;
                     }
-                    $changes = array_diff_assoc($event, $original);
+                    $changes = $seriesChanges;
                     $index = $intervals[$child['starts_at']] ?? null;
                     if ($index && (isset($changes['starts_at']) || array_key_exists('ends_at', $changes))) {
                         $slot = scheduleOccurrence($start, $rule, $index);

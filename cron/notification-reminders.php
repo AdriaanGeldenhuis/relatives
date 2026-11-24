@@ -14,12 +14,17 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 require_once __DIR__ . '/../core/bootstrap.php';
-require_once __DIR__ . '/../core/NotificationManager.php';
 require_once __DIR__ . '/../core/NotificationTriggers.php';
 
 echo "[" . date('Y-m-d H:i:s') . "] Starting reminder cron...\n";
 
 try {
+    // MySQL releases the lock when this cron process disconnects.
+    $lock = $db->query("SELECT GET_LOCK(CONCAT('relatives_reminders_', MD5(DATABASE())), 0)")->fetchColumn();
+    if ((int)$lock !== 1) {
+        echo "A reminder run is already active\n";
+        exit(0);
+    }
     $triggers = new NotificationTriggers($db);
     
     // Get events whose configured reminder time has arrived. The old query
@@ -36,14 +41,11 @@ try {
         SELECT
             e.id,
             e.user_id,
-            e.family_id,
             e.title,
-            e.kind,
             e.starts_at,
-            e.reminder_minutes,
-            u.full_name
+            e.reminder_minutes
         FROM events e
-        JOIN users u ON e.user_id = u.id
+        JOIN users u ON u.id = e.user_id AND u.family_id = e.family_id AND u.status = 'active'
         WHERE e.reminder_minutes IS NOT NULL
           AND e.status = 'pending'
           AND e.starts_at > NOW()
@@ -59,6 +61,7 @@ try {
           AND NOT EXISTS (
               SELECT 1 FROM notifications n
               WHERE n.type = 'calendar'
+                AND n.user_id = e.user_id
                 AND JSON_EXTRACT(n.data_json, '$.event_id') = e.id
                 AND n.title LIKE 'Event Reminder%'
                 AND n.created_at >= DATE_SUB(e.starts_at, INTERVAL e.reminder_minutes MINUTE)
@@ -68,33 +71,28 @@ try {
     }
     $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    if (empty($events)) {
-        echo "No reminders due\n";
-        exit(0);
-    }
-    
     echo "Found " . count($events) . " events needing reminders\n";
     
     foreach ($events as $event) {
         try {
-            $startsAt = new DateTime($event['starts_at']);
-            $now = new DateTime();
-            $diff = $now->diff($startsAt);
-            $minutesUntil = ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
-            
-            echo "Processing event {$event['id']}: {$event['title']} (in {$minutesUntil}m)\n";
+            $secondsUntil = strtotime($event['starts_at']) - time();
+            if ($secondsUntil <= 0) {
+                continue;
+            }
+            $minutesUntil = (int)ceil($secondsUntil / 60);
             
             // Send reminder notification
             $triggers->onEventReminder(
                 (int)$event['id'],
                 (int)$event['user_id'],
                 $event['title'],
-                (int)$event['reminder_minutes']
+                $minutesUntil
             );
 
             if ($hasSentColumn) {
-                $upd = $db->prepare("UPDATE events SET reminder_sent_at = NOW() WHERE id = ?");
-                $upd->execute([(int)$event['id']]);
+                $upd = $db->prepare("UPDATE events SET reminder_sent_at = NOW()
+                    WHERE id = ? AND status = 'pending' AND user_id = ? AND starts_at = ? AND reminder_minutes = ?");
+                $upd->execute([$event['id'], $event['user_id'], $event['starts_at'], $event['reminder_minutes']]);
             }
 
             echo "  ✅ Sent reminder for event {$event['id']}\n";
@@ -109,11 +107,9 @@ try {
         SELECT 
             e.id,
             e.user_id,
-            e.family_id,
-            e.title,
-            e.kind,
-            e.starts_at
+            e.title
         FROM events e
+        JOIN users u ON u.id = e.user_id AND u.family_id = e.family_id AND u.status = 'active'
         WHERE e.kind IN ('study', 'work', 'todo')
           AND e.status = 'pending'
           AND e.starts_at <= NOW()
@@ -121,6 +117,7 @@ try {
           AND NOT EXISTS (
               SELECT 1 FROM notifications n
               WHERE n.type = 'schedule'
+                AND n.user_id = e.user_id
                 AND JSON_EXTRACT(n.data_json, '$.task_id') = e.id
                 AND n.title LIKE 'Task Due Now%'
                 AND n.created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
@@ -134,8 +131,6 @@ try {
         
         foreach ($tasks as $task) {
             try {
-                echo "Processing task {$task['id']}: {$task['title']}\n";
-                
                 $triggers->onScheduleTaskDue(
                     (int)$task['id'],
                     (int)$task['user_id'],

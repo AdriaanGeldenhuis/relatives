@@ -10,6 +10,9 @@
     # Force HTTPS
     RewriteCond %{HTTPS} off
     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Notes serves these files after checking the requester's family.
+    RewriteRule ^saves/notes-private(?:/|$) - [F]
 </IfModule>
 
 # Manifest

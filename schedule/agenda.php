@@ -3,6 +3,7 @@ $entries = $viewMode === 'week' ? $weekEvents : $events;
 $total = count($entries);
 $done = count(array_filter($entries, static fn($event) => $event['status'] === 'done'));
 $percent = $total ? round(100 * $done / $total) : 0;
+$today = date('Y-m-d');
 $weekLast = $weekStart->modify('+6 days');
 $dateLabel = $viewMode === 'week'
     ? $weekStart->format($weekStart->format('m') === $weekLast->format('m') ? 'j' : 'j M') . ' – ' . $weekLast->format('j M Y')
@@ -26,7 +27,7 @@ $dateLabel = $viewMode === 'week'
     <header class="planner-date-heading">
         <div>
             <h2 tabindex="-1" id="scheduleDateHeading"><?= $dateLabel ?></h2>
-            <p><?= $total ?> <?= $total === 1 ? 'event' : 'events' ?><?= $viewMode === 'day' && $selectedDate === date('Y-m-d') ? ' · Today' : '' ?></p>
+            <p><?= $total ?> <?= $total === 1 ? 'event' : 'events' ?><?= $viewMode === 'day' && $selectedDate === $today ? ' · Today' : '' ?></p>
         </div>
         <?php if ($viewMode === 'day' && $events): ?>
             <button type="button" id="bulkModeBtn" class="planner-control" onclick="toggleBulkMode()" aria-pressed="false">Select events</button>
@@ -40,13 +41,13 @@ $dateLabel = $viewMode === 'week'
                 $dateKey = $date->format('Y-m-d');
                 $daily = scheduleOnDay($weekEvents, $date);
                 ?>
-                <section class="planner-week-day<?= $dateKey === date('Y-m-d') ? ' is-today' : '' ?>">
+                <section class="planner-week-day<?= $dateKey === $today ? ' is-today' : '' ?>">
                     <h3><a href="?date=<?= $dateKey ?>&amp;view=day" data-schedule-view="day">
                         <span><?= $date->format('D') ?></span> <?= $date->format('j M') ?>
                     </a></h3>
                     <div class="planner-week-entries">
                         <?php foreach (array_slice($daily, 0, 4) as $item): ?>
-                            <a class="planner-week-entry<?= $item['status'] === 'done' ? ' is-done' : '' ?>" href="?date=<?= $dateKey ?>&amp;view=day" data-schedule-view="day">
+                            <a class="planner-week-entry<?= $item['status'] === 'done' ? ' is-done' : '' ?>" href="?date=<?= $dateKey ?>&amp;view=day&amp;event=<?= (int)$item['id'] ?>" data-schedule-view="day">
                                 <span><?= scheduleDayTime($item, $date) ?></span><?= scheduleEscape($item['title']) ?>
                             </a>
                         <?php endforeach; ?>
@@ -106,7 +107,8 @@ $dateLabel = $viewMode === 'week'
                             $status = in_array($item['status'], ['done', 'in_progress'], true) ? $item['status'] : 'pending';
                             $kind = $types[$item['kind']] ?? $types['other'];
                             $color = preg_match('/^#[0-9a-f]{6}$/iD', $item['color'] ?? '') ? $item['color'] : $kind['color'];
-                            $notes = $item['notes'] ?: $item['description'];
+                            $notes = $item['notes'] ?? $item['description'];
+                            $activeFocus = $status === 'in_progress' && $item['focus_mode'];
                             ?>
                             <article class="planner-event event-card <?= $status ?>" data-event-id="<?= $id ?>" style="--event-accent: <?= $color ?>">
                                 <div class="planner-event-time">
@@ -121,7 +123,7 @@ $dateLabel = $viewMode === 'week'
                                         <?php if ($item['repeat_rule']): ?><span>Repeats</span><?php endif; ?>
                                     </div>
                                     <h3><button type="button" onclick="editEvent(<?= $id ?>)"><?= scheduleEscape($item['title']) ?></button></h3>
-                                    <?php if ($notes): ?><p class="planner-event-notes"><?= scheduleEscape($notes) ?></p><?php endif; ?>
+                                    <?php if ($notes !== null && $notes !== ''): ?><p class="planner-event-notes"><?= scheduleEscape($notes) ?></p><?php endif; ?>
                                     <div class="planner-event-meta">
                                         <?php if ($item['assigned_to_name']): ?><span><?= scheduleEscape($item['assigned_to_name']) ?></span><?php endif; ?>
                                         <?php if ($item['location']): ?><span><?= scheduleEscape($item['location']) ?></span><?php endif; ?>
@@ -137,19 +139,19 @@ $dateLabel = $viewMode === 'week'
                                     <details class="planner-event-menu">
                                         <summary class="planner-icon-button" aria-label="Actions for <?= scheduleEscape($item['title']) ?>">···</summary>
                                         <div>
-                                            <button type="button" onclick="editEvent(<?= $id ?>)">Edit</button>
+                                            <?php if (!$activeFocus): ?><button type="button" onclick="editEvent(<?= $id ?>)">Edit</button><?php endif; ?>
                                             <button type="button" onclick="duplicateEvent(<?= $id ?>)">Duplicate</button>
                                             <a href="/calendar/?date=<?= $selectedDate ?>&amp;event=<?= $id ?>">Open in Calendar</a>
                                             <a href="/notes/?event=<?= $id ?>&amp;new=1">New linked note</a>
-                                            <button type="button" class="planner-danger" onclick="deleteEvent(<?= $id ?>)">Delete</button>
+                                            <?php if (!$activeFocus): ?><button type="button" class="planner-danger" onclick="deleteEvent(<?= $id ?>)">Delete</button><?php endif; ?>
                                         </div>
                                     </details>
                                     <label class="planner-complete">
-                                        <input type="checkbox" <?= $status === 'done' ? 'checked' : '' ?> <?= $status === 'in_progress' && $item['focus_mode'] ? 'disabled' : '' ?> onchange="toggleEvent(<?= $id ?>, this)">
+                                        <input type="checkbox" <?= $status === 'done' ? 'checked' : '' ?> <?= $activeFocus ? 'disabled' : '' ?> onchange="toggleEvent(<?= $id ?>, this)">
                                         <span class="planner-sr-only">Complete <?= scheduleEscape($item['title']) ?></span>
                                     </label>
                                     <label class="planner-select" hidden>
-                                        <input type="checkbox" class="bulk-checkbox" value="<?= $id ?>">
+                                        <input type="checkbox" class="bulk-checkbox" value="<?= $id ?>" <?= $activeFocus ? 'disabled' : '' ?>>
                                         <span class="planner-sr-only">Select <?= scheduleEscape($item['title']) ?></span>
                                     </label>
                                 </div>

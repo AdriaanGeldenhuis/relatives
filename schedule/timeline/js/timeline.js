@@ -4,16 +4,14 @@
     const { events, date } = JSON.parse(document.getElementById('timelineData').textContent);
     const details = new Map(events.map(event => [event.id, event]));
     const dialog = document.getElementById('timelineEventDialog');
-    const clock = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Africa/Johannesburg', year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
-    });
+    const planner = window.RelativesPlanner;
     const nowLine = document.getElementById('timelineNow');
 
     function drawClock() {
-        const values = Object.fromEntries(clock.formatToParts().map(({ type, value }) => [type, value]));
-        const today = values.year + '-' + values.month + '-' + values.day;
-        const minutes = Number(values.hour) * 60 + Number(values.minute);
+        if (document.hidden) return;
+        const { date: today, time } = planner.today();
+        const [hour, minute] = time.split(':').map(Number);
+        const minutes = hour * 60 + minute;
         const { start, end } = nowLine.dataset;
         nowLine.hidden = today !== date || minutes < Number(start) || minutes >= Number(end);
         if (!nowLine.hidden) nowLine.style.top = ((minutes - start) / (end - start) * 100) + '%';
@@ -22,6 +20,7 @@
     if (nowLine) {
         drawClock();
         setInterval(drawClock, 15000);
+        document.addEventListener('visibilitychange', drawClock);
     }
 
     document.addEventListener('click', event => {
@@ -58,9 +57,10 @@
         else location.reload();
     }
     window.addEventListener('storage', event => {
-        if (event.key === window.RelativesPlanner.eventSignal) refreshTimeline();
+        if (event.key === planner.eventSignal) refreshTimeline();
     });
     window.addEventListener('relatives:event-saved', refreshTimeline);
+    window.addEventListener('pageshow', event => { if (event.persisted) refreshTimeline(); });
     dialog.addEventListener('close', () => {
         if (refreshOnClose) location.reload();
     });
