@@ -1,680 +1,340 @@
 <?php
-/**
- * RELATIVES - ADMIN PANEL v3
- * Family management only - NO subscription management
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/session_boot.php';
-
-if (!isset($_SESSION['user_id'])) {
+if (empty($_SESSION['user_id'])) {
     header('Location: /login.php');
     exit;
 }
-
 require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/ui.php';
 
-$auth = new Auth($db);
-$user = $auth->getCurrentUser();
-
-if (!$user) {
-    header('Location: /login.php');
+$user = (new Auth($db))->getCurrentUser();
+if (!$user || !in_array($user['role'], ['owner', 'admin'], true)) {
+    header('Location: ' . ($user ? '/home/' : '/login.php'));
     exit;
 }
 
-// Check if user is admin or owner
-if (!in_array($user['role'], ['owner', 'admin'])) {
-    header('Location: /home/index.php');
-    exit;
-}
+$userId = (int)$user['id'];
+$familyId = (int)$user['family_id'];
+$isOwner = $user['role'] === 'owner';
 
-// Get family info
-$stmt = $db->prepare("SELECT * FROM families WHERE id = ?");
-$stmt->execute([$user['family_id']]);
-$family = $stmt->fetch();
-
-// Get all family members with detailed stats
-$stmt = $db->prepare("
-    SELECT u.*, 
-           (SELECT COUNT(*) FROM shopping_items WHERE added_by = u.id) as items_added,
-           (SELECT COUNT(*) FROM notes WHERE user_id = u.id) as notes_created,
-           (SELECT COUNT(*) FROM events WHERE user_id = u.id) as events_created,
-           (SELECT MAX(created_at) FROM audit_log WHERE user_id = u.id) as last_activity
-    FROM users u
-    WHERE u.family_id = ?
-    ORDER BY 
-        CASE u.role
-            WHEN 'owner' THEN 1
-            WHEN 'admin' THEN 2
-            WHEN 'member' THEN 3
-        END,
-        u.full_name ASC
-");
-$stmt->execute([$user['family_id']]);
-$members = $stmt->fetchAll();
-
-// Get comprehensive stats
-$stats = [
-    'total_members' => count($members),
-    'active_members' => count(array_filter($members, fn($m) => $m['status'] === 'active')),
-    'total_shopping_items' => 0,
-    'pending_shopping_items' => 0,
-    'total_notes' => 0,
-    'total_events' => 0,
-    'upcoming_events' => 0,
-    'shopping_lists' => 0
-];
-
-// Shopping items
-$stmt = $db->prepare("
-    SELECT COUNT(*) as total, 
-           SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
-    FROM shopping_items si
-    JOIN shopping_lists sl ON si.list_id = sl.id
-    WHERE sl.family_id = ?
-");
-$stmt->execute([$user['family_id']]);
-$shopping = $stmt->fetch();
-$stats['total_shopping_items'] = (int)$shopping['total'];
-$stats['pending_shopping_items'] = (int)$shopping['pending'];
-
-// Notes
-$stmt = $db->prepare("SELECT COUNT(*) FROM notes WHERE family_id = ?");
-$stmt->execute([$user['family_id']]);
-$stats['total_notes'] = (int)$stmt->fetchColumn();
-
-// Events
-$stmt = $db->prepare("
-    SELECT COUNT(*) as total,
-           SUM(CASE WHEN starts_at >= NOW() AND starts_at <= DATE_ADD(NOW(), INTERVAL 7 DAY) AND status = 'pending' THEN 1 ELSE 0 END) as upcoming
-    FROM events 
-    WHERE family_id = ?
-");
-$stmt->execute([$user['family_id']]);
-$events = $stmt->fetch();
-$stats['total_events'] = (int)$events['total'];
-$stats['upcoming_events'] = (int)$events['upcoming'];
-
-// Shopping lists
-$stmt = $db->prepare("SELECT COUNT(*) FROM shopping_lists WHERE family_id = ?");
-$stmt->execute([$user['family_id']]);
-$stats['shopping_lists'] = (int)$stmt->fetchColumn();
-
-// Recent activity (last 10)
-$stmt = $db->prepare("
-    SELECT al.action, al.entity_type, al.created_at, al.user_id, u.full_name, u.avatar_color
-    FROM audit_log al
-    LEFT JOIN users u ON al.user_id = u.id
-    WHERE al.family_id = ?
-    ORDER BY al.created_at DESC
-    LIMIT 10
-");
-$stmt->execute([$user['family_id']]);
-$recentActivity = $stmt->fetchAll();
-
-// Handle POST actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    header('Content-Type: application/json');
-    
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    adminCheckCsrf();
+    $action = $_POST['action'] ?? '';
+    $returnTo = in_array($action, ['update_role', 'toggle_user_status'], true) ? '/admin/#members' : '/admin/#settings';
     try {
-        switch ($_POST['action']) {
+        switch ($action) {
             case 'update_role':
-                if ($user['role'] !== 'owner') {
-                    throw new Exception('Only owner can change roles');
-                }
-                
-                $targetUserId = (int)$_POST['user_id'];
-                $newRole = $_POST['role'];
-                
-                if (!in_array($newRole, ['admin', 'member'])) {
-                    throw new Exception('Invalid role');
-                }
-                
-                if ($targetUserId === $user['id']) {
-                    throw new Exception('Cannot change your own role');
-                }
-                
-                $stmt = $db->prepare("UPDATE users SET role = ?, updated_at = NOW() WHERE id = ? AND family_id = ?");
-                $stmt->execute([$newRole, $targetUserId, $user['family_id']]);
-                
-                echo json_encode(['success' => true]);
-                exit;
-                
             case 'toggle_user_status':
-                if (!in_array($user['role'], ['owner', 'admin'])) {
-                    throw new Exception('Unauthorized');
+                $changingRole = $action === 'update_role';
+                $targetId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+                $value = $_POST[$changingRole ? 'role' : 'status'] ?? '';
+                $choices = $changingRole ? ['admin', 'member'] : ['active', 'disabled'];
+                if (!$targetId || $targetId === $userId || !in_array($value, $choices, true) || ($changingRole && !$isOwner)) {
+                    throw new InvalidArgumentException('That member change is unavailable.');
                 }
-                
-                $targetUserId = (int)$_POST['user_id'];
-                $newStatus = $_POST['status'];
-                
-                if (!in_array($newStatus, ['active', 'disabled'])) {
-                    throw new Exception('Invalid status');
+                $field = $changingRole ? 'role' : 'status';
+                $stmt = $db->prepare("UPDATE users SET $field = ?, updated_at = NOW() WHERE id = ? AND family_id = ? AND role <> 'owner'");
+                $stmt->execute([$value, $targetId, $familyId]);
+                if (!$stmt->rowCount()) {
+                    throw new InvalidArgumentException('No change was made to that member.');
                 }
-                
-                if ($targetUserId === $user['id']) {
-                    throw new Exception('Cannot change your own status');
-                }
-                
-                $stmt = $db->prepare("UPDATE users SET status = ?, updated_at = NOW() WHERE id = ? AND family_id = ?");
-                $stmt->execute([$newStatus, $targetUserId, $user['family_id']]);
-                
-                echo json_encode(['success' => true]);
-                exit;
-                
-            case 'regenerate_invite':
-                if ($user['role'] !== 'owner') {
-                    throw new Exception('Only owner can regenerate invite code');
-                }
-                
-                do {
-                    $newCode = strtoupper(substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZ23456789'), 0, 8));
-                    $stmt = $db->prepare("SELECT id FROM families WHERE invite_code = ?");
-                    $stmt->execute([$newCode]);
-                } while ($stmt->fetchColumn());
-                
-                $stmt = $db->prepare("UPDATE families SET invite_code = ?, updated_at = NOW() WHERE id = ?");
-                $stmt->execute([$newCode, $user['family_id']]);
-                
-                echo json_encode(['success' => true, 'code' => $newCode]);
-                exit;
-                
+                adminRedirect($returnTo, $changingRole ? 'Member role updated.' : 'Member access updated.');
             case 'update_family_name':
-                if ($user['role'] !== 'owner') {
-                    throw new Exception('Only owner can change family name');
+                $name = is_string($_POST['name'] ?? null) ? trim($_POST['name']) : '';
+                if (!$isOwner || $name === '' || mb_strlen($name) > 120) {
+                    throw new InvalidArgumentException('Enter a family name of 1 to 120 characters.');
                 }
-                
-                $newName = trim($_POST['name'] ?? '');
-                
-                if (empty($newName)) {
-                    throw new Exception('Family name cannot be empty');
-                }
-                
-                $stmt = $db->prepare("UPDATE families SET name = ?, updated_at = NOW() WHERE id = ?");
-                $stmt->execute([$newName, $user['family_id']]);
-                
-                echo json_encode(['success' => true]);
-                exit;
-                
+                $stmt = $db->prepare('UPDATE families SET name = ?, updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$name, $familyId]);
+                adminRedirect($returnTo, 'Family name updated.');
             case 'update_timezone':
-                if ($user['role'] !== 'owner') {
-                    throw new Exception('Only owner can change timezone');
+                $timezone = $_POST['timezone'] ?? '';
+                if (!$isOwner || !in_array($timezone, timezone_identifiers_list(), true)) {
+                    throw new InvalidArgumentException('Choose a valid timezone.');
                 }
-                
-                $timezone = trim($_POST['timezone'] ?? '');
-                
-                if (!in_array($timezone, timezone_identifiers_list())) {
-                    throw new Exception('Invalid timezone');
+                $stmt = $db->prepare('UPDATE families SET timezone = ?, updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$timezone, $familyId]);
+                adminRedirect($returnTo, 'Family timezone updated.');
+            case 'regenerate_invite':
+                if (!$isOwner) {
+                    throw new InvalidArgumentException('Only the family owner can replace the invite code.');
                 }
-                
-                $stmt = $db->prepare("UPDATE families SET timezone = ?, updated_at = NOW() WHERE id = ?");
-                $stmt->execute([$timezone, $user['family_id']]);
-                
-                echo json_encode(['success' => true]);
-                exit;
+                $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                $stmt = $db->prepare('UPDATE families SET invite_code = ?, updated_at = NOW() WHERE id = ? AND invite_code <> ?');
+                for ($attempt = 0; $attempt < 5; $attempt++) {
+                    $code = '';
+                    for ($character = 0; $character < 8; $character++) {
+                        $code .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+                    }
+                    try {
+                        $stmt->execute([$code, $familyId, $code]);
+                        if ($stmt->rowCount()) {
+                            adminRedirect($returnTo, 'New invite code ready to share.');
+                        }
+                    } catch (PDOException $e) {
+                        if ((int)($e->errorInfo[1] ?? 0) !== 1062) {
+                            throw $e;
+                        }
+                    }
+                }
+                throw new RuntimeException('Could not allocate a new invite code.');
+            default:
+                throw new InvalidArgumentException('Unknown administration action.');
         }
-        
-    } catch (Exception $e) {
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-        exit;
+    } catch (InvalidArgumentException $e) {
+        adminRedirect($returnTo, $e->getMessage(), false);
+    } catch (Throwable $e) {
+        error_log('Family administration: ' . $e->getMessage());
+        adminRedirect($returnTo, 'The change could not be saved. Please try again.', false);
     }
 }
 
-// Set page metadata
-$pageTitle = 'Admin Panel';
-$pageCSS = [
-    '/shared/css/aurora.css',
-    '/admin/css/admin.css'
-];
-$pageJS = ['/admin/js/admin.js'];
+$stmt = $db->prepare('SELECT name, invite_code, timezone, created_at FROM families WHERE id = ?');
+$stmt->execute([$familyId]);
+$family = $stmt->fetch();
+if (!$family) {
+    http_response_code(404);
+    exit('Family not found.');
+}
 
-// Include header
-require_once __DIR__ . '/../shared/components/header.php';
+$stmt = $db->prepare("
+    SELECT u.id, u.full_name, u.email, u.role, u.status, u.created_at,
+        (SELECT COUNT(*) FROM shopping_items WHERE added_by = u.id) AS items_added,
+        (SELECT COUNT(*) FROM notes WHERE user_id = u.id) AS notes_created,
+        (SELECT COUNT(*) FROM events WHERE user_id = u.id) AS events_created,
+        (SELECT MAX(created_at) FROM audit_log WHERE user_id = u.id AND family_id = u.family_id) AS last_activity
+    FROM users u WHERE u.family_id = ?
+    ORDER BY FIELD(u.role, 'owner', 'admin', 'member'), u.full_name, u.id");
+$stmt->execute([$familyId]);
+$members = $stmt->fetchAll();
+
+$stmt = $db->prepare("
+    SELECT
+        (SELECT COUNT(*) FROM shopping_items si JOIN shopping_lists sl ON sl.id = si.list_id WHERE sl.family_id = ? AND si.status = 'pending') AS shopping,
+        (SELECT COUNT(*) FROM notes WHERE family_id = ?) AS notes,
+        (SELECT COUNT(*) FROM events WHERE family_id = ? AND starts_at BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 7 DAY) AND status = 'pending') AS events");
+$stmt->execute([$familyId, $familyId, $familyId]);
+$activityCounts = $stmt->fetch();
+$activeMembers = count(array_filter($members, static fn(array $member): bool => $member['status'] === 'active'));
+
+$stmt = $db->prepare("
+    SELECT al.action, al.entity_type, al.created_at, u.full_name
+    FROM audit_log al LEFT JOIN users u ON u.id = al.user_id
+    WHERE al.family_id = ? ORDER BY al.created_at DESC LIMIT 10");
+$stmt->execute([$familyId]);
+$activity = $stmt->fetchAll();
+
+$subscription = null;
+if ($isOwner) {
+    try {
+        $subscription = (new SubscriptionManager($db))->getFamilySubscriptionStatus($familyId);
+    } catch (Throwable $e) {
+        error_log('Family administration subscription: ' . $e->getMessage());
+    }
+}
+$inviteLink = rtrim($_ENV['APP_URL'], '/') . '/register-join.php?code=' . rawurlencode($family['invite_code']);
+$timezone = $family['timezone'] ?: 'Africa/Johannesburg';
+$timezoneOptions = [
+    'Africa/Johannesburg' => 'South Africa (SAST)', 'Europe/London' => 'London',
+    'Europe/Paris' => 'Paris', 'America/New_York' => 'New York',
+    'America/Los_Angeles' => 'Los Angeles', 'Asia/Dubai' => 'Dubai',
+    'Asia/Tokyo' => 'Tokyo', 'Australia/Sydney' => 'Sydney'
+];
+if (!isset($timezoneOptions[$timezone])) {
+    $timezoneOptions[$timezone] = str_replace('_', ' ', $timezone);
+}
+$pageTitle = 'Family administration';
+require __DIR__ . '/header.php';
 ?>
 
-<!-- Aurora background -->
-<div class="aurora" aria-hidden="true">
-    <div class="aurora-blob aurora-a"></div>
-    <div class="aurora-blob aurora-b"></div>
-    <div class="aurora-blob aurora-c"></div>
-    <div class="stars stars-a"></div>
-    <div class="stars stars-b"></div>
-    <div class="shooting-star"></div>
-    <div class="aurora-grid"></div>
-</div>
-
-<!-- Main Content -->
-<main class="main-content">
-    <?php if ($user['role'] === 'admin' && (int) $user['family_id'] === 1): ?>
-        <p><a href="/admin/account-deletion.php">Account deletion requests</a></p>
-    <?php endif; ?>
-    <div class="hub">
-
-        <!-- Compact page header -->
-        <header class="page-head" style="--glow:#fb7185; --page-glow: rgba(251, 113, 133, 0.13)">
-            <span class="ph-glyph" aria-hidden="true">⚙️</span>
-            <div class="ph-titles">
-                <h1><?php echo htmlspecialchars($family['name']); ?></h1>
-                <p class="ph-sub"><?php echo ucfirst($user['role']); ?> panel · <?php echo $stats['active_members']; ?> active member<?php echo $stats['active_members'] === 1 ? '' : 's'; ?></p>
+<main class="family-main admin-main">
+    <header class="family-hero admin-hero">
+        <div class="family-hero-content">
+            <h1 class="family-hero-title"><?= adminEscape($family['name']) ?></h1>
+            <p class="family-hero-summary">Manage your family, invite members and review activity.</p>
+            <div class="family-actions">
+                <button class="family-button family-button-primary" type="button" data-open-dialog="inviteModal">Invite member</button>
+                <a href="#members" class="family-button">Family members</a>
             </div>
-            <div class="ph-actions">
-                <button onclick="showInviteModal()" class="pill-btn primary">
-                    <span aria-hidden="true">📨</span> Invite member
-                </button>
-                <button onclick="copyInviteCode()" class="pill-btn">
-                    <span aria-hidden="true">📋</span> Copy code
-                </button>
-                <?php if ($user['role'] === 'owner'): ?>
-                <a href="/admin/plans-public.php" class="pill-btn">
-                    <span aria-hidden="true">⚡</span> Plans
-                </a>
-                <?php endif; ?>
-            </div>
-        </header>
+        </div>
+        <?php adminHeroArt(); ?>
+    </header>
+    <?php adminNavigation($user, 'family'); ?>
 
-        <!-- Subscription Status Banner (OWNERS ONLY) -->
-        <?php if ($user['role'] === 'owner'): ?>
+    <?php if ($subscription): ?>
         <?php
-        // Get subscription state
-        $subscriptionManager = new SubscriptionManager($db);
-        $status = $subscriptionManager->getFamilySubscriptionStatus($user['family_id']);
-        $trialInfo = $subscriptionManager->getTrialInfo($user['family_id']);
+        [$subscriptionLabel, $subscriptionDetail] = match ($subscription['status']) {
+            'active' => ['Subscription active', 'Renews ' . adminDate($subscription['current_period_end'])],
+            'trial' => ['Free trial', 'Ends ' . adminDate($subscription['trial_ends_at'])],
+            default => ['Trial ended', 'View plans to continue using paid features.']
+        };
         ?>
+        <aside class="admin-banner">
+            <div><strong><?= $subscriptionLabel ?></strong><p><?= adminEscape($subscriptionDetail) ?></p></div>
+            <a class="admin-button" href="/admin/plans-public.php">View subscription</a>
+        </aside>
+    <?php endif; ?>
 
-        <?php if ($status['status'] === 'trial'): ?>
-            <?php
-            $trialEnd = new DateTime($trialInfo['ends_at']);
-            $now = new DateTime();
-            $diff = $now->diff($trialEnd);
-            $daysLeft = max(0, $diff->days);
-            ?>
-            <section class="sub-banner trial">
-                <span class="sub-banner-icon" aria-hidden="true">🎁</span>
-                <div class="sub-banner-copy">
-                    <strong>You're on a 3-day free trial</strong>
-                    <span>Ends <?php echo $trialEnd->format('j F, H:i'); ?><?php if ($daysLeft <= 1): ?> · <em class="sub-urgent">less than a day left!</em><?php endif; ?></span>
-                </div>
-                <a href="/admin/plans-public.php" class="pill-btn primary">
-                    <span aria-hidden="true">⚡</span> View plans
-                </a>
-            </section>
+    <dl class="admin-stats" aria-label="Family at a glance">
+        <?php foreach (['Active members' => $activeMembers, 'To buy' => $activityCounts['shopping'], 'Notes' => $activityCounts['notes'], 'Events next 7 days' => $activityCounts['events']] as $label => $count): ?>
+            <div><dt><?= $label ?></dt><dd><?= number_format((int)$count) ?></dd></div>
+        <?php endforeach; ?>
+    </dl>
 
-        <?php elseif ($status['status'] === 'locked' || $status['status'] === 'expired'): ?>
-            <section class="sub-banner locked">
-                <span class="sub-banner-icon" aria-hidden="true">🔒</span>
-                <div class="sub-banner-copy">
-                    <strong>Your trial has ended</strong>
-                    <span>Subscribe now to keep using all Relatives features</span>
-                </div>
-                <a href="/admin/plans-public.php" class="pill-btn primary">
-                    <span aria-hidden="true">⚡</span> Subscribe
-                </a>
-            </section>
+    <?php adminShowFlash(); ?>
+    <p class="admin-feedback" id="adminCopyFeedback" role="status" hidden></p>
 
-        <?php elseif ($status['status'] === 'active'): ?>
-            <section class="sub-banner active-sub">
-                <span class="sub-banner-icon" aria-hidden="true">✓</span>
-                <div class="sub-banner-copy">
-                    <strong><?php echo htmlspecialchars($status['plan_code'] ?? 'Premium'); ?> subscription active</strong>
-                    <span>Renews <?php echo date('j F Y', strtotime($status['current_period_end'])); ?></span>
-                </div>
-                <a href="/admin/plans-public.php" class="pill-btn">Details</a>
-            </section>
-        <?php endif; ?>
-        <?php endif; ?>
-
-        <!-- Quick Stats -->
-        <section class="admin-stats-bar">
-            <div class="stat-item">
-                <span class="stat-icon" aria-hidden="true">👥</span>
-                <span class="stat-value"><?php echo $stats['active_members']; ?></span>
-                <span class="stat-label">Members</span>
+    <section class="admin-section" id="settings" aria-labelledby="settingsTitle">
+        <h2 class="family-section-title" id="settingsTitle">Family settings</h2>
+        <dl class="admin-settings">
+            <div class="admin-setting admin-card">
+                <div><dt>Family name</dt><dd><?= adminEscape($family['name']) ?></dd></div>
+                <?php if ($isOwner): ?><button class="admin-button" type="button" data-open-dialog="nameModal" aria-label="Edit family name">Edit</button><?php endif; ?>
             </div>
-            <div class="stat-item">
-                <span class="stat-icon" aria-hidden="true">🛒</span>
-                <span class="stat-value"><?php echo $stats['pending_shopping_items']; ?></span>
-                <span class="stat-label">To buy</span>
+            <div class="admin-setting admin-card">
+                <div><dt>Invite code</dt><dd><code id="familyInviteCode"><?= adminEscape($family['invite_code']) ?></code></dd></div>
+                <button class="admin-button" type="button" data-copy="familyInviteCode">Copy code</button>
             </div>
-            <div class="stat-item">
-                <span class="stat-icon" aria-hidden="true">📝</span>
-                <span class="stat-value"><?php echo $stats['total_notes']; ?></span>
-                <span class="stat-label">Notes</span>
+            <div class="admin-setting admin-card">
+                <div><dt>Timezone</dt><dd><?= adminEscape($timezoneOptions[$timezone]) ?></dd></div>
+                <?php if ($isOwner): ?><button class="admin-button" type="button" data-open-dialog="timezoneModal" aria-label="Edit family timezone">Edit</button><?php endif; ?>
             </div>
-            <div class="stat-item">
-                <span class="stat-icon" aria-hidden="true">📅</span>
-                <span class="stat-value"><?php echo $stats['upcoming_events']; ?></span>
-                <span class="stat-label">Events, 7d</span>
+            <div class="admin-setting admin-card">
+                <div><dt>Family created</dt><dd><?= adminEscape(date('j M Y', strtotime($family['created_at']))) ?></dd></div>
             </div>
-        </section>
+        </dl>
+    </section>
 
-        <!-- Family Settings -->
-        <section class="admin-section panel" style="--glow:#38bdf8">
-            <h2 class="section-title">
-                <span class="title-icon" aria-hidden="true">🏠</span>
-                Family Settings
-            </h2>
-
-            <div class="settings-grid">
-                <!-- Family Name -->
-                <div class="setting-card">
-                    <div class="setting-icon" aria-hidden="true">📝</div>
-                    <div class="setting-content">
-                        <div class="setting-label">Family name</div>
-                        <div class="setting-value" id="familyNameDisplay">
-                            <?php echo htmlspecialchars($family['name']); ?>
+    <section class="admin-section" id="members" aria-labelledby="membersTitle">
+        <div class="admin-section-head">
+            <h2 class="family-section-title" id="membersTitle">Family members</h2>
+            <?php if (count($members) > 1): ?>
+                <label class="admin-filter" hidden>Search members <input type="search" placeholder="Name or email" data-filter="membersGrid"></label>
+            <?php endif; ?>
+        </div>
+        <div class="admin-members" id="membersGrid">
+            <?php foreach ($members as $member): ?>
+                <?php
+                $memberId = (int)$member['id'];
+                $name = adminEscape($member['full_name']);
+                $initial = adminEscape(mb_strtoupper(mb_substr($member['full_name'], 0, 1)));
+                $avatar = avatarUrl($memberId);
+                $canManage = $memberId !== $userId && $member['role'] !== 'owner';
+                ?>
+                <article class="admin-member admin-card" data-search-row data-search-text="<?= adminEscape($member['full_name'] . ' ' . $member['email']) ?>">
+                    <div class="admin-member-head">
+                        <span class="admin-avatar" aria-hidden="true">
+                            <?php if (!str_ends_with($avatar, 'v=0')): ?><img alt="" src="<?= $avatar ?>"><?php else: ?><?= $initial ?><?php endif; ?>
+                        </span>
+                        <div>
+                            <h3><?= $name ?><?= $memberId === $userId ? ' <small>(you)</small>' : '' ?></h3>
+                            <p><?= adminEscape($member['email']) ?></p>
+                            <span class="admin-chip"><?= adminEscape(ucfirst($member['role'])) ?></span>
+                            <span class="admin-chip" data-status="<?= adminEscape($member['status']) ?>"><?= adminEscape(ucfirst($member['status'])) ?></span>
                         </div>
                     </div>
-                    <?php if ($user['role'] === 'owner'): ?>
-                    <button onclick="editFamilyName()" class="btn-icon-action" title="Edit">
-                        ✏️
-                    </button>
+                    <dl class="admin-member-stats">
+                        <?php foreach (['Items' => $member['items_added'], 'Notes' => $member['notes_created'], 'Events' => $member['events_created']] as $label => $count): ?>
+                            <div><dt><?= $label ?></dt><dd><?= number_format((int)$count) ?></dd></div>
+                        <?php endforeach; ?>
+                    </dl>
+                    <?php if ($canManage): ?>
+                        <div class="admin-member-actions">
+                            <?php if ($isOwner): ?>
+                                <form method="post" action="/admin/" data-confirm="Save this role change for <?= $name ?>?">
+                                    <?= adminCsrfField() ?>
+                                    <input type="hidden" name="action" value="update_role">
+                                    <input type="hidden" name="user_id" value="<?= $memberId ?>">
+                                    <label class="admin-sr-only" for="role<?= $memberId ?>">Role for <?= $name ?></label>
+                                    <select id="role<?= $memberId ?>" name="role">
+                                        <option value="member"<?= $member['role'] === 'member' ? ' selected' : '' ?>>Member</option>
+                                        <option value="admin"<?= $member['role'] === 'admin' ? ' selected' : '' ?>>Admin</option>
+                                    </select>
+                                    <button class="admin-button" type="submit">Save role</button>
+                                </form>
+                            <?php endif; ?>
+                            <?php $deactivate = $member['status'] === 'active'; ?>
+                            <form method="post" action="/admin/" data-confirm="<?= $deactivate ? 'Deactivate' : 'Activate' ?> <?= $name ?>?">
+                                <?= adminCsrfField() ?>
+                                <input type="hidden" name="action" value="toggle_user_status">
+                                <input type="hidden" name="user_id" value="<?= $memberId ?>">
+                                <input type="hidden" name="status" value="<?= $deactivate ? 'disabled' : 'active' ?>">
+                                <button class="admin-button<?= $deactivate ? ' admin-danger' : '' ?>" type="submit"><?= $deactivate ? 'Deactivate' : 'Activate' ?></button>
+                            </form>
+                        </div>
                     <?php endif; ?>
-                </div>
+                    <footer>Joined <?= adminEscape(date('j M Y', strtotime($member['created_at']))) ?><?php if ($member['last_activity']): ?> · Last activity <?= adminEscape(adminDate($member['last_activity'])) ?><?php endif; ?></footer>
+                </article>
+            <?php endforeach; ?>
+        </div>
+        <p class="admin-empty admin-card" data-filter-empty="membersGrid" hidden>No family members match your search.</p>
+    </section>
 
-                <!-- Invite Code -->
-                <div class="setting-card">
-                    <div class="setting-icon" aria-hidden="true">🎫</div>
-                    <div class="setting-content">
-                        <div class="setting-label">Invite code</div>
-                        <div class="setting-value">
-                            <code class="invite-code-display" id="inviteCodeDisplay"><?php echo htmlspecialchars($family['invite_code']); ?></code>
-                        </div>
-                    </div>
-                    <div class="setting-actions">
-                        <button onclick="copyInviteCode()" class="btn-icon-action" title="Copy">
-                            📋
-                        </button>
-                        <?php if ($user['role'] === 'owner'): ?>
-                        <button onclick="regenerateInviteCode()" class="btn-icon-action" title="Regenerate">
-                            🔄
-                        </button>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <!-- Timezone -->
-                <div class="setting-card">
-                    <div class="setting-icon" aria-hidden="true">🌍</div>
-                    <div class="setting-content">
-                        <div class="setting-label">Timezone</div>
-                        <div class="setting-value" id="timezoneDisplay">
-                            <?php echo htmlspecialchars($family['timezone'] ?? 'Africa/Johannesburg'); ?>
-                        </div>
-                    </div>
-                    <?php if ($user['role'] === 'owner'): ?>
-                    <button onclick="editTimezone()" class="btn-icon-action" title="Edit">
-                        ✏️
-                    </button>
-                    <?php endif; ?>
-                </div>
-
-                <!-- Created Date -->
-                <div class="setting-card">
-                    <div class="setting-icon" aria-hidden="true">📆</div>
-                    <div class="setting-content">
-                        <div class="setting-label">Created</div>
-                        <div class="setting-value">
-                            <?php echo date('j F Y', strtotime($family['created_at'])); ?>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Family Members -->
-        <section class="admin-section panel" style="--glow:#f472b6">
-            <div class="section-header">
-                <h2 class="section-title">
-                    <span class="title-icon" aria-hidden="true">👥</span>
-                    Family Members
-                    <span class="member-count"><?php echo count($members); ?></span>
-                </h2>
-            </div>
-
-            <div class="members-grid">
-                <?php foreach ($members as $member): ?>
-                    <div class="member-card <?php echo $member['status']; ?>" data-user-id="<?php echo $member['id']; ?>">
-                        <div class="member-header">
-                            <div class="member-avatar" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
-                                <img src="<?php echo avatarUrl($member['id']); ?>"
-                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                                     style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
-                                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-weight:800;">
-                                    <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
-                                </span>
-                            </div>
-                            <div class="member-info">
-                                <div class="member-name"><?php echo htmlspecialchars($member['full_name']); ?></div>
-                                <div class="member-email"><?php echo htmlspecialchars($member['email']); ?></div>
-                                <div class="member-badges">
-                                    <span class="badge badge-role badge-<?php echo $member['role']; ?>">
-                                        <?php echo ucfirst($member['role']); ?>
-                                    </span>
-                                    <span class="badge badge-status badge-<?php echo $member['status']; ?>">
-                                        <?php echo $member['status'] === 'active' ? '✓ Active' : '✗ Disabled'; ?>
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="member-stats-grid">
-                            <div class="mini-stat">
-                                <div class="mini-stat-value"><?php echo $member['items_added']; ?></div>
-                                <div class="mini-stat-label">🛒 Items</div>
-                            </div>
-                            <div class="mini-stat">
-                                <div class="mini-stat-value"><?php echo $member['notes_created']; ?></div>
-                                <div class="mini-stat-label">📝 Notes</div>
-                            </div>
-                            <div class="mini-stat">
-                                <div class="mini-stat-value"><?php echo $member['events_created']; ?></div>
-                                <div class="mini-stat-label">📅 Events</div>
-                            </div>
-                        </div>
-
-                        <?php if ($member['id'] !== $user['id']): ?>
-                        <div class="member-actions">
-                            <?php if ($user['role'] === 'owner' && $member['role'] !== 'owner'): ?>
-                                <select onchange="changeUserRole(<?php echo $member['id']; ?>, this.value)" class="role-select">
-                                    <option value="">Change role...</option>
-                                    <option value="member" <?php echo $member['role'] === 'member' ? 'selected' : ''; ?>>Member</option>
-                                    <option value="admin" <?php echo $member['role'] === 'admin' ? 'selected' : ''; ?>>Admin</option>
-                                </select>
-                            <?php endif; ?>
-
-                            <?php if ($member['status'] === 'active'): ?>
-                                <button onclick="toggleUserStatus(<?php echo $member['id']; ?>, 'disabled', <?php echo htmlspecialchars(json_encode($member['full_name'])); ?>)"
-                                        class="btn btn-sm btn-danger">
-                                    Deactivate
-                                </button>
-                            <?php else: ?>
-                                <button onclick="toggleUserStatus(<?php echo $member['id']; ?>, 'active', <?php echo htmlspecialchars(json_encode($member['full_name'])); ?>)"
-                                        class="btn btn-sm btn-success">
-                                    Activate
-                                </button>
-                            <?php endif; ?>
-                        </div>
-                        <?php else: ?>
-                        <div class="member-actions">
-                            <span class="text-muted">This is you</span>
-                        </div>
-                        <?php endif; ?>
-
-                        <div class="member-footer">
-                            <small>Joined <?php echo date('j M Y', strtotime($member['created_at'])); ?></small>
-                            <?php if ($member['last_activity']): ?>
-                                <small class="last-activity">
-                                    Active <?php echo date('j M, H:i', strtotime($member['last_activity'])); ?>
-                                </small>
-                            <?php endif; ?>
-                        </div>
-                    </div>
+    <section class="admin-section" aria-labelledby="activityTitle">
+        <h2 class="family-section-title" id="activityTitle">Recent activity</h2>
+        <?php if ($activity): ?>
+            <ul class="admin-activity admin-card">
+                <?php foreach ($activity as $entry): ?>
+                    <li>
+                        <span><strong><?= adminEscape($entry['full_name'] ?? 'Family member') ?></strong>
+                            <?= adminEscape(str_replace('_', ' ', $entry['action'])) ?> <?= adminEscape($entry['entity_type']) ?></span>
+                        <time datetime="<?= adminEscape(date(DATE_ATOM, strtotime($entry['created_at']))) ?>"><?= adminEscape(adminDate($entry['created_at'])) ?></time>
+                    </li>
                 <?php endforeach; ?>
-            </div>
-        </section>
-
-        <!-- Recent Activity -->
-        <section class="admin-section panel" style="--glow:#38bdf8">
-            <h2 class="section-title">
-                <span class="title-icon" aria-hidden="true">🛰️</span>
-                Recent Activity
-            </h2>
-
-            <div class="activity-timeline">
-                <?php if (empty($recentActivity)): ?>
-                    <div class="empty-state">
-                        <div class="empty-icon" aria-hidden="true">📭</div>
-                        <p>No recent activity</p>
-                    </div>
-                <?php else: ?>
-                    <?php foreach ($recentActivity as $activity): ?>
-                        <div class="activity-item">
-                            <div class="activity-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#8b5cf6'); ?>">
-                                <img src="<?php echo avatarUrl($activity['user_id']); ?>"
-                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                                     style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
-                                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-weight:600;">
-                                    <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
-                                </span>
-                            </div>
-                            <div class="activity-content">
-                                <div class="activity-text">
-                                    <strong><?php echo htmlspecialchars($activity['full_name'] ?? 'Someone'); ?></strong>
-                                    <?php echo htmlspecialchars(str_replace('_', ' ', $activity['action'])); ?>
-                                    <?php if ($activity['entity_type']): ?>
-                                        <span class="activity-entity"><?php echo htmlspecialchars($activity['entity_type']); ?></span>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="activity-time">
-                                    <?php
-                                    $time = new DateTime($activity['created_at']);
-                                    $now = new DateTime();
-                                    $diff = $now->diff($time);
-
-                                    if ($diff->d > 0) {
-                                        echo $diff->d . ' day' . ($diff->d > 1 ? 's' : '') . ' ago';
-                                    } elseif ($diff->h > 0) {
-                                        echo $diff->h . ' hour' . ($diff->h > 1 ? 's' : '') . ' ago';
-                                    } elseif ($diff->i > 0) {
-                                        echo $diff->i . ' minute' . ($diff->i > 1 ? 's' : '') . ' ago';
-                                    } else {
-                                        echo 'Just now';
-                                    }
-                                    ?>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-        </section>
-
-    </div>
+            </ul>
+        <?php else: ?>
+            <p class="admin-empty admin-card">No recent activity.</p>
+        <?php endif; ?>
+    </section>
 </main>
 
-<!-- MODALS -->
-
-<!-- Invite Modal -->
-<div id="inviteModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2>📨 Invite Family Member</h2>
-            <button onclick="closeModal('inviteModal')" class="modal-close">&times;</button>
+<dialog id="inviteModal" class="admin-dialog" aria-labelledby="inviteTitle">
+    <header><h2 id="inviteTitle">Invite a family member</h2><button class="admin-button" type="button" data-close-dialog>Close</button></header>
+    <div class="admin-dialog-body">
+        <p>Share this link with the person you’d like to join your family.</p>
+        <label>Invite link <input id="familyInviteLink" value="<?= adminEscape($inviteLink) ?>" readonly></label>
+        <div class="admin-dialog-actions">
+            <button class="admin-button admin-primary" type="button" data-copy="familyInviteLink">Copy invite link</button>
+            <?php if ($isOwner): ?>
+                <form method="post" action="/admin/" data-confirm="Replace the invite code? Previously shared links will stop working.">
+                    <?= adminCsrfField() ?>
+                    <input type="hidden" name="action" value="regenerate_invite">
+                    <button class="admin-button" type="submit">Replace invite code</button>
+                </form>
+            <?php endif; ?>
         </div>
-        <div class="modal-body">
-            <?php
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            $baseUrl = $scheme . '://' . $_SERVER['HTTP_HOST'];
-            $inviteLink = $baseUrl . '/register-join.php?code=' . urlencode($family['invite_code']);
-            ?>
-
-            <p class="modal-description">
-                Share this link with family members to let them join:
-            </p>
-
-            <div class="invite-code-box">
-                <code id="inviteLinkDisplay"><?php echo htmlspecialchars($inviteLink); ?></code>
-            </div>
-
-            <button onclick="copyInviteLink()" class="btn btn-primary btn-block">
-                🔗 Copy Invite Link
-            </button>
-
-            <div class="invite-instructions">
-                <h3>How to invite</h3>
-                <ol>
-                    <li>Copy the link above</li>
-                    <li>Send it via WhatsApp, SMS, or email</li>
-                    <li>They click the link and register</li>
-                    <li>Done! They're part of your family</li>
-                </ol>
-            </div>
-        </div>
+        <p class="admin-feedback" role="status" hidden></p>
     </div>
-</div>
+</dialog>
 
-<!-- Edit Family Name Modal -->
-<div id="editFamilyNameModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2>✏️ Edit Family Name</h2>
-            <button onclick="closeModal('editFamilyNameModal')" class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="editFamilyNameForm" onsubmit="saveFamilyName(event)">
-                <div class="form-group">
-                    <label>Family Name</label>
-                    <input type="text" id="newFamilyName" class="form-control form-input"
-                           value="<?php echo htmlspecialchars($family['name']); ?>" required>
-                </div>
-                <div class="modal-actions form-actions">
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                    <button type="button" onclick="closeModal('editFamilyNameModal')" class="btn btn-secondary">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+<?php if ($isOwner): ?>
+    <dialog id="nameModal" class="admin-dialog" aria-labelledby="nameTitle">
+        <header><h2 id="nameTitle">Edit family name</h2><button class="admin-button" type="button" data-close-dialog>Close</button></header>
+        <form class="admin-dialog-body" method="post" action="/admin/">
+            <?= adminCsrfField() ?>
+            <input type="hidden" name="action" value="update_family_name">
+            <label>Family name <input name="name" value="<?= adminEscape($family['name']) ?>" maxlength="120" required autofocus></label>
+            <button class="admin-button admin-primary" type="submit">Save name</button>
+        </form>
+    </dialog>
 
-<!-- Edit Timezone Modal -->
-<div id="editTimezoneModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2>🌍 Edit Timezone</h2>
-            <button onclick="closeModal('editTimezoneModal')" class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="editTimezoneForm" onsubmit="saveTimezone(event)">
-                <div class="form-group">
-                    <label>Timezone</label>
-                    <select id="newTimezone" class="form-control form-input" required>
-                        <?php
-                        $timezones = [
-                            'Africa/Johannesburg' => 'South Africa (SAST)',
-                            'Europe/London' => 'London (GMT/BST)',
-                            'Europe/Paris' => 'Paris (CET/CEST)',
-                            'America/New_York' => 'New York (EST/EDT)',
-                            'America/Los_Angeles' => 'Los Angeles (PST/PDT)',
-                            'Asia/Dubai' => 'Dubai (GST)',
-                            'Asia/Tokyo' => 'Tokyo (JST)',
-                            'Australia/Sydney' => 'Sydney (AEST/AEDT)'
-                        ];
+    <dialog id="timezoneModal" class="admin-dialog" aria-labelledby="timezoneTitle">
+        <header><h2 id="timezoneTitle">Edit timezone</h2><button class="admin-button" type="button" data-close-dialog>Close</button></header>
+        <form class="admin-dialog-body" method="post" action="/admin/">
+            <?= adminCsrfField() ?>
+            <input type="hidden" name="action" value="update_timezone">
+            <label>Timezone
+                <select name="timezone" autofocus required>
+                    <?php foreach ($timezoneOptions as $zone => $label): ?>
+                        <option value="<?= adminEscape($zone) ?>"<?= $zone === $timezone ? ' selected' : '' ?>><?= adminEscape($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <button class="admin-button admin-primary" type="submit">Save timezone</button>
+        </form>
+    </dialog>
+<?php endif; ?>
 
-                        $currentTZ = $family['timezone'] ?? 'Africa/Johannesburg';
-
-                        foreach ($timezones as $tz => $label) {
-                            $selected = $tz === $currentTZ ? 'selected' : '';
-                            echo "<option value=\"$tz\" $selected>$label</option>";
-                        }
-                        ?>
-                    </select>
-                </div>
-                <div class="modal-actions form-actions">
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                    <button type="button" onclick="closeModal('editTimezoneModal')" class="btn btn-secondary">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<?php require_once __DIR__ . '/../shared/components/footer.php'; ?>
+<?php require __DIR__ . '/../shared/components/footer.php'; ?>

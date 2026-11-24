@@ -1,336 +1,107 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../core/session_boot.php';
-
-if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
-    exit;
-}
-
 require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/ui.php';
 
-$auth = new Auth($db);
-$user = $auth->getCurrentUser();
-
-// ====================================
-// SUPER ADMIN ONLY - NOBODY ELSE
-// ====================================
-if (!$user || $user['role'] !== 'admin' || (int) $user['family_id'] !== 1) {
-    header('Location: /home/index.php');
+$user = (new Auth($db))->getCurrentUser();
+if (!$user || !adminPlatformAccess($user)) {
+    header('Location: ' . ($user ? '/home/' : '/login.php'));
     exit;
 }
 
-// Handle POST actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    header('Content-Type: application/json');
-    
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    adminCheckCsrf();
+    $id = filter_var($_POST['plan_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    $action = $_POST['action'] ?? '';
+    $returnTo = '/admin/plans.php' . ($id ? '#plan' . $id : '');
     try {
-        switch ($_POST['action']) {
-            case 'update_plan':
-                $planId = (int)$_POST['plan_id'];
-                $priceCents = (int)$_POST['price_cents'];
-                $isActive = isset($_POST['is_active']) ? 1 : 0;
-                
-                $stmt = $db->prepare("
-                    UPDATE plans 
-                    SET price_cents = ?, is_active = ?, updated_at = NOW()
-                    WHERE id = ?
-                ");
-                $stmt->execute([$priceCents, $isActive, $planId]);
-                
-                echo json_encode(['success' => true]);
-                exit;
-                
-            case 'toggle_plan':
-                $planId = (int)$_POST['plan_id'];
-                
-                $stmt = $db->prepare("
-                    UPDATE plans 
-                    SET is_active = NOT is_active, updated_at = NOW()
-                    WHERE id = ?
-                ");
-                $stmt->execute([$planId]);
-                
-                echo json_encode(['success' => true]);
-                exit;
+        if (!$id) {
+            throw new InvalidArgumentException('Choose a plan first.');
         }
-        
-    } catch (Exception $e) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-        exit;
+        if ($action === 'update_plan') {
+            $price = filter_var($_POST['price_cents'] ?? null, FILTER_VALIDATE_INT,
+                ['options' => ['min_range' => 0, 'max_range' => 2147483647]]);
+            if ($price === false) {
+                throw new InvalidArgumentException('Enter a valid price in cents.');
+            }
+            $stmt = $db->prepare('UPDATE plans SET price_cents = ? WHERE id = ?');
+            $stmt->execute([$price, $id]);
+            adminRedirect($returnTo, 'Plan pricing saved.');
+        }
+        if ($action === 'toggle_plan') {
+            $active = $_POST['is_active'] ?? '';
+            if (!in_array($active, ['0', '1'], true)) {
+                throw new InvalidArgumentException('Choose a valid plan status.');
+            }
+            $stmt = $db->prepare('UPDATE plans SET is_active = ? WHERE id = ?');
+            $stmt->execute([(int)$active, $id]);
+            adminRedirect($returnTo, $active === '1' ? 'Plan enabled.' : 'Plan disabled.');
+        }
+        throw new InvalidArgumentException('Unknown plan action.');
+    } catch (InvalidArgumentException $e) {
+        adminRedirect($returnTo, $e->getMessage(), false);
+    } catch (Throwable $e) {
+        error_log('Plan administration: ' . $e->getMessage());
+        adminRedirect($returnTo, 'The plan could not be saved. Please try again.', false);
     }
 }
 
-// Get all plans
-$stmt = $db->query("
-    SELECT p.*,
-           (SELECT COUNT(*) FROM families WHERE current_plan_id = p.id) as active_families
-    FROM plans p
-    ORDER BY 
-        FIELD(p.billing_period, 'monthly', 'yearly'),
-        p.price_cents ASC
-");
-$plans = $stmt->fetchAll();
+$plans = $db->query("
+    SELECT p.id, p.code, p.name, p.billing_period, p.price_cents, p.currency, p.max_members, p.is_active,
+        (SELECT COUNT(*) FROM families WHERE current_plan_id = p.id) AS assigned_families
+    FROM plans p ORDER BY FIELD(p.billing_period, 'monthly', 'yearly'), p.price_cents, p.id")->fetchAll();
 
-$pageTitle = 'Manage Plans';
-$pageCSS = ['/admin/css/admin.css'];
-$pageJS = [];
-
-require_once __DIR__ . '/../shared/components/header.php';
+$pageTitle = 'Manage plans';
+require __DIR__ . '/header.php';
 ?>
 
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
-</div>
+<main class="family-main admin-main">
+    <?php adminHero('Manage plans', 'Update displayed pricing and plan availability.'); ?>
+    <?php adminNavigation($user, 'plans'); ?>
+    <?php adminShowFlash(); ?>
 
-<main class="main-content">
-    <div class="container">
-        
-        <section class="page-header">
-            <h1 class="page-title">
-                <span class="gradient-text">Subscription Plans</span>
-            </h1>
-            <p class="page-subtitle">Manage pricing and availability</p>
-        </section>
-
-        <section class="admin-section">
-            <div class="plans-grid">
-                
-                <?php foreach ($plans as $plan): ?>
-                    <div class="plan-admin-card glass-card <?php echo $plan['is_active'] ? '' : 'inactive'; ?>">
-                        <div class="plan-admin-header">
-                            <div class="plan-badge">
-                                <span class="badge-icon"><?php echo $plan['billing_period'] === 'monthly' ? '📅' : '🗓️'; ?></span>
-                                <span class="badge-text"><?php echo ucfirst($plan['billing_period']); ?></span>
-                            </div>
-                            
-                            <form method="POST" style="display: inline;">
-                                <input type="hidden" name="action" value="toggle_plan">
-                                <input type="hidden" name="plan_id" value="<?php echo $plan['id']; ?>">
-                                <button type="submit" class="toggle-btn <?php echo $plan['is_active'] ? 'active' : ''; ?>">
-                                    <?php echo $plan['is_active'] ? '✓ Active' : '✗ Disabled'; ?>
-                                </button>
-                            </form>
+    <?php foreach (['monthly' => 'Monthly plans', 'yearly' => 'Yearly plans'] as $period => $label): ?>
+        <?php $periodPlans = array_filter($plans, static fn(array $plan): bool => $plan['billing_period'] === $period); ?>
+        <?php if (!$periodPlans) continue; ?>
+        <section class="admin-section" aria-labelledby="<?= $period ?>Title">
+            <h2 class="family-section-title" id="<?= $period ?>Title"><?= $label ?></h2>
+            <div class="admin-plans">
+                <?php foreach ($periodPlans as $plan): ?>
+                    <?php $id = (int)$plan['id']; $active = (bool)$plan['is_active']; ?>
+                    <article class="admin-card admin-plan" id="plan<?= $id ?>">
+                        <div class="admin-plan-heading">
+                            <h3><?= adminEscape($plan['name']) ?></h3>
+                            <span class="admin-chip" data-status="<?= $active ? 'active' : 'disabled' ?>"><?= $active ? 'Active' : 'Disabled' ?></span>
                         </div>
-                        
-                        <div class="plan-admin-body">
-                            <h3 class="plan-title"><?php echo htmlspecialchars($plan['name']); ?></h3>
-                            <p class="plan-code"><?php echo htmlspecialchars($plan['code']); ?></p>
-                            
-                            <form method="POST" class="plan-edit-form" onsubmit="return updatePlan(event, <?php echo $plan['id']; ?>)">
-                                <input type="hidden" name="action" value="update_plan">
-                                <input type="hidden" name="plan_id" value="<?php echo $plan['id']; ?>">
-                                
-                                <div class="form-row">
-                                    <label>Price (cents)</label>
-                                    <input 
-                                        type="number" 
-                                        name="price_cents" 
-                                        value="<?php echo $plan['price_cents']; ?>"
-                                        class="form-input"
-                                        min="0"
-                                        step="100"
-                                    >
-                                    <small class="form-hint">
-                                        Display: <?php echo $plan['currency']; ?> <?php echo number_format($plan['price_cents'] / 100, 2); ?>
-                                    </small>
-                                </div>
-                                
-                                <div class="form-row">
-                                    <label>Max Members</label>
-                                    <input 
-                                        type="text" 
-                                        value="<?php echo $plan['max_members'] === 0 ? 'Unlimited' : $plan['max_members']; ?>"
-                                        class="form-input"
-                                        readonly
-                                    >
-                                </div>
-                                
-                                <button type="submit" class="btn btn-primary btn-block">
-                                    Save Changes
-                                </button>
-                            </form>
-                        </div>
-                        
-                        <div class="plan-admin-footer">
-                            <div class="stat">
-                                <span class="stat-label">Active Families</span>
-                                <span class="stat-value"><?php echo $plan['active_families']; ?></span>
-                            </div>
-                        </div>
-                    </div>
+                        <code><?= adminEscape($plan['code']) ?></code>
+                        <dl class="admin-plan-info">
+                            <div><dt>Family size</dt><dd><?= (int)$plan['max_members'] === 0 ? 'Unlimited' : (int)$plan['max_members'] ?></dd></div>
+                            <div><dt>Families assigned</dt><dd><?= number_format((int)$plan['assigned_families']) ?></dd></div>
+                        </dl>
+                        <form method="post" action="/admin/plans.php" class="admin-price-form">
+                            <?= adminCsrfField() ?>
+                            <input type="hidden" name="action" value="update_plan">
+                            <input type="hidden" name="plan_id" value="<?= $id ?>">
+                            <label>Price in <?= adminEscape($plan['currency']) ?> cents
+                                <input type="number" name="price_cents" min="0" max="2147483647" step="1" required value="<?= (int)$plan['price_cents'] ?>">
+                            </label>
+                            <small>Current price <?= adminEscape(adminMoney((int)$plan['price_cents'], $plan['currency'])) ?></small>
+                            <button type="submit" class="admin-button admin-primary">Save price</button>
+                        </form>
+                        <form method="post" action="/admin/plans.php" data-confirm="<?= $active ? 'Disable' : 'Enable' ?> <?= adminEscape($plan['name']) ?> for new subscriptions?">
+                            <?= adminCsrfField() ?>
+                            <input type="hidden" name="action" value="toggle_plan">
+                            <input type="hidden" name="plan_id" value="<?= $id ?>">
+                            <input type="hidden" name="is_active" value="<?= $active ? 0 : 1 ?>">
+                            <button type="submit" class="admin-button<?= $active ? ' admin-danger' : '' ?>"><?= $active ? 'Disable plan' : 'Enable plan' ?></button>
+                        </form>
+                    </article>
                 <?php endforeach; ?>
-                
             </div>
         </section>
-
-    </div>
+    <?php endforeach; ?>
+    <?php if (!$plans): ?><p class="admin-empty admin-card">No subscription plans are configured.</p><?php endif; ?>
 </main>
 
-<style>
-.plans-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 30px;
-}
-
-.plan-admin-card {
-    padding: 30px;
-    transition: all 0.3s ease;
-}
-
-.plan-admin-card.inactive {
-    opacity: 0.6;
-    filter: grayscale(50%);
-}
-
-.plan-admin-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 15px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.plan-badge {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 20px;
-    font-weight: 700;
-}
-
-.toggle-btn {
-    padding: 8px 16px;
-    border-radius: 20px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    background: transparent;
-    color: white;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.toggle-btn.active {
-    background: linear-gradient(135deg, #51cf66, #37b24d);
-    border-color: #51cf66;
-}
-
-.plan-title {
-    font-size: 24px;
-    font-weight: 900;
-    color: white;
-    margin-bottom: 5px;
-}
-
-.plan-code {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
-    font-family: monospace;
-    margin-bottom: 20px;
-}
-
-.plan-edit-form {
-    margin: 20px 0;
-}
-
-.form-row {
-    margin-bottom: 15px;
-}
-
-.form-row label {
-    display: block;
-    color: white;
-    font-weight: 600;
-    margin-bottom: 5px;
-    font-size: 14px;
-}
-
-.form-input {
-    width: 100%;
-    padding: 12px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
-    color: white;
-    font-size: 16px;
-}
-
-.form-hint {
-    display: block;
-    margin-top: 5px;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 12px;
-}
-
-.plan-admin-footer {
-    margin-top: 20px;
-    padding-top: 15px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.stat {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.stat-label {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 14px;
-}
-
-.stat-value {
-    color: white;
-    font-weight: 900;
-    font-size: 18px;
-}
-</style>
-
-<script>
-async function updatePlan(event, planId) {
-    event.preventDefault();
-    
-    const formData = new FormData(event.target);
-    
-    try {
-        const response = await fetch('', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showToast('Plan updated successfully', 'success');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            throw new Error(data.error || 'Update failed');
-        }
-        
-    } catch (error) {
-        showToast(error.message, 'error');
-    }
-    
-    return false;
-}
-
-function showToast(message, type) {
-    // Use existing Toast class from admin.js
-    if (typeof Toast !== 'undefined') {
-        Toast[type](message);
-    } else {
-        alert(message);
-    }
-}
-</script>
-
-<script src="/home/js/home.js?v=<?php echo $cacheVersion; ?>"></script>
-
-<?php require_once __DIR__ . '/../shared/components/footer.php'; ?>
+<?php require __DIR__ . '/../shared/components/footer.php'; ?>

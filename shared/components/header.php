@@ -23,7 +23,7 @@ $appVersion = '12.4.0';
 $cacheVersion = '12.12.0';
 $workspacePage = !isset($homeStylesheet) && !isset($messagesStylesheets);
 $buildTime = $cacheVersion;
-$familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'weather', 'holiday_traveling'], true);
+$familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'weather', 'holiday_traveling', 'games', 'admin'], true);
 
 // Avatar cache-busting: use file modification time so browsers fetch the new image after upload
 function avatarUrl($userId) {
