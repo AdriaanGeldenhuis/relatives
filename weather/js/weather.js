@@ -52,7 +52,7 @@
         { name: 'Somerset West', state: 'Western Cape', country: 'ZA', lat: -34.0849, lon: 18.8506 },
         { name: 'Ballito', state: 'KwaZulu-Natal', country: 'ZA', lat: -29.5390, lon: 31.2140 },
         { name: 'Umhlanga', state: 'KwaZulu-Natal', country: 'ZA', lat: -29.7256, lon: 31.0856 }
-        ]
+    ];
 
     const byId = id => document.getElementById(id);
     const settings = JSON.parse(byId('weatherSettings').textContent);
@@ -66,6 +66,7 @@
     const searchStatus = byId('searchStatus');
     const quickPlaces = byId('weatherPlaces');
     const pageStatus = byId('weatherStatus');
+    const locationStatus = byId('weatherLocationStatus');
     const locationButton = byId('useCurrentLocation');
     const unitButton = byId('weatherUnits');
     const refreshButton = byId('weatherRefresh');
@@ -73,10 +74,12 @@
     const shareDialog = byId('shareModal');
     const heroTitle = byId('weatherHeroTitle');
     const heroSummary = byId('weatherHeroSummary');
+    const weather = window.RelativesWeather;
 
     let preferences = {};
     try {
-        preferences = JSON.parse(localStorage.getItem(preferenceKey)) || {};
+        const saved = JSON.parse(localStorage.getItem(preferenceKey));
+        if (saved && typeof saved === 'object' && !Array.isArray(saved)) preferences = saved;
     } catch {}
     let location = null;
     let current = null;
@@ -87,7 +90,7 @@
     let searchTimer;
     let results = [];
     let activeResult = -1;
-    const sky = window.RelativesWeatherHero.mount(app.querySelector('.sky-hero'), { formatTemperature: temperature });
+    const sky = weather.mountHero(app.querySelector('.sky-hero'), { formatTemperature: temperature });
 
     function savePreferences() {
         try {
@@ -126,7 +129,8 @@
     }
 
     function localTime(timestamp, offset) {
-        return timestamp ? timeFormat.format((timestamp + (offset || 0)) * 1000) : '—';
+        return Number.isFinite(timestamp) && timestamp > 0
+            ? timeFormat.format((timestamp + (Number.isFinite(offset) ? offset : 0)) * 1000) : '—';
     }
 
     function calendarDate(date, formatter = dayFormat) {
@@ -142,20 +146,11 @@
     }
 
     function weatherIcon({ icon, condition }) {
-        if (icon?.startsWith('01')) return icon.endsWith('n') ? '🌙' : '☀️';
-        if (icon?.startsWith('02')) return icon.endsWith('n') ? '☁️' : '🌤️';
-        return { Clear: '☀️', Clouds: '☁️', Drizzle: '🌦️', Rain: '🌧️', Thunderstorm: '⛈️', Snow: '❄️' }[condition] ?? '🌫️';
-    }
-
-    async function request(action, parameters, signal) {
-        const query = new URLSearchParams({ action, ...parameters });
-        const response = await fetch(`/weather/api/api.php?${query}`, { signal, cache: 'no-store' });
-        if (!response.ok) {
-            const error = new Error('Weather request failed.');
-            error.status = response.status;
-            throw error;
-        }
-        return response.json();
+        icon = typeof icon === 'string' ? icon : '';
+        if (icon.startsWith('01')) return icon.endsWith('n') ? '🌙' : '☀️';
+        if (icon.startsWith('02')) return icon.endsWith('n') ? '☁️' : '🌤️';
+        if (icon.startsWith('50')) return '🌫️';
+        return { Clear: '☀️', Clouds: '☁️', Drizzle: '🌦️', Rain: '🌧️', Thunderstorm: '⛈️', Snow: '❄️' }[condition] ?? '';
     }
 
     function closeSearch() {
@@ -207,7 +202,7 @@
         searchRequest = controller;
         searchTimer = setTimeout(async () => {
             try {
-                const data = await request('search', { q: query }, controller.signal);
+                const data = await weather.request('search', { q: query }, controller.signal);
                 if (controller.signal.aborted) return;
                 const combined = [...local];
                 for (const place of data.results.filter(validPlace)) {
@@ -228,8 +223,6 @@
 
     function chooseResult(index) {
         if (!results[index] || searchPopover.hidden) return;
-        searchInput.value = '';
-        closeSearch();
         selectPlace(results[index], true);
     }
 
@@ -254,6 +247,8 @@
     function selectPlace(place, remember = false) {
         locating++;
         locationButton.disabled = false;
+        locationStatus.textContent = '';
+        searchInput.value = '';
         closeSearch();
         if (!location || place.lat !== location.lat || place.lon !== location.lon) {
             current = null;
@@ -270,24 +265,19 @@
         loadWeather();
     }
 
-    function useDeviceLocation() {
-        if (!navigator.geolocation) {
-            pageStatus.textContent = 'Location is unavailable on this device. Search for a city or town.';
-            return;
-        }
+    async function useDeviceLocation(quietly = false) {
+        if (locationButton.disabled) return;
         const attempt = ++locating;
         locationButton.disabled = true;
-        pageStatus.textContent = 'Finding your location…';
-        navigator.geolocation.getCurrentPosition(position => {
-            if (attempt !== locating) return;
-            selectPlace({ lat: position.coords.latitude, lon: position.coords.longitude, name: 'My location', useProviderName: true });
-        }, error => {
-            if (attempt !== locating) return;
-            locationButton.disabled = false;
-            pageStatus.textContent = error.code === 1
-                ? 'Location access is off. Search for a city or allow location in your browser.'
-                : 'Your location could not be found. Search for a city or try again.';
-        }, { timeout: 8000, maximumAge: 120000 });
+        if (!quietly) locationStatus.textContent = 'Finding your location…';
+        try {
+            const coordinates = await weather.getDeviceLocation();
+            if (attempt === locating) selectPlace({ ...coordinates, name: 'My location', useProviderName: true });
+        } catch (error) {
+            if (attempt === locating && !quietly) locationStatus.textContent = `${error.message} You can also search for a city.`;
+        } finally {
+            if (attempt === locating) locationButton.disabled = false;
+        }
     }
 
     async function loadWeather(quiet = false) {
@@ -302,7 +292,7 @@
         const errors = [];
         const loadPart = async (action, parameters, apply) => {
             try {
-                const data = await request(action, parameters, controller.signal);
+                const data = await weather.request(action, parameters, controller.signal);
                 if (controller.signal.aborted) return;
                 apply(data);
                 renderWeather();
@@ -312,15 +302,18 @@
         };
         await Promise.all([
             loadPart('current', params, data => {
-                if (!Number.isFinite(data.temperature)) throw new Error('Current conditions are missing.');
+                if (!Number.isFinite(data?.temperature)) throw new Error('Current conditions are missing.');
                 current = data;
             }),
             loadPart('forecast', { ...params, include: 'hourly' }, data => {
-                if (!data.forecast?.length || !data.hourly?.length) throw new Error('Forecast is missing.');
+                if (!Array.isArray(data?.forecast) || !data.forecast.length || !Array.isArray(data.hourly) || !data.hourly.length) {
+                    throw new Error('Forecast is missing.');
+                }
                 forecast = data;
             })
         ]);
         if (controller.signal.aborted) return;
+        weatherRequest = null;
         refreshButton.disabled = false;
         if (errors.some(error => error.status === 401)) {
             pageStatus.textContent = 'Your session expired. Sign in again to refresh weather.';
@@ -335,9 +328,9 @@
 
     function locationName() {
         if (!location) return '';
-        const providerName = current?.location_name ?? forecast?.location_name;
-        if (!location.useProviderName || !providerName || providerName === 'Unknown') return location.name;
-        return location.name === 'Last shared location' ? `${providerName} · last shared location` : providerName;
+        const providerName = [current?.location_name || current?.location, forecast?.location_name]
+            .find(name => name && name !== 'Unknown');
+        return location.useProviderName && providerName ? providerName : location.name;
     }
 
     function upcomingHours() {
@@ -349,35 +342,25 @@
         return `<dl class="wx-metrics">${values.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>`;
     }
 
-    function renderSky(hours = upcomingHours()) {
-        const name = locationName();
-        const precipitation = hours.map(hour => hour.precipitation).filter(Number.isFinite);
-        const observedAt = current?.dt ? localTime(current.dt, current.timezone) : '';
-        heroTitle.textContent = name.replace(/ · last shared location$/, '') || 'Weather';
-        heroSummary.textContent = precipitation.length
-            ? `Rain chance peaks at ${Math.max(...precipitation)}% over the next 24 hours.`
-            : observedAt ? `Conditions observed at ${observedAt} local time.`
-                : !location ? 'Search for a city or use your location to see its weather.'
-                    : refreshButton.disabled ? 'Loading the local forecast…' : 'Refresh or choose another city.';
+    function renderSky() {
+        const offset = current?.timezone ?? forecast?.timezone;
+        const timestamp = current?.dt ?? forecast?.fetched_at;
+        const detail = timestamp ? `${current?.dt ? 'Observed' : 'Forecast retrieved'} at ${localTime(timestamp, offset)} local time.`
+            : refreshButton.disabled ? 'Loading the local forecast…' : 'Refresh or choose another city.';
+        heroTitle.textContent = locationName() || 'Weather';
+        heroSummary.textContent = location ? [location.source, detail].filter(Boolean).join(' · ')
+            : 'Search for a city or use your location to see its weather.';
         refreshButton.hidden = !location;
         sky.update({
             current,
-            offset: current?.timezone ?? forecast?.timezone,
+            offset,
             message: location && (refreshButton.disabled ? 'Loading current weather…' : 'Current weather is unavailable')
         });
     }
 
     function renderWeather() {
         const hours = upcomingHours();
-        renderSky(hours);
-        const name = locationName();
-        byId('weatherLocationHeading').hidden = !location;
-        byId('weatherLocation').textContent = name;
-        const timestamp = current?.dt ?? forecast?.fetched_at;
-        const offset = current?.timezone ?? forecast?.timezone;
-        byId('weatherUpdated').textContent = timestamp
-            ? `${current?.dt ? 'Observed' : 'Forecast retrieved'} at ${localTime(timestamp, offset)} local time`
-            : '';
+        renderSky();
         byId('weatherShare').hidden = !current && !forecast;
         byId('weatherOverview').hidden = !current && !forecast;
         byId('weatherSource').hidden = !current && !forecast;
@@ -387,7 +370,7 @@
         byId('hourlyForecast').innerHTML = hours.map(hour => renderHour(hour)).join('');
         byId('dailySection').hidden = !forecast?.forecast.length;
         byId('weeklyForecast').innerHTML = (forecast?.forecast ?? []).map(day => `
-            <button type="button" class="wx-day" data-date="${day.date}" aria-haspopup="dialog">
+            <button type="button" class="wx-day" data-date="${escapeHTML(day.date)}" aria-haspopup="dialog">
                 <span><strong>${escapeHTML(dayName(day))}</strong><span class="wx-day-date">${calendarDate(day.date, shortDate)}</span></span>
                 <span class="wx-day-icon" aria-hidden="true">${weatherIcon(day)}</span>
                 <span class="wx-day-temps">${temperature(day.temp_max)} / ${temperature(day.temp_min)}</span>
@@ -422,9 +405,9 @@
             element.innerHTML = '<h3>Plan your day</h3><p>The next 24 hours are unavailable.</p>';
             return;
         }
-        const temps = hours.map(hour => hour.temperature);
+        const temps = hours.map(hour => hour.temperature).filter(Number.isFinite);
         const rain = hours.reduce((peak, hour) => (hour.precipitation ?? -1) > (peak?.precipitation ?? -1) ? hour : peak, null);
-        const peakWind = Math.max(...hours.map(hour => hour.wind_gust ?? hour.wind_speed));
+        const peakWind = Math.max(...hours.map(hour => hour.wind_gust ?? hour.wind_speed).filter(Number.isFinite));
         let note = 'Check the forecast below for the conditions at your planned time.';
         if (hours.some(hour => hour.condition === 'Thunderstorm')) {
             note = 'Thunderstorms are possible in the next 24 hours. Check the forecast before heading out.';
@@ -564,7 +547,8 @@
             chooseResult(Math.max(activeResult, 0));
         }
     });
-    locationButton.addEventListener('click', useDeviceLocation);
+    locationButton.hidden = false;
+    locationButton.addEventListener('click', () => useDeviceLocation());
     refreshButton.addEventListener('click', () => loadWeather());
     unitButton.addEventListener('click', () => {
         preferences.fahrenheit = !preferences.fahrenheit;
@@ -584,8 +568,11 @@
     shareDialog.querySelectorAll('[data-export]').forEach(button => button.addEventListener('click', () => exportWeather(button.dataset.export)));
 
     setView(preferences.view === 'list' ? 'list' : 'cards');
+    preferences.fahrenheit = preferences.fahrenheit === true;
+    unitButton.hidden = false;
     unitButton.setAttribute('aria-pressed', String(Boolean(preferences.fahrenheit)));
-    const tracked = settings.trackedLocation;
+    const tracked = settings.trackedLocation && { ...settings.trackedLocation,
+        name: 'Last shared location', source: 'Last shared location', useProviderName: true };
     const query = new URLSearchParams(window.location.search);
     const linked = query.get('lat')?.trim() && query.get('lon')?.trim()
         ? { lat: Number(query.get('lat')), lon: Number(query.get('lon')), name: 'Your location', useProviderName: true }
@@ -594,17 +581,15 @@
         selectPlace(linked);
     } else if (validPlace(preferences.recent)) {
         selectPlace(preferences.recent);
-    } else if (validPlace(tracked) && tracked.trackedAt > Date.now() / 1000 - 1800) {
-        selectPlace({ ...tracked, useProviderName: true });
+    } else if (validPlace(tracked)) {
+        selectPlace(tracked);
     } else {
         renderQuickPlaces();
         pageStatus.textContent = 'Choose a place to see its weather.';
-        navigator.permissions?.query({ name: 'geolocation' }).then(permission => {
-            if (permission.state === 'granted' && !location && !locationButton.disabled) useDeviceLocation();
-        }).catch(() => {});
+        weather.hasLocationPermission().then(granted => { if (granted && !location) useDeviceLocation(true); });
     }
     setInterval(() => {
-        if (location && !document.hidden && !refreshButton.disabled && !locationButton.disabled
+        if (location && navigator.onLine && !document.hidden && !refreshButton.disabled && !locationButton.disabled
             && !dayDialog.open && !shareDialog.open && !byId('weeklyForecast').contains(document.activeElement)) {
             loadWeather(true);
         }

@@ -8,7 +8,6 @@ require_once __DIR__ . '/../../core/session_boot.php';
 if (empty($_SESSION['user_id'])) {
     weatherResponse(['error' => 'Sign in to load weather.'], 401);
 }
-session_write_close();
 
 try {
     require_once __DIR__ . '/../../core/bootstrap.php';
@@ -18,6 +17,12 @@ try {
 }
 
 try {
+    if (!(new Session($db))->validate()) {
+        unset($_SESSION['user_id']);
+        weatherResponse(['error' => 'Sign in to load weather.'], 401);
+    }
+    session_write_close();
+
     $action = $_GET['action'] ?? '';
     if ($action === 'search') {
         weatherResponse(['results' => searchLocation($_GET['q'] ?? '')]);
@@ -33,7 +38,8 @@ try {
     }
     $date = $_GET['date'] ?? null;
     if ($action === 'detailed' && $date !== null) {
-        $parsedDate = is_string($date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
+        $parsedDate = is_string($date) && preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $date)
+            ? DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
         if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) {
             throw new InvalidArgumentException('Invalid forecast date.');
         }
@@ -100,11 +106,11 @@ function openWeather(string $path, array $parameters): array
 
 function searchLocation(mixed $query): array
 {
-    if (!is_string($query) || strlen($query) > 150) {
+    if (!is_string($query) || !mb_check_encoding($query, 'UTF-8') || mb_strlen($query) > 150) {
         throw new InvalidArgumentException('Invalid location search.');
     }
     $query = trim($query);
-    if (strlen($query) < 2) {
+    if (mb_strlen($query) < 2) {
         return [];
     }
     $results = [];
@@ -126,7 +132,7 @@ function searchLocation(mixed $query): array
     return $results;
 }
 
-function getCachedWeather($db, float $lat, float $lon, string $type): ?array
+function getCachedWeather(PDO $db, float $lat, float $lon, string $type): ?array
 {
     try {
         $stmt = $db->prepare("SELECT weather_data FROM weather_cache
@@ -141,7 +147,7 @@ function getCachedWeather($db, float $lat, float $lon, string $type): ?array
     }
 }
 
-function cacheWeather($db, float $lat, float $lon, string $type, array $data, int $minutes): void
+function cacheWeather(PDO $db, float $lat, float $lon, string $type, array $data, int $minutes): void
 {
     try {
         $stmt = $db->prepare("INSERT INTO weather_cache
@@ -155,14 +161,14 @@ function cacheWeather($db, float $lat, float $lon, string $type, array $data, in
     }
 }
 
-function getCurrentWeather($db, float $lat, float $lon): array
+function getCurrentWeather(PDO $db, float $lat, float $lon): array
 {
     $cached = getCachedWeather($db, $lat, $lon, 'current');
     if ($cached) {
         return $cached;
     }
     $apiData = openWeather('data/2.5/weather', ['lat' => $lat, 'lon' => $lon, 'units' => 'metric']);
-    if (!isset($apiData['main']['temp'], $apiData['main']['feels_like'])) {
+    if (!is_numeric($apiData['main']['temp'] ?? null)) {
         throw new RuntimeException('OpenWeather current conditions are missing.');
     }
     $data = [
@@ -170,31 +176,31 @@ function getCurrentWeather($db, float $lat, float $lon): array
         'location_name' => $apiData['name'] ?? 'Unknown',
         'country' => $apiData['sys']['country'] ?? '',
         'temperature' => round($apiData['main']['temp']),
-        'feels_like' => round($apiData['main']['feels_like']),
-        'temp_min' => round(($apiData['main']['temp_min'] ?? $apiData['main']['temp'])),
-        'temp_max' => round(($apiData['main']['temp_max'] ?? $apiData['main']['temp'])),
-        'description' => ucfirst($apiData['weather'][0]['description'] ?? 'Clear'),
-        'icon' => $apiData['weather'][0]['icon'] ?? '01d',
-        'condition' => $apiData['weather'][0]['main'] ?? 'Clear',
+        'feels_like' => isset($apiData['main']['feels_like']) ? round($apiData['main']['feels_like']) : null,
+        'temp_min' => round($apiData['main']['temp_min'] ?? $apiData['main']['temp']),
+        'temp_max' => round($apiData['main']['temp_max'] ?? $apiData['main']['temp']),
+        'description' => ucfirst($apiData['weather'][0]['description'] ?? 'Conditions unavailable'),
+        'icon' => $apiData['weather'][0]['icon'] ?? null,
+        'condition' => $apiData['weather'][0]['main'] ?? null,
         'humidity' => $apiData['main']['humidity'] ?? null,
         'pressure' => $apiData['main']['pressure'] ?? null,
-        'wind_speed' => round(($apiData['wind']['speed'] ?? 0) * 3.6),
-        'wind_direction' => $apiData['wind']['deg'] ?? 0,
+        'wind_speed' => isset($apiData['wind']['speed']) ? round($apiData['wind']['speed'] * 3.6) : null,
+        'wind_direction' => $apiData['wind']['deg'] ?? null,
         'wind_gust' => isset($apiData['wind']['gust']) ? round($apiData['wind']['gust'] * 3.6) : null,
-        'clouds' => $apiData['clouds']['all'] ?? 0,
+        'clouds' => $apiData['clouds']['all'] ?? null,
         'visibility' => isset($apiData['visibility']) ? round($apiData['visibility'] / 1000, 1) : null,
         'sunrise' => $apiData['sys']['sunrise'] ?? null,
         'sunset' => $apiData['sys']['sunset'] ?? null,
         'timezone' => $apiData['timezone'] ?? 0,
         'timestamp' => time(),
-        'dt' => $apiData['dt'] ?? time()
+        'dt' => $apiData['dt'] ?? null
     ];
     
     cacheWeather($db, $lat, $lon, 'current', $data, 10);
     return $data;
 }
 
-function getForecastData($db, float $lat, float $lon): array
+function getForecastData(PDO $db, float $lat, float $lon): array
 {
     $cached = getCachedWeather($db, $lat, $lon, 'forecast_v2');
     if ($cached) {

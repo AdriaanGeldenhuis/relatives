@@ -55,12 +55,10 @@ body[data-area="weather"] { --footer-height: 56px; }
 .wx-button:hover, .wx-layout button:hover, .wx-places button:hover,
 .wx-layout button[aria-pressed="true"], .wx-places button[aria-pressed="true"] { background: var(--app-soft); border-color: var(--family-line); }
 
-.wx-location-heading, .wx-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.wx-location-heading { margin: 20px 0 12px; }
-.wx-location-heading h2 { overflow-wrap: anywhere; }
-.wx-location-heading p, .wx-section-head p, .wx-source { color: var(--family-muted); font-size: .81rem; margin-top: 4px; }
+.wx-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.wx-section-head p, .wx-source { color: var(--family-muted); font-size: .81rem; margin-top: 4px; }
 .wx-status { color: var(--family-muted); margin: 12px 0; }
-.wx-status:empty { display: none; }
+.wx-status:empty { margin: 0 0 12px; }
 .wx-message { padding: 14px; }
 .wx-overview { display: grid; grid-template-columns: 1.35fr 1fr; gap: 12px; }
 .wx-card, .wx-hour, .wx-day, .wx-dialog {

@@ -62,7 +62,7 @@ function renderWeatherHeroPanel(bool $home = false): void
             <button type="button" data-sky-locate hidden>Use my location</button>
             <a href="/weather/" data-sky-forecast>Full forecast <span aria-hidden="true">→</span></a>
         </div>
-        <p class="sky-feedback" data-sky-feedback role="status" hidden></p>
+        <p class="sky-feedback" data-sky-feedback role="status"></p>
         <?php endif; ?>
     </div>
     <?php

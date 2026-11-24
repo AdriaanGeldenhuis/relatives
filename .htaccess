@@ -12,15 +12,6 @@
     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 </IfModule>
 
-# Service Workers - MUST BE ACCESSIBLE
-<FilesMatch "^(sw\.js|firebase-messaging-sw\.js)$">
-    Header set Cache-Control "no-cache, no-store, must-revalidate"
-    Header set Content-Type "application/javascript; charset=utf-8"
-    <IfModule mod_headers.c>
-        Header set Service-Worker-Allowed "/"
-    </IfModule>
-</FilesMatch>
-
 # Manifest
 <Files "manifest.json">
     Header set Content-Type "application/manifest+json; charset=utf-8"
@@ -86,6 +77,14 @@
     <FilesMatch "\.(css|js)$">
         Header set Cache-Control "public, max-age=2592000, s-maxage=31536000, stale-while-revalidate=86400"
         Header set CDN-Cache-Control "max-age=31536000"
+    </FilesMatch>
+
+    # Check for worker updates at the origin instead of caching them as static scripts.
+    <FilesMatch "^(sw\.js|firebase-messaging-sw\.js)$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set CDN-Cache-Control "no-store"
+        Header set Content-Type "application/javascript; charset=utf-8"
+        Header set Service-Worker-Allowed "/"
     </FilesMatch>
 
     # Images - immutable CDN cache for 1 year

@@ -17,7 +17,35 @@
         send('state');
     }
 
-    let navigationReply;
+    let locationReply;
+
+    function prepareLocation(type) {
+        return new Promise(resolve => {
+            if (locationReply) {
+                resolve(false);
+                return;
+            }
+
+            const timeout = setTimeout(() => {
+                locationReply = undefined;
+                resolve(false);
+            }, 3000);
+            locationReply = {
+                type,
+                finish(allowed) {
+                    clearTimeout(timeout);
+                    locationReply = undefined;
+                    resolve(allowed);
+                }
+            };
+            try {
+                send(type);
+            } catch {
+                locationReply.finish(false);
+            }
+        });
+    }
+
     port.onmessage = function (event) {
         const data = JSON.parse(event.data);
         if (data.type === 'state') {
@@ -26,10 +54,8 @@
             snapshot.receivedAt = performance.now();
             snapshot.family = data.family;
             window.dispatchEvent(new CustomEvent('relativestrackingstate', { detail: snapshot.mode }));
-        } else if (data.type === 'navigation' && navigationReply) {
-            const reply = navigationReply;
-            navigationReply = undefined;
-            reply(data.allowed === true);
+        } else if (locationReply && data.type === locationReply.type) {
+            locationReply.finish(data.allowed === true);
         }
     };
 
@@ -53,22 +79,7 @@
         onTrackingScreenVisible: function () { send('map_visible'); },
         onTrackingScreenHidden: function () { send('map_hidden'); },
         requestNotificationPermission: function () { send('notifications'); },
-        prepareNavigation: function () {
-            return new Promise(function (resolve) {
-                if (navigationReply) {
-                    resolve(false);
-                    return;
-                }
-                const timeout = setTimeout(function () {
-                    navigationReply = undefined;
-                    resolve(false);
-                }, 3000);
-                navigationReply = function (allowed) {
-                    clearTimeout(timeout);
-                    resolve(allowed);
-                };
-                send('navigation');
-            });
-        }
+        prepareNavigation: () => prepareLocation('navigation'),
+        prepareWeatherLocation: () => prepareLocation('weather_location')
     });
 }());

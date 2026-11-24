@@ -1,71 +1,40 @@
 <?php
 declare(strict_types=1);
 
-// Start session with correct name to match bootstrap config
 require_once __DIR__ . '/../core/session_boot.php';
 
 header('Cache-Control: private, no-store');
 
-// Quick session check
-if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+if (empty($_SESSION['user_id'])) {
     header('Location: /login.php', true, 302);
     exit;
 }
 
-// Load bootstrap
 require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/../weather/location.php';
 
-// Validate session with database
 try {
     $auth = new Auth($db);
     $user = $auth->getCurrentUser();
-
-    if (!$user) {
-        header('Location: /login.php?session_expired=1', true, 302);
-        exit;
-    }
-
-} catch (Exception $e) {
+} catch (PDOException $e) {
     error_log('Home page error: ' . $e->getMessage());
-    header('Location: /login.php?error=1', true, 302);
+    http_response_code(503);
+    echo 'Home is temporarily unavailable. Please try again.';
     exit;
 }
 
-// Get user's last known location for weather
-$userLocation = null;
-try {
-    // First try tracking_current (most recent location)
-    $stmt = $db->prepare("
-        SELECT lat, lng, UNIX_TIMESTAMP(updated_at) AS tracked_at
-        FROM tracking_current
-        WHERE user_id = ?
-        LIMIT 1
-    ");
-    $stmt->execute([$user['id']]);
-    $userLocation = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    // Fallback to tracking_locations if no current location
-    if (!$userLocation) {
-        $stmt = $db->prepare("
-            SELECT latitude AS lat, longitude AS lng, UNIX_TIMESTAMP(created_at) AS tracked_at
-            FROM tracking_locations
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-            LIMIT 1
-        ");
-        $stmt->execute([$user['id']]);
-        $userLocation = $stmt->fetch(PDO::FETCH_ASSOC);
-    }
-} catch (Exception $e) {
-    error_log('Location fetch error: ' . $e->getMessage());
+if (!$user) {
+    unset($_SESSION['user_id']);
+    header('Location: /login.php?session_expired=1', true, 302);
+    exit;
 }
 
-// Get stats
+$userLocation = weatherTrackedLocation($db, (int)$user['id'], (int)$user['family_id']);
+
 $stats = [
     'shopping_items' => 0,
     'notes_count' => 0,
     'upcoming_events' => 0,
-    'family_members' => 0,
     'unread_messages' => 0,
     'completed_tasks' => 0,
     'active_lists' => 0
@@ -73,31 +42,20 @@ $stats = [
 
 try {
     $stmt = $db->prepare("
-        SELECT COUNT(*) FROM shopping_items si
+        SELECT COUNT(CASE WHEN si.status = 'pending' THEN 1 END) AS shopping_items,
+               COUNT(CASE WHEN si.status = 'bought' THEN 1 END) AS completed_tasks,
+               COUNT(DISTINCT CASE WHEN si.status = 'pending' THEN sl.id END) AS active_lists
+        FROM shopping_items si
         JOIN shopping_lists sl ON si.list_id = sl.id
-        WHERE sl.family_id = ? AND si.status = 'pending'
+        WHERE sl.family_id = ?
+          AND (si.status = 'pending' OR (si.status = 'bought' AND si.bought_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)))
     ");
     $stmt->execute([$user['family_id']]);
-    $stats['shopping_items'] = (int)$stmt->fetchColumn();
-
-    $stmt = $db->prepare("
-        SELECT COUNT(*) FROM shopping_items si
-        JOIN shopping_lists sl ON si.list_id = sl.id
-        WHERE sl.family_id = ? AND si.status = 'bought'
-        AND si.bought_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    ");
-    $stmt->execute([$user['family_id']]);
-    $stats['completed_tasks'] = (int)$stmt->fetchColumn();
-
-    $stmt = $db->prepare("
-        SELECT COUNT(DISTINCT sl.id) FROM shopping_lists sl
-        JOIN shopping_items si ON sl.id = si.list_id
-        WHERE sl.family_id = ? AND si.status = 'pending'
-    ");
-    $stmt->execute([$user['family_id']]);
-    $stats['active_lists'] = (int)$stmt->fetchColumn();
+    foreach ($stmt->fetch(PDO::FETCH_ASSOC) as $key => $count) {
+        $stats[$key] = (int)$count;
+    }
 } catch (Exception $e) {
-    error_log('Stats error: ' . $e->getMessage());
+    error_log('Home shopping stats: ' . $e->getMessage());
 }
 
 try {
@@ -112,7 +70,7 @@ try {
     $stmt = $db->prepare("
         SELECT COUNT(*) FROM events
         WHERE family_id = ?
-          AND starts_at >= NOW()
+          AND (starts_at >= NOW() OR (all_day = 1 AND starts_at >= CURDATE()))
           AND starts_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)
           AND status = 'pending'
     ");
@@ -122,14 +80,6 @@ try {
     error_log('Events error: ' . $e->getMessage());
 }
 
-try {
-    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE family_id = ? AND status = 'active'");
-    $stmt->execute([$user['family_id']]);
-    $stats['family_members'] = (int)$stmt->fetchColumn();
-} catch (Exception $e) {
-    error_log('Members error: ' . $e->getMessage());
-}
-
 // Get family invite code for invite link
 $inviteLink = '';
 try {
@@ -137,9 +87,7 @@ try {
     $stmt->execute([$user['family_id']]);
     $inviteCode = $stmt->fetchColumn();
     if ($inviteCode) {
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $baseUrl = $scheme . '://' . $_SERVER['HTTP_HOST'];
-        $inviteLink = $baseUrl . '/register-join.php?code=' . urlencode($inviteCode);
+        $inviteLink = rtrim(APP_URL, '/') . '/register-join.php?code=' . rawurlencode($inviteCode);
     }
 } catch (Exception $e) {
     error_log('Invite code error: ' . $e->getMessage());
@@ -147,15 +95,15 @@ try {
 
 try {
     $stmt = $db->prepare("
-        SELECT COUNT(DISTINCT m.id)
+        SELECT COUNT(*)
         FROM messages m
-        LEFT JOIN message_reads mr ON m.id = mr.message_id AND mr.user_id = ?
         WHERE m.family_id = ?
           AND m.user_id != ?
           AND m.deleted_at IS NULL
-          AND mr.id IS NULL
+          AND (m.expires_at IS NULL OR m.expires_at > NOW())
+          AND NOT EXISTS (SELECT 1 FROM message_reads mr WHERE mr.message_id = m.id AND mr.user_id = ?)
     ");
-    $stmt->execute([$user['id'], $user['family_id'], $user['id']]);
+    $stmt->execute([$user['family_id'], $user['id'], $user['id']]);
     $stats['unread_messages'] = (int)$stmt->fetchColumn();
 } catch (Exception $e) {
     error_log('Messages error: ' . $e->getMessage());
@@ -173,9 +121,9 @@ try {
             u.full_name,
             u.avatar_color
         FROM audit_log al
-        LEFT JOIN users u ON al.user_id = u.id
+        LEFT JOIN users u ON al.user_id = u.id AND al.family_id = u.family_id
         WHERE al.family_id = ?
-        ORDER BY al.created_at DESC
+        ORDER BY al.created_at DESC, al.id DESC
         LIMIT 8
     ");
     $stmt->execute([$user['family_id']]);
@@ -192,12 +140,12 @@ try {
             title,
             starts_at,
             location,
-            kind as priority
+            all_day
         FROM events
         WHERE family_id = ?
-          AND starts_at >= NOW()
+          AND (starts_at >= NOW() OR (all_day = 1 AND starts_at >= CURDATE()))
           AND status = 'pending'
-        ORDER BY starts_at ASC
+        ORDER BY starts_at, id
         LIMIT 5
     ");
     $stmt->execute([$user['family_id']]);
@@ -210,15 +158,12 @@ try {
 $familyMembers = [];
 try {
     $stmt = $db->prepare("
-        SELECT
-            id,
-            full_name,
-            avatar_color,
-            last_login as last_active,
-            role
-        FROM users
-        WHERE family_id = ? AND status = 'active'
-        ORDER BY last_login DESC
+        SELECT u.id, u.full_name, u.avatar_color, u.role,
+               CASE WHEN COALESCE(p.show_last_seen, 1) = 1 THEN u.last_login END AS last_login
+        FROM users u
+        LEFT JOIN user_privacy_settings p ON p.user_id = u.id
+        WHERE u.family_id = ? AND u.status = 'active'
+        ORDER BY u.full_name, u.id
     ");
     $stmt->execute([$user['family_id']]);
     $familyMembers = $stmt->fetchAll();
@@ -243,8 +188,11 @@ if ($hour < 12) {
     $greetingColor = 'evening';
 }
 
-$firstName = explode(' ', $user['name'])[0];
+$firstName = preg_split('/\s+/u', trim($user['name']), 2)[0];
 $showWelcome = isset($_GET['welcome']) || isset($_GET['joined']);
+$memberCount = count($familyMembers);
+$today = $now->format('Y-m-d');
+$tomorrow = $now->modify('+1 day')->format('Y-m-d');
 
 // App launcher shortcuts and their at-a-glance status.
 $messageSummary = match ($stats['unread_messages']) {
@@ -276,7 +224,6 @@ $launcherApps = [
 ];
 
 $pageTitle = 'Home';
-$activePage = 'home';
 $homeStylesheet = __DIR__ . '/css/home.css';
 
 require_once __DIR__ . '/../shared/components/header.php';
@@ -290,12 +237,12 @@ require_once __DIR__ . '/../shared/components/header.php';
 
         <?php if ($showWelcome): ?>
         <div class="welcome-banner" role="status">
-            <span class="welcome-emoji" aria-hidden="true">🎉</span>
+            <span aria-hidden="true">🎉</span>
             <div class="welcome-copy">
                 <strong>Welcome to <?php echo htmlspecialchars($user['family_name']); ?>!</strong>
                 <span>You're in. This is your family's command center.</span>
             </div>
-            <button class="welcome-close" onclick="this.parentElement.remove()" aria-label="Dismiss">✕</button>
+            <button class="welcome-close" type="button" aria-label="Dismiss welcome message">✕</button>
         </div>
         <?php endif; ?>
 
@@ -313,17 +260,22 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <p class="family-hero-summary">
                         The <?php echo htmlspecialchars($user['family_name']); ?> hub
                         <span class="dot-sep" aria-hidden="true">·</span>
-                        <?php echo $stats['family_members']; ?> member<?php echo $stats['family_members'] === 1 ? '' : 's'; ?>
+                        <?= $memberCount ?> member<?= $memberCount === 1 ? '' : 's' ?>
                     </p>
                     <div class="family-actions">
                         <a class="family-button family-button-primary" href="/calendar/">Open Calendar</a>
                         <?php if ($inviteLink): ?>
-                        <button class="family-button" type="button" onclick="copyInviteLink()">
+                        <button class="family-button" type="button" id="homeInviteCopy" aria-controls="homeInviteLink">
                             <span aria-hidden="true">📨</span> Invite family
                         </button>
-                        <input type="hidden" id="homeInviteLink" value="<?php echo htmlspecialchars($inviteLink); ?>">
                         <?php endif; ?>
                     </div>
+                    <?php if ($inviteLink): ?>
+                    <label class="home-invite-link" id="homeInviteLink" hidden>
+                        Invite link
+                        <input type="url" readonly value="<?= htmlspecialchars($inviteLink) ?>">
+                    </label>
+                    <?php endif; ?>
                 </div>
 
                 <?php renderWeatherHeroPanel(true); ?>
@@ -352,7 +304,6 @@ require_once __DIR__ . '/../shared/components/header.php';
         <!-- ============ BENTO GRID ============ -->
         <div class="bento">
 
-            <!-- Up next -->
             <section class="panel panel-today" style="--glow:#34d399">
                 <header class="panel-head">
                     <span class="panel-glyph" aria-hidden="true">📅</span>
@@ -362,27 +313,26 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php if (!empty($upcomingEvents)): ?>
                 <ul class="event-list">
                     <?php foreach ($upcomingEvents as $event):
-                        $eventTime = strtotime($event['starts_at']);
-                        $diff = $eventTime - time();
-                        $isToday = date('Y-m-d', $eventTime) === date('Y-m-d');
-                        $isTomorrow = date('Y-m-d', $eventTime) === date('Y-m-d', strtotime('+1 day'));
-
-                        if ($diff < 3600 && $diff > 0) {
+                        $startsAt = new DateTimeImmutable($event['starts_at']);
+                        $diff = $startsAt->getTimestamp() - $now->getTimestamp();
+                        $eventDate = $startsAt->format('Y-m-d');
+                        $dayLabel = match ($eventDate) {
+                            $today => 'Today',
+                            $tomorrow => 'Tomorrow',
+                            default => $startsAt->format('D j M'),
+                        };
+                        $tone = $eventDate === $today ? 'is-today' : '';
+                        if ($event['all_day']) {
+                            $when = $dayLabel . ' · all day';
+                        } elseif ($diff < 3600 && $diff > 0) {
                             $when = 'In ' . ceil($diff / 60) . ' min';
                             $tone = 'is-urgent';
-                        } elseif ($isToday) {
-                            $when = 'Today ' . date('H:i', $eventTime);
-                            $tone = 'is-today';
-                        } elseif ($isTomorrow) {
-                            $when = 'Tomorrow ' . date('H:i', $eventTime);
-                            $tone = '';
                         } else {
-                            $when = date('D j M, H:i', $eventTime);
-                            $tone = '';
+                            $when = $dayLabel . ' ' . $startsAt->format('H:i');
                         }
                     ?>
-                    <li class="event-row <?php echo $tone; ?>" data-epoch="<?php echo $eventTime; ?>">
-                        <span class="event-when"><?php echo $when; ?></span>
+                    <li class="event-row <?= $tone ?>">
+                        <time class="event-when" datetime="<?= $startsAt->format($event['all_day'] ? 'Y-m-d' : DATE_ATOM) ?>"<?= $event['all_day'] ? '' : ' data-event-start' ?>><?= $when ?></time>
                         <div class="event-body">
                             <span class="event-name"><?php echo htmlspecialchars($event['title']); ?></span>
                             <?php if ($event['location']): ?>
@@ -396,39 +346,38 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <div class="panel-empty">
                     <span aria-hidden="true">🌴</span>
                     <p>Nothing scheduled — enjoy the calm.</p>
-                    <a href="/calendar/" class="pill-btn pill-ghost">Plan something</a>
+                    <a href="/calendar/" class="pill-btn">Plan something</a>
                 </div>
                 <?php endif; ?>
             </section>
 
             <!-- This week pulse -->
-            <section class="panel panel-pulse" style="--glow:#fbbf24">
+            <section class="panel" style="--glow:#fbbf24">
                 <header class="panel-head">
                     <span class="panel-glyph" aria-hidden="true">⚡</span>
                     <h2>This week</h2>
                 </header>
                 <div class="pulse-grid">
                     <div class="pulse-tile">
-                        <span class="pulse-num" data-count="<?php echo $stats['completed_tasks']; ?>"><?php echo $stats['completed_tasks']; ?></span>
+                        <span class="pulse-num"><?= $stats['completed_tasks'] ?></span>
                         <span class="pulse-label">✅ Items ticked off</span>
                     </div>
                     <a class="pulse-tile" href="/shopping/">
-                        <span class="pulse-num" data-count="<?php echo $stats['active_lists']; ?>"><?php echo $stats['active_lists']; ?></span>
+                        <span class="pulse-num"><?= $stats['active_lists'] ?></span>
                         <span class="pulse-label">🛒 Active lists</span>
                     </a>
                     <a class="pulse-tile" href="/notes/">
-                        <span class="pulse-num" data-count="<?php echo $stats['notes_count']; ?>"><?php echo $stats['notes_count']; ?></span>
+                        <span class="pulse-num"><?= $stats['notes_count'] ?></span>
                         <span class="pulse-label">📝 Family notes</span>
                     </a>
                     <a class="pulse-tile" href="/calendar/">
-                        <span class="pulse-num" data-count="<?php echo $stats['upcoming_events']; ?>"><?php echo $stats['upcoming_events']; ?></span>
+                        <span class="pulse-num"><?= $stats['upcoming_events'] ?></span>
                         <span class="pulse-label">📅 Events, 7 days</span>
                     </a>
                 </div>
             </section>
 
-            <!-- Family presence -->
-            <section class="panel panel-family" style="--glow:#f472b6">
+            <section class="panel" style="--glow:#f472b6">
                 <header class="panel-head">
                     <span class="panel-glyph" aria-hidden="true">👨‍👩‍👧‍👦</span>
                     <h2>Family</h2>
@@ -436,36 +385,23 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </header>
                 <ul class="family-list">
                     <?php foreach ($familyMembers as $member):
-                        $lastActive = !empty($member['last_active']) ? strtotime($member['last_active']) : false;
-                        $isOnline = $lastActive !== false && (time() - $lastActive) < 300;
-                        if ($isOnline) {
-                            $seen = 'Online';
-                        } elseif ($lastActive === false) {
-                            $seen = 'Offline';
-                        } else {
-                            $sd = time() - $lastActive;
-                            if ($sd < 3600) { $seen = floor($sd / 60) . 'm ago'; }
-                            elseif ($sd < 86400) { $seen = floor($sd / 3600) . 'h ago'; }
-                            else { $seen = date('j M', $lastActive); }
-                        }
+                        $lastLogin = $member['last_login'] ? new DateTimeImmutable($member['last_login']) : null;
                     ?>
                     <li class="family-row">
-                        <span class="family-avatar <?php echo $isOnline ? 'is-on' : ''; ?>" style="background: <?php echo htmlspecialchars($member['avatar_color']); ?>">
-                            <?php
-                            $avatarPath = __DIR__ . "/../saves/{$member['id']}/avatar/avatar.webp";
-                            if (file_exists($avatarPath)):
-                            ?>
-                            <img src="<?php echo avatarUrl($member['id']); ?>" alt="" loading="lazy">
+                        <span class="family-avatar" style="background-color: <?= htmlspecialchars($member['avatar_color'] ?? '#667eea') ?>" aria-hidden="true">
+                            <?php if (is_file(avatarPath($member['id']))): ?>
+                            <img src="<?= htmlspecialchars(avatarUrl($member['id'])) ?>" alt="" loading="lazy">
                             <?php else: ?>
-                            <?php echo strtoupper(substr($member['full_name'], 0, 1)); ?>
+                            <?= htmlspecialchars(mb_strtoupper(mb_substr($member['full_name'], 0, 1))) ?>
                             <?php endif; ?>
-                            <i class="presence <?php echo $isOnline ? 'on' : ''; ?>" aria-hidden="true"></i>
                         </span>
                         <div class="family-meta">
                             <span class="family-name"><?php echo htmlspecialchars($member['full_name']); ?></span>
                             <span class="family-role"><?php echo ucfirst(htmlspecialchars($member['role'])); ?></span>
                         </div>
-                        <span class="family-seen <?php echo $isOnline ? 'on' : ''; ?>"><?php echo $seen; ?></span>
+                        <?php if ($lastLogin): ?>
+                        <span class="family-seen">Last active <time datetime="<?= $lastLogin->format(DATE_ATOM) ?>"><?= $lastLogin->format('j M') ?></time></span>
+                        <?php endif; ?>
                     </li>
                     <?php endforeach; ?>
                 </ul>
@@ -489,13 +425,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                     ?>
                     <li class="feed-row">
                         <span class="feed-avatar" style="background: <?php echo htmlspecialchars($activity['avatar_color'] ?? '#8b5cf6'); ?>" aria-hidden="true">
-                            <?php
-                            $activityAvatarPath = __DIR__ . "/../saves/{$activity['user_id']}/avatar/avatar.webp";
-                            if (!empty($activity['user_id']) && file_exists($activityAvatarPath)):
-                            ?>
-                            <img src="<?php echo avatarUrl($activity['user_id']); ?>" alt="" loading="lazy">
+                            <?php if ($activity['user_id'] && is_file(avatarPath($activity['user_id']))): ?>
+                            <img src="<?= htmlspecialchars(avatarUrl($activity['user_id'])) ?>" alt="" loading="lazy">
                             <?php else: ?>
-                            <?php echo strtoupper(substr($activity['full_name'] ?? '?', 0, 1)); ?>
+                            <?= htmlspecialchars(mb_strtoupper(mb_substr($activity['full_name'] ?? '?', 0, 1))) ?>
                             <?php endif; ?>
                         </span>
                         <p class="feed-text">
@@ -516,14 +449,7 @@ require_once __DIR__ . '/../shared/components/header.php';
     </div>
 </main>
 
-<!-- Pass user location to JavaScript -->
-<script>
-window.USER_LOCATION = <?php echo $userLocation ? json_encode([
-    'lat' => (float)$userLocation['lat'],
-    'lng' => (float)$userLocation['lng'],
-    'trackedAt' => (int)$userLocation['tracked_at']
-]) : 'null'; ?>;
-</script>
+<script type="application/json" id="homeWeatherLocation"><?= json_encode($userLocation, JSON_THROW_ON_ERROR) ?></script>
 
 <script><?php readfile(__DIR__ . '/js/home.js'); ?></script>
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

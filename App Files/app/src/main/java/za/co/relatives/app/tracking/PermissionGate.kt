@@ -12,9 +12,9 @@ import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import za.co.relatives.app.R
 
-/** Keep directions permission separate from consent to share location with family. */
+/** Keep foreground location separate from consent to share location with family. */
 class PermissionGate(private val activity: ComponentActivity) {
-    private enum class Purpose { DIRECTIONS, TRACKING }
+    private enum class Purpose { FOREGROUND, TRACKING }
 
     private var purpose: Purpose? = null
     private var result: ((Boolean) -> Unit)? = null
@@ -70,7 +70,7 @@ class PermissionGate(private val activity: ComponentActivity) {
             callback(true)
             return
         }
-        if (!begin(Purpose.DIRECTIONS, callback)) return
+        if (!begin(Purpose.FOREGROUND, callback)) return
         requestLocation()
     }
 
@@ -94,7 +94,7 @@ class PermissionGate(private val activity: ComponentActivity) {
 
     private fun onLocationResult() {
         when (purpose) {
-            Purpose.DIRECTIONS -> finish(hasForegroundLocation())
+            Purpose.FOREGROUND -> finish(hasForegroundLocation())
             Purpose.TRACKING -> when {
                 !hasForegroundLocation() -> finish(false)
                 TrackingService.canShowTrackingNotification(activity) -> offerBackgroundLocation()

@@ -14,8 +14,6 @@ require __DIR__ . '/shared/components/public-head.php';
 <body>
     <?php require __DIR__ . '/shared/components/site-navigation.php'; ?>
     <div class="public-wrap">
-
-
         <main>
             <section class="landing-hero" aria-labelledby="landing-title">
                 <div class="landing-copy">

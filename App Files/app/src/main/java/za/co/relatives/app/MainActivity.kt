@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
         private const val HOME_URL = "$WEB_URL/home/"
         private const val STATE_OFFLINE_HOME = "offline_home"
         private val HOME_PATHS = setOf("/", "/home", "/home/", "/home/index.php")
+        private val WEATHER_LOCATION_PATHS = (HOME_PATHS - "/") + setOf("/weather", "/weather/", "/weather/index.php")
         private val HOME_NETWORK_ERRORS = setOf(
             WebViewClient.ERROR_HOST_LOOKUP,
             WebViewClient.ERROR_CONNECT,
@@ -89,7 +90,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var root: FrameLayout
     private lateinit var webView: WebView
     private var offlineHome: View? = null
-    private var navigationPermissionUntil = 0L
+    private var webLocationPermissionUntil = 0L
+    private var webPageLoad = 0L
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var pendingMediaRequest: PermissionRequest? = null
@@ -271,11 +273,17 @@ class MainActivity : ComponentActivity() {
 
     fun wakeAllDevices() = TrackingService.requestWakeFix(this)
 
-    fun prepareWebNavigation(): Boolean {
-        if (!isTrackingMap(webView.url) || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+    fun prepareWebNavigation(): Boolean = isTrackingMap(webView.url) && prepareWebLocation()
+
+    fun prepareWeatherLocation(): Boolean = isWeatherLocationPage(webView.url) && prepareWebLocation()
+
+    private fun prepareWebLocation(): Boolean {
+        if (offlineHome?.visibility == View.VISIBLE ||
+            !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+        ) {
             return false
         }
-        navigationPermissionUntil = SystemClock.elapsedRealtime() + 5_000L
+        webLocationPermissionUntil = SystemClock.elapsedRealtime() + 5_000L
         return true
     }
 
@@ -331,6 +339,7 @@ class MainActivity : ComponentActivity() {
             webView.destroy()
         } catch (_: Exception) {
         }
+        webLocationPermissionUntil = 0L
         attachNewWebView()
         if (rendererCrashCount >= 3 || isHomeUrl(lastUrl?.let(Uri::parse)) || lastUrl.isNullOrBlank()) {
             loadHome()
@@ -371,14 +380,16 @@ class MainActivity : ComponentActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                if (view != webView) return
                 familyPoller.setActive(false)
-                navigationPermissionUntil = 0L
+                webLocationPermissionUntil = 0L
+                webPageLoad++
                 val uri = url?.let(Uri::parse)
                 if (uri != null && !isTrustedUrl(uri)) {
                     view?.stopLoading()
                     return
                 }
-                if (view == webView) hideOfflineHome()
+                hideOfflineHome()
                 if (uri?.path == "/logout.php") clearNativeSession()
             }
 
@@ -443,6 +454,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        val configuredView = webView
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
                 webView: WebView?,
@@ -464,15 +476,26 @@ class MainActivity : ComponentActivity() {
                 origin: String?,
                 callback: GeolocationPermissions.Callback?,
             ) {
-                if (origin == null || !isCurrentTrustedPage(webView, Uri.parse(origin)) ||
-                    !isTrackingMap(webView.url) || SystemClock.elapsedRealtime() >= navigationPermissionUntil
-                ) {
-                    callback?.invoke(origin, false, false)
+                if (origin == null || callback == null) return
+                if (configuredView != webView) {
+                    callback.invoke(origin, false, false)
                     return
                 }
-                navigationPermissionUntil = 0L
+                val requestingOrigin = Uri.parse(origin)
+                val requestingPage = configuredView.url
+                if (!isCurrentTrustedPage(configuredView, requestingOrigin) ||
+                    (!isTrackingMap(requestingPage) && !isWeatherLocationPage(requestingPage)) ||
+                    SystemClock.elapsedRealtime() >= webLocationPermissionUntil
+                ) {
+                    callback.invoke(origin, false, false)
+                    return
+                }
+                webLocationPermissionUntil = 0L
+                val pageLoad = webPageLoad
                 permissionGate.requestForegroundLocation { granted ->
-                    callback?.invoke(origin, granted && isTrackingMap(webView.url), false)
+                    val samePage = webPageLoad == pageLoad && isCurrentTrustedPage(configuredView, requestingOrigin) &&
+                        configuredView.url == requestingPage
+                    callback.invoke(origin, granted && samePage, false)
                 }
             }
 
@@ -561,13 +584,16 @@ class MainActivity : ComponentActivity() {
         isTrustedUrl(uri) && uri?.path in HOME_PATHS
 
     fun isCurrentTrustedPage(view: WebView, origin: Uri): Boolean {
+        if (view != webView || offlineHome?.visibility == View.VISIBLE) return false
         val document = view.url?.let(Uri::parse)
-        return view == webView && offlineHome?.visibility != View.VISIBLE && isTrustedUrl(document) && isTrustedUrl(origin) &&
-            document?.host == origin.host
+        return isTrustedUrl(document) && isTrustedUrl(origin) && document?.host == origin.host
     }
 
     fun isTrackingMap(url: String?): Boolean =
         url?.let { Uri.parse(it).let { uri -> isTrustedUrl(uri) && uri.path in MAP_PATHS } } == true
+
+    private fun isWeatherLocationPage(url: String?): Boolean =
+        url?.let { Uri.parse(it).let { uri -> isTrustedUrl(uri) && uri.path in WEATHER_LOCATION_PATHS } } == true
 
     private fun isWebCheckout(uri: Uri): Boolean =
         uri.path == "/upgrade" || uri.path?.startsWith("/upgrade/") == true

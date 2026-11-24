@@ -8,6 +8,61 @@
         hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC'
     });
     const symbols = { rain: '🌧️', storm: '⛈️', cloud: '☁️', snow: '❄️', fog: '🌫️' };
+    const androidApp = Boolean(window.TrackingBridge) || /\bRelativesAndroid(?:\/|App\b)/.test(navigator.userAgent);
+
+    async function getDeviceLocation() {
+        if (!window.isSecureContext) throw new Error('Device location requires an HTTPS connection.');
+        const policy = document.permissionsPolicy ?? document.featurePolicy;
+        if (policy && !policy.allowsFeature('geolocation')) {
+            throw new Error('This page cannot request location. Open Relatives directly in your browser.');
+        }
+        if (!navigator.geolocation) throw new Error('Device location is unavailable in this browser.');
+        if (androidApp) {
+            const bridge = window.TrackingBridge;
+            if (!bridge?.prepareWeatherLocation) {
+                throw new Error('Update Relatives and Android System WebView to use device location in the app.');
+            }
+            if (!await bridge.prepareWeatherLocation()) {
+                throw new Error('The app could not start a location request. Try again.');
+            }
+        }
+
+        return new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(({ coords }) => {
+                // Weather needs neighbourhood-level accuracy, including when opening the full forecast.
+                resolve({ lat: Number(coords.latitude.toFixed(2)), lon: Number(coords.longitude.toFixed(2)) });
+            }, ({ code }) => {
+                const denied = androidApp
+                    ? 'Location permission was denied. Allow location for Relatives in Android Settings and try again.'
+                    : 'Location permission was denied. Allow location for this site in your browser and try again.';
+                const message = code === 1 ? denied : code === 3
+                    ? 'Finding your location took too long. Try again.'
+                    : 'Your device could not find a location. Check that device location is on and try again.';
+                reject(new Error(message));
+            }, { timeout: 12000, maximumAge: 120000 });
+        });
+    }
+
+    async function hasLocationPermission() {
+        // The Android bridge accepts only a location request initiated by the page's button.
+        if (androidApp || !window.isSecureContext || !navigator.geolocation) return false;
+        try {
+            return (await navigator.permissions?.query({ name: 'geolocation' }))?.state === 'granted';
+        } catch {
+            return false;
+        }
+    }
+
+    async function request(action, parameters, signal) {
+        const query = new URLSearchParams({ action, ...parameters });
+        const response = await fetch(`/weather/api/api.php?${query}`, { signal, cache: 'no-store' });
+        if (!response.ok) {
+            const error = new Error('Weather request failed.');
+            error.status = response.status;
+            throw error;
+        }
+        return response.json();
+    }
 
     function skyFor(current) {
         if (!current) return 'unknown';
@@ -22,7 +77,6 @@
     }
 
     function mount(hero, { formatTemperature = value => `${Math.round(value)}°C`, onTime } = {}) {
-        if (!hero) return null;
         const panel = hero.querySelector('[data-weather-panel]');
         const field = name => panel.querySelector(`[data-sky-${name}]`);
         const fields = Object.fromEntries(['readout', 'place', 'source', 'clock', 'time', 'period', 'date', 'temp',
@@ -97,7 +151,8 @@
             text(fields.feels, Number.isFinite(current?.feels_like)
                 ? `Feels like ${formatTemperature(current.feels_like)}` : '', true);
             text(fields.wind, Number.isFinite(current?.wind_speed) ? `Wind ${current.wind_speed} km/h` : '', true);
-            text(fields.icon, current ? symbols[sky] || (light === 'night' ? '🌙' : '☀️') : '', true);
+            const icon = sky === 'clear' ? (light === 'night' ? '🌙' : '☀️') : symbols[sky];
+            text(fields.icon, icon || '', true);
 
             switcher.hidden = !hasSunTimes;
             if (!hasSunTimes) {
@@ -123,10 +178,10 @@
         }
 
         paint();
-        setInterval(paint, 15000);
+        setInterval(() => { if (!document.hidden) paint(); }, 15000);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) paint(); });
         return { update: next => { data = next; paint(); } };
     }
 
-    window.RelativesWeatherHero = { mount };
+    window.RelativesWeather = { mountHero: mount, getDeviceLocation, hasLocationPermission, request };
 })();

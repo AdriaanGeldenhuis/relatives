@@ -26,6 +26,8 @@ internal class TrackingBridge(private val activity: MainActivity) {
                 activity.requestNotificationPermission()
             } else if (command == "stop" && (path == "/profile/privacy.php" || path == "/legal/delete-account.php")) {
                 activity.stopTrackingService()
+            } else if (command == "weather_location") {
+                sendReply(reply, JSONObject().put("type", command).put("allowed", activity.prepareWeatherLocation()))
             } else if (activity.isTrackingMap(view.url)) {
                 handleTrackingCommand(command, reply)
             }

@@ -272,6 +272,7 @@ body .family-main .family-hero.sky-hero :focus-visible { outline-color: var(--sk
 .sky-links a { display: inline-flex; align-items: center; gap: 5px; }
 .sky-links button:disabled { opacity: .65; cursor: wait; }
 .sky-feedback { margin-top: 7px; }
+.sky-feedback:empty { margin-top: 0; }
 
 @media (max-width: 760px) {
     .sky-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }

@@ -3,51 +3,26 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../core/session_boot.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
+header('Cache-Control: private, no-store');
+if (empty($_SESSION['user_id'])) {
+    header('Location: /login.php?redirect=%2Fweather%2F');
     exit;
 }
 
 require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/location.php';
 
 $auth = new Auth($db);
 $user = $auth->getCurrentUser();
 
 if (!$user) {
-    header('Location: /login.php');
+    unset($_SESSION['user_id']);
+    header('Location: /login.php?redirect=%2Fweather%2F');
     exit;
 }
 
-// Get user's last known location
-$userLocation = null;
-try {
-    // First try tracking_current (most recent location)
-    $stmt = $db->prepare("
-        SELECT lat, lng, UNIX_TIMESTAMP(updated_at) AS tracked_at
-        FROM tracking_current
-        WHERE user_id = ?
-        LIMIT 1
-    ");
-    $stmt->execute([$user['id']]);
-    $userLocation = $stmt->fetch(PDO::FETCH_ASSOC);
+$userLocation = weatherTrackedLocation($db, (int)$user['id'], (int)$user['family_id']);
 
-    // Fallback to tracking_locations if no current location
-    if (!$userLocation) {
-        $stmt = $db->prepare("
-            SELECT latitude AS lat, longitude AS lng, UNIX_TIMESTAMP(created_at) AS tracked_at
-            FROM tracking_locations
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-            LIMIT 1
-        ");
-        $stmt->execute([$user['id']]);
-        $userLocation = $stmt->fetch(PDO::FETCH_ASSOC);
-    }
-} catch (Exception $e) {
-    error_log('Location fetch error: ' . $e->getMessage());
-}
-
-header('Cache-Control: private, no-store');
 $pageTitle = 'Weather';
 $pageCSS = ['/weather/css/weather.css?build=' . filemtime(__DIR__ . '/css/weather.css')];
 $pageJS = ['/weather/js/weather.js'];
@@ -57,18 +32,19 @@ require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
 <main class="family-main wx-main" id="weatherApp">
-    <header class="family-hero wx-hero sky-hero" data-light="unknown">
+    <header class="family-hero sky-hero" data-light="unknown">
         <?php renderWeatherSky(); ?>
         <div class="sky-layout">
             <div class="family-hero-content">
                 <h1 class="family-hero-title" id="weatherHeroTitle">Weather</h1>
                 <p class="family-hero-summary" id="weatherHeroSummary">Search for a city or use your location to see its weather.</p>
                 <div class="family-actions">
-                    <button type="button" class="family-button family-button-primary" id="useCurrentLocation">Use my location</button>
-                    <button type="button" class="family-button" id="weatherUnits" aria-label="Use Fahrenheit" aria-pressed="false">°C / °F</button>
+                    <button type="button" class="family-button family-button-primary" id="useCurrentLocation" hidden>Use my location</button>
+                    <button type="button" class="family-button" id="weatherUnits" aria-label="Fahrenheit temperatures" aria-pressed="false" hidden>°C / °F</button>
                     <button type="button" class="family-button" id="weatherRefresh" hidden>Refresh</button>
                     <button type="button" class="family-button" id="weatherShare" hidden>Share</button>
                 </div>
+                <p id="weatherLocationStatus" class="sky-feedback" role="status"></p>
             </div>
             <?php renderWeatherHeroPanel(); ?>
         </div>
@@ -87,12 +63,6 @@ require_once __DIR__ . '/../shared/components/header.php';
         <div class="wx-places" id="weatherPlaces" aria-label="Quick locations"></div>
     </div>
 
-    <div class="wx-location-heading" id="weatherLocationHeading" hidden>
-        <div>
-            <h2 class="family-section-title" id="weatherLocation"></h2>
-            <p id="weatherUpdated"></p>
-        </div>
-    </div>
     <p class="wx-status" id="weatherStatus" role="status"></p>
     <noscript><p class="wx-message">Enable JavaScript to search for a location and load its forecast.</p></noscript>
 
@@ -144,12 +114,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <script type="application/json" id="weatherSettings"><?= json_encode([
     'userId' => (int)$user['id'],
-    'trackedLocation' => $userLocation ? [
-        'lat' => (float)$userLocation['lat'],
-        'lon' => (float)$userLocation['lng'],
-        'name' => 'Last shared location',
-        'trackedAt' => (int)$userLocation['tracked_at']
-    ] : null
+    'trackedLocation' => $userLocation
 ], JSON_HEX_TAG | JSON_THROW_ON_ERROR) ?></script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

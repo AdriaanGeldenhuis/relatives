@@ -85,17 +85,17 @@ jobs:
             --exclude='/AGENTS.md' --exclude='/REBUILD_RECIPE.md' --exclude='/test_cache.php' \
             "$temp/site/" "relatives-production:${DEPLOY_PATH%/}/"
 
-          # This tracked source was removed from Git and cannot compile with the new project.
-          obsolete='App Files/app/src/main/java/za/co/relatives/app/tracking/OemBatteryHelper.kt'
-          if [[ ! -e "$temp/site/$obsolete" ]]; then
+          # Archive removed tracked files that would otherwise remain after rsync.
+          for obsolete in 'App Files/app/src/main/java/za/co/relatives/app/tracking/OemBatteryHelper.kt' 'weather/.htaccess'; do
+            [[ ! -e "$temp/site/$obsolete" ]] || continue
             ssh -F "$temp/ssh_config" relatives-production "sh -s -- '${DEPLOY_PATH%/}' '$obsolete'" <<'REMOTE'
           set -eu
           source_file="$1/$2"
           if [ -f "$source_file" ] || [ -L "$source_file" ]; then
             umask 077
-            backup_dir=$(mktemp -d "$HOME/.relatives-android-backup.XXXXXX")
+            backup_dir=$(mktemp -d "$HOME/.relatives-deploy-backup.XXXXXX")
             mv -- "$source_file" "$backup_dir/"
-            echo 'Archived obsolete Android tracking source outside the project.'
+            printf 'Archived obsolete deployed file %s\n' "$2"
           fi
           REMOTE
-          fi
+          done
