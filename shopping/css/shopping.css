@@ -133,46 +133,47 @@
     color: var(--text-0);
 }
 
-.list-gear-dropdown,
-.gear-dropdown {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    z-index: 300;
-    min-width: 140px;
-    padding: 6px;
-    border-radius: 14px;
-    background: var(--ink-2);
-    border: 1px solid var(--line-strong);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
-    display: none;
+/* Native disclosures stay in their own row on touch and keyboard. */
+.shopping-options { flex-shrink: 0; }
+.shopping-options summary {
+    display: flex;
+    width: 40px;
+    min-height: 40px;
+    margin-inline-start: auto;
+    list-style: none;
 }
+.shopping-options summary::-webkit-details-marker { display: none; }
+.shopping-options[open] summary {
+    background: #e8efdc;
+    border-color: #d2dec5;
+}
+.shopping-options summary:focus-visible { outline: 2px solid #3c7548; outline-offset: 2px; }
 
-.list-gear-dropdown.active,
-.gear-dropdown.active { display: block; animation: rise 0.2s var(--ease-out) both; }
+.shopping-options[open] :is(.list-gear-dropdown, .gear-dropdown) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: flex-end;
+    max-width: min(125px, 36vw);
+    margin-top: 4px;
+    scroll-margin-block: 72px;
+}
+.list-tab-wrapper { max-width: 100%; }
+.list-tab-wrapper .list-tab { min-width: 0; }
+.list-tab-wrapper .list-name { overflow: hidden; text-overflow: ellipsis; }
 
 .gear-option {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    width: 100%;
-    padding: 8px 10px;
-    border: none;
+    min-height: 42px;
+    padding: 5px 8px;
+    border: 1px solid var(--family-line);
     border-radius: 9px;
-    background: transparent;
-    color: var(--text-0);
-    font-family: inherit;
-    font-size: 0.8rem;
-    font-weight: 600;
+    background: var(--family-paper);
+    color: var(--family-green);
+    font: 700 .8rem var(--family-body);
     cursor: pointer;
-    text-align: left;
-    transition: background 0.15s ease;
 }
-
-.gear-option:hover { background: rgba(255, 255, 255, 0.07); }
-.gear-option.gear-delete { color: var(--coral); }
-.gear-option.gear-delete:hover { background: rgba(251, 113, 133, 0.12); }
-.gear-icon { font-size: 0.85rem; }
+.gear-option:hover { background: #e8efdc; }
+.gear-option.gear-delete { color: #93382d; }
 
 /* ============================================
    BULK ACTIONS BAR
@@ -948,8 +949,7 @@ body.workspace-page[data-area="shopping"] {
 .item-checkbox input:checked + .checkbox-label { background: var(--family-green); box-shadow: none; }
 .checkbox-label::after { border-color: #fffdf2; }
 .item-checkbox input:focus-visible + .checkbox-label { outline: 2px solid var(--family-green); outline-offset: 3px; }
-:is(.list-gear-dropdown, .gear-dropdown) { background: var(--family-paper); box-shadow: 0 8px 24px #233c2b25; }
-.gear-option:hover, .stat-item { background: #eff2e7; }
+.stat-item { background: #eff2e7; }
 .bulk-actions-bar { background: #e7efe0; box-shadow: 0 4px 12px #203a2720; }
 .progress-bar { background: #e8eddf; }
 .progress-fill { background: var(--family-green); box-shadow: none; }
@@ -966,3 +966,5 @@ body[data-area="shopping"] .btn-danger { background: #953b30; color: #fff; }
 @media (max-width: 555px) {
     .shopping-art { width: 94px; padding: 10px; gap: 7px; transform: rotate(-8deg); }
 }
+
+.shopping-content [hidden] { display: none !important; }

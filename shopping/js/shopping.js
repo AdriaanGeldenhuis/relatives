@@ -12,6 +12,7 @@ console.log('%c🛒 Shopping List Loading v2.0...', 'font-size: 16px; font-weigh
 // ============================================
 const ShoppingApp = {
     currentListId: window.currentListId || null,
+    listRequest: 0,
     currentUser: window.currentUser || {},
     allItems: window.allItems || [],
     categories: window.categories || {},
@@ -222,23 +223,8 @@ function addItemToDOM(item) {
     
     // Create category if doesn't exist
     if (!categorySection) {
-        let categoriesGrid = document.querySelector('.categories-grid');
-        
-        if (!categoriesGrid) {
-            const shoppingContent = document.querySelector('.shopping-content');
-            if (!shoppingContent) {
-                console.error('Shopping content container not found');
-                return;
-            }
-            
-            const emptyState = shoppingContent.querySelector('.empty-state');
-            if (emptyState) emptyState.remove();
-            
-            categoriesGrid = document.createElement('div');
-            categoriesGrid.className = 'categories-grid';
-            shoppingContent.appendChild(categoriesGrid);
-        }
-        
+        const categoriesGrid = document.querySelector('.categories-grid');
+
         const catInfo = ShoppingApp.categories[category] || { icon: '📦', name: category };
         
         categorySection = document.createElement('div');
@@ -289,7 +275,8 @@ function addItemToDOM(item) {
     const itemCard = document.createElement('div');
     itemCard.className = `item-card ${item.status || 'pending'}`;
     itemCard.setAttribute('data-item-id', item.id);
-    itemCard.setAttribute('data-item-name', escapeHtml(item.name));
+    itemCard.dataset.itemName = item.name;
+    itemCard.dataset.assignedTo = Number(item.assigned_to) || '';
     
     itemCard.innerHTML = `
         <div class="item-bulk-select" style="display: none;">
@@ -305,19 +292,7 @@ function addItemToDOM(item) {
             <div class="item-meta">${metaHTML}</div>
         </div>
         <div class="item-actions">
-            <div class="item-gear-menu">
-                <button class="item-action-btn gear-btn" onclick="toggleGearMenu(event, ${item.id})" title="Item options" aria-label="Item options" aria-expanded="false">⋯</button>
-                <div class="gear-dropdown" id="gearMenu_${item.id}">
-                    <button onclick="editItem(${item.id}); closeAllGearMenus();" class="gear-option">
-                        <span class="gear-icon">✏️</span>
-                        <span>Edit</span>
-                    </button>
-                    <button onclick="deleteItem(${item.id}); closeAllGearMenus();" class="gear-option gear-delete">
-                        <span class="gear-icon">🗑️</span>
-                        <span>Delete</span>
-                    </button>
-                </div>
-            </div>
+            ${shoppingItemOptions()}
         </div>
     `;
     
@@ -335,23 +310,7 @@ function addItemToDOM(item) {
     // Update category count
     updateCategoryCount(category);
     
-    // Remove empty state if exists
-    const emptyState = document.querySelector('.empty-state');
-    if (emptyState) {
-        emptyState.style.opacity = '0';
-        setTimeout(() => emptyState.remove(), 200);
-    }
-    
-    // Show list actions and stats if hidden
-    const listActions = document.querySelector('.list-actions');
-    if (listActions && listActions.style.display === 'none') {
-        listActions.style.display = 'flex';
-    }
-    
-    const listStats = document.querySelector('.list-stats');
-    if (listStats && listStats.style.display === 'none') {
-        listStats.style.display = 'grid';
-    }
+    syncShoppingContent();
 }
 
 // ============================================
@@ -455,7 +414,7 @@ async function deleteItem(itemId) {
             // Check if we need to show empty state
             const remainingItems = document.querySelectorAll('.item-card');
             if (remainingItems.length === 0) {
-                showEmptyState();
+                syncShoppingContent();
             }
         }, 300);
         
@@ -486,17 +445,14 @@ function editItem(itemId) {
     const storeEl = itemCard.querySelector('.item-store');
     const category = itemCard.closest('.category-section')?.getAttribute('data-category') || 'other';
     
-    // Get assigned info from ShoppingApp.allItems if available
-    const itemData = ShoppingApp.allItems.find(i => i.id == itemId);
-    
     // Populate form
     document.getElementById('editItemId').value = itemId;
     document.getElementById('editItemName').value = name;
     document.getElementById('editItemQty').value = qtyEl ? qtyEl.textContent : '';
-    document.getElementById('editItemPrice').value = priceEl ? priceEl.textContent.replace('R', '').trim() : '';
+    document.getElementById('editItemPrice').value = priceEl ? priceEl.textContent.replace(/[R,\s]/g, '') : '';
     document.getElementById('editItemStore').value = storeEl ? storeEl.textContent : '';
     document.getElementById('editItemCategory').value = category;
-    document.getElementById('editItemAssign').value = itemData?.assigned_to || '';
+    document.getElementById('editItemAssign').value = itemCard.dataset.assignedTo === '0' ? '' : itemCard.dataset.assignedTo || '';
     
     showModal('editItemModal');
 }
@@ -612,6 +568,7 @@ function updateItemInDOM(itemId, data) {
     
     // Update assignment
     if (data.assigned_to !== undefined) {
+        itemCard.dataset.assignedTo = Number(data.assigned_to) || '';
         const metaEl = itemCard.querySelector('.item-meta');
         if (metaEl) {
             let assignedSpan = metaEl.querySelector('.item-assigned');
@@ -719,7 +676,7 @@ async function clearBought() {
             // Show empty state if no items left
             const remainingItems = document.querySelectorAll('.item-card');
             if (remainingItems.length === 0) {
-                showEmptyState();
+                syncShoppingContent();
             }
         }, boughtCards.length * 50 + 400);
 
@@ -836,7 +793,7 @@ function updateProgressBar() {
         let totalPrice = 0;
         
         priceEls.forEach(el => {
-            const priceText = el.textContent.replace('R', '').replace(',', '').trim();
+            const priceText = el.textContent.replace(/[R,\s]/g, '');
             const price = parseFloat(priceText);
             if (!isNaN(price) && price > 0) {
                 totalPrice += price;
@@ -846,7 +803,7 @@ function updateProgressBar() {
         const statPriceEl = document.querySelector('.stat-price');
         if (statPriceEl) {
             if (totalPrice > 0) {
-                statPriceEl.textContent = 'R' + totalPrice.toFixed(2);
+                statPriceEl.textContent = 'R' + totalPrice.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 const statItem = statPriceEl.closest('.stat-item');
                 if (statItem) statItem.style.display = 'block';
             } else {
@@ -880,70 +837,14 @@ function updateCategoryCount(category) {
         countEl.textContent = count;
     }
     
-    // Remove category if empty
-    if (count === 0) {
-        categorySection.style.opacity = '0';
-        categorySection.style.transform = 'scale(0.95)';
-        
-        setTimeout(() => {
-            categorySection.remove();
-            
-            // Check if all categories are gone
-            const remainingCategories = document.querySelectorAll('.category-section');
-            if (remainingCategories.length === 0) {
-                showEmptyState();
-            }
-        }, 300);
-    }
+    if (count === 0) categorySection.remove();
+    syncShoppingContent();
 }
 
-/**
- * Show empty state - Enhanced to preserve other elements
- */
-function showEmptyState() {
-    const shoppingContent = document.querySelector('.shopping-content');
-    if (!shoppingContent) {
-        console.warn('Shopping content container not found');
-        return;
-    }
-    
-    // Remove only categories grid and existing empty state
-    const categoriesGrid = shoppingContent.querySelector('.categories-grid');
-    if (categoriesGrid) {
-        categoriesGrid.style.opacity = '0';
-        setTimeout(() => categoriesGrid.remove(), 200);
-    }
-    
-    const oldEmptyState = shoppingContent.querySelector('.empty-state');
-    if (oldEmptyState) oldEmptyState.remove();
-    
-    // Hide stats and actions
-    const listStats = document.querySelector('.list-stats');
-    if (listStats) {
-        listStats.style.display = 'none';
-    }
-    
-    const listActions = document.querySelector('.list-actions');
-    if (listActions) {
-        listActions.style.display = 'none';
-    }
-    
-    // Create and add empty state
-    const emptyState = document.createElement('div');
-    emptyState.className = 'empty-state glass-card';
-    emptyState.innerHTML = `
-        <div class="empty-icon">🛒</div>
-        <h2>Your list is empty</h2>
-        <p>Add items using voice, the form above, or quick-add from frequently bought</p>
-    `;
-    
-    emptyState.style.opacity = '0';
-    shoppingContent.appendChild(emptyState);
-    
-    requestAnimationFrame(() => {
-        emptyState.style.transition = 'opacity 0.3s ease';
-        emptyState.style.opacity = '1';
-    });
+function syncShoppingContent() {
+    const isEmpty = !document.querySelector('.categories-grid .item-card');
+    document.getElementById('shoppingEmpty').hidden = !isEmpty;
+    document.querySelector('.list-overview').hidden = isEmpty;
 }
 
 /**
@@ -1749,23 +1650,65 @@ function editList(listId, listName, listIcon) {
 // GEAR MENU FUNCTIONS
 // ============================================
 
-function toggleGearMenu(event, itemId) {
-    const menu = event.currentTarget.parentElement.querySelector('.gear-dropdown') ?? document.getElementById(`gearMenu_${itemId}`);
-    ActionPopup.toggle(menu, event);
+function shoppingItemOptions() {
+    return `
+        <details class="item-gear-menu shopping-options" name="shopping-options">
+            <summary class="item-action-btn gear-btn" title="Item options" aria-label="Item options">⋯</summary>
+            <div class="gear-dropdown">
+                <button type="button" class="gear-option" data-shopping-action="edit-item">Edit</button>
+                <button type="button" class="gear-option gear-delete" data-shopping-action="delete-item">Delete</button>
+            </div>
+        </details>
+    `;
 }
 
-function closeAllGearMenus() {
-    ActionPopup.close('.gear-dropdown');
+document.addEventListener('toggle', event => {
+    const options = event.target;
+    if (!options.matches?.('.shopping-options[open]')) return;
+
+    for (const other of document.querySelectorAll('.shopping-options[open]')) {
+        if (other !== options) other.open = false;
+    }
+    revealShoppingOptions(options);
+}, true);
+
+function revealShoppingOptions(options) {
+    options.lastElementChild.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
 }
 
-function toggleListGearMenu(event, listId) {
-    const menu = event.currentTarget.parentElement.querySelector('.list-gear-dropdown') ?? document.getElementById(`listGearMenu_${listId}`);
-    ActionPopup.toggle(menu, event);
+function fitOpenShoppingOptions() {
+    const options = document.querySelector('.shopping-options[open]');
+    if (!options) return;
+    const trigger = options.querySelector('summary').getBoundingClientRect();
+    const top = window.visualViewport?.offsetTop ?? 0;
+    const height = window.visualViewport?.height ?? innerHeight;
+    if (trigger.bottom >= top && trigger.top <= top + height) revealShoppingOptions(options);
 }
 
-function closeAllListGearMenus() {
-    ActionPopup.close('.list-gear-dropdown');
-}
+window.addEventListener('resize', fitOpenShoppingOptions, { passive: true });
+window.visualViewport?.addEventListener('resize', fitOpenShoppingOptions, { passive: true });
+
+document.addEventListener('click', event => {
+    const control = event.target.closest('[data-shopping-action]');
+    if (!control) {
+        if (!event.target.closest('.shopping-options')) {
+            document.querySelector('.shopping-options[open]')?.removeAttribute('open');
+        }
+        return;
+    }
+
+    const options = control.closest('.shopping-options');
+    options.open = false;
+    options.querySelector('summary').focus({ preventScroll: true });
+    const item = options.closest('.item-card');
+    const list = options.closest('.list-tab-wrapper')?.querySelector('.list-tab');
+    switch (control.dataset.shoppingAction) {
+        case 'edit-item': editItem(Number(item.dataset.itemId)); break;
+        case 'delete-item': deleteItem(Number(item.dataset.itemId)); break;
+        case 'edit-list': editList(Number(list.dataset.listId), list.dataset.listName, list.dataset.listIcon); break;
+        case 'delete-list': deleteList(Number(list.dataset.listId), list.dataset.listName); break;
+    }
+});
 
 // ============================================
 // AJAX LIST SWITCHING
@@ -1775,9 +1718,9 @@ function closeAllListGearMenus() {
  * Switch to a different list without page refresh
  */
 async function switchList(listId) {
-    if (listId === ShoppingApp.currentListId) return;
+    const listRequest = ++ShoppingApp.listRequest;
 
-    // Update UI immediately for responsiveness
+    // A later tap wins while a list request is in flight.
     document.querySelectorAll('.list-tab-wrapper').forEach(wrapper => {
         wrapper.classList.remove('active');
         wrapper.querySelector('.list-tab').classList.remove('active');
@@ -1802,6 +1745,7 @@ async function switchList(listId) {
             list_id: listId
         }, 'GET');
 
+        if (listRequest !== ShoppingApp.listRequest) return;
         if (result.success) {
             // Update current list ID
             ShoppingApp.currentListId = listId;
@@ -1823,6 +1767,7 @@ async function switchList(listId) {
             RealTimeUpdates.lastUpdate = Date.now();
         }
     } catch (error) {
+        if (listRequest !== ShoppingApp.listRequest) return;
         console.error('Error switching list:', error);
         showToast('Failed to load list', 'error');
         // Fallback to page refresh
@@ -1864,18 +1809,6 @@ function renderListItems(items, categories) {
         itemsByCategory[cat].push(item);
     });
 
-    // Check if empty
-    if (items.length === 0) {
-        categoriesGrid.innerHTML = `
-            <div class="glass-card empty-state">
-                <div class="empty-icon">🛒</div>
-                <h2>List is empty</h2>
-                <p>Add your first item above!</p>
-            </div>
-        `;
-        return;
-    }
-
     // Build HTML
     let html = '';
     for (const [category, catItems] of Object.entries(itemsByCategory)) {
@@ -1902,6 +1835,7 @@ function renderListItems(items, categories) {
     }
 
     categoriesGrid.innerHTML = html;
+    syncShoppingContent();
 }
 
 /**
@@ -1918,7 +1852,7 @@ function buildItemCardHTML(item, isBought) {
     if (item.assigned_to_name) metaHTML += `<span class="item-assigned">• For ${escapeHtml(item.assigned_to_name)}</span>`;
 
     return `
-        <div class="item-card ${isBought ? 'bought' : ''}" data-item-id="${item.id}">
+        <div class="item-card ${isBought ? 'bought' : ''}" data-item-id="${item.id}" data-item-name="${escapeHtml(item.name).replace(/"/g, '&quot;')}" data-assigned-to="${Number(item.assigned_to) || ''}">
             <div class="item-bulk-select">
                 <input type="checkbox" class="bulk-checkbox" data-item-id="${item.id}">
             </div>
@@ -1932,19 +1866,7 @@ function buildItemCardHTML(item, isBought) {
                 <div class="item-meta">${metaHTML}</div>
             </div>
             <div class="item-actions">
-                <div class="item-gear-menu">
-                    <button class="item-action-btn gear-btn" onclick="toggleGearMenu(event, ${item.id})" title="Item options" aria-label="Item options" aria-expanded="false">⋯</button>
-                    <div class="gear-dropdown" id="gearMenu_${item.id}">
-                        <button onclick="editItem(${item.id}); closeAllGearMenus();" class="gear-option">
-                            <span class="gear-icon">✏️</span>
-                            <span>Edit</span>
-                        </button>
-                        <button onclick="deleteItem(${item.id}); closeAllGearMenus();" class="gear-option gear-delete">
-                            <span class="gear-icon">🗑️</span>
-                            <span>Delete</span>
-                        </button>
-                    </div>
-                </div>
+                ${shoppingItemOptions()}
             </div>
         </div>
     `;
@@ -2014,14 +1936,16 @@ const RealTimeUpdates = {
     async poll() {
         if (!this.isPolling) return;
 
+        const listId = ShoppingApp.currentListId;
+        const listRequest = ShoppingApp.listRequest;
         try {
             const result = await apiCall(ShoppingApp.API.items, {
                 action: 'poll',
-                list_id: ShoppingApp.currentListId,
+                list_id: listId,
                 since: this.lastUpdate
             }, 'GET');
 
-            if (result.success && result.updates) {
+            if (listRequest === ShoppingApp.listRequest && listId === ShoppingApp.currentListId && result.success && result.updates) {
                 this.processUpdates(result.updates);
                 this.lastUpdate = result.timestamp || Date.now();
             }
@@ -2113,7 +2037,7 @@ const RealTimeUpdates = {
 
             // Check for empty state
             if (document.querySelectorAll('.item-card').length === 0) {
-                showEmptyState();
+                syncShoppingContent();
             }
         }, 300);
     },
@@ -2129,7 +2053,7 @@ const RealTimeUpdates = {
         });
 
         if (document.querySelectorAll('.item-card').length === 0) {
-            showEmptyState();
+            syncShoppingContent();
         }
     }
 };
@@ -2148,6 +2072,12 @@ function initKeyboardShortcuts() {
         
         // Escape - Close modals and exit bulk mode
         if (e.key === 'Escape') {
+            const options = document.querySelector('.shopping-options[open]');
+            if (options) {
+                options.open = false;
+                options.querySelector('summary').focus({ preventScroll: true });
+                return;
+            }
             const activeModals = document.querySelectorAll('.modal.active');
             if (activeModals.length > 0) {
                 activeModals.forEach(modal => closeModal(modal.id));
@@ -2262,10 +2192,6 @@ window.copyShareLink = copyShareLink;
 window.shareViaWhatsApp = shareViaWhatsApp;
 window.exportList = exportList;
 window.exportListAs = exportListAs;
-window.toggleGearMenu = toggleGearMenu;
-window.closeAllGearMenus = closeAllGearMenus;
-window.toggleListGearMenu = toggleListGearMenu;
-window.closeAllListGearMenus = closeAllListGearMenus;
 window.switchList = switchList;
 window.renderListItems = renderListItems;
 window.buildItemCardHTML = buildItemCardHTML;

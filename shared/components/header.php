@@ -191,8 +191,8 @@ if (isset($db) && isset($_SESSION['user_id'])) {
 
     <?php require __DIR__ . '/site-navigation.php'; ?>
 
-    <?php if (in_array($activePage, ['messages', 'shopping', 'holiday_traveling'], true)): ?>
-        <script src="/shared/js/action-popup.js?v=<?= filemtime(__DIR__ . '/../js/action-popup.js') ?>"></script>
+    <?php if (in_array($activePage, ['messages', 'holiday_traveling'], true)): ?>
+        <script><?php readfile(__DIR__ . '/../js/action-popup.js'); ?></script>
     <?php endif; ?>
     <script src="/shared/js/app.js?v=<?php echo $buildTime; ?>"></script>
     <!-- Help System -->

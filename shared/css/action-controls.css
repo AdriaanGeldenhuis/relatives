@@ -26,7 +26,8 @@ body .action-popup-open {
     inset: auto;
     z-index: 9500;
     display: block;
-    min-width: min(155px, calc(100vw - 16px));
+    max-width: var(--action-popup-width, calc(100vw - 16px));
+    min-width: min(155px, var(--action-popup-width, calc(100vw - 16px)));
     width: max-content;
     overflow: auto;
     overscroll-behavior: contain;

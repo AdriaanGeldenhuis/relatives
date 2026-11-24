@@ -22,6 +22,8 @@ if (!$user) {
 }
 
 // Load shopping classes
+header('Cache-Control: private, no-store');
+
 require_once __DIR__ . '/classes/ShoppingList.php';
 require_once __DIR__ . '/classes/ShoppingItem.php';
 
@@ -154,23 +156,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <span class="list-price">R<?php echo number_format($list['total_price'], 2); ?></span>
                             <?php endif; ?>
                         </button>
-                        <div class="list-gear-menu">
-                            <button class="list-action-btn gear-btn" onclick="toggleListGearMenu(event, <?php echo $list['id']; ?>)" title="Options" aria-label="Options" aria-expanded="false">
-                                ⚙️
-                            </button>
-                            <div class="list-gear-dropdown" id="listGearMenu_<?php echo $list['id']; ?>">
-                                <button onclick="editList(<?php echo $list['id']; ?>, '<?php echo htmlspecialchars($list['name']); ?>', '<?php echo htmlspecialchars($list['icon']); ?>'); closeAllListGearMenus();" class="gear-option">
-                                    <span class="gear-icon">✏️</span>
-                                    <span>Edit</span>
-                                </button>
+                        <details class="list-gear-menu shopping-options" name="shopping-options">
+                            <summary class="list-action-btn gear-btn" title="List options" aria-label="List options">⚙️</summary>
+                            <div class="list-gear-dropdown">
+                                <button type="button" class="gear-option" data-shopping-action="edit-list">Edit</button>
                                 <?php if (count($lists) > 1): ?>
-                                <button onclick="deleteList(<?php echo $list['id']; ?>, '<?php echo htmlspecialchars($list['name']); ?>'); closeAllListGearMenus();" class="gear-option gear-delete">
-                                    <span class="gear-icon">🗑️</span>
-                                    <span>Delete</span>
-                                </button>
+                                    <button type="button" class="gear-option gear-delete" data-shopping-action="delete-list">Delete</button>
                                 <?php endif; ?>
                             </div>
-                        </div>
+                        </details>
                     </div>
                 <?php endforeach; ?>
                 <button onclick="showCreateListModal()" class="list-tab-add">
@@ -208,19 +202,16 @@ require_once __DIR__ . '/../shared/components/header.php';
         <!-- Shopping Items -->
         <div class="shopping-content">
 
-            <?php if (empty($currentList['items'])): ?>
                 <!-- Empty State -->
-                <div class="empty-state panel">
+                <div class="empty-state panel" id="shoppingEmpty"<?= $totalItems ? ' hidden' : '' ?>>
                     <div class="empty-icon">🛒</div>
                     <h2>Your list is empty</h2>
                     <p>Add your first item and the family sees it instantly</p>
                     <button onclick="showAddItemModal()" class="pill-btn primary">＋ Add first item</button>
                 </div>
 
-            <?php else: ?>
-
                 <!-- Progress + stats strip -->
-                <div class="list-overview panel">
+                <div class="list-overview panel"<?= $totalItems ? '' : ' hidden' ?>>
                     <div class="list-actions" style="display: flex;">
                         <div class="list-progress">
                             <div class="progress-text">
@@ -276,7 +267,8 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <?php foreach ($categoryItems as $item): ?>
                                     <div class="item-card <?php echo $item['status']; ?>"
                                          data-item-id="<?php echo $item['id']; ?>"
-                                         data-item-name="<?php echo htmlspecialchars($item['name']); ?>">
+                                         data-item-name="<?php echo htmlspecialchars($item['name']); ?>"
+                                         data-assigned-to="<?= (int)($item['assigned_to'] ?? 0) ?>">
 
                                         <!-- Bulk Select Checkbox (Hidden by default) -->
                                         <div class="item-bulk-select" style="display: none;">
@@ -336,23 +328,13 @@ require_once __DIR__ . '/../shared/components/header.php';
                                         </div>
 
                                         <div class="item-actions">
-                                            <div class="item-gear-menu">
-                                                <button class="item-action-btn gear-btn"
-                                                        onclick="toggleGearMenu(event, <?php echo $item['id']; ?>)"
-                                                        title="Options" aria-label="Options" aria-expanded="false">
-                                                    ⋯
-                                                </button>
-                                                <div class="gear-dropdown" id="gearMenu_<?php echo $item['id']; ?>">
-                                                    <button onclick="editItem(<?php echo $item['id']; ?>); closeAllGearMenus();" class="gear-option">
-                                                        <span class="gear-icon">✏️</span>
-                                                        <span>Edit</span>
-                                                    </button>
-                                                    <button onclick="deleteItem(<?php echo $item['id']; ?>); closeAllGearMenus();" class="gear-option gear-delete">
-                                                        <span class="gear-icon">🗑️</span>
-                                                        <span>Delete</span>
-                                                    </button>
+                                            <details class="item-gear-menu shopping-options" name="shopping-options">
+                                                <summary class="item-action-btn gear-btn" title="Item options" aria-label="Item options">⋯</summary>
+                                                <div class="gear-dropdown">
+                                                    <button type="button" class="gear-option" data-shopping-action="edit-item">Edit</button>
+                                                    <button type="button" class="gear-option gear-delete" data-shopping-action="delete-item">Delete</button>
                                                 </div>
-                                            </div>
+                                            </details>
                                         </div>
                                     </div>
                                 <?php endforeach; ?>
@@ -360,8 +342,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                         </div>
                     <?php endforeach; ?>
                 </div>
-
-            <?php endif; ?>
         </div>
     </div>
 </main>
