@@ -12,6 +12,7 @@ require_once __DIR__ . '/../core/bootstrap.php';
 require_once __DIR__ . '/../core/CSRF.php';
 require_once __DIR__ . '/../core/EventNoteLinks.php';
 require_once __DIR__ . '/../schedule/planner.php';
+require_once __DIR__ . '/view.php';
 
 $user = (new Auth($db))->getCurrentUser();
 if (!$user) {
@@ -31,6 +32,7 @@ $view = $_GET['view'] ?? null;
 $view = in_array($view, ['month', 'week', 'day'], true) ? $view : 'month';
 $selectedEvent = eventNoteId($_GET['event'] ?? null);
 $notice = '';
+$openedEvent = null;
 if (isset($_GET['event'])) {
     $event = $selectedEvent ? eventNotePreview($db, $familyId, $selectedEvent) : null;
     if ($event) {
@@ -58,6 +60,7 @@ if ($view === 'week') {
 $events = scheduleEvents($db, $familyId, $firstDay, max($end, $selectedDay->modify('+8 days')));
 foreach ($events as &$event) {
     $event['version'] = scheduleEventVersion($event);
+    if ((int)$event['id'] === $selectedEvent) $openedEvent = $event;
 }
 unset($event);
 $data = [
@@ -69,7 +72,15 @@ $data = [
     'selectedEvent' => $selectedEvent ? (string)$selectedEvent : null,
     'notice' => $notice
 ];
+$types = scheduleTypes();
+$filters = [];
+foreach (['q', 'kind', 'assignee'] as $name) {
+    $filters[$name] = is_string($_GET[$name] ?? null) ? substr($_GET[$name], 0, 200) : '';
+}
 if (($_GET['ajax'] ?? null) === '1') {
+    ob_start();
+    calendarRender($data, $types, $filters, $today);
+    $data['html'] = ob_get_clean();
     header('Content-Type: application/json; charset=utf-8');
     echo scheduleJson($data);
     exit;
@@ -78,7 +89,6 @@ if (($_GET['ajax'] ?? null) === '1') {
 $stmt = $db->prepare("SELECT id, full_name FROM users WHERE family_id = ? AND status = 'active' ORDER BY full_name");
 $stmt->execute([$familyId]);
 $familyMembers = $stmt->fetchAll();
-$types = scheduleTypes();
 $prefill = null;
 if (($_GET['new'] ?? null) === '1') {
     if (isset($_GET['note'])) {
@@ -99,8 +109,8 @@ $pageCSS = [
     '/schedule/css/schedule.css?build=' . filemtime($plannerStyles),
     '/calendar/css/calendar.css?build=' . filemtime(__DIR__ . '/css/calendar.css')
 ];
-$pageJS = ['/shared/js/event-editor.js', '/calendar/js/calendar.js'];
-$pageJSVersion = max(filemtime(__DIR__ . '/js/calendar.js'), filemtime(__DIR__ . '/../shared/js/event-editor.js'));
+$plannerScriptLoaded = true;
+$calendarScripts = ['/shared/js/planner-events.js', '/shared/js/event-editor.js', '/calendar/js/calendar.js'];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
@@ -124,38 +134,56 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     <div class="planner-toolbar calendar-toolbar">
         <div class="planner-views" aria-label="Calendar views">
-            <a href="?date=<?= $selectedDate ?>&amp;view=month" data-calendar-view="month">Month</a>
-            <a href="?date=<?= $selectedDate ?>&amp;view=week" data-calendar-view="week">Week</a>
-            <a href="?date=<?= $selectedDate ?>&amp;view=day" data-calendar-view="day">Day</a>
+            <a href="<?= scheduleEscape(calendarUrl($selectedDate, 'month', $filters)) ?>" data-calendar-view="month"<?= $view === 'month' ? ' aria-current="page"' : '' ?>>Month</a>
+            <a href="<?= scheduleEscape(calendarUrl($selectedDate, 'week', $filters)) ?>" data-calendar-view="week"<?= $view === 'week' ? ' aria-current="page"' : '' ?>>Week</a>
+            <a href="<?= scheduleEscape(calendarUrl($selectedDate, 'day', $filters)) ?>" data-calendar-view="day"<?= $view === 'day' ? ' aria-current="page"' : '' ?>>Day</a>
         </div>
-        <div class="planner-date-actions">
-            <button type="button" class="planner-icon-button" id="calendarPrevious" aria-label="Previous month">‹</button>
-            <button type="button" class="planner-control" id="calendarToday">Today</button>
-            <button type="button" class="planner-icon-button" id="calendarNext" aria-label="Next month">›</button>
+        <form class="planner-date-actions" action="/calendar/">
+            <input type="hidden" name="view" value="<?= $view ?>">
+            <?php foreach (array_filter($filters) as $name => $value): ?><input type="hidden" name="<?= $name ?>" value="<?= scheduleEscape($value) ?>"><?php endforeach; ?>
+            <button type="submit" name="date" value="<?= calendarStep($selectedDay, $view, -1) ?>" class="planner-icon-button" id="calendarPrevious" aria-label="Previous <?= $view ?>">‹</button>
+            <button type="submit" name="date" value="<?= $today->format('Y-m-d') ?>" class="planner-control" id="calendarToday">Today</button>
+            <button type="submit" name="date" value="<?= calendarStep($selectedDay, $view, 1) ?>" class="planner-icon-button" id="calendarNext" aria-label="Next <?= $view ?>">›</button>
             <button type="button" class="planner-control" id="calendarPick">Pick date</button>
-        </div>
+        </form>
     </div>
 
     <header class="calendar-heading">
-        <h2 id="calendarPeriod" tabindex="-1"><?= $selectedDay->format('F Y') ?></h2>
+        <h2 id="calendarPeriod" tabindex="-1"><?php
+            if ($view === 'day') echo $selectedDay->format('l, j F Y');
+            elseif ($view === 'week') echo $firstDay->format('j M') . ' – ' . $end->modify('-1 day')->format('j M');
+            else echo $selectedDay->format('F Y');
+        ?></h2>
         <div class="calendar-filters">
-            <label><span class="planner-sr-only">Search calendar</span><input type="search" id="calendarSearch" placeholder="Search calendar…" autocomplete="off"></label>
+            <label><span class="planner-sr-only">Search calendar</span><input type="search" id="calendarSearch" value="<?= scheduleEscape($filters['q']) ?>" placeholder="Search calendar…" autocomplete="off"></label>
             <label><span class="planner-sr-only">Filter by event type</span>
                 <select id="calendarKind"><option value="">All types</option>
-                    <?php foreach ($types as $kind => $type): ?><option value="<?= $kind ?>"><?= $type['name'] ?></option><?php endforeach; ?>
+                    <?php foreach ($types as $kind => $type): ?><option value="<?= $kind ?>"<?= $kind === $filters['kind'] ? ' selected' : '' ?>><?= $type['name'] ?></option><?php endforeach; ?>
                 </select>
             </label>
             <label><span class="planner-sr-only">Filter by assignee</span>
-                <select id="calendarAssignee"><option value="">Everyone</option><option value="unassigned">Unassigned</option>
-                    <?php foreach ($familyMembers as $member): ?><option value="<?= (int)$member['id'] ?>"><?= scheduleEscape($member['full_name']) ?></option><?php endforeach; ?>
+                <select id="calendarAssignee"><option value="">Everyone</option><option value="unassigned"<?= $filters['assignee'] === 'unassigned' ? ' selected' : '' ?>>Unassigned</option>
+                    <?php foreach ($familyMembers as $member): ?><option value="<?= (int)$member['id'] ?>"<?= (string)$member['id'] === $filters['assignee'] ? ' selected' : '' ?>><?= scheduleEscape($member['full_name']) ?></option><?php endforeach; ?>
                 </select>
             </label>
         </div>
     </header>
 
-    <div id="calendarContent"></div>
+    <?php if ($openedEvent): ?>
+        <section id="calendarEventFallback" class="calendar-day-panel calendar-event-fallback">
+            <header><h3><?= scheduleEscape($openedEvent['title']) ?></h3>
+                <a class="planner-control" href="/schedule/?date=<?= $selectedDate ?>&amp;event=<?= $selectedEvent ?>">Open in Schedule</a>
+            </header>
+            <p><?= $selectedDay->format('l, j F Y') ?> · <?= scheduleDayTime($openedEvent, $selectedDay) ?></p>
+            <?php if ($openedEvent['location']): ?><p><?= scheduleEscape($openedEvent['location']) ?></p><?php endif; ?>
+            <?php if ($openedEvent['notes'] ?: $openedEvent['description']): ?>
+                <p class="calendar-event-notes"><?= scheduleEscape($openedEvent['notes'] ?: $openedEvent['description']) ?></p>
+            <?php endif; ?>
+        </section>
+    <?php endif; ?>
+    <div id="calendarContent"><?php calendarRender($data, $types, $filters, $today); ?></div>
     <p id="calendarNotice" class="calendar-notice" role="status" <?= $data['notice'] === '' ? 'hidden' : '' ?>><?= scheduleEscape($data['notice']) ?></p>
-    <noscript><p>Enable JavaScript to use the calendar.</p></noscript>
+    <noscript><p>You can browse the calendar here. Editing and filters need JavaScript.</p></noscript>
 </main>
 
 <?php require __DIR__ . '/../shared/components/event-editor.php'; ?>
@@ -202,4 +230,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 <script type="application/json" id="calendarData"><?= scheduleJson($data + [
     'types' => $types, 'prefill' => $prefill, 'csrf' => CSRF::generate()
 ]) ?></script>
+<?php foreach ($calendarScripts as $script): ?>
+    <script src="<?= $script ?>?v=<?= hash_file('sha256', __DIR__ . '/..' . $script) ?>"></script>
+<?php endforeach; ?>
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

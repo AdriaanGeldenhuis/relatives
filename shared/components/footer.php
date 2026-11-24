@@ -618,7 +618,9 @@
         </div>
     </div>
 
-    <script src="/shared/js/planner-events.js?v=<?= filemtime(__DIR__ . '/../js/planner-events.js') ?>"></script>
+    <?php if (empty($plannerScriptLoaded)): ?>
+        <script src="/shared/js/planner-events.js?v=<?= filemtime(__DIR__ . '/../js/planner-events.js') ?>"></script>
+    <?php endif; ?>
     <script src="/shared/js/voice-assistant-advanced.js?v=<?php echo filemtime(__DIR__ . '/../js/voice-assistant-advanced.js'); ?>"
             data-write-csrf="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>"></script>
     <!-- app.js already loaded in header.php - not duplicated here -->

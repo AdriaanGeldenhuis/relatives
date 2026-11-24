@@ -260,3 +260,7 @@
     .calendar-art-paper { width: 112px; padding: 16px 7px 6px; gap: 3px; }
     .calendar-event-actions .btn { padding-inline: 7px; }
 }
+
+.calendar-cell-date, .calendar-mini-event, .calendar-agenda-event { text-decoration: none; }
+.calendar-event-fallback { margin-bottom: 12px; }
+.calendar-main:not([data-enhanced]) :is([data-calendar-add], #calendarPick, .calendar-filters) { display: none; }

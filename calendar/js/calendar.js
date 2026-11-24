@@ -12,32 +12,28 @@
     const dateText = new Intl.DateTimeFormat('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
     const shortDate = new Intl.DateTimeFormat('en-ZA', { day: 'numeric', month: 'short', timeZone: 'UTC' });
     const monthText = new Intl.DateTimeFormat('en-ZA', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     let navigation = null;
     let refreshQueued = false;
     let opened = null;
     let relatedRequest = 0;
     let savingDetail = false;
     let noticeTimer;
+    let filterTimer;
 
     const dateValue = date => new Date(date + 'T12:00:00Z');
     const findEvent = id => state.events.find(event => String(event.id) === String(id));
     const kind = event => types[event.kind] || types.other;
-    const color = event => /^#[\da-f]{6}$/i.test(event.color) ? event.color : kind(event).color;
     const status = event => ({ done: 'Completed', in_progress: 'In progress' })[event.status] || 'Open';
     const eventUrl = id => '/calendar/?event=' + encodeURIComponent(id);
     const scheduleUrl = (date, id) => '/schedule/?' + new URLSearchParams(id ? { date, event: id } : { date });
     const noteUrl = id => '/notes/?note=' + encodeURIComponent(id);
 
-    function escape(value) {
-        return String(value).replace(/[&<>"']/g, character => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-        })[character]);
-    }
-
     function calendarUrl(date, view, ajax = false, event = null) {
         const params = new URLSearchParams({ date, view });
         if (ajax) params.set('ajax', '1');
+        for (const [key, id] of Object.entries({ q: 'calendarSearch', kind: 'calendarKind', assignee: 'calendarAssignee' })) {
+            if ($(id).value) params.set(key, $(id).value);
+        }
         if (event) params.set('event', event);
         return '/calendar/?' + params;
     }
@@ -72,103 +68,7 @@
         }
     });
 
-    function filterEvents() {
-        const query = $('calendarSearch').value.trim().toLocaleLowerCase();
-        const kindValue = $('calendarKind').value;
-        const assignee = $('calendarAssignee').value;
-        const terms = query ? query.split(/\s+/) : [];
-        return state.events.filter(event => {
-            const text = [event.title, event.notes || event.description, event.location, event.assigned_to_name, kind(event).name]
-                .join(' ').toLocaleLowerCase();
-            return (!kindValue || event.kind === kindValue)
-                && (!assignee || (assignee === 'unassigned' ? !event.assigned_to : String(event.assigned_to) === assignee))
-                && terms.every(term => text.includes(term));
-        });
-    }
-
-    function eventButton(event, date, compact = false) {
-        const details = `data-cal-event="${escape(event.id)}" data-cal-date="${date}"`;
-        const time = planner.timeOnDay(event, date);
-        if (compact) return `<button type="button" class="calendar-mini-event${event.status === 'done' ? ' is-done' : ''}" ${details} style="--event-color: ${color(event)}">
-            <span class="calendar-mini-time">${time.split('–', 1)[0]}</span><span>${escape(event.title)}</span>
-        </button>`;
-        const meta = [kind(event).name, event.assigned_to_name, event.location,
-            event.status === 'pending' ? '' : status(event)].filter(Boolean).map(escape).join(' · ');
-        return `<button type="button" class="calendar-agenda-event" ${details} style="--event-color: ${color(event)}">
-            <strong>${escape(event.title)}</strong><span>${time} · ${meta}</span>
-        </button>`;
-    }
-
-    function renderMonth(events, today) {
-        const date = state.date;
-        const weekdaysHtml = weekdays.map(day => `<span>${day}</span>`).join('');
-        const cells = [];
-        for (let day = state.first; day < state.end; day = planner.shiftDate(day, 1)) {
-            const list = events.filter(event => planner.onDay(event, day));
-            const selected = day === date;
-            const eventLabel = `${list.length} ${list.length === 1 ? 'event' : 'events'}`;
-            const label = escape(dateText.format(dateValue(day)) + ', ' + eventLabel);
-            cells.push(`<div class="calendar-cell${selected ? ' is-selected' : ''}${day.slice(0, 7) !== date.slice(0, 7) ? ' is-outside' : ''}">
-                <button type="button" class="calendar-cell-date${day === today ? ' is-today' : ''}" data-select-date="${day}" aria-label="${label}" aria-pressed="${selected}"${
-                    day === today ? ' aria-current="date"' : ''
-                }>${Number(day.slice(-2))}<span class="calendar-day-count" aria-hidden="true">${list.length || ''}</span></button>
-                <div class="calendar-cell-events">${list.slice(0, 3).map(event => eventButton(event, day, true)).join('')}
-                    ${list.length > 3 ? `<button type="button" class="calendar-more" data-select-date="${day}">+${list.length - 3} more</button>` : ''}
-                </div>
-                <span class="calendar-dots" aria-hidden="true">${list.slice(0, 3).map(event => `<i style="background: ${color(event)}"></i>`).join('')}</span>
-            </div>`);
-        }
-        return `<section class="calendar-month" aria-label="Month grid"><div class="calendar-weekdays">${weekdaysHtml}</div>
-            <div class="calendar-grid">${cells.join('')}</div></section>`;
-    }
-
-    function renderSelectedDay(events) {
-        const date = state.date;
-        const daily = events.filter(event => planner.onDay(event, date));
-        const until = planner.shiftDate(date, 7);
-        const upcoming = events.filter(event => {
-            const start = event.starts_at.slice(0, 10);
-            return start > date && start <= until && event.status !== 'done';
-        }).sort((a, b) => a.starts_at.localeCompare(b.starts_at)).slice(0, 5);
-        const filtered = filtersActive();
-        return `<aside class="calendar-side" aria-label="Day agenda">
-            <section class="calendar-day-panel">
-                <header>
-                    <h3>${escape(dateText.format(dateValue(date)))}</h3>
-                    <button type="button" class="planner-control" data-calendar-add>Add event</button>
-                </header>
-                <div class="calendar-day-list">${daily.length ? daily.map(event => eventButton(event, date)).join('')
-                    : `<p class="calendar-empty">${filtered ? 'No matching events for this day.' : 'Nothing scheduled for this day.'}</p>`}</div>
-            </section>
-            ${upcoming.length ? `<section class="calendar-day-panel">
-                <header><h3>Next 7 days</h3></header>
-                <div class="calendar-day-list">${upcoming.map(event => {
-                    const day = event.starts_at.slice(0, 10);
-                    return `<div class="calendar-upcoming"><span>${escape(shortDate.format(dateValue(day)))}</span>${eventButton(event, day)}</div>`;
-                }).join('')}</div>
-            </section>` : ''}
-        </aside>`;
-    }
-
-    function filtersActive() {
-        return Boolean($('calendarSearch').value.trim() || $('calendarKind').value || $('calendarAssignee').value);
-    }
-
-    function renderWeek(events, today) {
-        const days = [];
-        for (let date = state.first; date < state.end; date = planner.shiftDate(date, 1)) {
-            const list = events.filter(event => planner.onDay(event, date));
-            days.push(`<section class="calendar-week-day${today === date ? ' is-today' : ''}">
-                <h3><a href="${calendarUrl(date, 'day')}" data-week-date="${date}">${escape(dateText.format(dateValue(date)))}</a></h3>
-                <div class="calendar-day-list">${list.length ? list.map(event => eventButton(event, date)).join('')
-                    : '<p class="calendar-empty">No events</p>'}</div>
-            </section>`);
-        }
-        return `<div class="calendar-week">${days.join('')}</div>`;
-    }
-
     function paint() {
-        const today = planner.today().date;
         const date = state.date;
         const options = [...document.querySelectorAll('[data-calendar-view]')];
         options.forEach(link => {
@@ -184,14 +84,6 @@
             state.view === 'week' ? shortDate.format(dateValue(state.first)) + ' – ' + shortDate.format(dateValue(planner.shiftDate(state.end, -1))) :
                 dateText.format(dateValue(date));
 
-        const events = filterEvents();
-        if (state.view === 'month') {
-            content.innerHTML = `<div class="calendar-layout">${renderMonth(events, today)}${renderSelectedDay(events)}</div>`;
-        } else if (state.view === 'week') {
-            content.innerHTML = renderWeek(events, today);
-        } else {
-            content.innerHTML = `<div class="calendar-single-day">${renderSelectedDay(events)}</div>`;
-        }
     }
 
     async function loadCalendar(date, view, options = {}) {
@@ -207,7 +99,9 @@
             const next = await response.json();
             if (navigation !== request) return false;
             const changed = next.date !== state.date || next.view !== state.view;
+            if (typeof next.html !== 'string' || !next.html.trim()) throw new Error('Could not update the calendar.');
             Object.assign(state, next);
+            content.innerHTML = next.html;
             paint();
             if (historyMode === 'push' && changed) history.pushState(null, '', calendarUrl(state.date, state.view));
             if (focus === 'period') $('calendarPeriod').focus({ preventScroll: true });
@@ -246,6 +140,11 @@
 
     function reloadCalendar() {
         return loadCalendar(navigation?.date || state.date, navigation?.view || state.view, { historyMode: 'none' });
+    }
+
+    function queueCalendarRefresh() {
+        if (navigation) refreshQueued = true;
+        else reloadCalendar();
     }
 
     function shiftPeriod(direction) {
@@ -414,12 +313,19 @@
         const action = event.target.closest('[data-event-action]');
         if (action) eventAction(action.dataset.eventAction);
         const eventButton = event.target.closest('[data-cal-event]');
-        if (eventButton) openEvent(eventButton.dataset.calEvent, eventButton.dataset.calDate);
+        const standardClick = event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+        if (eventButton && standardClick) {
+            event.preventDefault();
+            openEvent(eventButton.dataset.calEvent, eventButton.dataset.calDate);
+        }
         const day = event.target.closest('[data-select-date]');
-        if (day) loadCalendar(day.dataset.selectDate, 'month', { focus: 'date' });
+        if (day && standardClick) {
+            event.preventDefault();
+            loadCalendar(day.dataset.selectDate, 'month', { focus: 'date' });
+        }
         if (event.target.closest('[data-calendar-add]')) editor.open();
         const view = event.target.closest('[data-calendar-view], [data-week-date]');
-        if (view && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+        if (view && standardClick) {
             event.preventDefault();
             loadCalendar(view.dataset.weekDate || state.date, view.dataset.calendarView || 'day', { focus: 'period' });
         }
@@ -429,6 +335,10 @@
     content.addEventListener('keydown', event => {
         const steps = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
         const date = event.target.dataset.selectDate;
+        if (event.key === ' ' && event.target.matches('a[role="button"]')) {
+            event.preventDefault();
+            event.target.click();
+        }
         if (date && steps[event.key]) {
             event.preventDefault();
             loadCalendar(planner.shiftDate(date, steps[event.key]), 'month', { focus: 'date' });
@@ -436,11 +346,17 @@
     });
 
     for (const id of ['calendarSearch', 'calendarKind', 'calendarAssignee']) {
-        $(id).addEventListener('input', paint);
+        $(id).addEventListener('input', () => {
+            clearTimeout(filterTimer);
+            filterTimer = setTimeout(queueCalendarRefresh, id === 'calendarSearch' ? 180 : 0);
+        });
     }
-    $('calendarPrevious').addEventListener('click', () => shiftPeriod(-1));
-    $('calendarNext').addEventListener('click', () => shiftPeriod(1));
-    $('calendarToday').addEventListener('click', () => loadCalendar(planner.today().date, state.view, { focus: 'period' }));
+    $('calendarPrevious').addEventListener('click', event => { event.preventDefault(); shiftPeriod(-1); });
+    $('calendarNext').addEventListener('click', event => { event.preventDefault(); shiftPeriod(1); });
+    $('calendarToday').addEventListener('click', event => {
+        event.preventDefault();
+        loadCalendar(planner.today().date, state.view, { focus: 'period' });
+    });
     $('calendarPick').addEventListener('click', () => {
         $('calendarDateInput').value = state.date;
         dateDialog.showModal();
@@ -458,19 +374,20 @@
 
     window.addEventListener('popstate', () => {
         const params = new URLSearchParams(location.search);
+        clearTimeout(filterTimer);
+        $('calendarSearch').value = params.get('q') || '';
+        $('calendarKind').value = params.get('kind') || '';
+        $('calendarAssignee').value = params.get('assignee') || '';
         if (eventDialog.open) eventDialog.close();
         loadCalendar(params.get('date') || planner.today().date, params.get('view') || 'month', {
             historyMode: 'pop', event: params.get('event'), focus: 'period'
         });
     });
     window.addEventListener('storage', event => {
-        if (event.key === planner.eventSignal) {
-            if (navigation) refreshQueued = true;
-            else reloadCalendar();
-        }
+        if (event.key === planner.eventSignal) queueCalendarRefresh();
         if (event.key === planner.noteSignal && eventDialog.open && opened) relatedNotes();
     });
-    window.addEventListener('relatives:event-saved', reloadCalendar);
+    window.addEventListener('relatives:event-saved', queueCalendarRefresh);
     window.addEventListener('pageshow', event => {
         if (event.persisted) {
             reloadCalendar();
@@ -480,9 +397,13 @@
 
     paint();
     if (initial.notice) message(initial.notice);
-    if (initial.selectedEvent) openEvent(initial.selectedEvent, state.date);
+    if (initial.selectedEvent && findEvent(initial.selectedEvent)) {
+        openEvent(initial.selectedEvent, state.date);
+        if ($('calendarEventFallback')) $('calendarEventFallback').hidden = eventDialog.open;
+    }
     else if (prefill) {
         editor.open(null, prefill);
         history.replaceState(null, '', calendarUrl(state.date, state.view));
     }
+    content.closest('.calendar-main').dataset.enhanced = 'true';
 })();
