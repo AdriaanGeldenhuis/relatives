@@ -472,22 +472,24 @@
 /* Hover actions */
 .message-actions {
     position: absolute;
-    top: -13px;
-    right: 8px;
+    top: -12px;
+    right: 4px;
     z-index: 5;
     display: flex;
     gap: 2px;
     padding: 2px;
-    border-radius: var(--radius-full);
+    border-radius: 12px;
     background: var(--ink-2);
     border: 1px solid var(--line-strong);
-    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 6px 16px #14291f25;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease;
 }
 
 .message-bubble:hover .message-actions,
+.message-bubble:focus-within .message-actions,
+.message-actions:has([aria-expanded="true"]),
 .message-actions:hover {
     opacity: 1;
     pointer-events: auto;
@@ -945,6 +947,7 @@
    ============================================ */
 
 .context-menu {
+    display: none;
     position: fixed;
     z-index: 9000;
     min-width: 150px;

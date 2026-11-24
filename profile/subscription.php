@@ -105,7 +105,7 @@ $providerNames = [
 ];
 
 $pageTitle = 'Subscription & Billing';
-$pageCSS = ['/profile/css/profile.css'];
+$pageCSS = ['/profile/css/profile.css?build=' . filemtime(__DIR__ . '/css/profile.css')];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
@@ -138,25 +138,25 @@ require_once __DIR__ . '/../shared/components/header.php';
     .status-active {
         background: rgba(67, 233, 123, 0.2);
         border: 1px solid rgba(67, 233, 123, 0.4);
-        color: #43e97b;
+        color: var(--family-green);
     }
 
     .status-trial {
         background: rgba(102, 126, 234, 0.2);
         border: 1px solid rgba(102, 126, 234, 0.4);
-        color: #a3b3ff;
+        color: #375881;
     }
 
     .status-expired, .status-locked {
         background: rgba(255, 71, 87, 0.2);
         border: 1px solid rgba(255, 71, 87, 0.4);
-        color: #ff4757;
+        color: #913d34;
     }
 
     .plan-name {
         font-size: 20px;
         font-weight: 700;
-        color: white;
+        color: var(--family-ink);
     }
 
     .subscription-details {
@@ -168,7 +168,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         display: flex;
         justify-content: space-between;
         padding: 10px 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        border-bottom: 1px solid var(--family-line);
     }
 
     .detail-row:last-child {
@@ -176,12 +176,12 @@ require_once __DIR__ . '/../shared/components/header.php';
     }
 
     .detail-label {
-        color: rgba(255, 255, 255, 0.6);
+        color: var(--family-muted);
         font-size: 13px;
     }
 
     .detail-value {
-        color: white;
+        color: var(--family-ink);
         font-weight: 600;
         font-size: 14px;
     }
@@ -191,7 +191,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         justify-content: space-between;
         align-items: center;
         padding: 14px;
-        background: rgba(255, 255, 255, 0.05);
+        background: #edf2e4;
         border-radius: 10px;
         margin-bottom: 10px;
     }
@@ -208,19 +208,19 @@ require_once __DIR__ . '/../shared/components/header.php';
 
     .payment-date {
         font-size: 13px;
-        color: rgba(255, 255, 255, 0.6);
+        color: var(--family-muted);
     }
 
     .payment-description {
         font-size: 14px;
         font-weight: 500;
-        color: white;
+        color: var(--family-ink);
     }
 
     .payment-amount {
         font-size: 16px;
         font-weight: 700;
-        color: #43e97b;
+        color: var(--family-green);
     }
 
     .manage-links {
@@ -235,16 +235,16 @@ require_once __DIR__ . '/../shared/components/header.php';
         align-items: center;
         gap: 10px;
         padding: 12px 16px;
-        background: rgba(255, 255, 255, 0.08);
+        background: #edf2e4;
         border-radius: 10px;
-        color: white;
+        color: var(--family-ink);
         text-decoration: none;
         font-size: 14px;
         transition: all 0.3s ease;
     }
 
     .manage-link:hover {
-        background: rgba(255, 255, 255, 0.15);
+        background: #edf2e4;
         transform: translateX(4px);
     }
 
@@ -255,7 +255,7 @@ require_once __DIR__ . '/../shared/components/header.php';
     .empty-state {
         text-align: center;
         padding: 30px;
-        color: rgba(255, 255, 255, 0.6);
+        color: var(--family-muted);
     }
 
     .empty-state-icon {
@@ -269,7 +269,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         border-radius: 12px;
         padding: 14px;
         margin-bottom: 20px;
-        color: #ffc107;
+        color: #74541f;
         font-size: 14px;
     }
 </style>
@@ -307,7 +307,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             <?php endif; ?>
 
             <?php if ($subStatus['status'] === 'locked' || $subStatus['status'] === 'expired'): ?>
-                <div class="trial-warning" style="background: rgba(255, 71, 87, 0.15); border-color: rgba(255, 71, 87, 0.3); color: #ff4757;">
+                <div class="trial-warning" style="background: rgba(255, 71, 87, 0.15); border-color: rgba(255, 71, 87, 0.3); color: #913d34;">
                     Your subscription has expired. Please renew to access all features.
                 </div>
             <?php endif; ?>
@@ -348,7 +348,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php endif; ?>
 
                 <?php if ($subStatus['status'] !== 'active'): ?>
-                    <a href="/admin/plans-public.php" class="manage-link" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));">
+                    <a href="/admin/plans-public.php" class="manage-link">
                         <span class="manage-link-icon">View Plans</span>
                         <span>View Subscription Plans</span>
                     </a>

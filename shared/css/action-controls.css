@@ -1,0 +1,62 @@
+/* Controls shared by the site's edit buttons, dialogs and action menus. */
+body :is(.notes-button, .notes-icon-button, .item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, [data-open-dialog].admin-button, .settings-link, .ht-btn, .wx-button, .admin-button, .site-control,
+    .planner-modal .btn, .planner-modal .modal-close, .modal-actions .btn, .modal-header .modal-close, .modal-dialog .btn, .context-menu button) {
+    border-radius: 9px;
+}
+
+body :is(.notes-icon-button, .item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, .planner-modal .modal-close, .modal-header .modal-close) {
+    min-width: 36px;
+    min-height: 36px;
+    border: 1px solid #d9dfd0;
+    background: #fffdf6;
+    color: #28563e;
+    box-shadow: none;
+}
+
+body :is(.notes-icon-button, .item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, .planner-modal .modal-close, .modal-header .modal-close):hover,
+body :is(.item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn)[aria-expanded="true"] {
+    background: #e8efdc;
+    color: #28563e;
+    border-color: #d2dec5;
+    transform: none;
+}
+
+body .action-popup-open {
+    position: fixed;
+    inset: auto;
+    z-index: 9500;
+    display: block;
+    min-width: min(155px, calc(100vw - 16px));
+    width: max-content;
+    overflow: auto;
+    overscroll-behavior: contain;
+    margin: 0;
+    padding: 5px;
+    border: 1px solid #d9dfd0;
+    border-radius: 12px;
+    background: #fffdf6;
+    box-shadow: 0 12px 34px #14291f35;
+    color: #192e24;
+    animation: none;
+}
+body .action-popup-open.ht-menu-dropdown { visibility: visible; opacity: 1; transform: none; }
+body .action-popup-open :is(button, a[href]) {
+    min-height: 42px;
+    color: #192e24;
+    white-space: normal;
+    border-radius: 8px;
+}
+body .action-popup-open :is(button, a[href]):hover,
+body .action-popup-open :is(button, a[href]):focus-visible { background: #e8efdc; }
+body .action-popup-open button:is(.danger, .gear-delete, .ht-menu-item-danger, .ht-text-danger) { color: #93382d; }
+
+body :is(.planner-modal .modal-actions, .modal-dialog .modal-actions, .modal-content .modal-actions, .notes-dialog-footer) {
+    flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+    body :is(.item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, .planner-modal .modal-close, .modal-header .modal-close) {
+        min-width: 40px;
+        min-height: 40px;
+    }
+}

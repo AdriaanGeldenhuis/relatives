@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pageTitle = 'Profile Picture';
-$pageCSS = ['/profile/css/profile.css'];
+$pageCSS = ['/profile/css/profile.css?build=' . filemtime(__DIR__ . '/css/profile.css')];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
@@ -187,7 +187,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <span class="icon">Avatar Color</span>
             </div>
 
-            <p style="font-size: 13px; color: rgba(255, 255, 255, 0.7); margin-bottom: 15px;">
+            <p style="font-size: 13px; color: var(--family-muted); margin-bottom: 15px;">
                 Choose a background color for your avatar when no picture is set.
             </p>
 

@@ -36,7 +36,7 @@ $geofences = $geoRepo->listAll($familyId);
 $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 
 $pageTitle = 'Geofences';
-$pageCSS = ['/tracking/app/assets/css/tracking.css?v=4.6'];
+$pageCSS = ['/tracking/app/assets/css/tracking.css?build=' . filemtime(__DIR__ . '/assets/css/tracking.css')];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 

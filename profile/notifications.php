@@ -170,7 +170,7 @@ try {
 }
 
 $pageTitle = 'Notification Preferences';
-$pageCSS = ['/profile/css/profile.css'];
+$pageCSS = ['/profile/css/profile.css?build=' . filemtime(__DIR__ . '/css/profile.css')];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>

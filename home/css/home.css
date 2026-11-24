@@ -1,4 +1,5 @@
 .home-page {
+    --footer-height: 68px;
     --home-paper: #f3f2e9;
     --home-card: #fffdf7;
     --home-ink: #182c21;
@@ -349,7 +350,7 @@
     text-shadow: 0 1px 3px #000;
 }
 
-.family-avatar img, .feed-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.family-avatar img, .feed-avatar img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .family-meta { min-width: 0; display: grid; }
 .presence {
     position: absolute;

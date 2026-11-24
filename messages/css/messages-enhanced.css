@@ -580,3 +580,18 @@
     .messages-toolbar { gap: 3px; }
     .toolbar-btn { padding-inline: 5px; gap: 3px; }
 }
+
+.reaction-picker {
+    max-width: calc(100vw - 20px);
+    max-height: 45dvh;
+    overflow: auto;
+    border-radius: 12px;
+    border-color: var(--family-line);
+    box-shadow: 0 12px 34px #14291f35;
+}
+.reaction-picker-expanded { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 390px) {
+    .input-wrapper { gap: 4px; }
+    .message-input-container { padding-inline: 8px; }
+    #messageInput { padding-inline: 8px; }
+}

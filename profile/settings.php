@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pageTitle = 'Account Settings';
-$pageCSS = ['/profile/css/profile.css'];
+$pageCSS = ['/profile/css/profile.css?build=' . filemtime(__DIR__ . '/css/profile.css')];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>

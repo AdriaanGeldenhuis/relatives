@@ -509,10 +509,10 @@ body.tracking-page .menu-backdrop {
     align-items: center;
     gap: 10px;
     padding: 8px 12px;
-    background: var(--trk-glass-bg);
+    background: #f9f8ef;
     backdrop-filter: blur(30px) saturate(180%);
-    border: 1px solid var(--trk-card-border);
-    border-radius: 32px;
+    border: 1px solid #d9dfd0;
+    border-radius: 15px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
     transition: opacity var(--trk-transition), transform var(--trk-transition);
 }
@@ -520,10 +520,10 @@ body.tracking-page .menu-backdrop {
 .tracking-toolbar-btn {
     height: 42px;
     padding: 0 18px;
-    border-radius: 24px;
-    border: 1px solid var(--trk-card-border);
-    background: var(--trk-card-bg);
-    color: var(--trk-text);
+    border-radius: 9px;
+    border: 1px solid #d9dfd0;
+    background: #fffdf6;
+    color: #28563e;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
@@ -535,8 +535,7 @@ body.tracking-page .menu-backdrop {
 }
 
 .tracking-toolbar-btn:hover {
-    background: var(--trk-glass-heavy);
-    transform: translateY(-2px);
+    background: #e8efdc;
 }
 
 .tracking-toolbar-btn svg {
@@ -547,35 +546,15 @@ body.tracking-page .menu-backdrop {
 }
 
 .tracking-toolbar-btn.wake-btn {
-    background: var(--trk-pink-gradient);
-    border-color: transparent;
-    color: white;
-    box-shadow: 0 4px 16px rgba(240, 147, 251, 0.4);
+    background: #e1f79b;
+    border-color: #ccdf92;
 }
 
-.tracking-toolbar-btn.wake-btn:hover {
-    box-shadow: 0 8px 24px rgba(240, 147, 251, 0.6);
-}
-
-.tracking-toolbar-btn.home-btn {
-    background: var(--trk-gradient);
-    border-color: transparent;
-    color: white;
-    box-shadow: 0 4px 16px rgba(73, 135, 87, 0.4);
-    text-decoration: none;
-}
-
-.tracking-toolbar-btn.home-btn:hover {
-    box-shadow: 0 8px 24px rgba(73, 135, 87, 0.6);
-}
-
+.tracking-toolbar-btn.wake-btn:hover { background: #edffb5; }
+.tracking-toolbar-btn.home-btn { text-decoration: none; }
 .tracking-toolbar-btn.wake-btn.active {
-    animation: toolbarPulse 2s ease-out infinite;
-}
-
-@keyframes toolbarPulse {
-    0%, 100% { box-shadow: 0 4px 16px rgba(240, 147, 251, 0.4); }
-    50% { box-shadow: 0 4px 32px rgba(240, 147, 251, 0.8); }
+    background: #d3ec9a;
+    border-color: #7b9d60;
 }
 
 /* Legacy wake FAB - hidden by default, toolbar takes over */
@@ -1506,34 +1485,42 @@ body.tracking-page .menu-backdrop {
         border-radius: var(--trk-radius-lg);
     }
 
-    /* Full-width pill bar. With four buttons (Enable Live Location +
-       Home + Wake + Family) the old centered box overflowed the screen
-       and cut buttons off; now it scrolls sideways instead. The auto
-       margins on the first/last buttons center the row whenever it
-       fits without making overflowing content unreachable (the classic
-       "justify-content: center clips a scrollable flexbox" problem). */
     .tracking-toolbar {
         bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-        left: 12px;
-        right: 12px;
+        left: 10px;
+        right: 10px;
         transform: none;
         max-width: none;
-        padding: 6px 10px;
-        gap: 8px;
+        padding: 5px;
+        gap: 4px;
         z-index: 1002;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        border-radius: 15px;
     }
-    .tracking-toolbar::-webkit-scrollbar { display: none; }
-    .tracking-toolbar-btn { height: 38px; padding: 0 14px; font-size: 12px; flex-shrink: 0; }
-    .tracking-toolbar-btn:first-child { margin-left: auto; }
-    .tracking-toolbar-btn:last-child { margin-right: auto; }
+
+    .tracking-toolbar:has(#nativeLocationSharing) { grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr)); }
+    .tracking-toolbar-btn {
+        min-width: 0;
+        height: 48px;
+        justify-content: center;
+        flex-direction: column;
+        gap: 2px;
+        padding: 4px;
+        border-radius: 9px;
+        text-align: center;
+        font-size: 11px;
+        line-height: 1.12;
+        white-space: normal;
+        text-decoration: none;
+    }
+    .tracking-toolbar-btn svg { width: 15px; height: 15px; }
 
     /* Keep the Mapbox logo + attribution visible above the pill bar. */
     #trackingMap .mapboxgl-ctrl-bottom-left,
     #trackingMap .mapboxgl-ctrl-bottom-right {
-        bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+        bottom: calc(78px + env(safe-area-inset-bottom, 0px));
     }
 
     .directions-bar { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
@@ -1560,7 +1547,6 @@ body.tracking-page .menu-backdrop {
     .consent-actions { flex-direction: column; }
     .consent-card { padding: 16px; }
     .tracking-topbar-title { font-size: 13px; }
-    .tracking-toolbar-btn span { display: none; }
 }
 
 /* Utility */
@@ -1576,4 +1562,33 @@ body.tracking-page .menu-backdrop {
     .tracking-app, .family-panel, .wake-fab, .tracking-topbar, .tracking-toolbar,
     .consent-overlay, .notification-prompt, .directions-bar, .nav-header, .nav-bottom,
     .nav-steps-panel { display: none !important; }
+}
+
+body:has(.tracking-settings) {
+    --trk-card-bg: #fffdf6;
+    --trk-card-border: #d9dfd0;
+    --trk-text: #192e24;
+    --trk-text-dim: #546356;
+    --trk-text-muted: #546356;
+    --trk-yellow: #79561c;
+    --trk-primary: #28563e;
+    background: #f4f3e9;
+    color: #192e24;
+    color-scheme: light;
+}
+.tracking-settings .tracking-content-header {
+    background: #17392c;
+    border: 1px solid #244a37;
+    border-radius: 18px;
+    padding: 19px;
+}
+.tracking-settings .tracking-content-title { color: #fffdf6; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+.tracking-settings .tracking-content-subtitle { color: #dae6cf; }
+.tracking-settings .tracking-back { color: #28563e; }
+.tracking-settings :is(.form-input, .form-select) { background-color: #fffef9; }
+.tracking-settings .settings-save-btn { background: #28563e; box-shadow: none; border-radius: 9px; }
+.tracking-settings :focus-visible { outline: 2px solid #3c7548; outline-offset: 2px; }
+@media (max-width: 480px) {
+    .tracking-settings .settings-card { padding: 14px; }
+    .tracking-settings .form-row { grid-template-columns: 1fr; gap: 8px; }
 }

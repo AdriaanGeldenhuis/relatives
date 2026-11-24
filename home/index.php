@@ -498,7 +498,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         </span>
                         <p class="feed-text">
                             <strong><?php echo htmlspecialchars($activity['full_name'] ?? 'Someone'); ?></strong>
-                            <?php echo htmlspecialchars($activity['action']); ?>
+                            <?php echo htmlspecialchars(str_replace('_', ' ', $activity['action'])); ?>
                             <?php if ($activity['entity_type']): ?>
                             <em class="feed-tag"><?php echo htmlspecialchars($activity['entity_type']); ?></em>
                             <?php endif; ?>

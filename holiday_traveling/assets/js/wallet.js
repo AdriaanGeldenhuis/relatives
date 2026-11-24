@@ -389,7 +389,7 @@
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const itemId = btn.dataset.itemId;
-                    this.showItemMenu(btn, itemId);
+                    this.showItemMenu(e, itemId);
                 });
             });
 
@@ -580,11 +580,7 @@
         /**
          * Show item menu (for card view)
          */
-        showItemMenu(btn, itemId) {
-            // Simple dropdown menu
-            const existing = document.querySelector('.ht-wallet-dropdown');
-            if (existing) existing.remove();
-
+        showItemMenu(event, itemId) {
             const items = HT.Wallet.getCachedItems();
             const item = items.find(i => i.id == itemId);
 
@@ -599,17 +595,12 @@
                 <button class="ht-wallet-dropdown-item ht-text-danger" data-action="delete">Delete</button>
             `;
 
-            const rect = btn.getBoundingClientRect();
-            menu.style.position = 'fixed';
-            menu.style.top = `${rect.bottom + 4}px`;
-            menu.style.right = `${window.innerWidth - rect.right}px`;
-
-            document.body.appendChild(menu);
+            ActionPopup.toggle(menu, event);
 
             // Handle menu clicks
             menu.addEventListener('click', async (e) => {
-                const action = e.target.dataset.action;
-                menu.remove();
+                const action = e.target.closest('[data-action]')?.dataset.action;
+                ActionPopup.close('.ht-wallet-dropdown');
 
                 switch (action) {
                     case 'view':
@@ -630,16 +621,6 @@
                         break;
                 }
             });
-
-            // Close on click outside
-            setTimeout(() => {
-                document.addEventListener('click', function closeMenu(e) {
-                    if (!menu.contains(e.target)) {
-                        menu.remove();
-                        document.removeEventListener('click', closeMenu);
-                    }
-                });
-            }, 0);
         },
 
         /**

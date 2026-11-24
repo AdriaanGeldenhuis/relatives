@@ -60,7 +60,7 @@ $itemTypes = [
                     <span class="ht-wallet-type-label"><?php echo $itemTypes[$item['type']]['label'] ?? ucfirst($item['type']); ?></span>
                 </div>
                 <?php if ($canEdit): ?>
-                <button class="ht-wallet-menu-btn" data-item-id="<?php echo $item['id']; ?>">⋮</button>
+                <button class="ht-wallet-menu-btn" type="button" aria-label="Wallet item options" aria-expanded="false" data-item-id="<?php echo $item['id']; ?>">⋮</button>
                 <?php endif; ?>
             </div>
             <?php endforeach; ?>

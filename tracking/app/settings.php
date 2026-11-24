@@ -38,11 +38,11 @@ $alertsRepo = new AlertsRepo($db, $trackingCache);
 $alertRules = $alertsRepo->get($familyId);
 
 $pageTitle = 'Tracking Settings';
-$pageCSS = ['/tracking/app/assets/css/tracking.css?v=4.6'];
+$pageCSS = ['/tracking/app/assets/css/tracking.css?build=' . filemtime(__DIR__ . '/assets/css/tracking.css')];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 
-<div class="settings-container">
+<div class="settings-container tracking-settings">
 
     <a href="/tracking/app/" class="tracking-back">Back to Map</a>
 

@@ -255,7 +255,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 </main>
 
 <!-- Context Menu -->
-<div class="context-menu" id="contextMenu" style="display: none;">
+<div class="context-menu" id="contextMenu">
     <button onclick="contextReplyMessage()">↩️ Reply</button>
     <button onclick="copyMessage()">📋 Copy</button>
     <button onclick="deleteMessage()" class="danger">🗑️ Delete</button>

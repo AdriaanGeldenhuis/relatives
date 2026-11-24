@@ -225,6 +225,8 @@ body.workspace-page[data-area="notes"] {
     border: 1px solid var(--note-edge);
     border-radius: var(--family-card-radius);
     background: var(--family-paper);
+    background: linear-gradient(145deg, var(--note-tint) 0%, color-mix(in srgb, var(--note-tint), var(--family-paper) 43%) 55%, var(--family-paper) 100%);
+    border-color: color-mix(in srgb, var(--note-edge), var(--note-mark) 15%);
     box-shadow: var(--family-card-shadow);
     transition: border-color .15s ease, box-shadow .15s ease;
 }
@@ -459,7 +461,7 @@ body.workspace-page[data-area="notes"] {
     .notes-art-back { transform: translate(28px, 6px) rotate(13deg); }
     .notes-toolbar { margin-top: 12px; gap: 8px; padding-bottom: 10px; }
     .notes-search { width: 100%; flex-basis: 100%; order: -1; }
-    .notes-filters { max-width: 100%; gap: 3px; overflow: auto; padding: 3px; scrollbar-width: thin; }
+    .notes-filters { max-width: 100%; flex-wrap: wrap; gap: 3px; padding: 3px; }
     .notes-filters button { padding-inline: 6px; font-size: .75rem; }
     .notes-filters .notes-icon { display: none; }
     .notes-board-tools { margin: 11px 0; }

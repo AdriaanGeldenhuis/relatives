@@ -155,7 +155,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                             <?php endif; ?>
                         </button>
                         <div class="list-gear-menu">
-                            <button class="list-action-btn gear-btn" onclick="toggleListGearMenu(event, <?php echo $list['id']; ?>)" title="Options" aria-label="Options">
+                            <button class="list-action-btn gear-btn" onclick="toggleListGearMenu(event, <?php echo $list['id']; ?>)" title="Options" aria-label="Options" aria-expanded="false">
                                 ⚙️
                             </button>
                             <div class="list-gear-dropdown" id="listGearMenu_<?php echo $list['id']; ?>">
@@ -339,7 +339,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                             <div class="item-gear-menu">
                                                 <button class="item-action-btn gear-btn"
                                                         onclick="toggleGearMenu(event, <?php echo $item['id']; ?>)"
-                                                        title="Options" aria-label="Options">
+                                                        title="Options" aria-label="Options" aria-expanded="false">
                                                     ⋯
                                                 </button>
                                                 <div class="gear-dropdown" id="gearMenu_<?php echo $item['id']; ?>">

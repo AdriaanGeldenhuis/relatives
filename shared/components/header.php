@@ -22,7 +22,7 @@ $appVersion = '12.4.0';
 $cacheVersion = '12.12.0';
 $workspacePage = !isset($homeStylesheet) && !isset($messagesStylesheets);
 $buildTime = $cacheVersion;
-$familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'weather', 'holiday_traveling', 'games', 'admin'], true);
+$familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'weather', 'holiday_traveling', 'games', 'admin', 'profile'], true);
 
 // Avatar cache-busting: use file modification time so browsers fetch the new image after upload
 function avatarUrl($userId) {
@@ -161,7 +161,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <?php if ($familyPage): ?>
         <style><?php readfile(__DIR__ . '/../css/family-surfaces.css'); ?></style>
     <?php endif; ?>
-    <style><?php readfile(__DIR__ . '/../css/site-navigation.css'); ?></style>
+    <style><?php readfile(__DIR__ . '/../css/site-navigation.css'); readfile(__DIR__ . '/../css/action-controls.css'); ?></style>
 </head>
 <body class="<?= $workspacePage ? 'workspace-page' : (isset($homeStylesheet) ? 'home-page' : 'messages-page') ?><?= $familyPage ? ' family-page' : '' ?>" data-area="<?= htmlspecialchars($activePage) ?>" <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
     
@@ -191,6 +191,9 @@ if (isset($db) && isset($_SESSION['user_id'])) {
 
     <?php require __DIR__ . '/site-navigation.php'; ?>
 
+    <?php if (in_array($activePage, ['messages', 'shopping', 'holiday_traveling'], true)): ?>
+        <script src="/shared/js/action-popup.js?v=<?= filemtime(__DIR__ . '/../js/action-popup.js') ?>"></script>
+    <?php endif; ?>
     <script src="/shared/js/app.js?v=<?php echo $buildTime; ?>"></script>
     <!-- Help System -->
     <script src="/help/js/help.js?v=<?php echo $buildTime; ?>"></script>

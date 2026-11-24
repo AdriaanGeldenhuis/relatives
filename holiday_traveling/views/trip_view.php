@@ -62,7 +62,7 @@ $statusDisplay = $tripStatus ?? 'upcoming';
         <div class="ht-trip-header-top">
             <a href="/holiday_traveling/" class="ht-back-link">← Back to Trips</a>
             <div class="ht-trip-actions-menu">
-                <button class="ht-menu-trigger" aria-label="Trip actions">⋮</button>
+                <button class="ht-menu-trigger" type="button" aria-label="Trip actions" aria-expanded="false">⋮</button>
                 <div class="ht-menu-dropdown">
                     <a href="/holiday_traveling/trip_edit.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Edit</a>
                     <a href="/holiday_traveling/trip_share.php?id=<?php echo $trip['id']; ?>" class="ht-menu-item">Share</a>
@@ -554,59 +554,9 @@ $statusDisplay = $tripStatus ?? 'upcoming';
 
     // Dropdown menu toggle
     document.addEventListener('DOMContentLoaded', function() {
-        document.querySelectorAll('.ht-menu-trigger').forEach(function(trigger) {
-            trigger.addEventListener('click', function(e) {
-                e.stopPropagation();
-                const menu = this.closest('.ht-trip-actions-menu') || this.closest('.ht-actions-menu');
-                const dropdown = menu.querySelector('.ht-menu-dropdown');
-                const isActive = menu.classList.contains('active');
-
-                // Close all other dropdowns
-                document.querySelectorAll('.ht-trip-actions-menu.active, .ht-actions-menu.active').forEach(function(m) {
-                    m.classList.remove('active');
-                });
-
-                // Toggle this dropdown
-                if (!isActive) {
-                    // Temporarily show dropdown off-screen to measure it
-                    dropdown.style.visibility = 'hidden';
-                    dropdown.style.opacity = '0';
-                    dropdown.style.display = 'block';
-                    dropdown.style.position = 'fixed';
-                    dropdown.style.top = '0';
-                    dropdown.style.left = '0';
-                    menu.classList.add('active');
-
-                    const ddWidth = dropdown.offsetWidth;
-                    const ddHeight = dropdown.offsetHeight;
-                    const buttonRect = this.getBoundingClientRect();
-                    const vw = window.innerWidth;
-                    const vh = window.innerHeight;
-
-                    // Default: position below the trigger button, right-aligned
-                    let top = buttonRect.bottom + 8;
-                    let left = buttonRect.right - ddWidth;
-
-                    // Clamp to viewport
-                    if (left < 8) left = 8;
-                    if (left + ddWidth > vw - 8) left = vw - ddWidth - 8;
-                    if (top + ddHeight > vh - 8) top = buttonRect.top - ddHeight - 8;
-                    if (top < 8) top = 8;
-
-                    dropdown.style.top = top + 'px';
-                    dropdown.style.left = left + 'px';
-                    dropdown.style.right = 'auto';
-                    dropdown.style.visibility = '';
-                    dropdown.style.opacity = '';
-                    dropdown.style.display = '';
-                }
-            });
-        });
-
-        // Close dropdown when clicking outside
-        document.addEventListener('click', function() {
-            document.querySelectorAll('.ht-trip-actions-menu.active, .ht-actions-menu.active').forEach(function(m) {
-                m.classList.remove('active');
+        document.querySelectorAll('.ht-menu-trigger').forEach(trigger => {
+            trigger.addEventListener('click', event => {
+                ActionPopup.toggle(trigger.parentElement.querySelector('.ht-menu-dropdown'), event);
             });
         });
 

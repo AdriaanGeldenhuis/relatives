@@ -644,7 +644,7 @@ function createMessageElement(msg) {
             <button class="message-action-btn" onclick="replyToMessage(${msg.id}, '${escapeForAttr(msg.full_name)}', '${escapeForAttr(msg.content || '')}')" title="Reply">↩️</button>
             <button class="message-action-btn" onclick="showReactionPicker(${msg.id})" title="React">😊</button>
             ${isOwn && window.enableEditMessage ? `<button class="message-action-btn" onclick="enableEditMessage(${msg.id})" title="Edit">✏️</button>` : ''}
-            <button class="message-action-btn" onclick="showMessageOptions(${msg.id}, event)" title="More">⋮</button>
+            <button class="message-action-btn" onclick="showMessageOptions(${msg.id}, event)" title="More actions" aria-label="More actions" aria-controls="contextMenu" aria-expanded="false">⋮</button>
         </div>
     `;
     
@@ -1103,19 +1103,8 @@ async function downloadMedia(url) {
 // CONTEXT MENU
 // ============================================
 function showMessageOptions(messageId, event) {
-    event.stopPropagation();
     MessageSystem.contextMessageId = messageId;
-    const menu = document.getElementById('contextMenu');
-    menu.style.display = 'block';
-    menu.style.left = event.pageX + 'px';
-    menu.style.top = event.pageY + 'px';
-    
-    setTimeout(() => {
-        document.addEventListener('click', function hideMenu() {
-            menu.style.display = 'none';
-            document.removeEventListener('click', hideMenu);
-        });
-    }, 100);
+    ActionPopup.toggle(document.getElementById('contextMenu'), event);
 }
 
 function contextReplyMessage() {

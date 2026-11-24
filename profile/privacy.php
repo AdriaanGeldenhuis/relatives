@@ -116,7 +116,7 @@ $stmt->execute([$currentTokenHash, $user['id']]);
 $activeSessions = $stmt->fetchAll();
 
 $pageTitle = 'Privacy & Security';
-$pageCSS = ['/profile/css/profile.css'];
+$pageCSS = ['/profile/css/profile.css?build=' . filemtime(__DIR__ . '/css/profile.css')];
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
@@ -270,7 +270,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
 
             <?php if (empty($activeSessions)): ?>
-                <p style="color: rgba(255, 255, 255, 0.6); font-size: 14px;">No active sessions found.</p>
+                <p style="color: var(--family-muted); font-size: 14px;">No active sessions found.</p>
             <?php else: ?>
                 <?php foreach ($activeSessions as $session): ?>
                     <div class="settings-link" style="cursor: default;">
@@ -279,7 +279,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <div class="settings-link-text">
                                     <?php echo htmlspecialchars($session['device_info'] ?? 'Unknown Device'); ?>
                                 </div>
-                                <div style="font-size: 11px; color: rgba(255, 255, 255, 0.5); margin-top: 4px;">
+                                <div style="font-size: 11px; color: var(--family-muted); margin-top: 4px;">
                                     <?php echo htmlspecialchars($session['ip_address'] ?? 'Unknown IP'); ?>
                                     &bull;
                                     Signed in: <?php echo isset($session['created_at']) ? date('M j, g:i a', strtotime($session['created_at'])) : 'Unknown'; ?>
@@ -296,7 +296,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 </button>
                             </form>
                         <?php else: ?>
-                            <span style="color: #43e97b; font-size: 12px; font-weight: 600;">Current</span>
+                            <span style="color: var(--family-green); font-size: 12px; font-weight: 600;">Current</span>
                         <?php endif; ?>
                     </div>
                 <?php endforeach; ?>

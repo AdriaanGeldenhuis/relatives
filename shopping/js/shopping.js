@@ -306,7 +306,7 @@ function addItemToDOM(item) {
         </div>
         <div class="item-actions">
             <div class="item-gear-menu">
-                <button class="item-action-btn gear-btn" onclick="toggleGearMenu(event, ${item.id})" title="Options">⚙️</button>
+                <button class="item-action-btn gear-btn" onclick="toggleGearMenu(event, ${item.id})" title="Item options" aria-label="Item options" aria-expanded="false">⋯</button>
                 <div class="gear-dropdown" id="gearMenu_${item.id}">
                     <button onclick="editItem(${item.id}); closeAllGearMenus();" class="gear-option">
                         <span class="gear-icon">✏️</span>
@@ -1749,102 +1749,23 @@ function editList(listId, listName, listIcon) {
 // GEAR MENU FUNCTIONS
 // ============================================
 
-/**
- * Toggle gear dropdown menu (for items)
- */
 function toggleGearMenu(event, itemId) {
-    event.stopPropagation();
-
-    const menu = document.getElementById(`gearMenu_${itemId}`);
-    if (!menu) return;
-
-    const wasActive = menu.classList.contains('active');
-
-    // Close all other menus first
-    closeAllGearMenus();
-    closeAllListGearMenus();
-
-    // If it was already open, just close (done above)
-    if (wasActive) return;
-
-    // Position using fixed coordinates
-    const btn = event.currentTarget;
-    const rect = btn.getBoundingClientRect();
-
-    let top = rect.bottom + 4;
-    let left = rect.right - 130;
-
-    // Keep within viewport bounds
-    if (left < 8) left = 8;
-    if (left + 130 > window.innerWidth) left = window.innerWidth - 138;
-
-    // If it would go below viewport, show above the button
-    if (top + 90 > window.innerHeight) {
-        top = rect.top - 90;
-    }
-
-    menu.style.top = top + 'px';
-    menu.style.left = left + 'px';
-    menu.style.right = 'auto';
-    menu.classList.add('active');
+    const menu = event.currentTarget.parentElement.querySelector('.gear-dropdown') ?? document.getElementById(`gearMenu_${itemId}`);
+    ActionPopup.toggle(menu, event);
 }
 
-/**
- * Close all gear dropdown menus (items)
- */
 function closeAllGearMenus() {
-    document.querySelectorAll('.gear-dropdown.active').forEach(menu => {
-        menu.classList.remove('active');
-    });
+    ActionPopup.close('.gear-dropdown');
 }
 
-/**
- * Toggle list gear dropdown menu
- */
 function toggleListGearMenu(event, listId) {
-    event.stopPropagation();
-
-    const menu = document.getElementById(`listGearMenu_${listId}`);
-    const btn = event.currentTarget;
-    if (!menu || !btn) return;
-
-    // Close all other menus first
-    closeAllGearMenus();
-    closeAllListGearMenus();
-
-    // Position the dropdown using fixed positioning
-    const rect = btn.getBoundingClientRect();
-    menu.style.top = (rect.bottom + 4) + 'px';
-    menu.style.left = Math.max(10, rect.right - 110) + 'px';
-
-    // Toggle this menu
-    menu.classList.toggle('active');
+    const menu = event.currentTarget.parentElement.querySelector('.list-gear-dropdown') ?? document.getElementById(`listGearMenu_${listId}`);
+    ActionPopup.toggle(menu, event);
 }
 
-/**
- * Close all list gear dropdown menus
- */
 function closeAllListGearMenus() {
-    document.querySelectorAll('.list-gear-dropdown.active').forEach(menu => {
-        menu.classList.remove('active');
-    });
+    ActionPopup.close('.list-gear-dropdown');
 }
-
-// Close all gear menus when clicking outside
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.item-gear-menu')) {
-        closeAllGearMenus();
-    }
-    if (!e.target.closest('.list-gear-menu')) {
-        closeAllListGearMenus();
-    }
-});
-
-// Close fixed dropdowns on scroll so they don't float away from their item
-window.addEventListener('scroll', () => {
-    closeAllGearMenus();
-    closeAllListGearMenus();
-}, { passive: true });
 
 // ============================================
 // AJAX LIST SWITCHING
@@ -2012,7 +1933,7 @@ function buildItemCardHTML(item, isBought) {
             </div>
             <div class="item-actions">
                 <div class="item-gear-menu">
-                    <button class="item-action-btn gear-btn" onclick="toggleGearMenu(event, ${item.id})" title="Options">⚙️</button>
+                    <button class="item-action-btn gear-btn" onclick="toggleGearMenu(event, ${item.id})" title="Item options" aria-label="Item options" aria-expanded="false">⋯</button>
                     <div class="gear-dropdown" id="gearMenu_${item.id}">
                         <button onclick="editItem(${item.id}); closeAllGearMenus();" class="gear-option">
                             <span class="gear-icon">✏️</span>
