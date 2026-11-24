@@ -654,6 +654,7 @@ function createMessageElement(msg) {
     
     const editedIndicator = msg.edited_at ? `<span class="edited-indicator" title="Edited at ${msg.edited_at}">(edited)</span>` : '';
     
+    div.addEventListener('error', showUnavailableAttachment, true);
     div.innerHTML = `
         ${!isOwn ? avatar : ''}
         <div class="message-content">
@@ -1006,9 +1007,22 @@ function cancelMedia() {
     document.getElementById('fileInput').value = '';
 }
 
+function showUnavailableAttachment(event) {
+    const media = event.target;
+    const container = media.closest('.message-media, .media-viewer');
+    if (!container || !media.matches('img, video, audio')) return;
+
+    const unavailable = document.createElement('p');
+    unavailable.className = 'attachment-unavailable';
+    unavailable.textContent = media.matches('img') ? 'Image unavailable' : 'Attachment unavailable';
+    media.replaceWith(unavailable);
+    container.querySelector('.media-viewer-actions')?.remove();
+}
+
 function openMediaViewer(mediaPath, type) {
     const viewer = document.createElement('div');
     viewer.className = 'media-viewer-overlay';
+    viewer.addEventListener('error', showUnavailableAttachment, true);
     viewer.innerHTML = `
         <div class="media-viewer">
             <button onclick="this.parentElement.parentElement.remove()" class="media-viewer-close">✖️</button>

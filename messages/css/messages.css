@@ -498,6 +498,16 @@
     object-fit: cover;
 }
 
+.attachment-unavailable {
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--card);
+    color: var(--text-2);
+    font-size: .8rem;
+    font-weight: 650;
+}
+
 .message-doc {
     display: inline-flex;
     align-items: center;
