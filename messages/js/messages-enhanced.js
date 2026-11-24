@@ -55,23 +55,19 @@ document.addEventListener('DOMContentLoaded', function() {
 // ENHANCED TOOLBAR (EXPORT REMOVED)
 // ============================================
 function addEnhancedToolbar() {
-    const heading = document.querySelector('.chat-heading');
-    if (!heading) return;
+    const toolbar = document.getElementById('messagesActions');
+    const chat = document.getElementById('chatMain');
+    if (!toolbar || !chat) return;
 
-    const toolbar = document.createElement('div');
-    toolbar.className = 'messages-toolbar';
-    toolbar.setAttribute('role', 'group');
-    toolbar.setAttribute('aria-label', 'Conversation tools');
     toolbar.innerHTML = `
-        <button onclick="openSearchDialog()" class="toolbar-btn" title="Search (Ctrl+F)">
+        <button onclick="openSearchDialog()" class="family-button" title="Search (Ctrl+F)">
             🔍 Search
         </button>
-        <button onclick="toggleBulkMode()" id="bulkModeBtn" class="toolbar-btn" title="Bulk Operations (Ctrl+B)">
+        <button onclick="toggleBulkMode()" id="bulkModeBtn" class="family-button" title="Bulk Operations (Ctrl+B)">
             ☑️ Select
         </button>
     `;
     
-    heading.append(toolbar);
     
     // Add bulk actions bar (hidden by default)
     const bulkBar = document.createElement('div');
@@ -94,7 +90,7 @@ function addEnhancedToolbar() {
         </div>
     `;
     
-    heading.insertAdjacentElement('afterend', bulkBar);
+    chat.prepend(bulkBar);
 }
 
 // ============================================

@@ -265,7 +265,7 @@ $homeStylesheet = __DIR__ . '/css/home.css';
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<main class="main-content">
+<main class="main-content family-main">
     <div class="hub">
         <p class="offline-status" id="home-connection" role="status" hidden>
             You’re offline. Live family activity and apps need a connection.
@@ -282,59 +282,47 @@ require_once __DIR__ . '/../shared/components/header.php';
         </div>
         <?php endif; ?>
 
-        <div class="home-overview">
-            <section class="hero" data-time="<?php echo $greetingColor; ?>">
-                <div class="hero-main">
-                    <div class="hero-greeting">
-                        <p class="hero-kicker">
-                            <span aria-hidden="true"><?php echo $greetingIcon; ?></span>
-                            <span id="heroDate"><?php echo date('l, j F Y'); ?></span>
-                        </p>
-                        <h1 class="hero-title">
-                            <?php echo $greeting; ?>, <span class="hero-name"><?php echo htmlspecialchars($firstName); ?></span>
-                        </h1>
-                        <p class="hero-sub">
-                            The <?php echo htmlspecialchars($user['family_name']); ?> hub
-                            <span class="dot-sep" aria-hidden="true">·</span>
-                            <?php echo $stats['family_members']; ?> member<?php echo $stats['family_members'] === 1 ? '' : 's'; ?>
-                        </p>
-                        <div class="hero-actions">
-                            <a class="pill-btn home-calendar-button" href="/calendar/">Open Calendar</a>
-                            <?php if ($inviteLink): ?>
-                            <button class="pill-btn" onclick="copyInviteLink()">
-                                <span aria-hidden="true">📨</span> Invite family
-                            </button>
-                            <input type="hidden" id="homeInviteLink" value="<?php echo htmlspecialchars($inviteLink); ?>">
-                            <?php endif; ?>
-                        </div>
-                    </div>
-
-                    <?php $dayPct = round((((int)date('H')) * 3600 + ((int)date('i')) * 60 + (int)date('s')) / 864, 1); ?>
-                    <div class="hero-clock" aria-hidden="true">
-                        <div class="clock-ring" id="clockRing" style="--day: <?php echo $dayPct; ?>">
-                            <div class="clock-core">
-                                <span class="clock-hm" id="clockHM"><?php echo date('H:i'); ?></span>
-                                <span class="clock-sec" id="clockSec"><?php echo date('s'); ?></span>
-                            </div>
-                        </div>
-                        <span class="clock-cap" id="dayCap"><?php echo round($dayPct); ?>% of today</span>
+        <section class="hero family-hero" data-time="<?php echo $greetingColor; ?>">
+            <div class="hero-main">
+                <div class="hero-greeting family-hero-content">
+                    <p class="hero-kicker">
+                        <span aria-hidden="true"><?php echo $greetingIcon; ?></span>
+                        <span id="heroDate"><?php echo date('l, j F Y'); ?></span>
+                    </p>
+                    <h1 class="family-hero-title">
+                        <?php echo $greeting; ?>, <span class="hero-name"><?php echo htmlspecialchars($firstName); ?></span>
+                    </h1>
+                    <p class="family-hero-summary">
+                        The <?php echo htmlspecialchars($user['family_name']); ?> hub
+                        <span class="dot-sep" aria-hidden="true">·</span>
+                        <?php echo $stats['family_members']; ?> member<?php echo $stats['family_members'] === 1 ? '' : 's'; ?>
+                    </p>
+                    <div class="family-actions">
+                        <a class="family-button family-button-primary" href="/calendar/">Open Calendar</a>
+                        <?php if ($inviteLink): ?>
+                        <button class="family-button" type="button" onclick="copyInviteLink()">
+                            <span aria-hidden="true">📨</span> Invite family
+                        </button>
+                        <input type="hidden" id="homeInviteLink" value="<?php echo htmlspecialchars($inviteLink); ?>">
+                        <?php endif; ?>
                     </div>
                 </div>
-            </section>
-            <section class="weather-card" aria-labelledby="home-weather-title">
-                <h2 id="home-weather-title">Weather</h2>
-                <a class="hero-weather" id="heroWeather" href="/weather/" aria-label="Open weather forecast">
-                    <div class="wx-skeleton">
-                        <span class="wx-skel-icon" aria-hidden="true">🌤️</span>
-                        <span class="wx-skel-bar"></span>
-                        <span class="wx-skel-bar short"></span>
+
+                <?php $dayPct = round((((int)date('H')) * 3600 + ((int)date('i')) * 60 + (int)date('s')) / 864, 1); ?>
+                <div class="hero-clock" aria-hidden="true">
+                    <div class="clock-ring" id="clockRing" style="--day: <?php echo $dayPct; ?>">
+                        <div class="clock-core">
+                            <span class="clock-hm" id="clockHM"><?php echo date('H:i'); ?></span>
+                            <span class="clock-sec" id="clockSec"><?php echo date('s'); ?></span>
+                        </div>
                     </div>
-                </a>
-            </section>
-        </div>
+                    <span class="clock-cap" id="dayCap"><?php echo round($dayPct); ?>% of today</span>
+                </div>
+            </div>
+        </section>
 
         <section class="apps-section" aria-labelledby="family-apps-heading">
-            <h2 id="family-apps-heading" class="home-section-title">Family apps</h2>
+            <h2 id="family-apps-heading" class="home-section-title family-section-title">Family apps</h2>
             <nav class="launcher" aria-labelledby="family-apps-heading">
                 <?php foreach ($launcherApps as $app): ?>
                 <a href="<?php echo $app['href']; ?>" class="launch-tile" style="--glow: <?php echo $app['glow']; ?>">
@@ -468,6 +456,17 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </li>
                     <?php endforeach; ?>
                 </ul>
+            </section>
+
+            <section class="weather-card panel-weather" aria-labelledby="home-weather-title">
+                <h2 id="home-weather-title">Weather</h2>
+                <a class="hero-weather" id="heroWeather" href="/weather/" aria-label="Open weather forecast">
+                    <div class="wx-skeleton">
+                        <span class="wx-skel-icon" aria-hidden="true">🌤️</span>
+                        <span class="wx-skel-bar"></span>
+                        <span class="wx-skel-bar short"></span>
+                    </div>
+                </a>
             </section>
 
             <!-- Recent activity -->

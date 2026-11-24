@@ -101,9 +101,9 @@ $percentage = $totalItems > 0 ? round(($boughtItems / $totalItems) * 100) : 0;
 
 // Set page metadata
 $pageTitle = 'Shopping';
-$pageCSS = [
-    '/shared/css/aurora.css',
-    '/shopping/css/shopping.css?build=' . filemtime(__DIR__ . '/css/shopping.css')
+$pageInlineStylesheets = [
+    __DIR__ . '/../shared/css/aurora.css',
+    __DIR__ . '/css/shopping.css'
 ];
 $pageJS = [
     '/shopping/js/shopping.js',
@@ -115,30 +115,30 @@ $pageJSVersion = max(filemtime(__DIR__ . '/js/shopping.js'), filemtime(__DIR__ .
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<main class="main-content">
+<main class="main-content family-main">
     <div class="hub">
-        <header class="page-head shopping-hero">
-            <div class="ph-titles">
-                <h1>Family shopping</h1>
-                <p class="ph-sub">Shared shopping lists and what’s still to buy.</p>
+        <header class="shopping-hero family-hero">
+            <div class="family-hero-content">
+                <h1 class="family-hero-title">Family shopping</h1>
+                <p class="family-hero-summary">Shared shopping lists and what’s still to buy.</p>
+                <div class="family-actions">
+                    <button type="button" onclick="showAddItemModal()" class="family-button family-button-primary">
+                        <span aria-hidden="true">＋</span> Add item
+                    </button>
+                    <button type="button" onclick="toggleBulkMode()" id="bulkModeBtn" class="family-button" title="Select multiple items">
+                        <span aria-hidden="true">☑️</span> Select
+                    </button>
+                    <button type="button" onclick="exportList()" class="family-button" title="Share or export this list">
+                        <span aria-hidden="true">📤</span> Share
+                    </button>
+                </div>
             </div>
-            <div class="shopping-art" aria-hidden="true"><span></span><span></span><span></span></div>
-            <div class="ph-actions">
-                <button onclick="showAddItemModal()" class="pill-btn primary">
-                    <span aria-hidden="true">＋</span> Add item
-                </button>
-                <button onclick="toggleBulkMode()" id="bulkModeBtn" class="pill-btn" title="Select multiple items">
-                    <span aria-hidden="true">☑️</span> Select
-                </button>
-                <button onclick="exportList()" class="pill-btn" title="Share or export this list">
-                    <span aria-hidden="true">📤</span> Share
-                </button>
-            </div>
+            <div class="family-hero-art" aria-hidden="true"><div class="shopping-art"><span></span><span></span><span></span></div></div>
         </header>
 
         <!-- List tabs -->
         <section class="lists-section" aria-labelledby="shopping-lists-heading">
-            <h2 id="shopping-lists-heading">Shopping lists</h2>
+            <h2 class="family-section-title" id="shopping-lists-heading">Shopping lists</h2>
             <div class="lists-tabs">
                 <?php foreach ($lists as $list): ?>
                     <div class="list-tab-wrapper <?php echo $list['id'] == $currentListId ? 'active' : ''; ?>" data-list-id="<?php echo $list['id']; ?>">

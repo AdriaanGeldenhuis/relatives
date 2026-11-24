@@ -10,18 +10,18 @@
     <link rel="stylesheet" href="/shared/css/family-surfaces.css">
     <script src="/home/js/home.js" defer></script>
 </head>
-<body class="home-page offline-home">
+<body class="home-page family-page offline-home">
     <header class="offline-header"><span class="home-wordmark">Relatives<span>.</span></span></header>
-    <main class="main-content">
+    <main class="main-content family-main">
         <div class="hub">
-            <section class="hero" aria-labelledby="offline-title">
+            <section class="hero family-hero" aria-labelledby="offline-title">
                 <div class="hero-main">
-                    <div class="hero-greeting">
+                    <div class="hero-greeting family-hero-content">
                         <p class="hero-kicker"><span id="heroDate"></span></p>
-                        <h1 class="hero-title" id="offline-title">Relatives Home</h1>
-                        <p class="hero-sub" id="offline-app-status" role="status">You’re offline. Family activity and apps will be available when you reconnect.</p>
-                        <div class="hero-actions">
-                            <a class="pill-btn" href="/home/">Try again <span aria-hidden="true">↻</span></a>
+                        <h1 class="family-hero-title" id="offline-title">Relatives Home</h1>
+                        <p class="family-hero-summary" id="offline-app-status" role="status">You’re offline. Family activity and apps will be available when you reconnect.</p>
+                        <div class="family-actions">
+                            <a class="family-button family-button-primary" href="/home/">Try again <span aria-hidden="true">↻</span></a>
                         </div>
                     </div>
                     <div class="hero-clock" aria-hidden="true">
@@ -35,7 +35,7 @@
                     </div>
                 </div>
             </section>
-            <h2 class="home-section-title">Family apps</h2>
+            <h2 class="home-section-title family-section-title">Family apps</h2>
             <ul class="launcher offline-apps" aria-label="Family apps available online">
                 <li><a class="launch-tile" data-app-url="/messages/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">💬</span></span><span class="launch-label">Messages</span></a></li>
                 <li><a class="launch-tile" data-app-url="/shopping/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">🛒</span></span><span class="launch-label">Shopping</span></a></li>

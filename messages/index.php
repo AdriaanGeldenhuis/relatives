@@ -64,8 +64,16 @@ $pageJSVersion = max(filemtime(__DIR__ . '/js/messages.js'), filemtime(__DIR__ .
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<main class="main-content">
+<main class="main-content family-main">
     <div class="hub">
+        <header class="family-hero messages-hero">
+            <div class="family-hero-content">
+                <h1 class="family-hero-title" id="messages-title">Messages</h1>
+                <p class="family-hero-summary"><?= htmlspecialchars($user['family_name'] ?? 'Family chat') ?></p>
+                <div class="family-actions" id="messagesActions" role="group" aria-label="Conversation tools"></div>
+            </div>
+            <div class="family-hero-art" aria-hidden="true"><div class="message-art"><span></span><span></span></div></div>
+        </header>
         <div class="messages-container">
             
             <!-- Sidebar -->
@@ -130,16 +138,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             </aside>
 
             <!-- Chat Main Area -->
-            <section class="chat-main" aria-labelledby="messages-title">
-                <header class="chat-heading">
-                    <div class="chat-title">
-                        <span class="chat-mark" aria-hidden="true"></span>
-                        <div>
-                            <h1 id="messages-title">Messages</h1>
-                            <p><?php echo htmlspecialchars($user['family_name'] ?? 'Family chat'); ?></p>
-                        </div>
-                    </div>
-                </header>
+            <section class="chat-main" id="chatMain" aria-labelledby="messages-title">
                 <div class="connection-status" id="connectionStatus" role="status" style="display: none;">
                     <span class="status-dot"></span>
                     <span class="status-text">Connecting...</span>

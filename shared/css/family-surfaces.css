@@ -1,30 +1,115 @@
 :root {
     --family-canvas: #f4f3e9;
     --family-paper: #fffdf6;
-    --family-ink: #1e3128;
-    --family-muted: #536358;
-    --family-line: #d9dfd1;
-    --family-forest: #19392c;
-    --family-green: #2d5c43;
-    --family-lime: #def69c;
+    --family-ink: #192e24;
+    --family-muted: #546356;
+    --family-line: #d9dfd0;
+    --family-forest: #17392c;
+    --family-green: #28563e;
+    --family-lime: #e1f79b;
     --family-display: Georgia, 'Times New Roman', serif;
-    --family-hero: radial-gradient(ellipse at 88% 8%, #375e45, transparent 65%), var(--family-forest);
+    --family-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --family-hero: radial-gradient(ellipse at 88% 10%, #335a40, transparent 62%), var(--family-forest);
+    --family-card-radius: 17px;
+    --family-card-shadow: 0 2px 6px #223d2210;
 }
 
-:is(.home-page, .messages-page, .workspace-page[data-area="shopping"]) .main-content {
+body.family-page {
+    background: var(--family-canvas);
+    color: var(--family-ink);
+    color-scheme: light;
+    font-family: var(--family-body);
+}
+.family-page .family-main {
     width: min(100% - 64px, 1216px);
     margin-inline: auto;
-    padding: clamp(20px, 3.4vw, 40px) 0 37px;
+    padding: clamp(24px, 4vw, 48px) 0 36px;
+    font: 400 .9375rem/1.5 var(--family-body);
 }
+.family-main .hub { padding-inline: 0; }
 
-:is(.home-page, .messages-page, .workspace-page[data-area="shopping"]) .hub {
-    padding-inline: 0;
+.family-main .family-hero {
+    min-height: 250px;
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    padding: clamp(26px, 4.5vw, 52px);
+    border: 1px solid #244a37;
+    border-radius: 26px;
+    background: var(--family-hero);
+    color: #fffdf0;
 }
+.family-hero-content { position: relative; z-index: 1; min-width: 0; }
+.family-hero .family-hero-title {
+    font: 400 clamp(3.25rem, 6vw, 5.2rem)/.99 var(--family-display);
+    letter-spacing: -.067em;
+    overflow-wrap: anywhere;
+}
+.family-hero .family-hero-summary {
+    margin-top: 13px;
+    color: #dae6cf;
+    font: 400 clamp(.9rem, 1.5vw, 1.03rem)/1.5 var(--family-body);
+}
+.family-hero .family-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.family-hero :focus-visible { outline: 2px solid #d9f491; outline-offset: 3px; }
+.family-hero .family-button {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 8px 14px;
+    border: 1px solid #ffffff52;
+    border-radius: 10px;
+    background: #ffffff0c;
+    color: #fffdf0;
+    font: 700 .82rem/1.25 var(--family-body);
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+}
+.family-hero .family-button:hover { background: #ffffff25; }
+.family-hero :is(.family-button-primary, .family-button.active) {
+    border-color: var(--family-lime);
+    background: var(--family-lime);
+    color: #213525;
+}
+.family-hero :is(.family-button-primary, .family-button.active):hover { background: #edffb5; }
+.family-hero .family-hero-art {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 41%;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    background-image: radial-gradient(#dce9b752 1px, transparent 1px);
+    background-size: 16px 16px;
+    mask-image: linear-gradient(to right, transparent, black 23%);
+}
+.family-main .family-section-title {
+    font: 400 clamp(1.7rem, 3vw, 2.35rem)/1.1 var(--family-display);
+    letter-spacing: -.045em;
+}
+.family-main :is(.weather-card, .panel, .launch-tile, .category-section, .messages-sidebar, .chat-main) {
+    border-radius: var(--family-card-radius);
+    background: var(--family-paper);
+    box-shadow: var(--family-card-shadow);
+}
+.family-page :is(.main-content, .notes-main, .modal, .modal-overlay, .notes-dialog, .notes-gallery, .context-menu)
+    :is(button, input, textarea, select) { font-family: var(--family-body); }
 
 @media (max-width: 830px) {
-    :is(.home-page, .messages-page, .workspace-page[data-area="shopping"]) .main-content { width: calc(100% - 34px); }
+    .family-page .family-main { width: calc(100% - 34px); }
 }
 
 @media (max-width: 555px) {
-    :is(.home-page, .messages-page, .workspace-page[data-area="shopping"]) .main-content { width: calc(100% - 24px); padding-top: 13px; }
+    .family-page .family-main { width: calc(100% - 24px); padding-top: 13px; }
+    .family-main .family-hero { min-height: 0; padding: 23px 13px; border-radius: 17px; }
+    .family-hero .family-hero-title { font-size: clamp(2.5rem, 12vw, 3.55rem); }
+    .family-hero .family-hero-summary { max-width: 235px; margin-top: 8px; line-height: 1.4; }
+    .family-hero .family-actions { margin-top: 16px; gap: 5px; }
+    .family-hero .family-button { padding-inline: 8px; font-size: .75rem; }
+    .family-hero .family-hero-art { right: -19px; width: 36%; opacity: .3; }
 }

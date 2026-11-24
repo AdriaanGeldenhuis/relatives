@@ -11,7 +11,7 @@
     min-height: 100vh;
     background: var(--home-paper);
     color: var(--home-ink);
-    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: var(--family-body);
     line-height: 1.5;
 }
 
@@ -78,12 +78,6 @@
     margin-inline: auto;
 }
 
-.home-overview {
-    display: grid;
-    grid-template-columns: minmax(0, 2.35fr) minmax(240px, 1fr);
-    gap: 14px;
-}
-
 .hero,
 .weather-card {
     position: relative;
@@ -137,17 +131,8 @@
     text-transform: uppercase;
 }
 
-.hero-title {
-    margin: 0;
-    font: 400 clamp(2rem, 4.35vw, 4.6rem)/.98 var(--home-display);
-    letter-spacing: -.055em;
-    overflow-wrap: anywhere;
-}
-
 .hero-name { color: var(--home-lime); font-style: italic; }
-.hero-sub { margin: 11px 0 0; color: #e0e9dc; font-size: .9rem; overflow-wrap: anywhere; }
 .dot-sep { padding-inline: 4px; }
-.hero-actions { margin-top: 18px; }
 
 .pill-btn {
     display: inline-flex;
@@ -159,7 +144,7 @@
     border-radius: 9px;
     background: var(--home-lime);
     color: var(--home-ink);
-    font: 750 .83rem/1.25 system-ui, sans-serif;
+    font: 750 .83rem/1.25 var(--family-body);
     text-decoration: none;
     cursor: pointer;
 }
@@ -430,7 +415,6 @@
         border-top: 1px solid var(--home-line);
         background: #fbfaf2;
     }
-    .home-overview { grid-template-columns: 1fr; gap: 8px; }
     .hero, .weather-card { border-radius: 16px; }
     .weather-card { gap: 6px; padding: 9px 12px; }
     .hero-weather { grid-template-columns: auto auto; gap: 5px; align-items: center; }
@@ -446,7 +430,6 @@
 @media (max-width: 360px) {
     .hero { padding: 14px; }
     .hero-kicker { font-size: .62rem; }
-    .hero-sub { font-size: .8rem; }
     .clock-ring { width: 72px; }
     .clock-cap { font-size: .61rem; }
 }
@@ -465,11 +448,6 @@
     --home-lime: var(--family-lime, #def69c);
 }
 .home-page .hero { border: 1px solid #315641; }
-.home-page .hero-title { letter-spacing: -.065em; }
-.home-page .hero-actions { display: flex; flex-wrap: wrap; gap: 7px; }
-.home-page .hero-actions .pill-btn { min-height: 40px; border-radius: 9px; }
-.home-page .hero-actions button.pill-btn { background: #ffffff12; border-color: #ffffff61; color: #fffdf1; }
-.home-page .hero-actions button.pill-btn:hover { background: #ffffff29; }
-.home-page .hero-actions .home-calendar-button { background: var(--home-lime); color: var(--home-ink); border-color: var(--home-lime); }
-.home-page .hero-actions .home-calendar-button:hover { background: #ecffab; }
-.home-page :is(.weather-card, .panel, .launch-tile) { box-shadow: 0 2px 6px #223d2210; }
+
+.home-page .hero-main { width: 100%; }
+.home-page .panel-weather { grid-column: 1 / -1; min-height: 0; background: var(--home-card); border-color: var(--home-line); }

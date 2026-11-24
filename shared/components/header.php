@@ -23,6 +23,7 @@ $appVersion = '12.4.0';
 $cacheVersion = '12.12.0';
 $workspacePage = !isset($homeStylesheet) && !isset($messagesStylesheets);
 $buildTime = $cacheVersion;
+$familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages'], true);
 
 // Avatar cache-busting: use file modification time so browsers fetch the new image after upload
 function avatarUrl($userId) {
@@ -808,11 +809,14 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <?php if ($workspacePage): ?>
         <style><?php readfile(__DIR__ . '/../css/workspace.css'); ?></style>
     <?php endif; ?>
-    <?php if (in_array($activePage, ['home', 'shopping', 'messages'], true)): ?>
-        <link rel="stylesheet" href="/shared/css/family-surfaces.css?v=<?= filemtime(__DIR__ . '/../css/family-surfaces.css') ?>">
+    <?php foreach ($pageInlineStylesheets ?? [] as $stylesheet): ?>
+        <style><?php readfile($stylesheet); ?></style>
+    <?php endforeach; ?>
+    <?php if ($familyPage): ?>
+        <style><?php readfile(__DIR__ . '/../css/family-surfaces.css'); ?></style>
     <?php endif; ?>
 </head>
-<body class="<?= $workspacePage ? 'workspace-page' : (isset($homeStylesheet) ? 'home-page' : 'messages-page') ?>" data-area="<?= htmlspecialchars($activePage) ?>" <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
+<body class="<?= $workspacePage ? 'workspace-page' : (isset($homeStylesheet) ? 'home-page' : 'messages-page') ?><?= $familyPage ? ' family-page' : '' ?>" data-area="<?= htmlspecialchars($activePage) ?>" <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
     
     <!-- App Loader -->
     <div id="appLoader" class="app-loader">

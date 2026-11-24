@@ -51,7 +51,7 @@ if (isset($_GET['event']) && ($_GET['new'] ?? null) === '1') {
 $openNote = eventNoteId($_GET['note'] ?? null);
 $openNote = $openNote ? (string)$openNote : null;
 $pageTitle = 'Notes';
-$pageCSS = ['/notes/css/notes.css?build=' . filemtime(__DIR__ . '/css/notes.css')];
+$pageInlineStylesheets = [__DIR__ . '/css/notes.css'];
 $pageJS = ['/notes/js/notes.js'];
 $pageJSVersion = filemtime(__DIR__ . '/js/notes.js');
 $shoppingCount = 0;
@@ -85,18 +85,18 @@ require_once __DIR__ . '/../shared/components/header.php';
     </defs>
 </svg>
 
-<main class="notes-main" id="notesApp">
-    <header class="notes-hero">
-        <div class="notes-hero-content">
-            <h1>Family notes</h1>
-            <p>Keep lists, photos and little reminders in one place.</p>
-            <div class="notes-hero-actions">
-                <button type="button" class="notes-button notes-button-lime" data-create="text"><?= notesIcon('plus') ?> New note</button>
-                <button type="button" class="notes-button notes-button-hero" data-create="list"><?= notesIcon('list') ?> Checklist</button>
-                <button type="button" class="notes-button notes-button-hero" data-create="voice"><?= notesIcon('mic') ?> Record</button>
+<main class="notes-main family-main" id="notesApp">
+    <header class="family-hero">
+        <div class="family-hero-content">
+            <h1 class="family-hero-title">Family notes</h1>
+            <p class="family-hero-summary">Keep lists, photos and little reminders in one place.</p>
+            <div class="family-actions">
+                <button type="button" class="family-button family-button-primary" data-create="text"><?= notesIcon('plus') ?> New note</button>
+                <button type="button" class="family-button" data-create="list"><?= notesIcon('list') ?> Checklist</button>
+                <button type="button" class="family-button" data-create="voice"><?= notesIcon('mic') ?> Record</button>
             </div>
         </div>
-        <div class="notes-hero-art" aria-hidden="true">
+        <div class="family-hero-art" aria-hidden="true">
             <span class="notes-art-paper notes-art-back"></span>
             <span class="notes-art-paper notes-art-front">
                 <span class="notes-art-tape"></span>
@@ -122,7 +122,7 @@ require_once __DIR__ . '/../shared/components/header.php';
     </div>
 
     <div class="notes-board-tools">
-        <h2 id="notesBoardHeading">Board</h2>
+        <h2 class="family-section-title" id="notesBoardHeading">Board</h2>
         <div class="notes-view-tools">
             <label class="notes-sort"><span class="notes-sr-only">Sort notes</span>
                 <select id="notesSort">
