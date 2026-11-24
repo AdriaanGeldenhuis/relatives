@@ -263,15 +263,15 @@ $calendarSummary = match ($stats['upcoming_events']) {
 };
 
 $launcherApps = [
-    'tracking' => ['href' => '/tracking/app/', 'icon' => '📍', 'label' => 'Tracking', 'summary' => 'Family locations', 'glow' => '#f6a491'],
+    'tracking' => ['href' => '/tracking/app/', 'label' => 'Tracking', 'summary' => 'Family locations', 'glow' => '#f6a491'],
     'weather' => ['href' => '/weather/', 'label' => 'Weather', 'summary' => 'Local forecast', 'glow' => '#8ccbea'],
-    'notes' => ['href' => '/notes/', 'icon' => '📝', 'label' => 'Notes', 'summary' => 'Shared notes', 'glow' => '#be9be4'],
+    'notes' => ['href' => '/notes/', 'label' => 'Notes', 'summary' => 'Shared notes', 'glow' => '#be9be4'],
     'shopping' => ['href' => '/shopping/', 'label' => 'Shopping', 'summary' => $shoppingSummary, 'glow' => '#f5ba55'],
-    'calendar' => ['href' => '/calendar/', 'icon' => '📅', 'label' => 'Calendar', 'summary' => $calendarSummary, 'glow' => '#6bcba1'],
+    'calendar' => ['href' => '/calendar/', 'label' => 'Calendar', 'summary' => $calendarSummary, 'glow' => '#6bcba1'],
     'schedule' => ['href' => '/schedule/', 'icon' => '⏰', 'label' => 'Schedule', 'summary' => 'Daily agenda', 'glow' => '#e992ba'],
     'travel' => ['href' => '/holiday_traveling/', 'icon' => '✈️', 'label' => 'Travel', 'summary' => 'Trips and itineraries', 'glow' => '#6fcbbf'],
     'games' => ['href' => '/games/', 'icon' => '🎮', 'label' => 'Games', 'summary' => 'Family arcade', 'glow' => '#a89aee'],
-    'messages' => ['href' => '/messages/', 'icon' => '💬', 'label' => 'Messages', 'summary' => $messageSummary, 'glow' => '#7fb5f1'],
+    'messages' => ['href' => '/messages/', 'label' => 'Messages', 'summary' => $messageSummary, 'glow' => '#7fb5f1'],
 ];
 
 $pageTitle = 'Home';
@@ -338,8 +338,11 @@ require_once __DIR__ . '/../shared/components/header.php';
         </section>
 
         <section class="apps-section" aria-labelledby="family-apps-heading">
-            <h2 id="family-apps-heading" class="home-section-title family-section-title">Family apps</h2>
-            <nav class="launcher" aria-labelledby="family-apps-heading">
+            <div class="apps-heading">
+                <h2 id="family-apps-heading" class="home-section-title family-section-title">Family apps</h2>
+                <button type="button" class="launch-motion-toggle" aria-controls="family-apps-list" hidden>Pause motion</button>
+            </div>
+            <nav class="launcher" id="family-apps-list" aria-labelledby="family-apps-heading">
                 <?php foreach ($launcherApps as $appKey => $app): ?>
                 <a class="launch-tile" href="<?= $app['href'] ?>" data-app="<?= $appKey ?>" style="--glow: <?= $app['glow'] ?>">
                     <?php if ($appKey === 'weather'): ?>
@@ -354,10 +357,30 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <span class="launch-summary"><?= $app['summary'] ?></span>
                     </span>
                     <span class="launch-art" aria-hidden="true">
-                        <?php if ($appKey === 'shopping'): ?>
-                        <span class="launch-trolley"><span class="launch-basket"></span></span>
+                        <?php if ($appKey === 'tracking'): ?>
+                        <span class="launch-map">
+                            <span class="launch-map-pin"></span>
+                        </span>
                         <?php elseif ($appKey === 'weather'): ?>
                         <span class="launch-cloud"></span>
+                        <?php elseif ($appKey === 'notes'): ?>
+                        <span class="launch-note">
+                            <span class="launch-paper">
+                                <span class="launch-ink"></span>
+                                <span class="launch-ink"></span>
+                            </span>
+                            <span class="launch-pen"></span>
+                        </span>
+                        <?php elseif ($appKey === 'shopping'): ?>
+                        <span class="launch-trolley">
+                            <span class="launch-basket"></span>
+                            <span class="launch-wheel"></span>
+                            <span class="launch-wheel"></span>
+                        </span>
+                        <?php elseif ($appKey === 'calendar'): ?>
+                        <span class="launch-calendar"><span class="launch-calendar-page"></span></span>
+                        <?php elseif ($appKey === 'messages'): ?>
+                        <span class="launch-message"><span></span><span></span><span></span></span>
                         <?php else: ?>
                         <span class="launch-icon"><?= $app['icon'] ?></span>
                         <?php endif; ?>

@@ -1,7 +1,7 @@
 /**
  * ============================================
  * Relatives Home
- * Offline status, day clock, event countdowns, and weather
+ * Offline status, app shortcut motion, day clock, event countdowns, and weather
  * ============================================
  */
 
@@ -41,6 +41,41 @@
 
         window.addEventListener('online', () => showConnected(true));
         window.addEventListener('offline', () => showConnected(false));
+    }
+
+    const motionToggle = document.querySelector('.launch-motion-toggle');
+    if (motionToggle) {
+        const apps = motionToggle.closest('.apps-section');
+        const preferenceKey = 'relatives-home-motion-paused';
+        const setPaused = (paused) => {
+            apps.toggleAttribute('data-motion-paused', paused);
+            motionToggle.textContent = paused ? 'Resume motion' : 'Pause motion';
+        };
+
+        try {
+            setPaused(sessionStorage.getItem(preferenceKey) === 'true');
+        } catch {
+            // The control still works when storage is restricted.
+        }
+        motionToggle.hidden = false;
+        motionToggle.addEventListener('click', () => {
+            const paused = !apps.hasAttribute('data-motion-paused');
+            setPaused(paused);
+            try {
+                sessionStorage.setItem(preferenceKey, String(paused));
+            } catch {
+                // Keep the current choice for this page.
+            }
+        });
+
+        if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(({ target, isIntersecting }) => {
+                    target.toggleAttribute('data-offscreen', !isIntersecting);
+                });
+            });
+            apps.querySelectorAll('.launch-tile').forEach((tile) => observer.observe(tile));
+        }
     }
 
     function pad(n) { return n < 10 ? '0' + n : '' + n; }
