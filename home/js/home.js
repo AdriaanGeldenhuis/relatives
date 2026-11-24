@@ -123,8 +123,11 @@
     setInterval(refreshEventTimes, 30000);
 
     // ============================================
-    // WEATHER STRIP (inside the hero card)
+    // HOME WEATHER
     // ============================================
+    const weatherShortcut = document.querySelector('[data-app="weather"] .launch-summary');
+    const weatherShortcutFallback = weatherShortcut?.textContent;
+
     var weather = {
         el: document.getElementById('heroWeather'),
         location: null,
@@ -133,7 +136,7 @@
         init: function () {
             if (!this.el) return;
 
-            if (window.USER_LOCATION && window.USER_LOCATION.lat && window.USER_LOCATION.lng) {
+            if (Number.isFinite(window.USER_LOCATION?.lat) && Number.isFinite(window.USER_LOCATION?.lng)) {
                 this.location = { lat: window.USER_LOCATION.lat, lng: window.USER_LOCATION.lng };
                 this.load();
             } else if ('geolocation' in navigator) {
@@ -209,6 +212,11 @@
         },
 
         render: function (w) {
+            if (weatherShortcut && Number.isFinite(w.temperature)) {
+                const description = w.description || w.condition;
+                weatherShortcut.textContent = description ? `${w.temperature}° · ${description}` : `${w.temperature}°`;
+            }
+
             var now = new Date();
             var day = true;
             if (w.sunrise && w.sunset) {
@@ -240,6 +248,7 @@
 
         renderFallback: function () {
             if (!this.el) return;
+            if (weatherShortcut) weatherShortcut.textContent = weatherShortcutFallback;
             this.el.innerHTML =
                 '<span class="wx-fallback">' +
                     '<span aria-hidden="true">🌍</span>' +

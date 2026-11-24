@@ -245,17 +245,33 @@ if ($hour < 12) {
 $firstName = explode(' ', $user['name'])[0];
 $showWelcome = isset($_GET['welcome']) || isset($_GET['joined']);
 
-// App launcher tiles (badge = live count, glow = accent colour)
+// App launcher shortcuts and their at-a-glance status.
+$messageSummary = match ($stats['unread_messages']) {
+    0 => 'Family conversations',
+    1 => '1 unread message',
+    default => $stats['unread_messages'] . ' unread messages',
+};
+$shoppingSummary = match ($stats['shopping_items']) {
+    0 => 'Family shopping lists',
+    1 => '1 item to buy',
+    default => $stats['shopping_items'] . ' items to buy',
+};
+$calendarSummary = match ($stats['upcoming_events']) {
+    0 => 'Family events',
+    1 => '1 event this week',
+    default => $stats['upcoming_events'] . ' events this week',
+};
+
 $launcherApps = [
-    ['href' => '/messages/',          'icon' => '💬',  'label' => 'Messages', 'badge' => $stats['unread_messages'], 'glow' => '#60a5fa'],
-    ['href' => '/shopping/',          'icon' => '🛒',  'label' => 'Shopping', 'badge' => $stats['shopping_items'],  'glow' => '#fbbf24'],
-    ['href' => '/calendar/',          'icon' => '📅',  'label' => 'Calendar', 'badge' => $stats['upcoming_events'], 'glow' => '#34d399'],
-    ['href' => '/notes/',             'icon' => '📝',  'label' => 'Notes',    'badge' => 0, 'glow' => '#c084fc'],
-    ['href' => '/schedule/',          'icon' => '⏰',  'label' => 'Schedule', 'badge' => 0, 'glow' => '#f472b6'],
-    ['href' => '/tracking/app/',      'icon' => '📍',  'label' => 'Tracking', 'badge' => 0, 'glow' => '#fb7185'],
-    ['href' => '/weather/',           'icon' => '🌤️', 'label' => 'Weather',  'badge' => 0, 'glow' => '#38bdf8'],
-    ['href' => '/holiday_traveling/', 'icon' => '✈️',  'label' => 'Travel',   'badge' => 0, 'glow' => '#2dd4bf'],
-    ['href' => '/games/',             'icon' => '🎮',  'label' => 'Games',    'badge' => 0, 'glow' => '#a78bfa'],
+    'messages' => ['href' => '/messages/', 'icon' => '💬', 'label' => 'Messages', 'summary' => $messageSummary, 'glow' => '#7fb5f1'],
+    'shopping' => ['href' => '/shopping/', 'label' => 'Shopping', 'summary' => $shoppingSummary, 'glow' => '#f5ba55'],
+    'calendar' => ['href' => '/calendar/', 'icon' => '📅', 'label' => 'Calendar', 'summary' => $calendarSummary, 'glow' => '#6bcba1'],
+    'notes' => ['href' => '/notes/', 'icon' => '📝', 'label' => 'Notes', 'summary' => 'Shared notes', 'glow' => '#be9be4'],
+    'schedule' => ['href' => '/schedule/', 'icon' => '⏰', 'label' => 'Schedule', 'summary' => 'Daily agenda', 'glow' => '#e992ba'],
+    'tracking' => ['href' => '/tracking/app/', 'icon' => '📍', 'label' => 'Tracking', 'summary' => 'Family locations', 'glow' => '#f6a491'],
+    'weather' => ['href' => '/weather/', 'label' => 'Weather', 'summary' => 'Local forecast', 'glow' => '#8ccbea'],
+    'travel' => ['href' => '/holiday_traveling/', 'icon' => '✈️', 'label' => 'Travel', 'summary' => 'Trips and itineraries', 'glow' => '#6fcbbf'],
+    'games' => ['href' => '/games/', 'icon' => '🎮', 'label' => 'Games', 'summary' => 'Family arcade', 'glow' => '#a89aee'],
 ];
 
 $pageTitle = 'Home';
@@ -324,13 +340,29 @@ require_once __DIR__ . '/../shared/components/header.php';
         <section class="apps-section" aria-labelledby="family-apps-heading">
             <h2 id="family-apps-heading" class="home-section-title family-section-title">Family apps</h2>
             <nav class="launcher" aria-labelledby="family-apps-heading">
-                <?php foreach ($launcherApps as $app): ?>
-                <a href="<?php echo $app['href']; ?>" class="launch-tile" style="--glow: <?php echo $app['glow']; ?>">
-                    <span class="launch-chip" aria-hidden="true"><span class="launch-icon"><?php echo $app['icon']; ?></span></span>
-                    <span class="launch-label"><?php echo $app['label']; ?></span>
-                    <?php if ($app['badge'] > 0): ?>
-                    <span class="launch-badge" aria-label="<?php echo $app['badge']; ?> pending"><?php echo $app['badge'] > 99 ? '99+' : $app['badge']; ?></span>
+                <?php foreach ($launcherApps as $appKey => $app): ?>
+                <a class="launch-tile" href="<?= $app['href'] ?>" data-app="<?= $appKey ?>" style="--glow: <?= $app['glow'] ?>">
+                    <?php if ($appKey === 'weather'): ?>
+                    <span class="launch-rain" aria-hidden="true">
+                        <?php for ($drop = 0; $drop < 16; $drop++): ?>
+                        <span style="--drop: <?= $drop ?>"></span>
+                        <?php endfor; ?>
+                    </span>
                     <?php endif; ?>
+                    <span class="launch-copy">
+                        <span class="launch-label"><?= $app['label'] ?></span>
+                        <span class="launch-summary"><?= $app['summary'] ?></span>
+                    </span>
+                    <span class="launch-art" aria-hidden="true">
+                        <?php if ($appKey === 'shopping'): ?>
+                        <span class="launch-trolley"><span class="launch-basket"></span></span>
+                        <?php elseif ($appKey === 'weather'): ?>
+                        <span class="launch-cloud"></span>
+                        <?php else: ?>
+                        <span class="launch-icon"><?= $app['icon'] ?></span>
+                        <?php endif; ?>
+                    </span>
+                    <span class="launch-arrow" aria-hidden="true">→</span>
                 </a>
                 <?php endforeach; ?>
             </nav>
