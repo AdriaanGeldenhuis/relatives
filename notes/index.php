@@ -1,991 +1,231 @@
 <?php
-/**
- * RELATIVES - NOTES SYSTEM
- * Beautiful sticky notes with AI & voice
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/session_boot.php';
+require_once __DIR__ . '/store.php';
 
+$isPost = $_SERVER['REQUEST_METHOD'] === 'POST';
 if (!isset($_SESSION['user_id'])) {
+    if ($isPost) {
+        notesRespond(['success' => false, 'error' => 'Sign in again to save your changes.'], 401);
+    }
     header('Location: /login.php');
     exit;
 }
 
 require_once __DIR__ . '/../core/bootstrap.php';
-require_once __DIR__ . '/../core/NotificationManager.php';
-require_once __DIR__ . '/../core/NotificationTriggers.php';
+require_once __DIR__ . '/../core/CSRF.php';
 
-$auth = new Auth($db);
-$user = $auth->getCurrentUser();
-
+$user = (new Auth($db))->getCurrentUser();
 if (!$user) {
+    if ($isPost) {
+        notesRespond(['success' => false, 'error' => 'Sign in again to save your changes.'], 401);
+    }
     header('Location: /login.php');
     exit;
 }
 
-// 🎤 VOICE PREFILL DETECTION
-$voicePrefillContent = '';
-if (isset($_GET['new']) && $_GET['new'] == '1' && isset($_GET['content'])) {
-    $voicePrefillContent = trim($_GET['content']);
+header('Cache-Control: private, no-store');
+$csrfToken = CSRF::generate();
+$imageCapacity = notesImageCapacity($db);
+if ($isPost) {
+    session_write_close();
+    notesHandlePost($db, $user, $imageCapacity, $csrfToken);
 }
 
-// Handle POST actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    header('Content-Type: application/json');
-    
-    try {
-        switch ($_POST['action']) {
-            case 'create_note':
-                $type = $_POST['type'] ?? 'text';
-                $title = trim($_POST['title'] ?? '');
-                $body = trim($_POST['body'] ?? '');
-                $color = $_POST['color'] ?? '#ffeb3b';
-
-                if ($type === 'text' && empty($body) && !isset($_FILES['images'])) {
-                    throw new Exception('Note content is required');
-                }
-
-                $stmt = $db->prepare("
-                    INSERT INTO notes (family_id, user_id, type, title, body, color, pinned, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, 0, NOW())
-                ");
-                $stmt->execute([$user['family_id'], $user['id'], $type, $title, $body, $color]);
-
-                $noteId = $db->lastInsertId();
-
-                // Handle voice note audio upload
-                if ($type === 'voice' && isset($_FILES['audio']) && $_FILES['audio']['error'] === UPLOAD_ERR_OK) {
-                    $uploadDir = __DIR__ . '/../uploads/voice/';
-
-                    if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0755, true);
-                    }
-
-                    $filename = 'voice_' . time() . '_' . uniqid() . '.webm';
-                    $filepath = $uploadDir . $filename;
-
-                    if (move_uploaded_file($_FILES['audio']['tmp_name'], $filepath)) {
-                        $audioPath = '/uploads/voice/' . $filename;
-
-                        $stmt = $db->prepare("UPDATE notes SET audio_path = ? WHERE id = ?");
-                        $stmt->execute([$audioPath, $noteId]);
-                    }
-                }
-
-                // Handle multiple image uploads - save as WebP to /saves/{user_id}/notes/
-                $imagePaths = [];
-                if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
-                    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-                    $maxSize = 10 * 1024 * 1024; // 10MB
-                    $maxImages = 7;
-
-                    // Create user's notes directory: /saves/{user_id}/notes/
-                    $uploadDir = __DIR__ . '/../saves/' . $user['id'] . '/notes/';
-                    if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0755, true);
-                    }
-
-                    $finfo = new finfo(FILEINFO_MIME_TYPE);
-                    $imageCount = min(count($_FILES['images']['name']), $maxImages);
-
-                    for ($i = 0; $i < $imageCount; $i++) {
-                        if ($_FILES['images']['error'][$i] !== UPLOAD_ERR_OK) continue;
-
-                        $tmpName = $_FILES['images']['tmp_name'][$i];
-                        $fileSize = $_FILES['images']['size'][$i];
-                        $mimeType = $finfo->file($tmpName);
-
-                        if (!in_array($mimeType, $allowedTypes) || $fileSize > $maxSize) continue;
-
-                        $filename = 'note_' . $noteId . '_' . time() . '_' . $i . '.webp';
-                        $filepath = $uploadDir . $filename;
-
-                        // Load image based on type and convert to WebP
-                        $sourceImage = null;
-                        switch ($mimeType) {
-                            case 'image/jpeg':
-                                $sourceImage = imagecreatefromjpeg($tmpName);
-                                break;
-                            case 'image/png':
-                                $sourceImage = imagecreatefrompng($tmpName);
-                                break;
-                            case 'image/gif':
-                                $sourceImage = imagecreatefromgif($tmpName);
-                                break;
-                            case 'image/webp':
-                                $sourceImage = imagecreatefromwebp($tmpName);
-                                break;
-                        }
-
-                        if ($sourceImage) {
-                            // Preserve transparency
-                            imagepalettetotruecolor($sourceImage);
-                            imagealphablending($sourceImage, true);
-                            imagesavealpha($sourceImage, true);
-
-                            // Save as WebP with 85% quality
-                            if (imagewebp($sourceImage, $filepath, 85)) {
-                                $imagePaths[] = '/saves/' . $user['id'] . '/notes/' . $filename;
-                            }
-                            imagedestroy($sourceImage);
-                        }
-                    }
-
-                    // Store as JSON if we have images
-                    if (!empty($imagePaths)) {
-                        $imagePathJson = json_encode($imagePaths);
-                        $stmt = $db->prepare("UPDATE notes SET image_path = ? WHERE id = ?");
-                        $stmt->execute([$imagePathJson, $noteId]);
-                    }
-                }
-                // Legacy support: single image upload
-                elseif (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-                    $file = $_FILES['image'];
-                    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-                    $maxSize = 10 * 1024 * 1024; // 10MB
-
-                    $finfo = new finfo(FILEINFO_MIME_TYPE);
-                    $mimeType = $finfo->file($file['tmp_name']);
-
-                    if (in_array($mimeType, $allowedTypes) && $file['size'] <= $maxSize) {
-                        $uploadDir = __DIR__ . '/../saves/' . $user['id'] . '/notes/';
-                        if (!is_dir($uploadDir)) {
-                            mkdir($uploadDir, 0755, true);
-                        }
-
-                        $filename = 'note_' . $noteId . '_' . time() . '.webp';
-                        $filepath = $uploadDir . $filename;
-
-                        $sourceImage = null;
-                        switch ($mimeType) {
-                            case 'image/jpeg':
-                                $sourceImage = imagecreatefromjpeg($file['tmp_name']);
-                                break;
-                            case 'image/png':
-                                $sourceImage = imagecreatefrompng($file['tmp_name']);
-                                break;
-                            case 'image/gif':
-                                $sourceImage = imagecreatefromgif($file['tmp_name']);
-                                break;
-                            case 'image/webp':
-                                $sourceImage = imagecreatefromwebp($file['tmp_name']);
-                                break;
-                        }
-
-                        if ($sourceImage) {
-                            imagepalettetotruecolor($sourceImage);
-                            imagealphablending($sourceImage, true);
-                            imagesavealpha($sourceImage, true);
-
-                            if (imagewebp($sourceImage, $filepath, 85)) {
-                                $imagePaths[] = '/saves/' . $user['id'] . '/notes/' . $filename;
-                                $stmt = $db->prepare("UPDATE notes SET image_path = ? WHERE id = ?");
-                                $stmt->execute([json_encode($imagePaths), $noteId]);
-                            }
-                            imagedestroy($sourceImage);
-                        }
-                    }
-                }
-
-                // Send notification to family members
-                try {
-                    $triggers = new NotificationTriggers($db);
-                    $triggers->onNoteCreated($noteId, $user['id'], $user['family_id'], $title, $type);
-                } catch (Exception $e) {
-                    error_log('Note notification error: ' . $e->getMessage());
-                }
-
-                // Return full note data for real-time DOM update
-                $audioPath = null;
-                if ($type === 'voice' && isset($_FILES['audio'])) {
-                    $stmt = $db->prepare("SELECT audio_path FROM notes WHERE id = ?");
-                    $stmt->execute([$noteId]);
-                    $audioPath = $stmt->fetchColumn();
-                }
-
-                echo json_encode([
-                    'success' => true,
-                    'note_id' => $noteId,
-                    'note' => [
-                        'id' => $noteId,
-                        'type' => $type,
-                        'title' => $title,
-                        'body' => $body,
-                        'color' => $color,
-                        'pinned' => 0,
-                        'audio_path' => $audioPath,
-                        'image_path' => !empty($imagePaths) ? json_encode($imagePaths) : null,
-                        'user_id' => $user['id'],
-                        'user_name' => $user['full_name'],
-                        'avatar_color' => $user['avatar_color'],
-                        'created_at' => date('Y-m-d H:i:s')
-                    ]
-                ]);
-                exit;
-            
-            case 'update_note':
-                $noteId = (int)$_POST['note_id'];
-                $title = trim($_POST['title'] ?? '');
-                $body = trim($_POST['body'] ?? '');
-                $color = $_POST['color'] ?? '#ffeb3b';
-                
-                if (empty($body)) {
-                    throw new Exception('Note content is required');
-                }
-                
-                $stmt = $db->prepare("
-                    UPDATE notes 
-                    SET title = ?, body = ?, color = ?, updated_at = NOW() 
-                    WHERE id = ? AND family_id = ?
-                ");
-                $stmt->execute([$title, $body, $color, $noteId, $user['family_id']]);
-                
-                echo json_encode(['success' => true]);
-                exit;
-            
-            case 'delete_note':
-                $noteId = (int)$_POST['note_id'];
-
-                $stmt = $db->prepare("SELECT audio_path, image_path FROM notes WHERE id = ? AND family_id = ?");
-                $stmt->execute([$noteId, $user['family_id']]);
-                $note = $stmt->fetch();
-
-                // Delete audio file if exists
-                if ($note && $note['audio_path']) {
-                    $audioFile = __DIR__ . '/..' . $note['audio_path'];
-                    if (file_exists($audioFile)) {
-                        unlink($audioFile);
-                    }
-                }
-
-                // Delete image files if exist (supports both JSON array and single path)
-                if ($note && $note['image_path']) {
-                    $imagePaths = json_decode($note['image_path'], true);
-                    if (is_array($imagePaths)) {
-                        foreach ($imagePaths as $imgPath) {
-                            $imageFile = __DIR__ . '/..' . $imgPath;
-                            if (file_exists($imageFile)) {
-                                unlink($imageFile);
-                            }
-                        }
-                    } else {
-                        // Legacy: single image path
-                        $imageFile = __DIR__ . '/..' . $note['image_path'];
-                        if (file_exists($imageFile)) {
-                            unlink($imageFile);
-                        }
-                    }
-                }
-
-                $stmt = $db->prepare("DELETE FROM notes WHERE id = ? AND family_id = ?");
-                $stmt->execute([$noteId, $user['family_id']]);
-
-                echo json_encode(['success' => true]);
-                exit;
-            
-            case 'toggle_pin':
-                $noteId = (int)$_POST['note_id'];
-                
-                $stmt = $db->prepare("SELECT pinned FROM notes WHERE id = ? AND family_id = ?");
-                $stmt->execute([$noteId, $user['family_id']]);
-                $currentPinned = (int)$stmt->fetchColumn();
-                
-                $newPinned = $currentPinned ? 0 : 1;
-                
-                $stmt = $db->prepare("UPDATE notes SET pinned = ? WHERE id = ?");
-                $stmt->execute([$newPinned, $noteId]);
-                
-                echo json_encode(['success' => true, 'pinned' => $newPinned]);
-                exit;
-        }
-        
-    } catch (Exception $e) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-        exit;
-    }
-}
-
-// Get all notes (including image_path for photo notes)
-$stmt = $db->prepare("
-    SELECT n.*, u.full_name, u.avatar_color
-    FROM notes n
-    LEFT JOIN users u ON n.user_id = u.id
-    WHERE n.family_id = ?
-    ORDER BY n.pinned DESC, n.created_at DESC
-");
-$stmt->execute([$user['family_id']]);
-$notes = $stmt->fetchAll();
-
-$pinnedNotes = array_filter($notes, fn($n) => $n['pinned'] == 1);
-$regularNotes = array_filter($notes, fn($n) => $n['pinned'] == 0);
-
-function timeAgo($timestamp) {
-    $time = strtotime($timestamp);
-    $now = time();
-    $diff = $now - $time;
-
-    if ($diff < 60) return 'Just now';
-    if ($diff < 3600) return floor($diff / 60) . ' min ago';
-    if ($diff < 86400) return floor($diff / 3600) . ' hours ago';
-    if ($diff < 604800) return floor($diff / 86400) . ' days ago';
-
-    return date('M j, Y', $time);
-}
-
-// Helper function to parse image paths (supports JSON array or legacy single path)
-function getImagePaths($imagePath) {
-    if (empty($imagePath)) return [];
-
-    // Try to decode as JSON array
-    $decoded = json_decode($imagePath, true);
-    if (is_array($decoded)) {
-        return $decoded;
-    }
-
-    // Legacy: single path string
-    return [$imagePath];
-}
-
+$notes = array_map('notesClientData', notesSelect($db, (int)$user['family_id']));
+$prefill = ($_GET['new'] ?? null) === '1' && is_string($_GET['content'] ?? null) ? $_GET['content'] : '';
 $pageTitle = 'Notes';
-$pageCSS = [
-    '/shared/css/aurora.css',
-    '/notes/css/notes.css',
-    '/collage/css/collage.css'
-];
-$pageJS = [
-    '/notes/js/notes.js',
-    '/collage/js/collage.state.js',
-    '/collage/js/collage.images.js',
-    '/collage/js/collage.drag.js',
-    '/collage/js/collage.resize.js',
-    '/collage/js/collage.rotate.js',
-    '/collage/js/collage.layouts.js',
-    '/collage/js/collage.background.js',
-    '/collage/js/collage.cleanup.js',
-    '/collage/js/collage.init.js'
-];
+$pageCSS = ['/notes/css/notes.css?build=' . filemtime(__DIR__ . '/css/notes.css')];
+$pageJS = ['/notes/js/notes.js'];
+$pageJSVersion = filemtime(__DIR__ . '/js/notes.js');
 $shoppingCount = 0;
+
+function notesIcon(string $name): string
+{
+    return '<svg class="notes-icon" aria-hidden="true"><use href="#notes-icon-' . $name . '"></use></svg>';
+}
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Aurora background -->
-<div class="aurora" aria-hidden="true">
-    <div class="aurora-blob aurora-a"></div>
-    <div class="aurora-blob aurora-b"></div>
-    <div class="aurora-blob aurora-c"></div>
-    <div class="stars stars-a"></div>
-    <div class="stars stars-b"></div>
-    <div class="shooting-star"></div>
-    <div class="aurora-grid"></div>
-</div>
+<svg width="0" height="0" class="notes-symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <symbol id="notes-icon-note" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8m-8 4h6"/></symbol>
+        <symbol id="notes-icon-list" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 9 1.5 1.5L11 8m2 2h4m-10 5h2m4 0h4"/></symbol>
+        <symbol id="notes-icon-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8"/></symbol>
+        <symbol id="notes-icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+        <symbol id="notes-icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+        <symbol id="notes-icon-pin" viewBox="0 0 24 24"><path d="M15 3 21 9l-3 1-3 3v4l-2 2-8-8 2-2h4l3-3 1-3zM9 15l-6 6"/></symbol>
+        <symbol id="notes-icon-pencil" viewBox="0 0 24 24"><path d="m13 6 5 5M4 20l5-1 11-11a2.8 2.8 0 0 0-4-4L5 15l-1 5z"/></symbol>
+        <symbol id="notes-icon-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></symbol>
+        <symbol id="notes-icon-photo" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.5"/><path d="m21 16-5-5L5 21"/></symbol>
+        <symbol id="notes-icon-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+        <symbol id="notes-icon-rows" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+        <symbol id="notes-icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+        <symbol id="notes-icon-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13m-7 4v5m3-5v5"/></symbol>
+        <symbol id="notes-icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 4H6a2 2 0 0 0-2 2v10"/></symbol>
+        <symbol id="notes-icon-chevron" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol>
+        <symbol id="notes-icon-check" viewBox="0 0 24 24"><path d="m5 12 5 5L19 7"/></symbol>
+    </defs>
+</svg>
 
-<!-- Main Content -->
-<main class="main-content">
-    <div class="hub">
-
-        <!-- Compact page header -->
-        <header class="page-head" style="--glow:#c084fc; --page-glow: rgba(192, 132, 252, 0.14)">
-            <span class="ph-glyph" aria-hidden="true">📝</span>
-            <div class="ph-titles">
-                <h1>Notes</h1>
-                <p class="ph-sub"><?php echo count($notes); ?> note<?php echo count($notes) === 1 ? '' : 's'; ?> · <?php echo count($pinnedNotes); ?> pinned</p>
-            </div>
-            <div class="ph-actions">
-                <button id="btnNewNote" class="pill-btn primary" data-action="text">
-                    <span aria-hidden="true">＋</span> New note
-                </button>
-                <button id="btnVoiceNote" class="pill-btn" data-action="voice">
-                    <span aria-hidden="true">🎤</span> Voice
-                </button>
-                <button id="btnSearch" class="pill-btn" data-action="search">
-                    <span aria-hidden="true">🔍</span> Search
-                </button>
-
-                <!-- INLINE SCRIPT FOR NATIVE APP COMPATIBILITY -->
-                <script>
-                (function() {
-                    // Immediately attach handlers - no waiting for DOMContentLoaded
-                    function handleAction(action) {
-                        if (action === 'text') {
-                            document.getElementById('createTextNoteModal').classList.add('active');
-                            setTimeout(function() {
-                                var noteBody = document.getElementById('noteBody');
-                                if (noteBody) noteBody.focus();
-                            }, 100);
-                        } else if (action === 'voice') {
-                            document.getElementById('createVoiceNoteModal').classList.add('active');
-                            if (typeof resetVoiceRecorder === 'function') resetVoiceRecorder();
-                        } else if (action === 'search') {
-                            document.getElementById('searchInput').focus();
-                        }
-                    }
-
-                    function setupButton(btn) {
-                        if (!btn) return;
-                        var action = btn.getAttribute('data-action');
-                        var handled = false;
-
-                        btn.addEventListener('touchstart', function(e) {
-                            btn.style.transform = 'translateY(-2px) scale(1.02)';
-                            btn.style.background = 'rgba(255,255,255,0.18)';
-                        }, {passive: true});
-
-                        btn.addEventListener('touchend', function(e) {
-                            btn.style.transform = '';
-                            btn.style.background = '';
-                            e.preventDefault();
-                            handled = true;
-                            handleAction(action);
-                            setTimeout(function() { handled = false; }, 300);
-                        }, {passive: false});
-
-                        btn.addEventListener('touchcancel', function() {
-                            btn.style.transform = '';
-                            btn.style.background = '';
-                        }, {passive: true});
-
-                        btn.addEventListener('click', function(e) {
-                            if (!handled) handleAction(action);
-                        });
-                    }
-
-                    setupButton(document.getElementById('btnNewNote'));
-                    setupButton(document.getElementById('btnVoiceNote'));
-                    setupButton(document.getElementById('btnSearch'));
-
-                    console.log('✅ Quick action buttons ready (inline)');
-                })();
-                </script>
-        </header>
-
-        <!-- Search and Filter Bar -->
-        <div class="search-filter-section">
-            <div class="search-bar glass-card">
-                <span class="search-icon">🔍</span>
-                <input 
-                    type="text" 
-                    id="searchInput" 
-                    class="search-input" 
-                    placeholder="Search notes..."
-                    oninput="searchNotes(this.value)">
-            </div>
-            
-            <div class="filter-buttons">
-                <button class="filter-btn active" data-filter="all" onclick="filterNotes('all')">
-                    All Notes
-                </button>
-                <button class="filter-btn" data-filter="text" onclick="filterNotes('text')">
-                    📝 Text
-                </button>
-                <button class="filter-btn" data-filter="voice" onclick="filterNotes('voice')">
-                    🎤 Voice
-                </button>
-                <button class="filter-btn" data-filter="pinned" onclick="filterNotes('pinned')">
-                    📌 Pinned
-                </button>
+<main class="notes-main" id="notesApp">
+    <header class="notes-hero">
+        <div class="notes-hero-content">
+            <h1>Family notes</h1>
+            <p>Keep lists, photos and little reminders in one place.</p>
+            <div class="notes-hero-actions">
+                <button type="button" class="notes-button notes-button-lime" data-create="text"><?= notesIcon('plus') ?> New note</button>
+                <button type="button" class="notes-button notes-button-hero" data-create="list"><?= notesIcon('list') ?> Checklist</button>
+                <button type="button" class="notes-button notes-button-hero" data-create="voice"><?= notesIcon('mic') ?> Record</button>
             </div>
         </div>
-
-        <!-- Stats Bar -->
-        <div class="notes-stats-bar">
-            <div class="stat-item">
-                <span class="stat-icon">📝</span>
-                <span class="stat-value" id="totalNotes"><?php echo count($notes); ?></span>
-                <span class="stat-label">Total</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-icon">📌</span>
-                <span class="stat-value" id="pinnedCount"><?php echo count($pinnedNotes); ?></span>
-                <span class="stat-label">Pinned</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-icon">📄</span>
-                <span class="stat-value" id="textCount"><?php echo count(array_filter($notes, fn($n) => $n['type'] === 'text')); ?></span>
-                <span class="stat-label">Text</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-icon">🎤</span>
-                <span class="stat-value" id="voiceCount"><?php echo count(array_filter($notes, fn($n) => $n['type'] === 'voice')); ?></span>
-                <span class="stat-label">Voice</span>
-            </div>
+        <div class="notes-hero-art" aria-hidden="true">
+            <span class="notes-art-paper notes-art-back"></span>
+            <span class="notes-art-paper notes-art-front">
+                <span class="notes-art-tape"></span>
+                <span class="notes-art-line"><?= notesIcon('check') ?><i></i></span>
+                <span class="notes-art-line"><?= notesIcon('check') ?><i></i></span>
+                <span class="notes-art-line"><svg class="notes-icon" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3"/></svg><i></i></span>
+            </span>
         </div>
+    </header>
 
-        <!-- Pinned Notes Section -->
-        <?php if (!empty($pinnedNotes)): ?>
-            <section class="notes-section">
-                <h2 class="section-title">
-                    <span class="title-icon">📌</span>
-                    Pinned Notes
-                </h2>
-                <div class="notes-grid">
-                    <?php foreach ($pinnedNotes as $note): ?>
-                        <div class="note-card"
-                             data-note-id="<?php echo $note['id']; ?>"
-                             data-note-type="<?php echo $note['type']; ?>"
-                             style="background: <?php echo htmlspecialchars($note['color']); ?>; cursor: pointer;"
-                             onclick="openFullscreenNote(<?php echo $note['id']; ?>)">
-
-                            <div class="note-header">
-                                <button onclick="event.stopPropagation(); togglePin(<?php echo $note['id']; ?>)"
-                                        class="note-pin active"
-                                        title="Unpin">
-                                    📌
-                                </button>
-                                <div class="note-actions">
-                                    <?php if ($note['type'] === 'text'): ?>
-                                        <button onclick="event.stopPropagation(); editNote(<?php echo $note['id']; ?>)"
-                                                class="note-action"
-                                                title="Edit">
-                                            ✏️
-                                        </button>
-                                    <?php endif; ?>
-                                    <button onclick="event.stopPropagation(); deleteNote(<?php echo $note['id']; ?>)"
-                                            class="note-action"
-                                            title="Delete">
-                                        🗑️
-                                    </button>
-                                </div>
-                            </div>
-
-                            <?php if (!empty($note['title'])): ?>
-                                <div class="note-title"><?php echo htmlspecialchars($note['title']); ?></div>
-                            <?php endif; ?>
-
-                            <?php if ($note['type'] === 'text'): ?>
-                                <div class="note-body"><?php echo nl2br(htmlspecialchars($note['body'])); ?></div>
-                            <?php else: ?>
-                                <div class="note-voice" onclick="event.stopPropagation();">
-                                    <div class="voice-icon">🎤</div>
-                                    <div class="voice-label">Voice Note</div>
-                                    <?php
-                                    $audioExists = $note['audio_path'] && file_exists(__DIR__ . '/..' . $note['audio_path']);
-                                    if ($audioExists): ?>
-                                        <audio controls onclick="event.stopPropagation();">
-                                            <source src="<?php echo htmlspecialchars($note['audio_path']); ?>" type="audio/webm">
-                                            Your browser does not support audio playback.
-                                        </audio>
-                                    <?php elseif ($note['audio_path']): ?>
-                                        <div class="voice-missing">Audio file not available</div>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endif; ?>
-
-                            <?php
-                            $notePaths = getImagePaths($note['image_path']);
-                            if (!empty($notePaths)):
-                                $imageCount = count($notePaths);
-                            ?>
-                                <div class="note-images-carousel" onclick="event.stopPropagation(); openImageCarousel(<?php echo htmlspecialchars(json_encode($notePaths)); ?>, 0)" data-images='<?php echo htmlspecialchars(json_encode($notePaths)); ?>'>
-                                    <img src="<?php echo htmlspecialchars($notePaths[0]); ?>" alt="Note photo" loading="lazy">
-                                    <?php if ($imageCount > 1): ?>
-                                        <div class="carousel-indicator"><?php echo $imageCount; ?> photos</div>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endif; ?>
-
-                            <div class="note-footer">
-                                <div class="note-author">
-                                    <div class="author-avatar-mini"
-                                         style="background: <?php echo htmlspecialchars($note['avatar_color']); ?>">
-                                        <img src="<?php echo avatarUrl($note['user_id']); ?>"
-                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                                             style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
-                                        <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($note['full_name'], 0, 1)); ?></span>
-                                    </div>
-                                    <span><?php echo htmlspecialchars($note['full_name']); ?></span>
-                                </div>
-                                <div class="note-date" title="<?php echo date('M j, Y \a\t g:i A', strtotime($note['created_at'])); ?>">
-                                    <?php echo timeAgo($note['created_at']); ?>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </section>
-        <?php endif; ?>
-
-        <!-- Regular Notes Section -->
-        <section class="notes-section">
-            <?php if (!empty($pinnedNotes)): ?>
-                <h2 class="section-title">
-                    <span class="title-icon">📋</span>
-                    Other Notes
-                </h2>
-            <?php endif; ?>
-            
-            <?php if (empty($notes)): ?>
-                <div class="empty-state glass-card">
-                    <div class="empty-icon">📝</div>
-                    <h2>No notes yet</h2>
-                    <p>Start capturing your family's ideas and reminders</p>
-                    <div class="empty-actions">
-                        <button onclick="showCreateNoteModal('text')" class="btn btn-primary btn-lg">
-                            <span class="btn-icon">📝</span>
-                            <span>Create First Note</span>
-                        </button>
-                        <button onclick="showCreateNoteModal('voice')" class="btn btn-voice btn-lg">
-                            <span class="btn-icon">🎤</span>
-                            <span>Record Voice Note</span>
-                        </button>
-                    </div>
-                </div>
-                
-            <?php else: ?>
-                <div class="notes-grid">
-                    <?php foreach ($regularNotes as $note): ?>
-                        <div class="note-card"
-                             data-note-id="<?php echo $note['id']; ?>"
-                             data-note-type="<?php echo $note['type']; ?>"
-                             style="background: <?php echo htmlspecialchars($note['color']); ?>; cursor: pointer;"
-                             onclick="openFullscreenNote(<?php echo $note['id']; ?>)">
-
-                            <div class="note-header">
-                                <button onclick="event.stopPropagation(); togglePin(<?php echo $note['id']; ?>)"
-                                        class="note-pin"
-                                        title="Pin">
-                                    📌
-                                </button>
-                                <div class="note-actions">
-                                    <?php if ($note['type'] === 'text'): ?>
-                                        <button onclick="event.stopPropagation(); editNote(<?php echo $note['id']; ?>)"
-                                                class="note-action"
-                                                title="Edit">
-                                            ✏️
-                                        </button>
-                                    <?php endif; ?>
-                                    <button onclick="event.stopPropagation(); deleteNote(<?php echo $note['id']; ?>)"
-                                            class="note-action"
-                                            title="Delete">
-                                        🗑️
-                                    </button>
-                                </div>
-                            </div>
-
-                            <?php if (!empty($note['title'])): ?>
-                                <div class="note-title"><?php echo htmlspecialchars($note['title']); ?></div>
-                            <?php endif; ?>
-
-                            <?php if ($note['type'] === 'text'): ?>
-                                <div class="note-body"><?php echo nl2br(htmlspecialchars($note['body'])); ?></div>
-                            <?php else: ?>
-                                <div class="note-voice" onclick="event.stopPropagation();">
-                                    <div class="voice-icon">🎤</div>
-                                    <div class="voice-label">Voice Note</div>
-                                    <?php
-                                    $audioExists = $note['audio_path'] && file_exists(__DIR__ . '/..' . $note['audio_path']);
-                                    if ($audioExists): ?>
-                                        <audio controls onclick="event.stopPropagation();">
-                                            <source src="<?php echo htmlspecialchars($note['audio_path']); ?>" type="audio/webm">
-                                            Your browser does not support audio playback.
-                                        </audio>
-                                    <?php elseif ($note['audio_path']): ?>
-                                        <div class="voice-missing">Audio file not available</div>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endif; ?>
-
-                            <?php
-                            $notePaths = getImagePaths($note['image_path']);
-                            if (!empty($notePaths)):
-                                $imageCount = count($notePaths);
-                            ?>
-                                <div class="note-images-carousel" onclick="event.stopPropagation(); openImageCarousel(<?php echo htmlspecialchars(json_encode($notePaths)); ?>, 0)" data-images='<?php echo htmlspecialchars(json_encode($notePaths)); ?>'>
-                                    <img src="<?php echo htmlspecialchars($notePaths[0]); ?>" alt="Note photo" loading="lazy">
-                                    <?php if ($imageCount > 1): ?>
-                                        <div class="carousel-indicator"><?php echo $imageCount; ?> photos</div>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endif; ?>
-
-                            <div class="note-footer">
-                                <div class="note-author">
-                                    <div class="author-avatar-mini"
-                                         style="background: <?php echo htmlspecialchars($note['avatar_color']); ?>">
-                                        <img src="<?php echo avatarUrl($note['user_id']); ?>"
-                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                                             style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
-                                        <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($note['full_name'], 0, 1)); ?></span>
-                                    </div>
-                                    <span><?php echo htmlspecialchars($note['full_name']); ?></span>
-                                </div>
-                                <div class="note-date" title="<?php echo date('M j, Y \a\t g:i A', strtotime($note['created_at'])); ?>">
-                                    <?php echo timeAgo($note['created_at']); ?>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
-        </section>
-
+    <div class="notes-toolbar">
+        <div class="notes-filters" role="group" aria-label="Filter notes">
+            <button type="button" data-filter="all" aria-pressed="true">All notes <span id="notesTotal"><?= count($notes) ?></span></button>
+            <button type="button" data-filter="pinned" aria-pressed="false"><?= notesIcon('pin') ?> Pinned</button>
+            <button type="button" data-filter="list" aria-pressed="false"><?= notesIcon('list') ?> Checklists</button>
+            <button type="button" data-filter="text" aria-pressed="false"><?= notesIcon('note') ?> Text</button>
+            <button type="button" data-filter="photos" aria-pressed="false"><?= notesIcon('photo') ?> Photos</button>
+            <button type="button" data-filter="voice" aria-pressed="false"><?= notesIcon('mic') ?> Voice</button>
+        </div>
+        <label class="notes-search"><?= notesIcon('search') ?><span class="notes-sr-only">Search notes</span>
+            <input id="notesSearch" type="search" placeholder="Search notes…" autocomplete="off">
+        </label>
     </div>
+
+    <div class="notes-board-tools">
+        <h2 id="notesBoardHeading">Board</h2>
+        <div class="notes-view-tools">
+            <label class="notes-sort"><span class="notes-sr-only">Sort notes</span>
+                <select id="notesSort">
+                    <option value="new">Newest first</option>
+                    <option value="updated">Recently edited</option>
+                    <option value="old">Oldest first</option>
+                    <option value="title">Title A–Z</option>
+                </select>
+            </label>
+            <div class="notes-layout" role="group" aria-label="Board layout">
+                <button type="button" data-layout="grid" aria-label="Grid layout" aria-pressed="true" title="Grid layout"><?= notesIcon('grid') ?></button>
+                <button type="button" data-layout="list" aria-label="List layout" aria-pressed="false" title="List layout"><?= notesIcon('rows') ?></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notesBoard" class="notes-board" aria-labelledby="notesBoardHeading"></div>
+    <p id="notesResultCount" class="notes-sr-only" role="status"></p>
+    <noscript><p class="notes-empty">Enable JavaScript to use the family notes board.</p></noscript>
+    <div id="notesToast" class="notes-toast" role="status" hidden></div>
 </main>
 
-<!-- Create Text Note Modal -->
-<div id="createTextNoteModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2>📝 Create Note</h2>
-            <button onclick="closeModal('createTextNoteModal')" class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form onsubmit="createNote(event, 'text')">
-                <div class="form-group">
-                    <label>Title (optional)</label>
-                    <input type="text" id="noteTitle" class="form-control" placeholder="Note title...">
+<dialog class="notes-dialog" id="notesEditor" aria-labelledby="notesEditorHeading">
+    <form id="notesForm">
+        <header class="notes-dialog-header">
+            <h2 id="notesEditorHeading">New note</h2>
+            <button type="button" class="notes-icon-button" data-close aria-label="Close editor"><?= notesIcon('close') ?></button>
+        </header>
+        <div class="notes-dialog-body">
+            <div id="notesRecorder" class="notes-recorder" hidden>
+                <div class="notes-recorder-icon"><?= notesIcon('mic') ?></div>
+                <output id="notesTimer">00:00</output>
+                <div id="notesRecordStatus" role="status">Ready to record</div>
+                <div class="notes-recorder-controls">
+                    <button type="button" id="notesStartRecord" class="notes-button notes-button-primary">Start recording</button>
+                    <button type="button" id="notesStopRecord" class="notes-button notes-button-danger" hidden>Stop recording</button>
                 </div>
-
-                <div class="form-group">
-                    <label>Content</label>
-                    <textarea id="noteBody"
-                              class="form-control note-textarea"
-                              placeholder="Write your note here..."
-                              rows="8"><?php echo htmlspecialchars($voicePrefillContent); ?></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label>Photos (optional, up to 7)</label>
-                    <div class="photo-upload-area" id="notePhotoDropZone" onclick="document.getElementById('notePhotoInput').click()">
-                        <div class="upload-icon">📷</div>
-                        <div class="upload-text">Click or drag to add photos</div>
-                        <div class="upload-hint">JPG, PNG, GIF or WebP. Up to 7 photos.</div>
-                    </div>
-                    <input type="file" id="notePhotoInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display: none;">
-                    <div class="photo-previews-container" id="notePhotoPreviewsContainer" style="display: none;">
-                        <div class="photo-previews-grid" id="notePhotoPreviewsGrid"></div>
-                        <div class="photo-count-indicator"><span id="photoCountText">0</span>/7 photos</div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Color</label>
-                    <div class="color-picker">
-                        <input type="radio" name="noteColor" value="#ffeb3b" id="color1" checked>
-                        <label for="color1" class="color-option" style="background: #ffeb3b;"></label>
-
-                        <input type="radio" name="noteColor" value="#ff9800" id="color2">
-                        <label for="color2" class="color-option" style="background: #ff9800;"></label>
-
-                        <input type="radio" name="noteColor" value="#e91e63" id="color3">
-                        <label for="color3" class="color-option" style="background: #e91e63;"></label>
-
-                        <input type="radio" name="noteColor" value="#9c27b0" id="color4">
-                        <label for="color4" class="color-option" style="background: #9c27b0;"></label>
-
-                        <input type="radio" name="noteColor" value="#2196f3" id="color5">
-                        <label for="color5" class="color-option" style="background: #2196f3;"></label>
-
-                        <input type="radio" name="noteColor" value="#00bcd4" id="color6">
-                        <label for="color6" class="color-option" style="background: #00bcd4;"></label>
-
-                        <input type="radio" name="noteColor" value="#4caf50" id="color7">
-                        <label for="color7" class="color-option" style="background: #4caf50;"></label>
-
-                        <input type="radio" name="noteColor" value="#8bc34a" id="color8">
-                        <label for="color8" class="color-option" style="background: #8bc34a;"></label>
-                    </div>
-                </div>
-
-                <div class="modal-actions">
-                    <button type="submit" class="btn btn-primary">Create Note</button>
-                    <button type="button" onclick="closeModal('createTextNoteModal')" class="btn btn-secondary">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Create Voice Note Modal -->
-<div id="createVoiceNoteModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2>🎤 Voice Note</h2>
-            <button onclick="closeModal('createVoiceNoteModal')" class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div class="voice-recorder">
-                <div class="recording-status" id="recordingStatus">
-                    <div class="recording-icon">🎤</div>
-                    <div class="recording-text">Press record to start</div>
-                    <div class="recording-timer" id="recordingTimer">00:00</div>
-                </div>
-
-                <div class="recording-visualizer" id="visualizer">
-                    <canvas id="visualizerCanvas"></canvas>
-                </div>
-
-                <div class="recording-controls">
-                    <button type="button" onclick="startRecording()" id="startRecordBtn" class="btn btn-primary btn-lg">
-                        <span class="btn-icon">⏺️</span>
-                        <span class="btn-text">Start Recording</span>
-                    </button>
-                    <button type="button" onclick="stopRecording()" id="stopRecordBtn" class="btn btn-danger btn-lg" style="display: none;">
-                        <span class="btn-icon">⏹️</span>
-                        <span class="btn-text">Stop Recording</span>
-                    </button>
-                    <button type="button" onclick="playRecording()" id="playRecordBtn" class="btn btn-success btn-lg" style="display: none;">
-                        <span class="btn-icon">▶️</span>
-                        <span class="btn-text">Play</span>
-                    </button>
-                </div>
-
-                <audio id="recordedAudio" controls style="display: none; width: 100%; margin: 20px 0;"></audio>
-
-                <form onsubmit="createNote(event, 'voice')" id="voiceNoteForm" style="display: none;">
-                    <div class="form-group">
-                        <label>Title (optional)</label>
-                        <input type="text" id="voiceNoteTitle" class="form-control" placeholder="Voice note title...">
-                    </div>
-
-                    <div class="form-group">
-                        <label>Color</label>
-                        <div class="color-picker">
-                            <input type="radio" name="voiceNoteColor" value="#ffeb3b" id="vcolor1" checked>
-                            <label for="vcolor1" class="color-option" style="background: #ffeb3b;"></label>
-
-                            <input type="radio" name="voiceNoteColor" value="#ff9800" id="vcolor2">
-                            <label for="vcolor2" class="color-option" style="background: #ff9800;"></label>
-
-                            <input type="radio" name="voiceNoteColor" value="#e91e63" id="vcolor3">
-                            <label for="vcolor3" class="color-option" style="background: #e91e63;"></label>
-
-                            <input type="radio" name="voiceNoteColor" value="#9c27b0" id="vcolor4">
-                            <label for="vcolor4" class="color-option" style="background: #9c27b0;"></label>
-                        </div>
-                    </div>
-
-                    <div class="modal-actions">
-                        <button type="submit" class="btn btn-primary">Save Voice Note</button>
-                        <button type="button" onclick="closeModal('createVoiceNoteModal')" class="btn btn-secondary">Cancel</button>
-                    </div>
-                </form>
+                <audio id="notesRecordingPreview" controls hidden></audio>
             </div>
-        </div>
-    </div>
-</div>
-
-<!-- Edit Note Modal -->
-<div id="editNoteModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2>✏️ Edit Note</h2>
-            <button onclick="closeModal('editNoteModal')" class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form onsubmit="updateNote(event)">
-                <input type="hidden" id="editNoteId">
-                
-                <div class="form-group">
-                    <label>Title</label>
-                    <input type="text" id="editNoteTitle" class="form-control" placeholder="Note title...">
+            <label class="notes-field">Title <input name="title" id="notesTitle" maxlength="160" placeholder="Give it a title"></label>
+            <div class="notes-field" id="notesBodyField">
+                <div class="notes-field-head">
+                    <label for="notesBody">Note</label>
+                    <button type="button" class="notes-button notes-button-small" id="notesInsertTasks" title="Convert selected lines or existing bullets to checkboxes"><?= notesIcon('list') ?> Add checkboxes</button>
                 </div>
-
-                <div class="form-group">
-                    <label>Content</label>
-                    <textarea id="editNoteBody" 
-                              class="form-control note-textarea" 
-                              required 
-                              rows="8"></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label>Color</label>
-                    <div class="color-picker">
-                        <input type="radio" name="editNoteColor" value="#ffeb3b" id="ecolor1">
-                        <label for="ecolor1" class="color-option" style="background: #ffeb3b;"></label>
-
-                        <input type="radio" name="editNoteColor" value="#ff9800" id="ecolor2">
-                        <label for="ecolor2" class="color-option" style="background: #ff9800;"></label>
-
-                        <input type="radio" name="editNoteColor" value="#e91e63" id="ecolor3">
-                        <label for="ecolor3" class="color-option" style="background: #e91e63;"></label>
-
-                        <input type="radio" name="editNoteColor" value="#9c27b0" id="ecolor4">
-                        <label for="ecolor4" class="color-option" style="background: #9c27b0;"></label>
-
-                        <input type="radio" name="editNoteColor" value="#2196f3" id="ecolor5">
-                        <label for="ecolor5" class="color-option" style="background: #2196f3;"></label>
-
-                        <input type="radio" name="editNoteColor" value="#00bcd4" id="ecolor6">
-                        <label for="ecolor6" class="color-option" style="background: #00bcd4;"></label>
-
-                        <input type="radio" name="editNoteColor" value="#4caf50" id="ecolor7">
-                        <label for="ecolor7" class="color-option" style="background: #4caf50;"></label>
-
-                        <input type="radio" name="editNoteColor" value="#8bc34a" id="ecolor8">
-                        <label for="ecolor8" class="color-option" style="background: #8bc34a;"></label>
-                    </div>
-                </div>
-
-                <div class="modal-actions">
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                    <button type="button" onclick="closeModal('editNoteModal')" class="btn btn-secondary">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Collage Builder Modal -->
-<div id="collageModal" class="modal">
-    <div class="modal-content modal-fullscreen">
-        <div class="modal-header">
-            <h2>🖼️ Create Collage</h2>
-            <button onclick="closeModal('collageModal')" class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body collage-modal-body">
-            <div class="collage-toolbar">
-                <div class="photo-upload-area" id="btnChooseImages" style="display:inline-flex;padding:8px 16px;min-height:auto;">
-                    <div class="upload-icon" style="font-size:1rem;margin:0 8px 0 0;">📷</div>
-                    <div class="upload-text" style="font-size:0.85rem;">Choose images</div>
-                </div>
-                <button id="btnChooseLayout">Choose layout</button>
-                <button id="btnChooseBackground">Choose background</button>
-                <button id="btnDone">Done</button>
-                <button id="btnDelete">Delete</button>
+                <textarea name="body" id="notesBody" rows="8" placeholder="Write something to remember…" spellcheck="true"></textarea>
+                <p id="notesChecklistHint" class="notes-hint" hidden>Press Enter to add another item. Tick items from the board or the open note.</p>
             </div>
-            <div id="collageCanvasWrapper">
-                <div id="collageCanvas"></div>
+            <?php if ($imageCapacity): ?>
+            <div id="notesAttachments" class="notes-field">
+                <div class="notes-field-head"><span>Photos</span><span class="notes-hint" id="notesPhotoCount"></span></div>
+                <div id="notesPhotoPreviews" class="notes-photo-previews"></div>
+                <button type="button" id="notesAddPhotos" class="notes-upload"><?= notesIcon('photo') ?> Add or drop photos</button>
+                <input type="file" id="notesPhotoInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
             </div>
+            <?php endif; ?>
+            <fieldset class="notes-colors">
+                <legend>Note color</legend>
+                <?php foreach ([
+                    'Paper' => ['paper', '#ffffff'], 'Honey' => ['honey', '#ffeb3b'],
+                    'Peach' => ['peach', '#ff9800'], 'Rose' => ['rose', '#e91e63'],
+                    'Lilac' => ['lilac', '#9c27b0'], 'Sky' => ['sky', '#2196f3'],
+                    'Aqua' => ['aqua', '#00bcd4'], 'Mint' => ['mint', '#4caf50'],
+                    'Lime' => ['lime', '#8bc34a']
+                ] as $name => [$tone, $color]): ?>
+                    <label class="notes-color" data-tone="<?= $tone ?>" title="<?= $name ?>">
+                        <input type="radio" name="color" value="<?= $color ?>" aria-label="<?= $name ?>">
+                        <span></span>
+                    </label>
+                <?php endforeach; ?>
+            </fieldset>
+            <p id="notesFormError" class="notes-form-error" role="alert" hidden></p>
+        </div>
+        <footer class="notes-dialog-footer">
+            <button type="button" class="notes-button" data-close>Cancel</button>
+            <button type="submit" class="notes-button notes-button-primary" id="notesSave">Save note</button>
+        </footer>
+    </form>
+</dialog>
+
+<dialog class="notes-dialog" id="notesReader" aria-labelledby="notesReaderHeading">
+    <div id="notesReaderSurface">
+        <header class="notes-dialog-header">
+            <div><div id="notesReaderKind" class="notes-card-kind"></div><h2 id="notesReaderHeading" tabindex="-1"></h2></div>
+            <button type="button" class="notes-icon-button" data-close aria-label="Close note"><?= notesIcon('close') ?></button>
+        </header>
+        <div class="notes-dialog-body" id="notesReaderContent"></div>
+        <p class="notes-reader-feedback" id="notesReaderFeedback" role="status" hidden></p>
+        <footer class="notes-dialog-footer notes-reader-actions" id="notesReaderActions"></footer>
+    </div>
+</dialog>
+
+<dialog class="notes-gallery" id="notesGallery" aria-label="Note photos">
+    <div class="notes-gallery-layout">
+        <div class="notes-gallery-header">
+            <p id="notesGalleryCount" role="status"></p>
+            <button type="button" class="notes-icon-button" data-close aria-label="Close photos"><?= notesIcon('close') ?></button>
+        </div>
+        <div class="notes-gallery-stage">
+            <button type="button" class="notes-icon-button" id="notesPrevPhoto" aria-label="Previous photo"><?= notesIcon('chevron') ?></button>
+            <div class="notes-gallery-photo"><img id="notesGalleryImage" alt=""><p id="notesGalleryError" hidden>This photo is unavailable.</p></div>
+            <button type="button" class="notes-icon-button notes-gallery-next" id="notesNextPhoto" aria-label="Next photo"><?= notesIcon('chevron') ?></button>
         </div>
     </div>
-</div>
+</dialog>
 
-<!-- Fullscreen Note View -->
-<div id="fullscreenNoteModal" class="fullscreen-note-overlay">
-    <div class="fullscreen-note-container">
-        <button onclick="closeFullscreenNote()" class="fullscreen-close-btn" title="Sluit">&times;</button>
+<dialog class="notes-dialog notes-delete-dialog" id="notesDelete" aria-labelledby="notesDeleteHeading">
+    <header class="notes-dialog-header"><h2 id="notesDeleteHeading">Delete this note?</h2></header>
+    <div class="notes-dialog-body"><p>This removes the note and its attachments from the family board.</p><p id="notesDeleteError" class="notes-form-error" role="alert" hidden></p></div>
+    <footer class="notes-dialog-footer">
+        <button type="button" class="notes-button" data-close autofocus>Cancel</button>
+        <button type="button" class="notes-button notes-button-danger" id="notesConfirmDelete">Delete note</button>
+    </footer>
+</dialog>
 
-        <div class="fullscreen-note-content" id="fullscreenNoteContent">
-            <!-- Note content will be injected here -->
-        </div>
-
-        <div class="fullscreen-note-actions" id="fullscreenNoteActions">
-            <!-- Action buttons will be injected here -->
-        </div>
-    </div>
-</div>
-
-<?php if ($voicePrefillContent): ?>
-<script>
-// 🎤 AUTO-OPEN MODAL WITH PREFILLED CONTENT
-document.addEventListener('DOMContentLoaded', function() {
-    showCreateNoteModal('text');
-    
-    const noteBody = document.getElementById('noteBody');
-    if (noteBody) {
-        noteBody.focus();
-        noteBody.setSelectionRange(noteBody.value.length, noteBody.value.length);
-        
-        // Show toast notification
-        if (typeof showToast === 'function') {
-            showToast('🎤 Voice command prefilled!', 'success');
-        }
-    }
-});
-</script>
-<?php endif; ?>
+<script type="application/json" id="notesData"><?= json_encode(
+    ['notes' => $notes, 'csrf' => $csrfToken, 'prefill' => $prefill, 'maxPhotos' => NOTES_MAX_PHOTOS],
+    JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR
+) ?></script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

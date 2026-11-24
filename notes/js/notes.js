@@ -1,1541 +1,826 @@
-/**
- * RELATIVES - NOTES JAVASCRIPT
- * Interactive sticky notes with voice recording
- */
+(() => {
+    'use strict';
 
-// ============================================
-// GLOBAL VARIABLES
-// ============================================
+    const $ = id => document.getElementById(id);
+    const { notes: initialNotes, csrf, prefill, maxPhotos } = JSON.parse($('notesData').textContent);
+    const notes = new Map(initialNotes.map(note => [note.id, note]));
+    const colors = {
+        '#ffffff': 'paper', '#ffeb3b': 'honey', '#ff9800': 'peach', '#e91e63': 'rose',
+        '#9c27b0': 'lilac', '#2196f3': 'sky', '#00bcd4': 'aqua', '#4caf50': 'mint', '#8bc34a': 'lime'
+    };
+    const taskPattern = /^[ \t]*[-*] \[([ xX])\][ \t]+(\S.*)$/u;
+    const taskPrefix = /^([ \t]*[-*] )\[[ xX]\](?:[ \t]+|$)/;
+    const bulletPrefix = /^([ \t]*)[-*•][ \t]+/;
+    const dateFormat = new Intl.DateTimeFormat('en-ZA', {
+        day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Johannesburg'
+    });
+    const editor = $('notesEditor');
+    const reader = $('notesReader');
+    const gallery = $('notesGallery');
+    const deleteDialog = $('notesDelete');
+    const form = $('notesForm');
+    const board = $('notesBoard');
+    const search = $('notesSearch');
+    const bodyInput = $('notesBody');
+    const photoInput = $('notesPhotoInput');
+    const saveButton = $('notesSave');
+    const deleteButton = $('notesConfirmDelete');
+    const pending = new Set();
+    let filter = 'all';
+    let layout = preference('layout') === 'list' ? 'list' : 'grid';
+    let editing = null;
+    let editorType = 'text';
+    let initialDraft = '';
+    let previousFocus = null;
+    let readerId = null;
+    let deleting = null;
+    let photoPaths = [];
+    let photoFiles = [];
+    let galleryImages = [];
+    let galleryIndex = 0;
+    let galleryTouch = null;
+    let toastTimer;
 
-let mediaRecorder = null;
-let audioChunks = [];
-let recordingTimer = null;
-let recordingStartTime = 0;
-let audioContext = null;
-let analyser = null;
-let dataArray = null;
-let animationId = null;
-let recordedBlob = null;
-let selectedNoteImages = []; // For multiple photo uploads (up to 7)
-const MAX_PHOTOS = 7;
+    function preference(name, value) {
+        try {
+            const key = 'relatives.notes.' + name;
+            if (value === undefined) return localStorage.getItem(key);
+            localStorage.setItem(key, value);
+        } catch {
+            // The board still works when browser storage is unavailable.
+        }
+    }
 
-// ============================================
-// INITIALIZATION
-// ============================================
+    function escape(value) {
+        return String(value).replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[character]);
+    }
 
-document.addEventListener('DOMContentLoaded', function() {
-    initParticles();
-    initNoteAnimations();
-    updateStats();
-    initQuickActionButtons();
-    initPhotoUpload();
-});
+    function icon(name) {
+        return `<svg class="notes-icon" aria-hidden="true"><use href="#notes-icon-${name}"></use></svg>`;
+    }
 
-// ============================================
-// PHOTO UPLOAD FOR NOTES
-// ============================================
+    function iconButton(action, glyph, label, pressed) {
+        return `<button type="button" class="notes-icon-button" data-action="${action}" aria-label="${label}" title="${label}" ${
+            pressed === undefined ? '' : `aria-pressed="${pressed}"`
+        }>${icon(glyph)}</button>`;
+    }
 
-function initPhotoUpload() {
-    const photoInput = document.getElementById('notePhotoInput');
-    const dropZone = document.getElementById('notePhotoDropZone');
+    function noteType(note) {
+        if (note.type === 'voice') return ['mic', 'Voice note'];
+        if (note.body.split('\n').some(line => taskPattern.test(line))) return ['list', 'Checklist'];
+        if (note.images.length) return ['photo', 'Photo note'];
+        return ['note', 'Note'];
+    }
+
+    function noteTitle(note) {
+        const kind = noteType(note)[1];
+        return note.title || (kind === 'Note' ? 'Untitled note' : kind);
+    }
+
+    function noteBody(note) {
+        const parts = [];
+        let prose = [];
+        let tasks = [];
+        let total = 0;
+        let done = 0;
+
+        function flushProse() {
+            if (prose.length && prose.some(line => line.trim())) {
+                parts.push(`<div class="notes-prose">${escape(prose.join('\n'))}</div>`);
+            }
+            prose = [];
+        }
+
+        function flushTasks() {
+            if (tasks.length) parts.push(`<ul class="notes-task-list">${tasks.join('')}</ul>`);
+            tasks = [];
+        }
+
+        note.body.split('\n').forEach((line, index) => {
+            const match = taskPattern.exec(line);
+            if (!match) {
+                flushTasks();
+                prose.push(line);
+                return;
+            }
+            flushProse();
+            const checked = match[1] !== ' ';
+            total++;
+            if (checked) done++;
+            tasks.push(`<li><label><input type="checkbox" data-line="${index}" ${checked ? 'checked' : ''}><span>${escape(match[2])}</span></label></li>`);
+        });
+        flushProse();
+        flushTasks();
+
+        const progress = total ? `<div class="notes-progress"><progress value="${done}" max="${total}" aria-label="Checklist progress"></progress><span>${done} / ${total} done</span></div>` : '';
+        return { content: parts.join(''), progress };
+    }
+
+    function audioPlayer(note) {
+        if (!note.audio) return '<p class="notes-media-missing">Recording unavailable</p>';
+        return `<audio controls preload="metadata" src="${escape(note.audio)}" aria-label="${escape(noteTitle(note))}"></audio>`;
+    }
+
+    function photoButton(path, index, count = 1) {
+        return `<button type="button" class="notes-photo" data-photo="${index}" aria-label="${
+            count > 1 ? `Open ${count} photos` : `Open photo ${index + 1}`
+        }"><img src="${escape(path)}" alt="" loading="lazy"><span class="notes-photo-missing" hidden>${icon('photo')} Photo unavailable</span>${
+            count > 1 ? `<span class="notes-photo-count">${icon('photo')} ${count}</span>` : ''
+        }</button>`;
+    }
+
+    function authorLine(note) {
+        const date = note.updated || note.created;
+        const initial = Array.from(note.author)[0]?.toLocaleUpperCase() || '?';
+        return `<span class="notes-author"><span class="notes-avatar" aria-hidden="true">${escape(initial)}${
+            note.avatar ? `<img src="${escape(note.avatar)}" alt="" loading="lazy">` : ''
+        }</span><span>${escape(note.author)}</span></span>${
+            date ? `<time title="${note.updated ? 'Last edited' : 'Created'}" datetime="${escape(date)}">${dateFormat.format(new Date(date))}</time>` : ''
+        }`;
+    }
+
+    function makeCard(note) {
+        const [glyph, kind] = noteType(note);
+        const text = note.type === 'text' ? noteBody(note) : null;
+        const photo = note.images[0];
+        return `<article class="notes-card" data-note-id="${escape(note.id)}" data-tone="${colors[note.color.toLowerCase()] || 'paper'}">
+            <div class="notes-card-top">
+                <span class="notes-card-kind">${icon(glyph)} ${kind}</span>
+                <div class="notes-card-actions">
+                    ${iconButton('pin', 'pin', note.pinned ? 'Unpin note' : 'Pin note', note.pinned)}
+                    ${iconButton('edit', 'pencil', 'Edit note')}
+                </div>
+            </div>
+            <h3><button type="button" class="notes-open" data-action="open">${escape(noteTitle(note))} ${icon('arrow')}</button></h3>
+            ${text?.content ? `<div class="notes-card-content">${text.content}</div>` : ''}
+            ${text?.progress || ''}
+            ${note.type === 'voice' ? `<div class="notes-audio">${audioPlayer(note)}</div>` : ''}
+            ${photo ? photoButton(photo, 0, note.images.length) : ''}
+            <footer class="notes-card-footer">${authorLine(note)}</footer>
+        </article>`;
+    }
+
+    function renderBoard() {
+        const query = search.value.trim().toLocaleLowerCase();
+        const terms = query ? query.split(/\s+/) : [];
+        const relevant = [...notes.values()].filter(note => {
+            if (filter === 'pinned' && !note.pinned) return false;
+            if (filter === 'list' && noteType(note)[0] !== 'list') return false;
+            if (filter === 'text' && note.type !== 'text') return false;
+            if (filter === 'photos' && !note.images.length) return false;
+            if (filter === 'voice' && note.type !== 'voice') return false;
+            const searchable = `${noteTitle(note)} ${note.body} ${note.author}`.toLocaleLowerCase();
+            return terms.every(word => searchable.includes(word));
+        });
+        const sort = $('notesSort').value;
+        relevant.sort((a, b) => {
+            if (sort === 'title') return noteTitle(a).localeCompare(noteTitle(b));
+            const aDate = sort === 'updated' ? a.updated || a.created : a.created;
+            const bDate = sort === 'updated' ? b.updated || b.created : b.created;
+            const difference = (Date.parse(bDate) || 0) - (Date.parse(aDate) || 0);
+            return sort === 'old' ? -difference : difference;
+        });
+        $('notesTotal').textContent = notes.size;
+        $('notesResultCount').textContent = `${relevant.length} ${relevant.length === 1 ? 'note' : 'notes'} shown`;
+        board.dataset.layout = layout;
+        if (!relevant.length) {
+            const hasFilter = Boolean(query) || filter !== 'all';
+            board.innerHTML = `<div class="notes-empty"><span class="notes-empty-icon">${icon(hasFilter ? 'search' : 'note')}</span>
+                <h3>${hasFilter ? 'No matching notes' : 'No notes yet'}</h3>
+                <p>${hasFilter ? 'Try another search or filter.' : 'Start with a note, a checklist or a voice recording.'}</p>
+                ${hasFilter
+                    ? '<button type="button" class="notes-button" data-action="clear">Clear filters</button>'
+                    : `<button type="button" class="notes-button notes-button-primary" data-create="text">${icon('plus')} New note</button>`}
+            </div>`;
+            return;
+        }
+        const pinned = relevant.filter(note => note.pinned);
+        const others = relevant.filter(note => !note.pinned);
+        const group = (title, items) => items.length ? `<section class="notes-group" aria-label="${title}"><h3>${title}</h3><div class="notes-grid">${items.map(makeCard).join('')}</div></section>` : '';
+        board.innerHTML = group('Pinned', pinned) + group(pinned.length ? 'Other notes' : 'Notes', others);
+    }
+
+    function renderReader(note) {
+        const [glyph, kind] = noteType(note);
+        const voice = note.type === 'voice';
+        const text = voice ? null : noteBody(note);
+        $('notesReaderSurface').dataset.tone = colors[note.color.toLowerCase()] || 'paper';
+        $('notesReaderKind').innerHTML = `${icon(glyph)} ${kind}`;
+        $('notesReaderHeading').textContent = noteTitle(note);
+        $('notesReaderContent').innerHTML = `<div class="notes-reader-meta">${authorLine(note)}</div>
+            ${voice ? `<div class="notes-audio">${audioPlayer(note)}</div>` : `${text.progress}${text.content}`}
+            ${note.images.length ? `<div class="notes-reader-photos">${note.images.map((path, index) => photoButton(path, index)).join('')}</div>` : ''}`;
+        $('notesReaderActions').innerHTML = `<button type="button" class="notes-button notes-reader-delete" data-action="delete">${icon('trash')} Delete</button>
+            ${voice ? '' : `<button type="button" class="notes-button" data-action="copy">${icon('copy')} Copy</button>`}
+            <button type="button" class="notes-button" data-action="pin" aria-pressed="${note.pinned}">${icon('pin')} ${note.pinned ? 'Unpin' : 'Pin'}</button>
+            <button type="button" class="notes-button notes-button-primary" data-action="edit">${icon('pencil')} Edit</button>`;
+    }
+
+    function openNote(note) {
+        readerId = note.id;
+        setNotice($('notesReaderFeedback'), '');
+        renderReader(note);
+        reader.showModal();
+        $('notesReaderHeading').focus();
+    }
+
+    async function request(action, data = new FormData()) {
+        data.set('action', action);
+        data.set('csrf_token', csrf);
+        const response = await fetch('/notes/', { method: 'POST', body: data });
+        let result;
+        try {
+            result = await response.json();
+        } catch {
+            throw new Error(response.status === 413
+                ? 'The attachments are too large. Try fewer or smaller files.'
+                : 'Notes could not reach the server. Try again.');
+        }
+        if (!response.ok || !result.success) {
+            const error = new Error(result.error || 'Could not save this change.');
+            error.note = result.note;
+            error.missing = response.status === 404;
+            throw error;
+        }
+        return result;
+    }
+
+    function setNotice(element, message) {
+        element.textContent = message;
+        element.hidden = !message;
+    }
+
+    function notify(message) {
+        const toast = reader.open && !editor.open && !deleteDialog.open ? $('notesReaderFeedback') : $('notesToast');
+        clearTimeout(toastTimer);
+        for (const id of ['notesToast', 'notesReaderFeedback']) setNotice($(id), '');
+        setNotice(toast, message);
+        toastTimer = setTimeout(() => setNotice(toast, ''), 4500);
+    }
+
+    function refreshNote(note, id) {
+        if (note) notes.set(note.id, note);
+        else notes.delete(id);
+        renderBoard();
+        if (reader.open && readerId === id) {
+            if (note) renderReader(note);
+            else reader.close();
+        }
+    }
+
+    function recordMutationError(error, id) {
+        if (error.note || error.missing) refreshNote(error.note, id);
+    }
+
+    async function changeNote(note, action, control) {
+        if (pending.has(note.id)) {
+            if (action === 'set_task') control.checked = !control.checked;
+            return;
+        }
+        const data = new FormData();
+        data.set('note_id', note.id);
+        data.set('version', note.version);
+        const focusWithinReader = reader.contains(control);
+        const selector = action === 'set_task' ? `[data-line="${control.dataset.line}"]` : '[data-action="pin"]';
+        if (action === 'set_task') {
+            data.set('line', control.dataset.line);
+            data.set('checked', control.checked ? '1' : '0');
+        }
+        pending.add(note.id);
+        control.disabled = true;
+        try {
+            const result = await request(action, data);
+            refreshNote(result.note, note.id);
+            if (action === 'toggle_pin') notify(result.note.pinned ? 'Note pinned.' : 'Note unpinned.');
+        } catch (error) {
+            recordMutationError(error, note.id);
+            if (control.isConnected && action === 'set_task') control.checked = !control.checked;
+            notify(error.message);
+        } finally {
+            pending.delete(note.id);
+            control.disabled = false;
+            const area = focusWithinReader && reader.open ? reader : board.querySelector(`[data-note-id="${note.id}"]`);
+            if (!control.isConnected && (!document.activeElement || document.activeElement === document.body || reader === document.activeElement || area?.contains(document.activeElement))) {
+                (area?.querySelector(selector) || (focusWithinReader && reader.open ? $('notesReaderHeading') : search)).focus({ preventScroll: true });
+            }
+        }
+    }
+
+    function draft() {
+        return JSON.stringify([$('notesTitle').value, bodyInput.value, form.elements.color.value, photoPaths]);
+    }
+
+    function openEditor(type, note = null, text = '') {
+        editing = note;
+        editorType = note?.type || (type === 'voice' ? 'voice' : 'text');
+        previousFocus = document.activeElement;
+        const recording = editorType === 'voice' && !note;
+        form.reset();
+        resetRecording();
+        clearPhotoFiles();
+        photoPaths = note ? [...note.images] : [];
+        $('notesEditorHeading').textContent = note ? 'Edit note' : { text: 'New note', list: 'New checklist', voice: 'Record a voice note' }[type];
+        $('notesTitle').value = note?.title || '';
+        bodyInput.value = note?.body ?? (type === 'list' ? '- [ ] ' : text);
+        bodyInput.placeholder = type === 'list' ? 'Add a checklist item…' : 'Write something to remember…';
+        $('notesRecorder').hidden = !recording;
+        $('notesBodyField').hidden = editorType === 'voice';
+        if (photoInput) {
+            $('notesAttachments').hidden = editorType === 'voice';
+            renderPhotoPreviews();
+        }
+        const custom = form.querySelector('[data-custom-color]');
+        custom?.remove();
+        const color = note?.color.toLowerCase() || '#ffffff';
+        if (colors[color]) {
+            form.elements.color.value = color;
+        } else {
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = 'color';
+            input.value = color;
+            input.dataset.customColor = '';
+            input.hidden = true;
+            input.checked = true;
+            form.querySelector('.notes-colors').append(input);
+        }
+        setNotice($('notesFormError'), '');
+        initialDraft = draft();
+        updateChecklistHint();
+        editor.showModal();
+        if (recording) $('notesStartRecord').focus();
+        else if (type === 'list' || text) {
+            bodyInput.focus();
+            bodyInput.setSelectionRange(bodyInput.value.length, bodyInput.value.length);
+        } else {
+            $('notesTitle').focus();
+        }
+    }
+
+    function closeEditor() {
+        if (saveButton.disabled) return;
+        const changed = draft() !== initialDraft || Boolean(photoFiles.length || recordedBlob || activeRecording?.started);
+        if (!changed || window.confirm('Discard your unsaved changes?')) editor.close();
+    }
+
+    function setSaving(saving) {
+        for (const input of form.elements) input.disabled = saving;
+        saveButton.textContent = saving ? 'Saving…' : 'Save note';
+        if (!saving) {
+            updateRecordingControls();
+            if (photoInput) $('notesAddPhotos').disabled = photoPaths.length + photoFiles.length >= maxPhotos;
+        }
+    }
+
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (saveButton.disabled) return;
+        const data = new FormData(form);
+        data.set('type', editorType);
+        if (editing) {
+            data.set('note_id', editing.id);
+            data.set('version', editing.version);
+            editing.images.filter(path => !photoPaths.includes(path)).forEach(path => data.append('remove_images[]', path));
+        }
+        photoFiles.forEach(({ file }) => data.append('images[]', file));
+        if (editorType === 'voice' && !editing) {
+            if (!recordedBlob) {
+                setNotice($('notesFormError'), 'Record a voice note first.');
+                return;
+            }
+            const extension = recordedBlob.type.includes('mp4') ? 'm4a' : recordedBlob.type.includes('ogg') ? 'ogg' : 'webm';
+            data.append('audio', recordedBlob, 'recording.' + extension);
+        }
+        // An unfinished last checkbox is a prompt, not a saved item.
+        if (editorType === 'text' && bodyInput.value !== editing?.body) {
+            data.set('body', bodyInput.value.replace(/(?:^|\n)[ \t]*[-*] \[ \][ \t]*$/, ''));
+        }
+        setNotice($('notesFormError'), '');
+        setSaving(true);
+        try {
+            const result = await request(editing ? 'update_note' : 'create_note', data);
+            const wasEditing = Boolean(editing);
+            refreshNote(result.note, result.note.id);
+            editor.close();
+            if (!reader.open && previousFocus && !previousFocus.isConnected) {
+                board.querySelector(`[data-note-id="${result.note.id}"] [data-action="edit"]`)?.focus();
+            }
+            notify(wasEditing ? 'Changes saved.' : 'Note added.');
+        } catch (error) {
+            if (editing) recordMutationError(error, editing.id);
+            setNotice($('notesFormError'), error.message + (error.note ? ' Copy your changes before reopening the editor.' : ''));
+        } finally {
+            setSaving(false);
+        }
+    });
+
+    function updateChecklistHint() {
+        $('notesChecklistHint').hidden = !bodyInput.value.split('\n').some(line => taskPrefix.test(line));
+    }
+
+    function addCheckboxes() {
+        const text = bodyInput.value;
+        const { selectionStart, selectionEnd } = bodyInput;
+        const start = selectionStart ? text.lastIndexOf('\n', selectionStart - 1) + 1 : 0;
+        const lastSelected = selectionEnd > selectionStart && text[selectionEnd - 1] === '\n' ? selectionEnd - 1 : selectionEnd;
+        const nextNewline = text.indexOf('\n', lastSelected);
+        const end = nextNewline < 0 ? text.length : nextNewline;
+        const toTask = line => taskPrefix.test(line) ? line : '- [ ] ' + line.replace(bulletPrefix, '$1').trimStart();
+        if (selectionStart !== selectionEnd) {
+            const lines = text.slice(start, end).split('\n').map(line => line.trim() ? toTask(line) : line);
+            bodyInput.setRangeText(lines.join('\n'), start, end, 'select');
+        } else if (text.split('\n').some(line => bulletPrefix.test(line) && !taskPrefix.test(line))) {
+            const lines = text.split('\n').map(line => bulletPrefix.test(line) ? toTask(line) : line);
+            bodyInput.setRangeText(lines.join('\n'), 0, text.length, 'end');
+        } else if (text.slice(start, end).trim()) {
+            const line = text.slice(start, end);
+            if (!taskPrefix.test(line)) bodyInput.setRangeText('\n- [ ] ', end, end, 'end');
+        } else {
+            bodyInput.setRangeText('- [ ] ', start, end, 'end');
+        }
+        bodyInput.focus();
+        updateChecklistHint();
+    }
+
+    $('notesInsertTasks').addEventListener('click', addCheckboxes);
+    bodyInput.addEventListener('input', updateChecklistHint);
+    bodyInput.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey || event.isComposing
+            || bodyInput.selectionStart !== bodyInput.selectionEnd) return;
+        const position = bodyInput.selectionStart;
+        const start = position ? bodyInput.value.lastIndexOf('\n', position - 1) + 1 : 0;
+        const end = bodyInput.value.indexOf('\n', position);
+        const line = bodyInput.value.slice(start, end < 0 ? undefined : end);
+        const prefix = taskPrefix.exec(line);
+        if (!prefix || position < start + prefix[0].length) return;
+        event.preventDefault();
+        if (!line.slice(prefix[0].length).trim()) {
+            bodyInput.setRangeText('', start, end < 0 ? bodyInput.value.length : end, 'end');
+        } else {
+            bodyInput.setRangeText('\n' + prefix[1] + '[ ] ', position, position, 'end');
+        }
+        updateChecklistHint();
+    });
+
+    function clearPhotoFiles() {
+        photoFiles.forEach(({ url }) => URL.revokeObjectURL(url));
+        photoFiles = [];
+    }
+
+    function renderPhotoPreviews() {
+        const paths = [...photoPaths, ...photoFiles.map(({ url }) => url)];
+        $('notesPhotoCount').textContent = `${paths.length} / ${maxPhotos}`;
+        $('notesAddPhotos').disabled = paths.length >= maxPhotos;
+        $('notesPhotoPreviews').innerHTML = paths.map((path, index) => `<div class="notes-photo-preview">
+            <img alt="" src="${escape(path)}"><span class="notes-photo-missing" hidden>${icon('photo')}</span>
+            <button type="button" data-remove-photo="${index}" class="notes-icon-button" aria-label="Remove photo ${index + 1}">${icon('close')}</button>
+        </div>`).join('');
+    }
+
+    function addPhotos(files) {
+        const message = [];
+        for (const file of files) {
+            if (photoPaths.length + photoFiles.length >= maxPhotos) {
+                message.push('You can attach up to seven photos.');
+                break;
+            }
+            if (/^image\/(?:jpeg|png|gif|webp)$/.test(file.type) && file.size > 0 && file.size <= 10 * 1024 * 1024) {
+                photoFiles.push({ file, url: URL.createObjectURL(file) });
+            } else if (!message.length) {
+                message.push('Choose JPG, PNG, GIF or WebP photos up to 10 MB each.');
+            }
+        }
+        renderPhotoPreviews();
+        setNotice($('notesFormError'), message.join(' '));
+    }
 
     if (photoInput) {
-        photoInput.addEventListener('change', function() {
-            if (this.files && this.files.length > 0) {
-                handlePhotosSelect(Array.from(this.files));
+        const dropZone = $('notesAddPhotos');
+        dropZone.addEventListener('click', () => photoInput.click());
+        photoInput.addEventListener('change', () => {
+            addPhotos(photoInput.files);
+            photoInput.value = '';
+        });
+        dropZone.addEventListener('dragover', event => event.preventDefault());
+        dropZone.addEventListener('drop', event => {
+            event.preventDefault();
+            if (!saveButton.disabled) addPhotos(event.dataTransfer.files);
+        });
+        $('notesPhotoPreviews').addEventListener('click', event => {
+            const button = event.target.closest('[data-remove-photo]');
+            if (!button || saveButton.disabled) return;
+            const index = Number(button.dataset.removePhoto);
+            if (index < photoPaths.length) photoPaths.splice(index, 1);
+            else URL.revokeObjectURL(photoFiles.splice(index - photoPaths.length, 1)[0].url);
+            renderPhotoPreviews();
+            ($('notesPhotoPreviews').querySelector(`[data-remove-photo="${index}"]`) || dropZone).focus();
+        });
+    }
+
+    function showPhoto(index) {
+        galleryIndex = (index + galleryImages.length) % galleryImages.length;
+        const image = $('notesGalleryImage');
+        image.hidden = false;
+        $('notesGalleryError').hidden = true;
+        image.alt = `Note photo ${galleryIndex + 1}`;
+        image.src = galleryImages[galleryIndex];
+        $('notesGalleryCount').textContent = `Photo ${galleryIndex + 1} of ${galleryImages.length}`;
+        $('notesPrevPhoto').hidden = galleryImages.length === 1;
+        $('notesNextPhoto').hidden = galleryImages.length === 1;
+    }
+
+    function openGallery(note, index) {
+        galleryImages = note.images;
+        showPhoto(index);
+        gallery.showModal();
+    }
+
+    $('notesPrevPhoto').addEventListener('click', () => showPhoto(galleryIndex - 1));
+    $('notesNextPhoto').addEventListener('click', () => showPhoto(galleryIndex + 1));
+    gallery.addEventListener('keydown', event => {
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            event.preventDefault();
+            showPhoto(galleryIndex + (event.key === 'ArrowLeft' ? -1 : 1));
+        }
+    });
+    gallery.addEventListener('touchstart', event => {
+        galleryTouch = event.changedTouches[0].clientX;
+    }, { passive: true });
+    gallery.addEventListener('touchend', event => {
+        if (galleryTouch === null) return;
+        const offset = galleryTouch - event.changedTouches[0].clientX;
+        galleryTouch = null;
+        if (Math.abs(offset) > 55) showPhoto(galleryIndex + Math.sign(offset));
+    }, { passive: true });
+
+    document.addEventListener('error', event => {
+        const element = event.target;
+        if (element.id === 'notesGalleryImage') {
+            element.hidden = true;
+            $('notesGalleryError').hidden = false;
+        } else if (element instanceof HTMLImageElement
+            && element.closest('.notes-photo, .notes-photo-preview, .notes-avatar')) {
+            element.hidden = true;
+            if (element.nextElementSibling?.classList.contains('notes-photo-missing')) {
+                element.nextElementSibling.hidden = false;
             }
-        });
-    }
-
-    if (dropZone) {
-        dropZone.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            this.classList.add('dragover');
-        });
-
-        dropZone.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            this.classList.remove('dragover');
-        });
-
-        dropZone.addEventListener('drop', function(e) {
-            e.preventDefault();
-            this.classList.remove('dragover');
-
-            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-            if (files.length > 0) {
-                handlePhotosSelect(files);
-            }
-        });
-    }
-}
-
-function handlePhotosSelect(files) {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    const maxSize = 10 * 1024 * 1024; // 10MB
-
-    // Filter valid files
-    const validFiles = files.filter(file => {
-        if (!allowedTypes.includes(file.type)) {
-            return false;
+        } else if (element instanceof HTMLAudioElement && element.closest('.notes-audio')) {
+            const message = document.createElement('p');
+            message.className = 'notes-media-missing';
+            message.textContent = 'Recording unavailable';
+            element.replaceWith(message);
         }
-        if (file.size > maxSize) {
-            showToast(`${file.name} is too large (max 10MB)`, 'error');
-            return false;
-        }
-        return true;
-    });
+    }, true);
 
-    // Check if adding would exceed max
-    const remainingSlots = MAX_PHOTOS - selectedNoteImages.length;
-    if (remainingSlots <= 0) {
-        showToast(`Maximum ${MAX_PHOTOS} photos allowed`, 'warning');
-        return;
+    let activeRecording = null;
+    let recordedBlob = null;
+    let recordingUrl = null;
+    let timer = null;
+
+    function updateRecordingControls() {
+        const waiting = Boolean(activeRecording && !activeRecording.started);
+        $('notesStartRecord').hidden = Boolean(activeRecording?.started);
+        $('notesStartRecord').disabled = waiting;
+        $('notesStartRecord').textContent = recordedBlob ? 'Record again' : 'Start recording';
+        $('notesStopRecord').hidden = !activeRecording?.started;
     }
 
-    const filesToAdd = validFiles.slice(0, remainingSlots);
-    if (filesToAdd.length < validFiles.length) {
-        showToast(`Only ${filesToAdd.length} photos added (max ${MAX_PHOTOS})`, 'warning');
+    function releaseRecording() {
+        const recording = activeRecording;
+        activeRecording = null;
+        clearInterval(timer);
+        if (recording?.recorder?.state === 'recording') recording.recorder.stop();
+        recording?.stream?.getTracks().forEach(track => track.stop());
     }
 
-    // Add files to selection
-    selectedNoteImages = [...selectedNoteImages, ...filesToAdd];
-    updatePhotoPreviewsUI();
-}
-
-function updatePhotoPreviewsUI() {
-    const container = document.getElementById('notePhotoPreviewsContainer');
-    const grid = document.getElementById('notePhotoPreviewsGrid');
-    const dropZone = document.getElementById('notePhotoDropZone');
-    const countText = document.getElementById('photoCountText');
-
-    if (selectedNoteImages.length === 0) {
-        container.style.display = 'none';
-        dropZone.style.display = '';
-        return;
+    function resetRecording() {
+        releaseRecording();
+        recordedBlob = null;
+        if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+        recordingUrl = null;
+        const preview = $('notesRecordingPreview');
+        preview.pause();
+        preview.removeAttribute('src');
+        preview.hidden = true;
+        $('notesTimer').value = '00:00';
+        $('notesRecordStatus').textContent = 'Ready to record';
+        updateRecordingControls();
     }
 
-    // Show container, hide dropzone if max reached
-    container.style.display = 'block';
-    dropZone.style.display = selectedNoteImages.length >= MAX_PHOTOS ? 'none' : '';
-    countText.textContent = selectedNoteImages.length;
-
-    // Clear and rebuild preview grid
-    grid.innerHTML = '';
-
-    selectedNoteImages.forEach((file, index) => {
-        const previewItem = document.createElement('div');
-        previewItem.className = 'photo-preview-item';
-
-        const img = document.createElement('img');
-        img.alt = `Preview ${index + 1}`;
-
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-
-        const removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.className = 'photo-preview-remove';
-        removeBtn.innerHTML = '&times;';
-        removeBtn.onclick = function() {
-            removeNotePhoto(index);
-        };
-
-        previewItem.appendChild(img);
-        previewItem.appendChild(removeBtn);
-        grid.appendChild(previewItem);
-    });
-
-    // Add "add more" button if not at max
-    if (selectedNoteImages.length < MAX_PHOTOS) {
-        const addMoreBtn = document.createElement('div');
-        addMoreBtn.className = 'photo-preview-add-more';
-        addMoreBtn.innerHTML = '<span>+</span>';
-        addMoreBtn.onclick = function() {
-            document.getElementById('notePhotoInput').click();
-        };
-        grid.appendChild(addMoreBtn);
-    }
-}
-
-function removeNotePhoto(index) {
-    if (typeof index === 'number') {
-        // Remove specific photo
-        selectedNoteImages.splice(index, 1);
-    } else {
-        // Clear all photos
-        selectedNoteImages = [];
-    }
-    updatePhotoPreviewsUI();
-    document.getElementById('notePhotoInput').value = '';
-}
-
-function clearAllNotePhotos() {
-    selectedNoteImages = [];
-    updatePhotoPreviewsUI();
-    document.getElementById('notePhotoInput').value = '';
-}
-
-function openImageFullscreen(imagePath) {
-    // Create fullscreen overlay
-    const overlay = document.createElement('div');
-    overlay.className = 'image-fullscreen-overlay';
-    overlay.innerHTML = `
-        <button class="image-fullscreen-close" onclick="this.parentElement.remove()">&times;</button>
-        <img src="${escapeHtml(imagePath)}" alt="Full size image">
-    `;
-
-    overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) {
-            overlay.remove();
-        }
-    });
-
-    document.body.appendChild(overlay);
-    document.body.style.overflow = 'hidden';
-
-    // Close on escape
-    const handleEscape = function(e) {
-        if (e.key === 'Escape') {
-            overlay.remove();
-            document.body.style.overflow = '';
-            document.removeEventListener('keydown', handleEscape);
-        }
-    };
-    document.addEventListener('keydown', handleEscape);
-
-    // Restore scroll when overlay is removed
-    const observer = new MutationObserver(function(mutations) {
-        if (!document.body.contains(overlay)) {
-            document.body.style.overflow = '';
-            observer.disconnect();
-        }
-    });
-    observer.observe(document.body, { childList: true });
-}
-
-// Image carousel for multiple photos
-function openImageCarousel(images, startIndex = 0) {
-    if (!images || images.length === 0) return;
-
-    // Handle JSON string input
-    if (typeof images === 'string') {
-        try {
-            images = JSON.parse(images);
-        } catch (e) {
-            images = [images];
-        }
+    function recordingError(message) {
+        resetRecording();
+        $('notesRecordStatus').textContent = message;
     }
 
-    // Single image - use simple fullscreen
-    if (images.length === 1) {
-        openImageFullscreen(images[0]);
-        return;
-    }
-
-    let currentIndex = startIndex;
-
-    const overlay = document.createElement('div');
-    overlay.className = 'image-carousel-overlay';
-    overlay.innerHTML = `
-        <button class="carousel-close-btn" onclick="this.parentElement.remove()">&times;</button>
-        <button class="carousel-nav-btn carousel-prev" aria-label="Previous">‹</button>
-        <div class="carousel-image-container">
-            <img src="${escapeHtml(images[currentIndex])}" alt="Photo ${currentIndex + 1}">
-        </div>
-        <button class="carousel-nav-btn carousel-next" aria-label="Next">›</button>
-        <div class="carousel-counter">${currentIndex + 1} / ${images.length}</div>
-        <div class="carousel-dots">
-            ${images.map((_, i) => `<span class="carousel-dot${i === currentIndex ? ' active' : ''}" data-index="${i}"></span>`).join('')}
-        </div>
-    `;
-
-    const imgEl = overlay.querySelector('.carousel-image-container img');
-    const counterEl = overlay.querySelector('.carousel-counter');
-    const dotsEl = overlay.querySelectorAll('.carousel-dot');
-    const prevBtn = overlay.querySelector('.carousel-prev');
-    const nextBtn = overlay.querySelector('.carousel-next');
-
-    function updateImage(newIndex) {
-        currentIndex = newIndex;
-        imgEl.src = images[currentIndex];
-        counterEl.textContent = `${currentIndex + 1} / ${images.length}`;
-
-        dotsEl.forEach((dot, i) => {
-            dot.classList.toggle('active', i === currentIndex);
-        });
-    }
-
-    function goNext() {
-        updateImage((currentIndex + 1) % images.length);
-    }
-
-    function goPrev() {
-        updateImage((currentIndex - 1 + images.length) % images.length);
-    }
-
-    prevBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        goPrev();
-    });
-
-    nextBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        goNext();
-    });
-
-    // Dot navigation
-    dotsEl.forEach(dot => {
-        dot.addEventListener('click', function(e) {
-            e.stopPropagation();
-            updateImage(parseInt(this.dataset.index));
-        });
-    });
-
-    // Close on backdrop click
-    overlay.addEventListener('click', function(e) {
-        if (e.target === overlay || e.target.classList.contains('carousel-image-container')) {
-            overlay.remove();
-            document.body.style.overflow = '';
-        }
-    });
-
-    // Swipe support for mobile
-    let touchStartX = 0;
-    let touchEndX = 0;
-
-    overlay.addEventListener('touchstart', function(e) {
-        touchStartX = e.changedTouches[0].screenX;
-    }, { passive: true });
-
-    overlay.addEventListener('touchend', function(e) {
-        touchEndX = e.changedTouches[0].screenX;
-        const diff = touchStartX - touchEndX;
-        if (Math.abs(diff) > 50) {
-            if (diff > 0) {
-                goNext();
-            } else {
-                goPrev();
-            }
-        }
-    }, { passive: true });
-
-    // Keyboard navigation
-    const handleKeydown = function(e) {
-        if (e.key === 'Escape') {
-            overlay.remove();
-            document.body.style.overflow = '';
-            document.removeEventListener('keydown', handleKeydown);
-        } else if (e.key === 'ArrowLeft') {
-            goPrev();
-        } else if (e.key === 'ArrowRight') {
-            goNext();
-        }
-    };
-    document.addEventListener('keydown', handleKeydown);
-
-    document.body.appendChild(overlay);
-    document.body.style.overflow = 'hidden';
-
-    // Cleanup when removed
-    const observer = new MutationObserver(function() {
-        if (!document.body.contains(overlay)) {
-            document.body.style.overflow = '';
-            document.removeEventListener('keydown', handleKeydown);
-            observer.disconnect();
-        }
-    });
-    observer.observe(document.body, { childList: true });
-}
-
-// Helper to parse image paths (JSON array or single path)
-function parseImagePaths(imagePath) {
-    if (!imagePath) return [];
-
-    if (typeof imagePath === 'string') {
-        try {
-            const parsed = JSON.parse(imagePath);
-            if (Array.isArray(parsed)) return parsed;
-        } catch (e) {
-            // Not JSON, treat as single path
-        }
-        return [imagePath];
-    }
-
-    if (Array.isArray(imagePath)) return imagePath;
-    return [];
-}
-
-// ============================================
-// QUICK ACTION BUTTONS - NATIVE APP FIX
-// ============================================
-
-function initQuickActionButtons() {
-    // Find all quick action buttons and attach proper event listeners
-    // This fixes the issue where inline onclick doesn't work in native Android WebView apps
-
-    const quickActionBtns = document.querySelectorAll('.quick-action-btn');
-
-    quickActionBtns.forEach(btn => {
-        // Get the onclick attribute to determine the action
-        const onclickAttr = btn.getAttribute('onclick');
-
-        if (onclickAttr) {
-            // Remove the inline onclick to prevent double-firing
-            btn.removeAttribute('onclick');
-
-            // Create handler based on the original onclick content
-            const handler = function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-
-                // Parse and execute the original onclick action
-                if (onclickAttr.includes("showCreateNoteModal('text')")) {
-                    showCreateNoteModal('text');
-                } else if (onclickAttr.includes("showCreateNoteModal('voice')")) {
-                    showCreateNoteModal('voice');
-                } else if (onclickAttr.includes('searchInput')) {
-                    document.getElementById('searchInput').focus();
-                }
-            };
-
-            // Add both click and touch events for maximum compatibility
-            btn.addEventListener('click', handler);
-
-            // Add touchstart for visual feedback
-            btn.addEventListener('touchstart', function(e) {
-                btn.classList.add('touched');
-            }, { passive: true });
-
-            // Add touchend for native app support (touchstart can cause issues with scrolling)
-            btn.addEventListener('touchend', function(e) {
-                btn.classList.remove('touched');
-                // Prevent the click event from also firing
-                e.preventDefault();
-                handler(e);
-            }, { passive: false });
-
-            // Remove touched class if touch is cancelled
-            btn.addEventListener('touchcancel', function() {
-                btn.classList.remove('touched');
-            }, { passive: true });
-        }
-    });
-
-    console.log('✅ Quick action buttons initialized for native app compatibility');
-
-    // Also fix recording control buttons for native app
-    initRecordingButtons();
-}
-
-// Initialize recording buttons with proper event listeners
-function initRecordingButtons() {
-    const startBtn = document.getElementById('startRecordBtn');
-    const stopBtn = document.getElementById('stopRecordBtn');
-    const playBtn = document.getElementById('playRecordBtn');
-
-    if (startBtn) {
-        startBtn.removeAttribute('onclick');
-        addTouchAndClickHandler(startBtn, startRecording);
-    }
-
-    if (stopBtn) {
-        stopBtn.removeAttribute('onclick');
-        addTouchAndClickHandler(stopBtn, stopRecording);
-    }
-
-    if (playBtn) {
-        playBtn.removeAttribute('onclick');
-        addTouchAndClickHandler(playBtn, playRecording);
-    }
-
-    console.log('✅ Recording buttons initialized for native app compatibility');
-}
-
-// Helper function to add both touch and click handlers
-function addTouchAndClickHandler(element, handler) {
-    let touchHandled = false;
-
-    element.addEventListener('touchstart', function() {
-        element.classList.add('touched');
-    }, { passive: true });
-
-    element.addEventListener('touchend', function(e) {
-        element.classList.remove('touched');
-        e.preventDefault();
-        touchHandled = true;
-        handler();
-        // Reset flag after a short delay
-        setTimeout(() => { touchHandled = false; }, 300);
-    }, { passive: false });
-
-    element.addEventListener('touchcancel', function() {
-        element.classList.remove('touched');
-    }, { passive: true });
-
-    element.addEventListener('click', function(e) {
-        // Only handle if not already handled by touch
-        if (!touchHandled) {
-            handler();
-        }
-    });
-}
-
-// ============================================
-// PARTICLES BACKGROUND - DISABLED FOR PERFORMANCE
-// Canvas hidden via CSS
-// ============================================
-
-function initParticles() {
-    // Disabled - canvas hidden via CSS for performance
-}
-
-// ============================================
-// NOTE ANIMATIONS
-// ============================================
-
-function initNoteAnimations() {
-    const cards = document.querySelectorAll('.note-card');
-    
-    cards.forEach((card, index) => {
-        card.style.animationDelay = `${index * 0.05}s`;
-    });
-}
-
-// ============================================
-// MODAL CONTROLS
-// ============================================
-
-function showCreateNoteModal(type) {
-    if (type === 'text') {
-        document.getElementById('createTextNoteModal').classList.add('active');
-        document.getElementById('noteBody').focus();
-    } else if (type === 'voice') {
-        document.getElementById('createVoiceNoteModal').classList.add('active');
-        resetVoiceRecorder();
-    }
-}
-
-function openCollageModal() {
-    document.getElementById('collageModal').classList.add('active');
-    if (typeof CollageInit !== 'undefined') {
-        CollageInit.init();
-    }
-}
-
-function closeModal(modalId) {
-    const modal = document.getElementById(modalId);
-    modal.classList.remove('active');
-
-    // Reset forms
-    if (modalId === 'createTextNoteModal') {
-        document.getElementById('noteTitle').value = '';
-        document.getElementById('noteBody').value = '';
-        document.querySelector('input[name="noteColor"]:checked').checked = false;
-        document.getElementById('color1').checked = true;
-
-        // Reset photo uploads
-        clearAllNotePhotos();
-    } else if (modalId === 'createVoiceNoteModal') {
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-        }
-        resetVoiceRecorder();
-    } else if (modalId === 'editNoteModal') {
-        document.getElementById('editNoteId').value = '';
-        document.getElementById('editNoteTitle').value = '';
-        document.getElementById('editNoteBody').value = '';
-    } else if (modalId === 'collageModal') {
-        if (typeof CollageState !== 'undefined') {
-            CollageState.clearAll();
-        }
-        if (typeof CollageImages !== 'undefined') {
-            CollageImages.clearAllImages();
-        }
-    }
-}
-
-// Close modal on backdrop click
-document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('modal')) {
-        closeModal(e.target.id);
-    }
-});
-
-// Close modal on Escape key
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        const activeModal = document.querySelector('.modal.active');
-        if (activeModal) {
-            closeModal(activeModal.id);
-        }
-    }
-});
-
-// ============================================
-// CREATE NOTE
-// ============================================
-
-async function createNote(event, type) {
-    event.preventDefault();
-
-    const formData = new FormData();
-    formData.append('action', 'create_note');
-    formData.append('type', type);
-
-    if (type === 'text') {
-        const title = document.getElementById('noteTitle').value.trim();
-        const body = document.getElementById('noteBody').value.trim();
-        const color = document.querySelector('input[name="noteColor"]:checked').value;
-
-        // Allow notes with just images (no body text required)
-        if (!body && selectedNoteImages.length === 0) {
-            showToast('Please enter note content or add a photo', 'error');
+    $('notesStartRecord').addEventListener('click', async () => {
+        if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+            recordingError('Audio recording is unavailable in this browser.');
             return;
         }
+        if (recordedBlob && !window.confirm('Replace this recording?')) return;
+        setNotice($('notesFormError'), '');
+        resetRecording();
+        const recording = { started: false };
+        activeRecording = recording;
+        $('notesRecordStatus').textContent = 'Waiting for microphone access…';
+        updateRecordingControls();
+        try {
+            recording.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (activeRecording !== recording || !editor.open) {
+                recording.stream.getTracks().forEach(track => track.stop());
+                return;
+            }
+            const recorder = new MediaRecorder(recording.stream);
+            recording.recorder = recorder;
+            const chunks = [];
+            recorder.addEventListener('dataavailable', event => {
+                if (event.data.size) chunks.push(event.data);
+            });
+            recorder.addEventListener('error', () => {
+                if (activeRecording === recording) recordingError('Recording failed. Try again.');
+            });
+            recorder.addEventListener('stop', () => {
+                if (activeRecording !== recording) return;
+                releaseRecording();
+                const blob = new Blob(chunks, { type: recorder.mimeType || chunks[0]?.type });
+                if (!blob.size) {
+                    recordingError('No audio was captured. Try recording again.');
+                    return;
+                }
+                recordedBlob = blob;
+                recordingUrl = URL.createObjectURL(blob);
+                const preview = $('notesRecordingPreview');
+                preview.src = recordingUrl;
+                preview.hidden = false;
+                $('notesRecordStatus').textContent = 'Recording ready to preview';
+                updateRecordingControls();
+            });
+            recorder.start(1000);
+            recording.started = true;
+            const start = Date.now();
+            timer = setInterval(() => {
+                const seconds = Math.floor((Date.now() - start) / 1000);
+                $('notesTimer').value = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+                if (seconds >= 600 && recorder.state === 'recording') recorder.stop();
+            }, 250);
+            $('notesRecordStatus').textContent = 'Recording…';
+            updateRecordingControls();
+        } catch (error) {
+            if (activeRecording === recording) recordingError(error.name === 'NotAllowedError'
+                ? 'Microphone access was denied. Allow it in your device or browser settings.'
+                : 'Could not start the microphone. Try again.');
+        }
+    });
 
-        formData.append('title', title);
-        formData.append('body', body);
-        formData.append('color', color);
+    $('notesStopRecord').addEventListener('click', () => {
+        if (activeRecording?.recorder?.state === 'recording') activeRecording.recorder.stop();
+    });
 
-        // Add images if selected (use images[] for multiple)
-        selectedNoteImages.forEach((file, index) => {
-            formData.append('images[]', file);
+    function updateFilters() {
+        document.querySelectorAll('[data-filter]').forEach(button => {
+            button.setAttribute('aria-pressed', button.dataset.filter === filter);
         });
+        renderBoard();
+    }
 
-    } else if (type === 'voice') {
-        if (!recordedBlob) {
-            showToast('Please record audio first', 'error');
+    function updateLayout() {
+        document.querySelectorAll('[data-layout]:is(button)').forEach(button => {
+            button.setAttribute('aria-pressed', button.dataset.layout === layout);
+        });
+        renderBoard();
+    }
+
+    async function copyNote(note) {
+        try {
+            await navigator.clipboard.writeText([note.title, note.body].filter(Boolean).join('\n\n'));
+            notify('Note copied.');
+        } catch {
+            notify('Clipboard access is unavailable.');
+        }
+    }
+
+    function openDelete(note) {
+        deleting = note;
+        setNotice($('notesDeleteError'), '');
+        deleteDialog.showModal();
+    }
+
+    deleteButton.addEventListener('click', async () => {
+        const note = deleting;
+        const data = new FormData();
+        data.set('note_id', note.id);
+        data.set('version', note.version);
+        deleteButton.disabled = true;
+        setNotice($('notesDeleteError'), '');
+        try {
+            await request('delete_note', data);
+            deleteDialog.close();
+            refreshNote(null, note.id);
+            search.focus({ preventScroll: true });
+            notify('Note deleted.');
+        } catch (error) {
+            recordMutationError(error, note.id);
+            setNotice($('notesDeleteError'), error.message);
+        } finally {
+            deleteButton.disabled = false;
+        }
+    });
+
+    function handleNoteClick(event) {
+        const button = event.target.closest('button');
+        if (!button) return;
+        const note = notes.get(reader.contains(button) ? readerId : button.closest('[data-note-id]')?.dataset.noteId);
+        if (!note) return;
+        if (button.hasAttribute('data-photo')) {
+            openGallery(note, Number(button.dataset.photo));
             return;
         }
-        
-        const title = document.getElementById('voiceNoteTitle').value.trim();
-        const color = document.querySelector('input[name="voiceNoteColor"]:checked').value;
-        
-        formData.append('title', title);
-        formData.append('body', 'Voice note');
-        formData.append('color', color);
-        formData.append('audio', recordedBlob, 'voice-note.webm');
-    }
-    
-    try {
-        const response = await fetch('/notes/', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showToast('Note created successfully!', 'success');
-            closeModal(type === 'text' ? 'createTextNoteModal' : 'createVoiceNoteModal');
-
-            // Add note to DOM in real-time
-            addNoteToDOM(data.note);
-            updateStats();
-        } else {
-            showToast(data.error || 'Failed to create note', 'error');
+        switch (button.dataset.action) {
+            case 'open': openNote(note); break;
+            case 'edit': openEditor('text', note); break;
+            case 'pin': changeNote(note, 'toggle_pin', button); break;
+            case 'copy': copyNote(note); break;
+            case 'delete': openDelete(note); break;
         }
-    } catch (error) {
-        console.error('Error creating note:', error);
-        showToast('Network error. Please try again.', 'error');
     }
-}
 
-// ============================================
-// EDIT NOTE
-// ============================================
+    function handleTaskChange(event) {
+        const control = event.target;
+        if (!control.matches('input[data-line]')) return;
+        const note = notes.get(reader.contains(control) ? readerId : control.closest('[data-note-id]')?.dataset.noteId);
+        if (note) changeNote(note, 'set_task', control);
+    }
 
-function editNote(noteId) {
-    const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
-    if (!noteCard) return;
-    
-    const title = noteCard.querySelector('.note-title')?.textContent || '';
-    const body = noteCard.querySelector('.note-body')?.textContent || '';
-    const color = noteCard.style.background;
-    
-    document.getElementById('editNoteId').value = noteId;
-    document.getElementById('editNoteTitle').value = title;
-    document.getElementById('editNoteBody').value = body;
-    
-    // Set color
-    const colorInputs = document.querySelectorAll('input[name="editNoteColor"]');
-    colorInputs.forEach(input => {
-        if (input.value === color) {
-            input.checked = true;
+    for (const container of [board, reader]) {
+        container.addEventListener('click', handleNoteClick);
+        container.addEventListener('change', handleTaskChange);
+    }
+
+    $('notesApp').addEventListener('click', event => {
+        const button = event.target.closest('button');
+        if (!button) return;
+        if (button.dataset.create) openEditor(button.dataset.create);
+        if (button.dataset.filter) {
+            filter = button.dataset.filter;
+            updateFilters();
+        }
+        if (button.dataset.layout) {
+            layout = button.dataset.layout;
+            preference('layout', layout);
+            updateLayout();
+        }
+        if (button.dataset.action === 'clear') {
+            filter = 'all';
+            search.value = '';
+            updateFilters();
+            search.focus();
         }
     });
-    
-    document.getElementById('editNoteModal').classList.add('active');
-    document.getElementById('editNoteBody').focus();
-}
 
-async function updateNote(event) {
-    event.preventDefault();
-    
-    const noteId = document.getElementById('editNoteId').value;
-    const title = document.getElementById('editNoteTitle').value.trim();
-    const body = document.getElementById('editNoteBody').value.trim();
-    const color = document.querySelector('input[name="editNoteColor"]:checked').value;
-    
-    if (!body) {
-        showToast('Please enter note content', 'error');
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('action', 'update_note');
-    formData.append('note_id', noteId);
-    formData.append('title', title);
-    formData.append('body', body);
-    formData.append('color', color);
-    
-    try {
-        const response = await fetch('/notes/', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showToast('Note updated successfully!', 'success');
-            closeModal('editNoteModal');
-            
-            // Update the note card
-            const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
-            if (noteCard) {
-                if (title) {
-                    let titleEl = noteCard.querySelector('.note-title');
-                    if (!titleEl) {
-                        titleEl = document.createElement('div');
-                        titleEl.className = 'note-title';
-                        noteCard.querySelector('.note-header').after(titleEl);
-                    }
-                    titleEl.textContent = title;
-                }
-                
-                const bodyEl = noteCard.querySelector('.note-body');
-                if (bodyEl) {
-                    bodyEl.innerHTML = body.replace(/\n/g, '<br>');
-                }
-                
-                noteCard.style.background = color;
-            }
-        } else {
-            showToast(data.error || 'Failed to update note', 'error');
-        }
-    } catch (error) {
-        console.error('Error updating note:', error);
-        showToast('Network error. Please try again.', 'error');
-    }
-}
-
-// ============================================
-// DELETE NOTE
-// ============================================
-
-async function deleteNote(noteId) {
-    if (!confirm('Are you sure you want to delete this note?')) {
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('action', 'delete_note');
-    formData.append('note_id', noteId);
-    
-    try {
-        const response = await fetch('/notes/', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showToast('Note deleted successfully', 'success');
-
-            // Animate out and remove
-            const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
-            if (noteCard) {
-                noteCard.style.animation = 'noteDisappear 0.3s ease forwards';
-                setTimeout(() => {
-                    noteCard.remove();
-                    updateStats();
-
-                    // Check if no notes left - show empty state
-                    const allCards = document.querySelectorAll('.note-card');
-                    if (allCards.length === 0) {
-                        showEmptyState();
-                    }
-                }, 300);
-            }
-        } else {
-            showToast(data.error || 'Failed to delete note', 'error');
-        }
-    } catch (error) {
-        console.error('Error deleting note:', error);
-        showToast('Network error. Please try again.', 'error');
-    }
-}
-
-// ============================================
-// TOGGLE PIN
-// ============================================
-
-async function togglePin(noteId) {
-    const formData = new FormData();
-    formData.append('action', 'toggle_pin');
-    formData.append('note_id', noteId);
-
-    try {
-        const response = await fetch('/notes/', {
-            method: 'POST',
-            body: formData
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            // Update pin state in DOM
-            const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
-            if (noteCard) {
-                const pinBtn = noteCard.querySelector('.note-pin');
-                if (data.pinned) {
-                    pinBtn.classList.add('active');
-                    showToast('Note pinned!', 'success');
-                } else {
-                    pinBtn.classList.remove('active');
-                    showToast('Note unpinned', 'info');
-                }
-                updateStats();
-            }
-        } else {
-            showToast(data.error || 'Failed to toggle pin', 'error');
-        }
-    } catch (error) {
-        console.error('Error toggling pin:', error);
-        showToast('Network error. Please try again.', 'error');
-    }
-}
-
-// ============================================
-// DUPLICATE NOTE
-// ============================================
-
-// ============================================
-// SEARCH NOTES
-// ============================================
-
-function searchNotes(query) {
-    const searchTerm = query.toLowerCase().trim();
-    const noteCards = document.querySelectorAll('.note-card');
-    
-    let visibleCount = 0;
-    
-    noteCards.forEach(card => {
-        const title = card.querySelector('.note-title')?.textContent.toLowerCase() || '';
-        const body = card.querySelector('.note-body')?.textContent.toLowerCase() || '';
-        const author = card.querySelector('.note-author span')?.textContent.toLowerCase() || '';
-        
-        const matches = title.includes(searchTerm) || 
-                       body.includes(searchTerm) || 
-                       author.includes(searchTerm);
-        
-        if (matches || searchTerm === '') {
-            card.style.display = '';
-            card.style.animation = 'noteAppear 0.3s ease backwards';
-            visibleCount++;
-        } else {
-            card.style.display = 'none';
-        }
-    });
-    
-    // Update total count
-    if (searchTerm !== '') {
-        document.getElementById('totalNotes').textContent = visibleCount;
-    } else {
-        updateStats();
-    }
-}
-
-// ============================================
-// FILTER NOTES
-// ============================================
-
-function filterNotes(filterType) {
-    // Update active button
-    const filterButtons = document.querySelectorAll('.filter-btn');
-    filterButtons.forEach(btn => {
-        if (btn.dataset.filter === filterType) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
-    
-    const noteCards = document.querySelectorAll('.note-card');
-    let visibleCount = 0;
-    
-    noteCards.forEach(card => {
-        const noteType = card.dataset.noteType;
-        const isPinned = card.querySelector('.note-pin.active') !== null;
-        
-        let show = false;
-        
-        switch(filterType) {
-            case 'all':
-                show = true;
-                break;
-            case 'text':
-                show = noteType === 'text';
-                break;
-            case 'voice':
-                show = noteType === 'voice';
-                break;
-            case 'pinned':
-                show = isPinned;
-                break;
-        }
-        
-        if (show) {
-            card.style.display = '';
-            card.style.animation = 'noteAppear 0.3s ease backwards';
-            visibleCount++;
-        } else {
-            card.style.display = 'none';
-        }
-    });
-    
-    // Update total count for filter
-    if (filterType !== 'all') {
-        document.getElementById('totalNotes').textContent = visibleCount;
-    } else {
-        updateStats();
-    }
-}
-
-// ============================================
-// UPDATE STATS
-// ============================================
-
-function updateStats() {
-    const allNotes = document.querySelectorAll('.note-card');
-    const pinnedNotes = document.querySelectorAll('.note-pin.active');
-    const textNotes = document.querySelectorAll('[data-note-type="text"]');
-    const voiceNotes = document.querySelectorAll('[data-note-type="voice"]');
-    
-    document.getElementById('totalNotes').textContent = allNotes.length;
-    document.getElementById('pinnedCount').textContent = pinnedNotes.length;
-    document.getElementById('textCount').textContent = textNotes.length;
-    document.getElementById('voiceCount').textContent = voiceNotes.length;
-}
-
-// ============================================
-// VOICE RECORDING
-// ============================================
-
-function resetVoiceRecorder() {
-    // Clear any running timer interval
-    if (recordingTimer) {
-        clearInterval(recordingTimer);
-        recordingTimer = null;
-    }
-
-    document.getElementById('startRecordBtn').style.display = 'inline-flex';
-    document.getElementById('stopRecordBtn').style.display = 'none';
-    document.getElementById('playRecordBtn').style.display = 'none';
-    document.getElementById('recordedAudio').style.display = 'none';
-    document.getElementById('voiceNoteForm').style.display = 'none';
-
-    document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '🎤';
-    document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Press record to start';
-    document.getElementById('recordingTimer').textContent = '00:00';
-
-    audioChunks = [];
-    recordedBlob = null;
-    
-    if (animationId) {
-        cancelAnimationFrame(animationId);
-    }
-    
-    const canvas = document.getElementById('visualizerCanvas');
-    if (canvas) {
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-}
-
-// Detect native app environment
-const isNativeApp = navigator.userAgent.includes('RelativesAndroidApp') ||
-                    window.matchMedia('(display-mode: standalone)').matches ||
-                    window.navigator.standalone ||
-                    window.AndroidInterface !== undefined ||
-                    window.Android !== undefined;
-
-async function startRecording() {
-    try {
-        let stream;
-
-        // Check for native app audio recording interface
-        if (isNativeApp && window.AndroidRecorder && typeof window.AndroidRecorder.startRecording === 'function') {
-            // Use native Android recording
-            try {
-                window.AndroidRecorder.startRecording();
-                updateUIForRecording();
-                return;
-            } catch (nativeError) {
-                console.warn('Native recording failed, falling back to web API:', nativeError);
-            }
-        }
-
-        // Request microphone permission - handle native WebView quirks
-        if (isNativeApp && window.Android && typeof window.Android.requestMicrophonePermission === 'function') {
-            // Request permission through native bridge
-            const permissionGranted = await new Promise((resolve) => {
-                window.onMicrophonePermissionResult = (granted) => {
-                    resolve(granted);
-                };
-                window.Android.requestMicrophonePermission();
-                // Timeout fallback
-                setTimeout(() => resolve(false), 5000);
-            });
-
-            if (!permissionGranted) {
-                showToast('Microphone permission denied. Please allow microphone access in app settings.', 'error');
-                return;
-            }
-        }
-
-        // Standard Web API
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-
-        mediaRecorder.ondataavailable = (event) => {
-            audioChunks.push(event.data);
+    for (const dialog of [editor, reader, gallery, deleteDialog]) {
+        const close = () => {
+            if (dialog === editor) closeEditor();
+            else if (dialog !== deleteDialog || !deleteButton.disabled) dialog.close();
         };
+        dialog.addEventListener('click', event => {
+            if (event.target === dialog || event.target.closest('[data-close]')) close();
+        });
+        dialog.addEventListener('cancel', event => {
+            event.preventDefault();
+            close();
+        });
+    }
 
-        mediaRecorder.onstop = () => {
-            recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            const audioUrl = URL.createObjectURL(recordedBlob);
-
-            const audio = document.getElementById('recordedAudio');
-            audio.src = audioUrl;
-            audio.style.display = 'block';
-
-            // Update the recording timer to show the actual audio duration
-            audio.addEventListener('loadedmetadata', function onMeta() {
-                audio.removeEventListener('loadedmetadata', onMeta);
-                if (isFinite(audio.duration)) {
-                    const dur = audio.duration;
-                    const mins = Math.floor(dur / 60);
-                    const secs = Math.floor(dur % 60);
-                    document.getElementById('recordingTimer').textContent =
-                        `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                }
-            });
-
-            document.getElementById('playRecordBtn').style.display = 'inline-flex';
-            document.getElementById('voiceNoteForm').style.display = 'block';
-
-            // Stop all tracks
-            stream.getTracks().forEach(track => track.stop());
-
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-            }
-
-            const canvas = document.getElementById('visualizerCanvas');
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        };
-
-        mediaRecorder.start();
-        updateUIForRecording();
-
-        // Start timer
-        recordingStartTime = Date.now();
-        recordingTimer = setInterval(updateRecordingTimer, 100);
-
-        // Start visualizer
-        setupVisualizer(stream);
-
-    } catch (error) {
-        console.error('Error accessing microphone:', error);
-
-        let errorMessage = 'Could not access microphone.';
-
-        if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-            errorMessage = 'No microphone found. Please connect a microphone and try again.';
-        } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-            if (isNativeApp) {
-                errorMessage = 'Microphone permission denied. Please allow microphone access in your device settings for this app.';
-            } else {
-                errorMessage = 'Microphone permission denied. Please allow microphone access in your browser settings.';
-            }
-        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-            errorMessage = 'Microphone is in use by another application. Please close other apps using the microphone.';
-        } else if (error.name === 'OverconstrainedError') {
-            errorMessage = 'No suitable microphone found for the requested settings.';
-        } else if (error.name === 'TypeError') {
-            errorMessage = 'Your browser does not support audio recording.';
-        } else if (error.name === 'AbortError' || error.name === 'SecurityError') {
-            if (isNativeApp) {
-                errorMessage = 'Recording not available. Please check app permissions in your device settings.';
-            } else {
-                errorMessage = 'Recording blocked due to security settings. Please use HTTPS.';
-            }
+    editor.addEventListener('close', () => {
+        resetRecording();
+        clearPhotoFiles();
+    });
+    reader.addEventListener('close', () => {
+        readerId = null;
+        $('notesReaderContent').replaceChildren();
+    });
+    document.addEventListener('keydown', event => {
+        if (editor.open && !saveButton.disabled && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            form.requestSubmit();
         }
-
-        showToast(errorMessage, 'error');
-    }
-}
-
-function updateUIForRecording() {
-    document.getElementById('startRecordBtn').style.display = 'none';
-    document.getElementById('stopRecordBtn').style.display = 'inline-flex';
-    document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '⏺️';
-    document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording...';
-}
-
-// Callback for native app to provide recorded audio
-window.onNativeRecordingComplete = function(base64Audio) {
-    try {
-        // Convert base64 to blob
-        const byteCharacters = atob(base64Audio);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey
+            && !document.querySelector('dialog[open]') && !event.target.closest('input, textarea, select, [contenteditable]')) {
+            event.preventDefault();
+            search.focus();
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        recordedBlob = new Blob([byteArray], { type: 'audio/webm' });
+    });
 
-        const audioUrl = URL.createObjectURL(recordedBlob);
-        const audio = document.getElementById('recordedAudio');
-        audio.src = audioUrl;
-        audio.style.display = 'block';
-
-        document.getElementById('playRecordBtn').style.display = 'inline-flex';
-        document.getElementById('voiceNoteForm').style.display = 'block';
-        document.getElementById('stopRecordBtn').style.display = 'none';
-        document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '✅';
-        document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording complete';
-
-        clearInterval(recordingTimer);
-    } catch (error) {
-        console.error('Error processing native recording:', error);
-        showToast('Failed to process recording', 'error');
-    }
-};
-
-// Callback for native recording error
-window.onNativeRecordingError = function(errorMessage) {
-    showToast(errorMessage || 'Recording failed', 'error');
-    resetVoiceRecorder();
-};
-
-function stopRecording() {
-    // Handle native app recording
-    if (isNativeApp && window.AndroidRecorder && typeof window.AndroidRecorder.stopRecording === 'function') {
-        try {
-            window.AndroidRecorder.stopRecording();
-        } catch (e) {
-            console.error('Native stopRecording failed:', e);
-        }
-    }
-
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-    }
-
-    // Stop timer
-    clearInterval(recordingTimer);
-    recordingTimer = null;
-
-    // Update UI
-    document.getElementById('stopRecordBtn').style.display = 'none';
-    document.getElementById('recordingStatus').querySelector('.recording-icon').textContent = '✅';
-    document.getElementById('recordingStatus').querySelector('.recording-text').textContent = 'Recording complete';
-}
-
-function playRecording() {
-    const audio = document.getElementById('recordedAudio');
-    if (audio.paused) {
-        audio.play();
-    } else {
-        audio.pause();
-    }
-}
-
-function updateRecordingTimer() {
-    const elapsed = Date.now() - recordingStartTime;
-    const minutes = Math.floor(elapsed / 60000);
-    const seconds = Math.floor((elapsed % 60000) / 1000);
-    
-    document.getElementById('recordingTimer').textContent = 
-        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-}
-
-function setupVisualizer(stream) {
-    // Close previous AudioContext to avoid hitting browser limit
-    if (audioContext) {
-        try { audioContext.close(); } catch (e) {}
-    }
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    analyser = audioContext.createAnalyser();
-    const source = audioContext.createMediaStreamSource(stream);
-    
-    source.connect(analyser);
-    analyser.fftSize = 256;
-    
-    const bufferLength = analyser.frequencyBinCount;
-    dataArray = new Uint8Array(bufferLength);
-    
-    const canvas = document.getElementById('visualizerCanvas');
-    const ctx = canvas.getContext('2d');
-    
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-    
-    function draw() {
-        animationId = requestAnimationFrame(draw);
-        
-        analyser.getByteFrequencyData(dataArray);
-        
-        ctx.fillStyle = 'rgba(15, 12, 41, 0.2)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        const barWidth = (canvas.width / bufferLength) * 2.5;
-        let x = 0;
-        
-        for (let i = 0; i < bufferLength; i++) {
-            const barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
-            
-            const gradient = ctx.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
-            gradient.addColorStop(0, '#667eea');
-            gradient.addColorStop(0.5, '#764ba2');
-            gradient.addColorStop(1, '#f093fb');
-            
-            ctx.fillStyle = gradient;
-            ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-            
-            x += barWidth + 1;
-        }
-    }
-    
-    draw();
-}
-
-// ============================================
-// FULLSCREEN NOTE VIEW
-// ============================================
-
-let currentFullscreenNoteId = null;
-
-function openFullscreenNote(noteId) {
-    const noteCard = document.querySelector(`[data-note-id="${noteId}"]`);
-    if (!noteCard) return;
-
-    currentFullscreenNoteId = noteId;
-
-    const noteType = noteCard.dataset.noteType;
-    const title = noteCard.querySelector('.note-title')?.textContent || '';
-    const body = noteCard.querySelector('.note-body')?.innerHTML || '';
-    const author = noteCard.querySelector('.note-author span')?.textContent || '';
-    const avatarEl = noteCard.querySelector('.author-avatar-mini');
-    const avatarColor = avatarEl?.style.background || '#667eea';
-    const avatarInitial = avatarEl?.textContent?.trim() || '?';
-    const date = noteCard.querySelector('.note-date')?.textContent || '';
-    const isPinned = noteCard.querySelector('.note-pin.active') !== null;
-    const audioEl = noteCard.querySelector('.note-voice audio');
-    const audioSrc = audioEl?.querySelector('source')?.src || audioEl?.src || '';
-    const noteColor = noteCard.style.background;
-
-    // Get images from carousel if present
-    const carouselEl = noteCard.querySelector('.note-images-carousel');
-    let imagePaths = [];
-    if (carouselEl && carouselEl.dataset.images) {
-        try {
-            imagePaths = JSON.parse(carouselEl.dataset.images);
-        } catch (e) {}
-    }
-
-    let contentHtml = '';
-
-    if (noteType === 'voice') {
-        contentHtml = `
-            <div class="fullscreen-note-voice">
-                <div class="fullscreen-voice-icon">🎤</div>
-                <div style="font-size: 1.2rem; color: rgba(255,255,255,0.8);">Voice Note</div>
-                ${audioSrc ? `<audio controls autoplay style="width: 100%; max-width: 400px;"><source src="${audioSrc}" type="audio/webm"></audio>` : '<div style="color: rgba(255,255,255,0.5);">Audio not available</div>'}
-            </div>
-        `;
-    } else {
-        // Build images carousel for fullscreen view
-        let imagesHtml = '';
-        if (imagePaths.length > 0) {
-            const imagesJson = JSON.stringify(imagePaths).replace(/"/g, '&quot;');
-            imagesHtml = `
-                <div class="fullscreen-note-images" onclick="openImageCarousel(${imagesJson}, 0)">
-                    <img src="${escapeHtml(imagePaths[0])}" alt="Note photo">
-                    ${imagePaths.length > 1 ? `<div class="fullscreen-images-indicator">${imagePaths.length} photos - tap to view</div>` : ''}
-                </div>
-            `;
-        }
-
-        contentHtml = `
-            ${title ? `<div class="fullscreen-note-title">${escapeHtml(title)}</div>` : ''}
-            <div class="fullscreen-note-body">${body}</div>
-            ${imagesHtml}
-        `;
-    }
-
-    const fullContent = `
-        <div style="background: ${noteColor}; border-radius: var(--radius-lg); padding: 4px; margin: -4px;">
-            ${contentHtml}
-        </div>
-        <div class="fullscreen-note-meta">
-            <div class="fullscreen-note-author">
-                <div class="fullscreen-author-avatar" style="background: ${avatarColor}">${avatarInitial}</div>
-                <span>${escapeHtml(author)}</span>
-            </div>
-            <div class="fullscreen-note-date">${escapeHtml(date)}</div>
-        </div>
-    `;
-
-    document.getElementById('fullscreenNoteContent').innerHTML = fullContent;
-
-    // Build action buttons
-    const editBtn = noteType === 'text' ? `
-        <button onclick="closeFullscreenNote(); editNote(${noteId});" class="fullscreen-action-btn edit-btn">
-            <span>✏️</span>
-            <span>Edit</span>
-        </button>
-    ` : '';
-
-    const actionsHtml = `
-        <button onclick="closeFullscreenNote(); togglePin(${noteId});" class="fullscreen-action-btn pin-btn">
-            <span>📌</span>
-            <span>${isPinned ? 'Unpin' : 'Pin'}</span>
-        </button>
-        ${editBtn}
-        <button onclick="closeFullscreenNote(); deleteNote(${noteId});" class="fullscreen-action-btn delete-btn">
-            <span>🗑️</span>
-            <span>Delete</span>
-        </button>
-    `;
-
-    document.getElementById('fullscreenNoteActions').innerHTML = actionsHtml;
-
-    // Show overlay
-    document.getElementById('fullscreenNoteModal').classList.add('active');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeFullscreenNote() {
-    document.getElementById('fullscreenNoteModal').classList.remove('active');
-    document.body.style.overflow = '';
-    currentFullscreenNoteId = null;
-}
-
-// Close fullscreen on Escape key
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && document.getElementById('fullscreenNoteModal').classList.contains('active')) {
-        closeFullscreenNote();
-    }
-});
-
-// Close fullscreen on backdrop click
-document.getElementById('fullscreenNoteModal')?.addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeFullscreenNote();
-    }
-});
-
-// ============================================
-// REAL-TIME DOM HELPERS
-// ============================================
-
-function addNoteToDOM(note) {
-    // Remove empty state if present
-    const emptyState = document.querySelector('.empty-state');
-    if (emptyState) {
-        emptyState.remove();
-    }
-
-    // Find or create notes grid
-    let notesGrid = document.querySelector('.notes-section .notes-grid');
-    if (!notesGrid) {
-        const notesSection = document.querySelector('.notes-section');
-        if (notesSection) {
-            notesGrid = document.createElement('div');
-            notesGrid.className = 'notes-grid';
-            notesSection.appendChild(notesGrid);
-        }
-    }
-
-    if (!notesGrid) return;
-
-    // Create note card HTML
-    const noteCard = document.createElement('div');
-    noteCard.className = 'note-card';
-    noteCard.dataset.noteId = note.id;
-    noteCard.dataset.noteType = note.type;
-    noteCard.style.background = note.color;
-    noteCard.style.cursor = 'pointer';
-    noteCard.style.animation = 'noteAppear 0.4s ease backwards';
-    noteCard.onclick = () => openFullscreenNote(note.id);
-
-    const titleHtml = note.title ? `<div class="note-title">${escapeHtml(note.title)}</div>` : '';
-
-    let contentHtml = '';
-    if (note.type === 'text') {
-        contentHtml = `<div class="note-body">${escapeHtml(note.body).replace(/\n/g, '<br>')}</div>`;
-    } else {
-        contentHtml = `
-            <div class="note-voice" onclick="event.stopPropagation();">
-                <div class="voice-icon">🎤</div>
-                <div class="voice-label">Voice Note</div>
-                ${note.audio_path ? `
-                    <audio controls onclick="event.stopPropagation();">
-                        <source src="${escapeHtml(note.audio_path)}" type="audio/webm">
-                        Your browser does not support audio playback.
-                    </audio>
-                ` : ''}
-            </div>
-        `;
-    }
-
-    // Add images if present (supports multiple images)
-    let imageHtml = '';
-    const imagePaths = parseImagePaths(note.image_path);
-    if (imagePaths.length > 0) {
-        const imageCount = imagePaths.length;
-        const imagesJson = escapeHtml(JSON.stringify(imagePaths));
-        imageHtml = `
-            <div class="note-images-carousel" onclick="event.stopPropagation(); openImageCarousel(${imagesJson}, 0)" data-images='${imagesJson}'>
-                <img src="${escapeHtml(imagePaths[0])}" alt="Note photo" loading="lazy">
-                ${imageCount > 1 ? `<div class="carousel-indicator">${imageCount} photos</div>` : ''}
-            </div>
-        `;
-    }
-
-    const editBtn = note.type === 'text' ? `
-        <button onclick="event.stopPropagation(); editNote(${note.id})" class="note-action" title="Edit">✏️</button>
-    ` : '';
-
-    noteCard.innerHTML = `
-        <div class="note-header">
-            <button onclick="event.stopPropagation(); togglePin(${note.id})" class="note-pin" title="Pin">📌</button>
-            <div class="note-actions">
-                ${editBtn}
-                <button onclick="event.stopPropagation(); deleteNote(${note.id})" class="note-action" title="Delete">🗑️</button>
-            </div>
-        </div>
-        ${titleHtml}
-        ${contentHtml}
-        ${imageHtml}
-        <div class="note-footer">
-            <div class="note-author">
-                <div class="author-avatar-mini" style="background: ${escapeHtml(note.avatar_color || '#667eea')}">
-                    <img src="/saves/${note.user_id}/avatar/avatar.webp?v=${window.avatarVersion || 0}"
-                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                         style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
-                    <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${(note.user_name || 'U').substring(0, 1).toUpperCase()}</span>
-                </div>
-                <span>${escapeHtml(note.user_name || 'Unknown')}</span>
-            </div>
-            <div class="note-date">Just now</div>
-        </div>
-    `;
-
-    // Add to beginning of grid
-    notesGrid.insertBefore(noteCard, notesGrid.firstChild);
-}
-
-function showEmptyState() {
-    const notesSection = document.querySelector('.notes-section');
-    if (!notesSection) return;
-
-    // Remove notes grid
-    const notesGrid = notesSection.querySelector('.notes-grid');
-    if (notesGrid) {
-        notesGrid.remove();
-    }
-
-    // Add empty state
-    const emptyState = document.createElement('div');
-    emptyState.className = 'empty-state glass-card';
-    emptyState.innerHTML = `
-        <div class="empty-icon">📝</div>
-        <h2>No notes yet</h2>
-        <p>Start capturing your family's ideas and reminders</p>
-        <div class="empty-actions">
-            <button onclick="showCreateNoteModal('text')" class="btn btn-primary btn-lg">
-                <span class="btn-icon">📝</span>
-                <span>Create First Note</span>
-            </button>
-            <button onclick="showCreateNoteModal('voice')" class="btn btn-voice btn-lg">
-                <span class="btn-icon">🎤</span>
-                <span>Record Voice Note</span>
-            </button>
-        </div>
-    `;
-    emptyState.style.animation = 'noteAppear 0.4s ease backwards';
-
-    notesSection.appendChild(emptyState);
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// ============================================
-// TOAST NOTIFICATIONS
-// ============================================
-
-function showToast(message, type = 'info') {
-    // Remove existing toasts
-    const existingToasts = document.querySelectorAll('.toast-notification');
-    existingToasts.forEach(toast => toast.remove());
-
-    const toast = document.createElement('div');
-    toast.className = `toast-notification toast-${type}`;
-
-    const icon = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️',
-        info: 'ℹ️'
-    }[type] || 'ℹ️';
-
-    const iconSpan = document.createElement('span');
-    iconSpan.className = 'toast-icon';
-    iconSpan.textContent = icon;
-
-    const msgSpan = document.createElement('span');
-    msgSpan.className = 'toast-message';
-    msgSpan.textContent = message;
-
-    toast.appendChild(iconSpan);
-    toast.appendChild(msgSpan);
-
-    document.body.appendChild(toast);
-
-    // Trigger animation
-    setTimeout(() => toast.classList.add('show'), 10);
-
-    // Auto remove
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
+    search.addEventListener('input', renderBoard);
+    const savedSort = preference('sort');
+    if (Array.from($('notesSort').options).some(option => option.value === savedSort)) $('notesSort').value = savedSort;
+    $('notesSort').addEventListener('change', () => {
+        preference('sort', $('notesSort').value);
+        renderBoard();
+    });
+    window.addEventListener('relatives:note-created', event => refreshNote(event.detail, event.detail.id));
+    updateLayout();
+    if (prefill) openEditor('text', null, prefill);
+})();

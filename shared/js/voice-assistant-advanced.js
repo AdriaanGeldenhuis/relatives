@@ -6,6 +6,7 @@
 (function() {
     'use strict';
 
+    var notesCsrf = document.currentScript.dataset.notesCsrf;
     var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     var synth = window.speechSynthesis;
 
@@ -487,11 +488,12 @@
         setStatus('📝', 'Creating note...', '');
 
         var formData = new FormData();
-        formData.append('action', 'create');
-        formData.append('title', title || content.substring(0, 50));
-        formData.append('content', content);
+        formData.append('action', 'create_note');
+        formData.append('csrf_token', notesCsrf);
+        formData.append('title', (title || content.substring(0, 50)).slice(0, 160));
+        formData.append('body', content);
 
-        fetch('/notes/api/notes.php', {
+        fetch('/notes/', {
             method: 'POST',
             body: formData,
             credentials: 'same-origin'
@@ -500,7 +502,7 @@
         .then(function(result) {
             if (result.success) {
                 console.log('[Suzi] Note created');
-                refreshPageData('note');
+                window.dispatchEvent(new CustomEvent('relatives:note-created', { detail: result.note }));
                 if (callback) callback(true);
             } else {
                 console.error('[Suzi] Failed to create note:', result.error);
@@ -637,13 +639,6 @@
                 }
             }
 
-            // Notes page
-            if (path.indexOf('/notes') === 0 && type === 'note') {
-                if (typeof window.loadNotes === 'function') {
-                    window.loadNotes();
-                    console.log('[Suzi] Notes reloaded');
-                }
-            }
         } catch (e) {
             console.log('[Suzi] Page refresh skipped:', e.message);
         }
