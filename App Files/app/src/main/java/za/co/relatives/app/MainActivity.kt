@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -19,10 +20,12 @@ import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -60,6 +63,15 @@ class MainActivity : ComponentActivity() {
         private const val TAG = "MainActivity"
         private const val WEB_URL = "https://www.relatives.co.za"
         private val TRUSTED_HOSTS = setOf("www.relatives.co.za", "relatives.co.za")
+        private const val HOME_URL = "$WEB_URL/home/"
+        private const val STATE_OFFLINE_HOME = "offline_home"
+        private val HOME_PATHS = setOf("/", "/home", "/home/", "/home/index.php")
+        private val HOME_NETWORK_ERRORS = setOf(
+            WebViewClient.ERROR_HOST_LOOKUP,
+            WebViewClient.ERROR_CONNECT,
+            WebViewClient.ERROR_TIMEOUT,
+            WebViewClient.ERROR_IO,
+        )
         private val MAP_PATHS = setOf("/tracking/app", "/tracking/app/", "/tracking/app/index.php")
     }
 
@@ -76,6 +88,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var root: FrameLayout
     private lateinit var webView: WebView
+    private var offlineHome: View? = null
     private var navigationPermissionUntil = 0L
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
@@ -123,7 +136,9 @@ class MainActivity : ComponentActivity() {
         // permission opens Settings and the system destroys this Activity).
         // Only load the initial URL on a truly fresh start — but never leave
         // a blank WebView if restoration produced nothing.
-        if (savedInstanceState != null) {
+        if (savedInstanceState?.getBoolean(STATE_OFFLINE_HOME) == true) {
+            loadHome()
+        } else if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState)
             if (webView.url.isNullOrBlank()) {
                 loadInitialUrl(intent)
@@ -197,6 +212,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_OFFLINE_HOME, offlineHome?.visibility == View.VISIBLE)
         super.onSaveInstanceState(outState)
         if (::webView.isInitialized) {
             webView.saveState(outState)
@@ -288,7 +304,7 @@ class MainActivity : ComponentActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
             )
         }
-        root.addView(webView)
+        root.addView(webView, 0)
         configureWebView()
     }
 
@@ -316,7 +332,11 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) {
         }
         attachNewWebView()
-        webView.loadUrl(if (rendererCrashCount >= 3) WEB_URL else lastUrl ?: WEB_URL)
+        if (rendererCrashCount >= 3 || isHomeUrl(lastUrl?.let(Uri::parse)) || lastUrl.isNullOrBlank()) {
+            loadHome()
+        } else {
+            webView.loadUrl(lastUrl)
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -358,12 +378,24 @@ class MainActivity : ComponentActivity() {
                     view?.stopLoading()
                     return
                 }
+                if (view == webView) hideOfflineHome()
                 if (uri?.path == "/logout.php") clearNativeSession()
+            }
+
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                super.onReceivedError(view, request, error)
+                if (view == webView && request.isForMainFrame && request.method == "GET" &&
+                    isHomeUrl(request.url) && (error.errorCode in HOME_NETWORK_ERRORS || !hasActiveNetwork())
+                ) {
+                    showOfflineHome()
+                }
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                if (view != webView || !isTrustedUrl(url?.let(Uri::parse))) return
+                if (view != webView || offlineHome?.visibility == View.VISIBLE ||
+                    !isTrustedUrl(url?.let(Uri::parse))
+                ) return
                 syncNativeSession(url)
                 CookieManager.getInstance().flush()
                 if (Uri.parse(url).path !in setOf("/", "/login.php", "/logout.php")) syncFcmToken()
@@ -467,8 +499,36 @@ class MainActivity : ComponentActivity() {
             // other page; logged-out users get the server's login redirect.
             loadDeepLink(deepLink)
         } else {
-            webView.loadUrl(WEB_URL)
+            loadHome()
         }
+    }
+
+    private fun hasActiveNetwork(): Boolean =
+        getSystemService(ConnectivityManager::class.java)?.activeNetwork != null
+
+    private fun loadHome() {
+        if (hasActiveNetwork()) {
+            hideOfflineHome()
+            webView.loadUrl(HOME_URL)
+        } else {
+            showOfflineHome()
+        }
+    }
+
+    private fun showOfflineHome() {
+        val fallback = offlineHome ?: layoutInflater.inflate(R.layout.offline_home, root, false).also { view ->
+            view.findViewById<Button>(R.id.offline_retry).setOnClickListener { loadHome() }
+            root.addView(view)
+            offlineHome = view
+        }
+        familyPoller.setActive(false)
+        webView.visibility = View.INVISIBLE
+        fallback.visibility = View.VISIBLE
+    }
+
+    private fun hideOfflineHome() {
+        offlineHome?.visibility = View.GONE
+        webView.visibility = View.VISIBLE
     }
 
     private fun handleDeepLink(intent: Intent?) {
@@ -497,9 +557,12 @@ class MainActivity : ComponentActivity() {
         uri?.scheme == "https" && uri.host in TRUSTED_HOSTS &&
             uri.encodedUserInfo == null && uri.port in setOf(-1, 443)
 
+    private fun isHomeUrl(uri: Uri?): Boolean =
+        isTrustedUrl(uri) && uri?.path in HOME_PATHS
+
     fun isCurrentTrustedPage(view: WebView, origin: Uri): Boolean {
         val document = view.url?.let(Uri::parse)
-        return view == webView && isTrustedUrl(document) && isTrustedUrl(origin) &&
+        return view == webView && offlineHome?.visibility != View.VISIBLE && isTrustedUrl(document) && isTrustedUrl(origin) &&
             document?.host == origin.host
     }
 

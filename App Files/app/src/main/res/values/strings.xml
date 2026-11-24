@@ -2,6 +2,10 @@
 <resources>
     <string name="app_name">Relatives</string>
 
+    <string name="offline_home_title">Relatives Home</string>
+    <string name="offline_home_message">You’re offline. Reconnect to see family activity and open apps.</string>
+    <string name="offline_home_try_again">Try again</string>
+
     <!-- Trial dialog -->
     <string name="trial_dialog_title">Free Trial</string>
     <string name="trial_dialog_message">You\'re currently on a free trial. Subscribe to unlock all features and keep your family connected.</string>

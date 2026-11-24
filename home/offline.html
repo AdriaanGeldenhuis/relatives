@@ -3,19 +3,14 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#06070f">
+    <meta name="theme-color" content="#f3f2e9">
     <title>Home offline - Relatives</title>
     <link rel="icon" href="/favicon.ico">
     <link rel="stylesheet" href="/home/css/home.css">
     <script src="/home/js/home.js" defer></script>
 </head>
-<body class="offline-home">
-    <div class="aurora" aria-hidden="true">
-        <div class="aurora-blob aurora-a"></div>
-        <div class="aurora-blob aurora-b"></div>
-        <div class="stars stars-a"></div>
-    </div>
-
+<body class="home-page offline-home">
+    <header class="offline-header"><span class="home-wordmark">Relatives<span>.</span></span></header>
     <main class="main-content">
         <div class="hub">
             <section class="hero" aria-labelledby="offline-title">
@@ -39,6 +34,7 @@
                     </div>
                 </div>
             </section>
+            <h2 class="home-section-title">Family apps</h2>
             <ul class="launcher offline-apps" aria-label="Family apps available online">
                 <li><a class="launch-tile" data-app-url="/messages/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">💬</span></span><span class="launch-label">Messages</span></a></li>
                 <li><a class="launch-tile" data-app-url="/shopping/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">🛒</span></span><span class="launch-label">Shopping</span></a></li>

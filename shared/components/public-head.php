@@ -6,8 +6,12 @@
     <meta name="theme-color" content="#f6f5ee">
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="stylesheet" href="/shared/public/site.css?v=<?= filemtime(__DIR__ . '/../public/site.css') ?>">
+    <style><?php readfile(__DIR__ . '/../public/site.css'); ?></style>
     <?php if (!empty($authPage)): ?>
-    <script src="/shared/public/auth.js?v=<?= filemtime(__DIR__ . '/../public/auth.js') ?>" defer></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        <?php readfile(__DIR__ . '/../public/auth.js'); ?>
+    });
+    </script>
     <?php endif; ?>
 </head>

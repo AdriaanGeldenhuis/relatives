@@ -1,13 +1,6 @@
 <?php
 declare(strict_types=1);
 
-/**
- * ============================================
- * HOME PAGE - FAMILY COMMAND CENTER v4.0
- * Compact bento-grid dashboard, aurora theme
- * ============================================
- */
-
 // Start session with correct name to match bootstrap config
 require_once __DIR__ . '/../core/session_boot.php';
 
@@ -267,22 +260,10 @@ $launcherApps = [
 
 $pageTitle = 'Home';
 $activePage = 'home';
-$pageCSS = ['/home/css/home.css'];
-$pageJS = ['/home/js/home.js'];
+$homeStylesheet = __DIR__ . '/css/home.css';
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
-
-<!-- Aurora background -->
-<div class="aurora" aria-hidden="true">
-    <div class="aurora-blob aurora-a"></div>
-    <div class="aurora-blob aurora-b"></div>
-    <div class="aurora-blob aurora-c"></div>
-    <div class="stars stars-a"></div>
-    <div class="stars stars-b"></div>
-    <div class="shooting-star"></div>
-    <div class="aurora-grid"></div>
-</div>
 
 <main class="main-content">
     <div class="hub">
@@ -301,65 +282,70 @@ require_once __DIR__ . '/../shared/components/header.php';
         </div>
         <?php endif; ?>
 
-        <!-- ============ HERO: greeting + live clock + weather ============ -->
-        <section class="hero spot" data-time="<?php echo $greetingColor; ?>">
-            <div class="hero-main">
-                <div class="hero-greeting">
-                    <p class="hero-kicker">
-                        <span aria-hidden="true"><?php echo $greetingIcon; ?></span>
-                        <span id="heroDate"><?php echo date('l, j F Y'); ?></span>
-                    </p>
-                    <h1 class="hero-title">
-                        <?php echo $greeting; ?>, <span class="hero-name"><?php echo htmlspecialchars($firstName); ?></span>
-                    </h1>
-                    <p class="hero-sub">
-                        The <?php echo htmlspecialchars($user['family_name']); ?> hub
-                        <span class="dot-sep" aria-hidden="true">·</span>
-                        <?php echo $stats['family_members']; ?> member<?php echo $stats['family_members'] === 1 ? '' : 's'; ?>
-                    </p>
-                    <?php if ($inviteLink): ?>
-                    <div class="hero-actions">
-                        <button class="pill-btn" onclick="copyInviteLink()">
-                            <span aria-hidden="true">📨</span> Invite family
-                        </button>
-                    </div>
-                    <input type="hidden" id="homeInviteLink" value="<?php echo htmlspecialchars($inviteLink); ?>">
-                    <?php endif; ?>
-                </div>
-
-                <?php $dayPct = round((((int)date('H')) * 3600 + ((int)date('i')) * 60 + (int)date('s')) / 864, 1); ?>
-                <div class="hero-clock" aria-hidden="true">
-                    <div class="clock-ring" id="clockRing" style="--day: <?php echo $dayPct; ?>">
-                        <div class="clock-core">
-                            <span class="clock-hm" id="clockHM"><?php echo date('H:i'); ?></span>
-                            <span class="clock-sec" id="clockSec"><?php echo date('s'); ?></span>
+        <div class="home-overview">
+            <section class="hero" data-time="<?php echo $greetingColor; ?>">
+                <div class="hero-main">
+                    <div class="hero-greeting">
+                        <p class="hero-kicker">
+                            <span aria-hidden="true"><?php echo $greetingIcon; ?></span>
+                            <span id="heroDate"><?php echo date('l, j F Y'); ?></span>
+                        </p>
+                        <h1 class="hero-title">
+                            <?php echo $greeting; ?>, <span class="hero-name"><?php echo htmlspecialchars($firstName); ?></span>
+                        </h1>
+                        <p class="hero-sub">
+                            The <?php echo htmlspecialchars($user['family_name']); ?> hub
+                            <span class="dot-sep" aria-hidden="true">·</span>
+                            <?php echo $stats['family_members']; ?> member<?php echo $stats['family_members'] === 1 ? '' : 's'; ?>
+                        </p>
+                        <?php if ($inviteLink): ?>
+                        <div class="hero-actions">
+                            <button class="pill-btn" onclick="copyInviteLink()">
+                                <span aria-hidden="true">📨</span> Invite family
+                            </button>
                         </div>
+                        <input type="hidden" id="homeInviteLink" value="<?php echo htmlspecialchars($inviteLink); ?>">
+                        <?php endif; ?>
                     </div>
-                    <span class="clock-cap" id="dayCap"><?php echo round($dayPct); ?>% of today</span>
-                </div>
-            </div>
 
-            <a class="hero-weather" id="heroWeather" href="/weather/" aria-label="Open weather forecast">
-                <div class="wx-skeleton">
-                    <span class="wx-skel-icon" aria-hidden="true">🌤️</span>
-                    <span class="wx-skel-bar"></span>
-                    <span class="wx-skel-bar short"></span>
+                    <?php $dayPct = round((((int)date('H')) * 3600 + ((int)date('i')) * 60 + (int)date('s')) / 864, 1); ?>
+                    <div class="hero-clock" aria-hidden="true">
+                        <div class="clock-ring" id="clockRing" style="--day: <?php echo $dayPct; ?>">
+                            <div class="clock-core">
+                                <span class="clock-hm" id="clockHM"><?php echo date('H:i'); ?></span>
+                                <span class="clock-sec" id="clockSec"><?php echo date('s'); ?></span>
+                            </div>
+                        </div>
+                        <span class="clock-cap" id="dayCap"><?php echo round($dayPct); ?>% of today</span>
+                    </div>
                 </div>
-            </a>
+            </section>
+            <section class="weather-card" aria-labelledby="home-weather-title">
+                <h2 id="home-weather-title">Weather</h2>
+                <a class="hero-weather" id="heroWeather" href="/weather/" aria-label="Open weather forecast">
+                    <div class="wx-skeleton">
+                        <span class="wx-skel-icon" aria-hidden="true">🌤️</span>
+                        <span class="wx-skel-bar"></span>
+                        <span class="wx-skel-bar short"></span>
+                    </div>
+                </a>
+            </section>
+        </div>
+
+        <section class="apps-section" aria-labelledby="family-apps-heading">
+            <h2 id="family-apps-heading" class="home-section-title">Family apps</h2>
+            <nav class="launcher" aria-labelledby="family-apps-heading">
+                <?php foreach ($launcherApps as $app): ?>
+                <a href="<?php echo $app['href']; ?>" class="launch-tile" style="--glow: <?php echo $app['glow']; ?>">
+                    <span class="launch-chip" aria-hidden="true"><span class="launch-icon"><?php echo $app['icon']; ?></span></span>
+                    <span class="launch-label"><?php echo $app['label']; ?></span>
+                    <?php if ($app['badge'] > 0): ?>
+                    <span class="launch-badge" aria-label="<?php echo $app['badge']; ?> pending"><?php echo $app['badge'] > 99 ? '99+' : $app['badge']; ?></span>
+                    <?php endif; ?>
+                </a>
+                <?php endforeach; ?>
+            </nav>
         </section>
-
-        <!-- ============ APP LAUNCHER ============ -->
-        <nav class="launcher" aria-label="Family apps">
-            <?php foreach ($launcherApps as $app): ?>
-            <a href="<?php echo $app['href']; ?>" class="launch-tile spot" style="--glow: <?php echo $app['glow']; ?>">
-                <span class="launch-chip" aria-hidden="true"><span class="launch-icon"><?php echo $app['icon']; ?></span></span>
-                <span class="launch-label"><?php echo $app['label']; ?></span>
-                <?php if ($app['badge'] > 0): ?>
-                <span class="launch-badge" aria-label="<?php echo $app['badge']; ?> pending"><?php echo $app['badge'] > 99 ? '99+' : $app['badge']; ?></span>
-                <?php endif; ?>
-            </a>
-            <?php endforeach; ?>
-        </nav>
 
         <!-- ============ BENTO GRID ============ -->
         <div class="bento">
@@ -421,19 +407,19 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </header>
                 <div class="pulse-grid">
                     <div class="pulse-tile">
-                        <span class="pulse-num" data-count="<?php echo $stats['completed_tasks']; ?>">0</span>
+                        <span class="pulse-num" data-count="<?php echo $stats['completed_tasks']; ?>"><?php echo $stats['completed_tasks']; ?></span>
                         <span class="pulse-label">✅ Items ticked off</span>
                     </div>
                     <a class="pulse-tile" href="/shopping/">
-                        <span class="pulse-num" data-count="<?php echo $stats['active_lists']; ?>">0</span>
+                        <span class="pulse-num" data-count="<?php echo $stats['active_lists']; ?>"><?php echo $stats['active_lists']; ?></span>
                         <span class="pulse-label">🛒 Active lists</span>
                     </a>
                     <a class="pulse-tile" href="/notes/">
-                        <span class="pulse-num" data-count="<?php echo $stats['notes_count']; ?>">0</span>
+                        <span class="pulse-num" data-count="<?php echo $stats['notes_count']; ?>"><?php echo $stats['notes_count']; ?></span>
                         <span class="pulse-label">📝 Family notes</span>
                     </a>
                     <a class="pulse-tile" href="/calendar/">
-                        <span class="pulse-num" data-count="<?php echo $stats['upcoming_events']; ?>">0</span>
+                        <span class="pulse-num" data-count="<?php echo $stats['upcoming_events']; ?>"><?php echo $stats['upcoming_events']; ?></span>
                         <span class="pulse-label">📅 Events, 7 days</span>
                     </a>
                 </div>
@@ -536,4 +522,5 @@ window.USER_LOCATION = <?php echo $userLocation ? json_encode([
 ]) : 'null'; ?>;
 </script>
 
+<script><?php readfile(__DIR__ . '/js/home.js'); ?></script>
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

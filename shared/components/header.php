@@ -47,7 +47,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#06070f">
+    <meta name="theme-color" content="<?= isset($homeStylesheet) ? '#f3f2e9' : '#06070f' ?>">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -798,8 +798,11 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             <link rel="stylesheet" href="<?php echo $css; ?>?v=<?php echo $buildTime; ?>">
         <?php endforeach; ?>
     <?php endif; ?>
+    <?php if (isset($homeStylesheet)): ?>
+        <style><?php readfile($homeStylesheet); ?></style>
+    <?php endif; ?>
 </head>
-<body <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
+<body <?= isset($homeStylesheet) ? 'class="home-page"' : '' ?> <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
     
     <!-- App Loader -->
     <div id="appLoader" class="app-loader">
@@ -935,6 +938,9 @@ if (isset($db) && isset($_SESSION['user_id'])) {
                     <span></span>
                     <span></span>
                 </button>
+                <?php if (isset($homeStylesheet)): ?>
+                    <a class="home-wordmark" href="/home/" aria-label="Relatives Home">Relatives<span>.</span></a>
+                <?php endif; ?>
             </div>
 
             <div class="header-right">

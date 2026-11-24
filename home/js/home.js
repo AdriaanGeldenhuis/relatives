@@ -1,8 +1,7 @@
 /**
  * ============================================
- * RELATIVES v4.1 - HOME (FAMILY COMMAND CENTER)
- * Day-ring clock · live countdowns · weather ·
- * cursor spotlight · count-ups
+ * Relatives Home
+ * Offline status, day clock, event countdowns, and weather
  * ============================================
  */
 
@@ -45,11 +44,6 @@
     }
 
     function pad(n) { return n < 10 ? '0' + n : '' + n; }
-
-    // Flag @property support so the rotating hero border only runs where it animates smoothly
-    if (window.CSS && typeof CSS.registerProperty === 'function') {
-        document.documentElement.classList.add('has-props');
-    }
 
     // ============================================
     // DAY-RING CLOCK (fills as the day passes)
@@ -127,19 +121,6 @@
 
     refreshEventTimes();
     setInterval(refreshEventTimes, 30000);
-
-    // ============================================
-    // CURSOR SPOTLIGHT (desktop pointers only)
-    // ============================================
-    if (window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches) {
-        document.querySelectorAll('.spot').forEach(function (el) {
-            el.addEventListener('pointermove', function (e) {
-                var r = el.getBoundingClientRect();
-                el.style.setProperty('--mx', (e.clientX - r.left) + 'px');
-                el.style.setProperty('--my', (e.clientY - r.top) + 'px');
-            });
-        });
-    }
 
     // ============================================
     // WEATHER STRIP (inside the hero card)
