@@ -27,27 +27,6 @@
     color-scheme: light;
 }
 
-.messages-page .global-header {
-    background: #fbfaf2;
-    border-color: var(--line);
-    animation: none;
-    box-shadow: none;
-}
-
-.messages-page .header-container { max-width: 1380px; }
-.messages-page .hamburger-menu span,
-.messages-page .hamburger-menu:hover span { background: var(--text-0); }
-.messages-page .header-btn { background: #edf0e4; border-color: var(--line); color: var(--text-0); }
-.messages-page .header-btn:hover { background: #e2e9d9; }
-.messages-page .home-wordmark {
-    color: var(--text-0);
-    font-size: 1.5rem;
-    font-weight: 800;
-    letter-spacing: -.07em;
-    text-decoration: none;
-}
-.messages-page .home-wordmark span { color: #548541; }
-
 .messages-page .global-footer :is(.mic-btn:where(:not(.listening, .wake-listening, .processing)), .help-btn-footer, .tracking-btn, .plus-btn) {
     width: 42px;
     height: 42px;
@@ -1057,34 +1036,18 @@
     .messages-page .main-content { padding-bottom: 67px; }
 }
 
-.messages-page .messages-container { margin-top: 17px; }
-.message-art {
-    display: grid;
-    gap: 8px;
-    width: clamp(142px, 17vw, 220px);
-    transform: translateX(-12px) rotate(-8deg);
+.messages-page .messages-container { margin-top: 10px; }
+.messages-toolbar, #messagesActions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.messages-toolbar { justify-content: space-between; }
+.messages-toolbar h1 { font: 400 clamp(1.7rem, 4vw, 2.3rem)/1.1 var(--family-display); letter-spacing: -.045em; }
+#messagesActions button {
+    padding: 7px 10px;
+    border: 1px solid var(--family-line);
+    border-radius: 9px;
+    min-height: 40px;
+    background: var(--family-paper);
+    color: var(--family-green);
+    font: 700 .8rem var(--family-body);
+    cursor: pointer;
 }
-.message-art span {
-    position: relative;
-    width: 79%;
-    height: clamp(43px, 6vw, 74px);
-    border-radius: 14px 14px 14px 5px;
-    background: #f9f4d4;
-    box-shadow: 0 7px 15px #112a1e50;
-}
-.message-art span::after {
-    content: '';
-    position: absolute;
-    inset: 32% 24% 36% 15%;
-    border-radius: 2px;
-    border-block: 4px solid #d4d7ac;
-}
-.message-art span:last-child {
-    justify-self: end;
-    border-radius: 14px 14px 5px 14px;
-    background: #bddd92;
-}
-.message-art span:last-child::after { border-color: #9abf77; }
-@media (max-width: 555px) {
-    .message-art { width: 105px; }
-}
+#messagesActions button:hover, #messagesActions button.active { background: #e8efdc; }

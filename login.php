@@ -68,10 +68,10 @@ $authPage = true;
 require __DIR__ . '/shared/components/public-head.php';
 ?>
 <body>
+    <?php require __DIR__ . '/shared/components/site-navigation.php'; ?>
     <div class="auth-layout">
         <?php require __DIR__ . '/shared/components/auth-aside.php'; ?>
         <main class="auth-main">
-            <?php require __DIR__ . '/shared/components/public-brand.php'; ?>
             <div class="auth-content">
                 <h1>Welcome back.</h1>
                 <p class="auth-description">Sign in to your family hub.</p>

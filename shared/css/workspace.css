@@ -11,45 +11,7 @@
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
-.workspace-page .global-header {
-    border-bottom: 1px solid #dce0d3;
-    background: var(--workspace-paper);
-    color: var(--workspace-ink);
-    box-shadow: none;
-    color-scheme: light;
-    animation: none;
-}
-
-.workspace-page .header-container {
-    max-width: 1380px;
-}
-
-.workspace-page .home-wordmark {
-    color: var(--workspace-ink);
-    font-size: 1.5rem;
-    font-weight: 800;
-    letter-spacing: -.07em;
-    text-decoration: none;
-}
-
-.workspace-page .home-wordmark span { color: #548541; }
-.workspace-page .hamburger-menu span,
-.workspace-page .hamburger-menu:hover span { background: var(--workspace-ink); }
-
-.workspace-page .header-btn {
-    border-color: #dce2d4;
-    background: #edf0e4;
-    color: var(--workspace-ink);
-}
-
-.workspace-page .header-btn:hover { background: #e2e9d9; }
-.workspace-page .mobile-sidebar,
 .workspace-page .app-loader { background: var(--workspace-forest); }
-.workspace-page .mobile-nav-link.active {
-    border-color: #6f9557;
-    background: #304c34;
-    color: var(--workspace-lime);
-}
 
 .workspace-page .global-footer :is(.mic-btn:where(:not(.listening, .wake-listening, .processing)), .help-btn-footer, .tracking-btn, .plus-btn) {
     border: 1px solid #dce2d4;
@@ -83,18 +45,6 @@
 
 .workspace-page[data-area="profile"] .profile-container { max-width: 690px; }
 .workspace-page[data-area="legal"] .legal-hero-title { color: #f8f6e9; }
-
-@media (max-width: 600px) {
-    .workspace-page .header-container { padding-inline: 10px; }
-    .workspace-page .header-left, .workspace-page .header-right { gap: 6px; }
-    .workspace-page .header-btn { width: 35px; height: 35px; font-size: 1rem; }
-    .workspace-page .home-wordmark { font-size: 1.27rem; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .workspace-page .mobile-sidebar,
-    .workspace-page .global-header { transition: none; }
-}
 
 .workspace-page .app-loader { display: none; }
 

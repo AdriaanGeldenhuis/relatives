@@ -66,14 +66,10 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <main class="main-content family-main">
     <div class="hub">
-        <header class="family-hero messages-hero">
-            <div class="family-hero-content">
-                <h1 class="family-hero-title" id="messages-title">Messages</h1>
-                <p class="family-hero-summary"><?= htmlspecialchars($user['family_name'] ?? 'Family chat') ?></p>
-                <div class="family-actions" id="messagesActions" role="group" aria-label="Conversation tools"></div>
-            </div>
-            <div class="family-hero-art" aria-hidden="true"><div class="message-art"><span></span><span></span></div></div>
-        </header>
+        <div class="messages-toolbar">
+            <h1 id="messages-title">Messages</h1>
+            <div id="messagesActions" role="group" aria-label="Conversation tools"></div>
+        </div>
         <div class="messages-container">
             
             <!-- Sidebar -->

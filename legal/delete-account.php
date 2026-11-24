@@ -63,27 +63,22 @@ if (!empty($_SESSION['user_id'])) {
         }
     }
 }
+$activeTab = 'deletion';
+$pageTitle = 'Delete your account | Relatives';
+$legalHeading = 'Delete your Relatives account';
+$legalSummary = 'Request permanent deletion of your account and its associated personal data.';
+require __DIR__ . '/layout-start.php';
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Delete your account | Relatives</title>
-    <style><?php readfile(__DIR__ . '/../legal/css/public-legal.css'); ?></style>
-</head>
-<body>
-<main>
-    <p><a href="/legal/privacy.php">Relatives Privacy Policy</a></p>
-    <h1>Delete your Relatives account</h1>
+<article class="legal-document">
+    <h2>Request account deletion</h2>
     <p>Use this form to request deletion of your account and associated personal data, including the location history linked to your account. The Relatives privacy team processes these requests. A family administrator does not need to approve your request.</p>
-    <p>Account deletion does not cancel a subscription managed through Google Play. You can manage it in Google Play under Payments &amp; subscriptions.</p>
+    <p>Store subscriptions need to be cancelled separately. You can submit this request before cancelling. Manage your subscription in <a href="https://play.google.com/store/account/subscriptions">Google Play</a> or the <a href="https://apps.apple.com/account/subscriptions">App Store</a>.</p>
     <?php if ($error !== ''): ?>
         <p role="alert"><?= htmlspecialchars($error) ?></p>
     <?php endif; ?>
     <?php if (!$user): ?>
         <p><a href="/login.php?redirect=%2Flegal%2Fdelete-account.php">Sign in to request deletion</a></p>
-        <p>If you cannot sign in, contact <a href="mailto:privacy@relatives.co.za">privacy@relatives.co.za</a> for help verifying your account.</p>
+        <p>If you cannot sign in, contact <a href="mailto:privacy@relatives.co.za">privacy@relatives.co.za</a> to request deletion and get help verifying your account.</p>
     <?php elseif ($pending): ?>
         <script>window.TrackingBridge?.stopTracking();</script>
         <p role="status">Your request has been received and is awaiting processing. Family location sharing has been turned off. Contact <a href="mailto:privacy@relatives.co.za">privacy@relatives.co.za</a> if you need help with your request.</p>
@@ -96,6 +91,7 @@ if (!empty($_SESSION['user_id'])) {
             <button type="submit">Request account deletion</button>
         </form>
     <?php endif; ?>
+</article>
 </main>
 </body>
 </html>

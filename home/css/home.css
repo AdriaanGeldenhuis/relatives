@@ -23,25 +23,12 @@
     outline-offset: 3px;
 }
 
-.home-page .global-header,
 .offline-header {
     background: #fbfaf2;
     border-bottom: 1px solid var(--home-line);
     box-shadow: none;
     animation: none;
 }
-
-.home-page .header-container { max-width: 1380px; }
-.home-page .hamburger-menu span,
-.home-page .hamburger-menu:hover span { background: var(--home-ink); }
-
-.home-page .header-btn {
-    background: #edf0e4;
-    border-color: #dce2d4;
-    color: var(--home-ink);
-}
-
-.home-page .header-btn:hover { background: #e2e9d9; }
 
 .home-page .footer-container { max-width: 1380px; }
 

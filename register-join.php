@@ -72,10 +72,10 @@ $authPage = true;
 require __DIR__ . '/shared/components/public-head.php';
 ?>
 <body>
+    <?php require __DIR__ . '/shared/components/site-navigation.php'; ?>
     <div class="auth-layout">
         <?php require __DIR__ . '/shared/components/auth-aside.php'; ?>
         <main class="auth-main">
-            <?php require __DIR__ . '/shared/components/public-brand.php'; ?>
             <div class="auth-content">
                 <h1>Join your family.</h1>
                 <p class="auth-description">Enter the invite code your family shared with you.</p>

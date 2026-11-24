@@ -14,4 +14,5 @@
     });
     </script>
     <?php endif; ?>
+    <style><?php readfile(__DIR__ . '/../css/site-navigation.css'); ?></style>
 </head>

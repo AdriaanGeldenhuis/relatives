@@ -12,14 +12,9 @@ $pageTitle = 'Relatives — A little closer, every day';
 require __DIR__ . '/shared/components/public-head.php';
 ?>
 <body>
+    <?php require __DIR__ . '/shared/components/site-navigation.php'; ?>
     <div class="public-wrap">
-        <header class="public-header">
-            <?php require __DIR__ . '/shared/components/public-brand.php'; ?>
-            <nav class="public-nav" aria-label="Account">
-                <a class="text-link" href="/register-join.php">Join a family</a>
-                <a class="button button-outline" href="/login.php">Sign in <span class="button-arrow" aria-hidden="true"></span></a>
-            </nav>
-        </header>
+
 
         <main>
             <section class="landing-hero" aria-labelledby="landing-title">

@@ -1,6 +1,6 @@
 /* Frame the games with the Relatives palette while keeping individual boards legible. */
-:is(.game-header, .top-bar, .game-hud, .family-header, .lobby-header, .turn-header, .results-header, .scoreboard-header, .viewer-header) {
-    background: #18372a;
+:is(.game-header, .top-bar, .game-hud, .family-header, .lobby-header, .turn-header, .results-header, .scoreboard-header, .viewer-header, .menu-header) {
+    background: #17392c;
     border-color: #527051;
     color: #fffdf2;
 }
@@ -20,11 +20,11 @@
 
 :is(a, button).back-btn {
     border: 1px solid #cbe37e;
-    background: #def788;
+    background: #e1f79b;
     color: #182c21;
 }
 
-:is(a, button).back-btn:hover { background: #edffb7; }
+:is(a, button).back-btn:hover { background: #edffb5; }
 :is(a, button).back-btn:focus-visible { outline: 2px solid #fffdf2; outline-offset: 3px; }
 
 #screen-start .back-btn { box-shadow: 0 3px 14px #10221980; }

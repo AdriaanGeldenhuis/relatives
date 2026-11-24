@@ -42,10 +42,10 @@ $authPage = true;
 require __DIR__ . '/shared/components/public-head.php';
 ?>
 <body>
+    <?php require __DIR__ . '/shared/components/site-navigation.php'; ?>
     <div class="auth-layout">
         <?php require __DIR__ . '/shared/components/auth-aside.php'; ?>
         <main class="auth-main">
-            <?php require __DIR__ . '/shared/components/public-brand.php'; ?>
             <div class="auth-content">
                 <?php if ($success): ?>
                     <h1>Check your email.</h1>

@@ -173,34 +173,37 @@
                 right: 0;
                 display: none;
                 flex-direction: column;
-                gap: 12px;
+                gap: 3px;
+                padding: 7px;
+                border: 1px solid #d9dfd0;
+                border-radius: 16px;
+                background: #fffdf6;
+                box-shadow: 0 8px 24px #14291f33;
                 pointer-events: all;
                 z-index: 1000;
             }
-            
-            .plus-menu.active {
-                display: flex;
-            }
-            
+
+            .plus-menu.active { display: flex; }
+
             .plus-menu-item {
                 display: flex;
                 align-items: center;
-                gap: 12px;
-                padding: 12px 20px;
-                background: white;
-                border-radius: 50px;
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-                cursor: pointer;
+                gap: 8px;
+                min-height: 42px;
+                padding: 5px 10px;
+                border: 1px solid transparent;
+                border-radius: 9px;
+                color: #192e24;
                 text-decoration: none;
-                color: #333;
-                font-weight: 600;
+                font-weight: 700;
                 white-space: nowrap;
             }
-            
-            .plus-menu-item:hover {
-                transform: translateX(-10px);
+
+            .plus-menu-item:hover, .plus-menu-item:focus-visible {
+                background: #e8efdc;
+                border-color: #d8e1cc;
             }
-            
+
             .plus-menu-icon {
                 font-size: 24px;
                 width: 35px;
@@ -569,7 +572,7 @@
                         </a>
                     </div>
                     
-                    <button class="footer-btn plus-btn" id="plusBtn" onclick="togglePlusMenu()">
+                    <button class="footer-btn plus-btn" id="plusBtn" aria-label="Quick links" aria-controls="plusMenu" aria-expanded="false" onclick="togglePlusMenu()">
                         ➕
                     </button>
                 </div>
@@ -640,6 +643,7 @@
             const backdrop = document.getElementById('menuBackdrop');
             
             plusMenuOpen = !plusMenuOpen;
+            btn.setAttribute('aria-expanded', String(plusMenuOpen));
             
             if (plusMenuOpen) {
                 menu.classList.add('active');

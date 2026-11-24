@@ -1,0 +1,134 @@
+.site-header, .site-menu {
+    --nav-paper: #fffdf6;
+    --nav-ink: #192e24;
+    --nav-green: #28563e;
+    --nav-line: #d9dfd0;
+    font: 600 .875rem/1.4 'Plus Jakarta Sans', system-ui, sans-serif;
+    box-sizing: border-box;
+    color: var(--nav-ink);
+    color-scheme: light;
+}
+body .site-header.global-header {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: #f9f8ef;
+    border: 0;
+    border-bottom: 1px solid var(--nav-line);
+    box-shadow: none;
+    animation: none;
+}
+.site-header .header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: min(100%, 1330px);
+    margin: auto;
+    min-height: 62px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) clamp(10px, 3vw, 24px) 8px;
+    box-sizing: border-box;
+}
+.site-header :is(.header-left, .header-right) { display: flex; align-items: center; gap: clamp(5px, 1vw, 12px); }
+.site-wordmark, .site-menu-head h2 {
+    font: 400 clamp(1.6rem, 4vw, 2.1rem)/1 Georgia, serif;
+    letter-spacing: -.06em;
+    color: var(--nav-ink);
+    text-decoration: none;
+}
+.site-wordmark span, .site-menu-head h2 span { color: #558240; }
+.site-control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 42px;
+    min-width: 42px;
+    padding: 6px 10px;
+    box-sizing: border-box;
+    border: 1px solid var(--nav-line);
+    border-radius: 10px;
+    background: #f0f2e6;
+    color: var(--nav-green);
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+.site-control:hover { background: #e5ecd8; }
+.site-account, .site-sign-in { background: #e1f79b; border-color: #ccdf92; font-weight: 800; }
+.site-menu-mark {
+    width: 15px;
+    height: 11px;
+    border-block: 2px solid currentColor;
+    box-sizing: border-box;
+    background: linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat;
+}
+.site-header .notification-bell { position: relative; }
+.site-header .notification-badge {
+    position: absolute;
+    inset: -4px -4px auto auto;
+    padding: 1px 4px;
+    min-width: 16px;
+    text-align: center;
+    border-radius: 12px;
+    background: #99382c;
+    color: white;
+    font-size: .65rem;
+}
+.site-header [hidden] { display: none !important; }
+.site-menu {
+    position: fixed;
+    inset: 0 auto 0 0;
+    margin: 0;
+    padding: 0;
+    width: min(390px, calc(100% - 22px));
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-right: 1px solid var(--nav-line);
+    border-radius: 0 20px 20px 0;
+    background: var(--nav-paper);
+    box-shadow: 10px 0 45px #14291f33;
+    overflow: auto;
+}
+.site-menu[open] { display: flex; flex-direction: column; }
+.site-menu::backdrop { background: #152d22b3; }
+.site-menu-head, .site-menu-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 14px 16px;
+    background: #f4f3e9;
+}
+.site-menu-head { border-bottom: 1px solid var(--nav-line); }
+.site-menu-foot { border-top: 1px solid var(--nav-line); margin-top: auto; overflow-wrap: anywhere; }
+.site-menu-foot a { flex: none; }
+.site-menu-nav { padding: 11px 16px; }
+.site-menu-group + .site-menu-group { border-top: 1px solid var(--nav-line); margin-top: 8px; padding-top: 8px; }
+.site-menu-group h3 { margin: 0 0 4px; padding: 0 8px; color: #546356; font-size: .75rem; }
+.site-menu-group a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 42px;
+    padding: 4px 9px;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: var(--nav-ink);
+    text-decoration: none;
+}
+.site-menu-group a:hover, .site-menu-group a[aria-current="page"] {
+    background: #e8efdc;
+    border-color: #d8e1cc;
+    color: var(--nav-green);
+}
+.site-menu-group a span { width: 1.5rem; text-align: center; }
+body :is(.site-header, .site-menu) :focus-visible { outline: 2px solid #3c7548; outline-offset: 2px; }
+html:has(.site-menu[open]) { overflow: hidden; }
+@media (max-width: 480px) {
+    .site-header .header-container { min-height: 57px; }
+    .site-menu-label { display: none; }
+    .site-header .site-control { min-width: 38px; min-height: 38px; }
+}
