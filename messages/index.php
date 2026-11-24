@@ -50,31 +50,20 @@ try {
 $pageTitle = 'Family Chat';
 $activePage = 'messages';
 
-$pageCSS = [
-    '/shared/css/aurora.css',
-    '/messages/css/messages.css',
-    '/messages/css/messages-enhanced.css'
+$messagesStylesheets = [
+    __DIR__ . '/css/messages.css',
+    __DIR__ . '/css/messages-enhanced.css',
 ];
 
 $pageJS = [
     '/messages/js/messages.js',
     '/messages/js/messages-enhanced.js'
 ];
+$pageJSVersion = max(filemtime(__DIR__ . '/js/messages.js'), filemtime(__DIR__ . '/js/messages-enhanced.js'));
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Aurora background -->
-<div class="aurora" aria-hidden="true">
-    <div class="aurora-blob aurora-a"></div>
-    <div class="aurora-blob aurora-b"></div>
-    <div class="aurora-blob aurora-c"></div>
-    <div class="stars stars-a"></div>
-    <div class="stars stars-b"></div>
-    <div class="aurora-grid"></div>
-</div>
-
-<!-- Main Content -->
 <main class="main-content">
     <div class="hub">
         <div class="messages-container">
@@ -82,17 +71,11 @@ require_once __DIR__ . '/../shared/components/header.php';
             <!-- Sidebar -->
             <aside class="messages-sidebar">
                 <div class="sidebar-header">
-                    <h2>💬 Family Chat</h2>
-                </div>
-
-                <div class="online-status">
-                    <div class="status-indicator online"></div>
-                    <span><?php echo count($familyMembers) + 1; ?> members</span>
+                    <h2>Family members</h2>
+                    <span class="member-total"><?php echo count($familyMembers) + 1; ?></span>
                 </div>
 
                 <div class="members-list">
-                    <h3>👨‍👩‍👧‍👦 Family Members</h3>
-                    
                     <!-- Current User -->
                     <div class="member-item current-user">
                         <div class="member-avatar" style="background: <?php echo $user['has_avatar'] ? 'transparent' : htmlspecialchars($user['avatar_color']); ?>">
@@ -102,7 +85,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                             ?>
                                 <img src="<?php echo avatarUrl($user['id']); ?>" alt="You">
                             <?php else: ?>
-                                <?php echo strtoupper(substr($user['name'], 0, 2)); ?>
+                                <?php echo htmlspecialchars(mb_strtoupper(mb_substr($user['name'], 0, 2))); ?>
                             <?php endif; ?>
                         </div>
                         <div class="member-info">
@@ -123,7 +106,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 <?php if ($memberHasAvatar): ?>
                                     <img src="<?php echo avatarUrl($member['id']); ?>" alt="<?php echo htmlspecialchars($member['full_name']); ?>">
                                 <?php else: ?>
-                                    <?php echo strtoupper(substr($member['full_name'], 0, 2)); ?>
+                                    <?php echo htmlspecialchars(mb_strtoupper(mb_substr($member['full_name'], 0, 2))); ?>
                                 <?php endif; ?>
                             </div>
                             <div class="member-info">
@@ -149,13 +132,20 @@ require_once __DIR__ . '/../shared/components/header.php';
             </aside>
 
             <!-- Chat Main Area -->
-            <main class="chat-main">
-                
-		<!-- Connection Status Indicator -->
-		    <div class="connection-status" id="connectionStatus" style="display: none;">
-    			<span class="status-dot"></span>
-    			<span class="status-text">Connecting...</span>
-		    </div>
+            <section class="chat-main" aria-labelledby="messages-title">
+                <header class="chat-heading">
+                    <div class="chat-title">
+                        <span class="chat-mark" aria-hidden="true"></span>
+                        <div>
+                            <h1 id="messages-title">Messages</h1>
+                            <p><?php echo htmlspecialchars($user['family_name'] ?? 'Family chat'); ?></p>
+                        </div>
+                    </div>
+                </header>
+                <div class="connection-status" id="connectionStatus" role="status" style="display: none;">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Connecting...</span>
+                </div>
                 <!-- Messages List -->
                 <div class="messages-list" id="messagesList">
                     <div class="loading-messages">
@@ -196,7 +186,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                     <!-- Input Wrapper -->
                     <div class="input-wrapper">
-                        <button class="attachment-btn" onclick="document.getElementById('fileInput').click()" title="Attach">
+                        <button class="attachment-btn" onclick="document.getElementById('fileInput').click()" title="Attach" aria-label="Attach files">
                             📎
                         </button>
 
@@ -204,20 +194,21 @@ require_once __DIR__ . '/../shared/components/header.php';
                                accept="image/*,video/*,audio/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf"
                                onchange="handleFileSelect(event)">
                         
-                        <button class="emoji-btn" id="emojiPickerBtn" title="Emoji">
+                        <button class="emoji-btn" id="emojiPickerBtn" title="Emoji" aria-label="Emoji">
                             😊
                         </button>
 
                         <div class="message-input-wrapper">
                             <textarea 
                                 id="messageInput" 
-                                placeholder="Type a message..."
+                                aria-label="Message"
+                                placeholder="Write a message…"
                                 rows="1"
                                 maxlength="5000"></textarea>
                         </div>
 
-                        <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Send">
-                            ➤
+                        <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Send" aria-label="Send">
+                            <span class="send-label" aria-hidden="true">Send</span><span aria-hidden="true">➤</span>
                         </button>
                     </div>
 
@@ -265,7 +256,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         </div>
                     </div>
                 </div>
-            </main>
+            </section>
         </div>
     </div>
 </main>

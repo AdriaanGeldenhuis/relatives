@@ -1,20 +1,8 @@
-/* ============================================
-   RELATIVES MESSAGES v4 - ENHANCED FEATURES
-   Toolbar, search, bulk ops, reactions picker,
-   media viewer, limits. Aurora style.
-   ============================================ */
-
-/* ============================================
-   TOOLBAR (injected at top of chat panel)
-   ============================================ */
-
 .messages-toolbar {
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 9px 12px;
-    border-bottom: 1px solid var(--line);
-    background: rgba(11, 13, 26, 0.6);
+    padding: 0;
     flex-shrink: 0;
 }
 
@@ -22,10 +10,11 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
-    border-radius: var(--radius-full);
+    min-height: 36px;
+    padding: 5px 9px;
+    border-radius: 9px;
     border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(45, 81, 51, 0.05);
     color: var(--text-1);
     font-family: inherit;
     font-size: 0.72rem;
@@ -35,14 +24,14 @@
 }
 
 .toolbar-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(45, 81, 51, 0.1);
     color: var(--text-0);
-    border-color: rgba(167, 139, 250, 0.5);
+    border-color: rgba(48, 100, 62, 0.5);
 }
 
 .toolbar-btn.active {
-    background: rgba(167, 139, 250, 0.2);
-    border-color: rgba(167, 139, 250, 0.65);
+    background: rgba(48, 100, 62, 0.2);
+    border-color: rgba(48, 100, 62, 0.65);
     color: var(--text-0);
 }
 
@@ -57,8 +46,8 @@
     gap: 9px;
     flex-wrap: wrap;
     padding: 9px 12px;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.4);
-    background: rgba(167, 139, 250, 0.1);
+    border-bottom: 1px solid rgba(48, 100, 62, 0.4);
+    background: rgba(48, 100, 62, 0.1);
     flex-shrink: 0;
 }
 
@@ -77,7 +66,7 @@
     padding: 6px 12px;
     border-radius: var(--radius-full);
     border: 1px solid var(--line-strong);
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(45, 81, 51, 0.07);
     color: var(--text-0);
     font-family: inherit;
     font-size: 0.72rem;
@@ -86,7 +75,7 @@
     transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-.bulk-action-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.bulk-action-btn:hover { background: rgba(45, 81, 51, 0.14); }
 
 .bulk-action-btn.danger {
     border-color: rgba(251, 113, 133, 0.5);
@@ -101,7 +90,7 @@
     flex-shrink: 0;
     align-self: center;
     margin-right: 2px;
-    accent-color: #a78bfa;
+    accent-color: var(--accent);
     cursor: pointer;
 }
 
@@ -116,7 +105,7 @@
     padding: 8px 11px;
     border-radius: 11px;
     border: 1px solid var(--line-strong);
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--card);
     color: var(--text-0);
     font-family: inherit;
     font-size: 0.86rem;
@@ -124,7 +113,7 @@
     min-height: 56px;
 }
 
-.message-edit-input:focus { outline: none; border-color: var(--violet); }
+.message-edit-input:focus { outline: none; border-color: var(--accent); }
 
 .message-edit-actions {
     display: flex;
@@ -138,7 +127,7 @@
     padding: 6px 14px;
     border-radius: var(--radius-full);
     border: 1px solid var(--line-strong);
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(45, 81, 51, 0.07);
     color: var(--text-0);
     font-family: inherit;
     font-size: 0.74rem;
@@ -150,13 +139,13 @@
 .btn-save,
 .btn-search {
     background: var(--brand);
-    border-color: transparent;
-    color: #fff;
+    border-color: var(--line);
+    color: var(--text-0);
 }
 
 .btn-save:hover,
-.btn-search:hover { box-shadow: 0 6px 18px rgba(244, 114, 182, 0.4); }
-.btn-cancel:hover { background: rgba(255, 255, 255, 0.14); }
+.btn-search:hover { box-shadow: 0 3px 10px rgba(48, 100, 62, 0.15); }
+.btn-cancel:hover { background: rgba(45, 81, 51, 0.14); }
 
 .edit-info {
     font-size: 0.62rem;
@@ -219,14 +208,14 @@
     flex-shrink: 0;
     border-radius: var(--radius-full);
     border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(45, 81, 51, 0.07);
     color: var(--text-0);
     font-size: 0.9rem;
     cursor: pointer;
     transition: background 0.2s ease, transform 0.2s ease;
 }
 
-.modal-close:hover { background: rgba(255, 255, 255, 0.15); transform: rotate(90deg); }
+.modal-close:hover { background: rgba(45, 81, 51, 0.15); transform: rotate(90deg); }
 
 .modal-body {
     padding: 14px 16px;
@@ -242,7 +231,7 @@
     padding: 9px 13px;
     border-radius: 11px;
     border: 1px solid var(--line-strong);
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(45, 81, 51, 0.05);
     color: var(--text-0);
     font-family: inherit;
     font-size: 0.86rem;
@@ -250,8 +239,8 @@
 
 .search-input:focus {
     outline: none;
-    border-color: var(--violet);
-    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.18);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(48, 100, 62, 0.18);
 }
 
 .search-filters {
@@ -276,7 +265,7 @@
     padding: 7px 10px;
     border-radius: 9px;
     border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(45, 81, 51, 0.05);
     color: var(--text-0);
     font-family: inherit;
     font-size: 0.78rem;
@@ -296,7 +285,7 @@
 .search-result-item {
     padding: 10px 12px;
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(45, 81, 51, 0.03);
     border: 1px solid var(--line);
     margin-bottom: 7px;
     cursor: pointer;
@@ -304,8 +293,8 @@
 }
 
 .search-result-item:hover {
-    background: rgba(167, 139, 250, 0.1);
-    border-color: rgba(167, 139, 250, 0.4);
+    background: rgba(48, 100, 62, 0.1);
+    border-color: rgba(48, 100, 62, 0.4);
 }
 
 .result-header {
@@ -316,7 +305,7 @@
     margin-bottom: 3px;
     font-size: 0.72rem;
     font-weight: 800;
-    color: var(--violet);
+    color: var(--accent);
 }
 
 .result-date { color: var(--text-2); font-weight: 600; font-size: 0.64rem; }
@@ -394,7 +383,7 @@
     transition: transform 0.15s var(--spring), background 0.15s ease;
 }
 
-.reaction-picker-item:hover { transform: scale(1.25); background: rgba(255, 255, 255, 0.08); }
+.reaction-picker-item:hover { transform: scale(1.25); background: rgba(45, 81, 51, 0.08); }
 
 .reaction-picker-more {
     font-size: 1rem;
@@ -455,7 +444,7 @@
     height: 40px;
     border-radius: var(--radius-full);
     border: 1px solid var(--line-strong);
-    background: rgba(16, 19, 42, 0.9);
+    background: var(--ink-2);
     color: var(--text-0);
     font-size: 1.1rem;
     cursor: pointer;
@@ -480,7 +469,7 @@
     padding: 9px 16px;
     border-radius: var(--radius-full);
     border: 1px solid var(--line-strong);
-    background: rgba(16, 19, 42, 0.9);
+    background: var(--ink-2);
     color: var(--text-0);
     font-family: inherit;
     font-size: 0.78rem;
@@ -490,41 +479,44 @@
     transition: background 0.2s ease;
 }
 
-.media-action-btn:hover { background: rgba(167, 139, 250, 0.3); }
+.media-action-btn:hover { background: rgba(48, 100, 62, 0.3); }
 
 /* ============================================
    MESSAGE LIMIT INDICATOR (sidebar widget)
    ============================================ */
 
 .limit-indicator {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    padding: 9px 11px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 5px 8px;
+    padding: 7px 9px;
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(45, 81, 51, 0.04);
     border: 1px solid var(--line);
     margin-top: 4px;
 }
 
 .limit-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    font-size: .75rem;
+    font-weight: 700;
 }
 
 .limit-text {
-    font-size: 0.62rem;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    font-size: 0.65rem;
     font-weight: 700;
     color: var(--text-2);
     font-variant-numeric: tabular-nums;
 }
 
 .limit-bar {
+    grid-column: 1 / -1;
     height: 4px;
     border-radius: var(--radius-full);
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(45, 81, 51, 0.08);
     overflow: hidden;
 }
 
@@ -540,6 +532,7 @@
 .limit-indicator.danger .limit-fill { background: linear-gradient(90deg, #fb7185, #ef4444); }
 
 .limit-archived {
+    grid-column: 1 / -1;
     font-size: 0.6rem;
     color: var(--text-2);
 }
@@ -556,11 +549,11 @@
     max-width: min(92vw, 420px);
     padding: 11px 18px;
     border-radius: var(--radius-full);
-    background: rgba(16, 19, 42, 0.95);
+    background: var(--ink-2);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid var(--line-strong);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 28px rgba(29, 54, 35, 0.16);
     color: var(--text-0);
     font-size: 0.84rem;
     font-weight: 700;
@@ -574,3 +567,16 @@
 
 .toast.toast-success { border-color: rgba(52, 211, 153, 0.5); }
 .toast.toast-error { border-color: rgba(251, 113, 133, 0.5); }
+
+.messages-list > .empty-state {
+    margin: auto;
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--card);
+}
+
+@media (max-width: 380px) {
+    .messages-toolbar { gap: 3px; }
+    .toolbar-btn { padding-inline: 5px; gap: 3px; }
+}

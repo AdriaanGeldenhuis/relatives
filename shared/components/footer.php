@@ -623,7 +623,7 @@
     
     <?php if (isset($pageJS)): ?>
         <?php foreach ((array)$pageJS as $js): ?>
-            <script src="<?php echo $js; ?>?v=<?php echo $buildTime; ?>"></script>
+            <script src="<?php echo $js; ?>?v=<?php echo $pageJSVersion ?? $buildTime; ?>"></script>
         <?php endforeach; ?>
     <?php endif; ?>
 

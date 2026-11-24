@@ -55,8 +55,13 @@ document.addEventListener('DOMContentLoaded', function() {
 // ENHANCED TOOLBAR (EXPORT REMOVED)
 // ============================================
 function addEnhancedToolbar() {
+    const heading = document.querySelector('.chat-heading');
+    if (!heading) return;
+
     const toolbar = document.createElement('div');
     toolbar.className = 'messages-toolbar';
+    toolbar.setAttribute('role', 'group');
+    toolbar.setAttribute('aria-label', 'Conversation tools');
     toolbar.innerHTML = `
         <button onclick="openSearchDialog()" class="toolbar-btn" title="Search (Ctrl+F)">
             🔍 Search
@@ -66,10 +71,7 @@ function addEnhancedToolbar() {
         </button>
     `;
     
-    const chatMain = document.querySelector('.chat-main');
-    if (chatMain) {
-        chatMain.insertBefore(toolbar, chatMain.firstChild);
-    }
+    heading.append(toolbar);
     
     // Add bulk actions bar (hidden by default)
     const bulkBar = document.createElement('div');
@@ -92,7 +94,7 @@ function addEnhancedToolbar() {
         </div>
     `;
     
-    toolbar.insertAdjacentElement('afterend', bulkBar);
+    heading.insertAdjacentElement('afterend', bulkBar);
 }
 
 // ============================================
@@ -529,7 +531,7 @@ function updateLimitIndicator(stats) {
     
     indicator.className = `limit-indicator ${statusClass}`;
     indicator.innerHTML = `
-        <div class="limit-header">💾 Message Storage</div>
+        <div class="limit-header">Message storage</div>
         <div class="limit-bar">
             <div class="limit-fill" style="width: ${percent}%"></div>
         </div>
@@ -742,6 +744,7 @@ function updateCharacterCount(count) {
         document.querySelector('.message-input-wrapper')?.appendChild(counter);
     }
     
+    counter.hidden = count === 0;
     counter.textContent = `${count}/5000`;
     
     if (count > 4500) {
