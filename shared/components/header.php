@@ -62,7 +62,6 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="/shared/css/footer-assistance.css?v=<?= filemtime(__DIR__ . '/../css/footer-assistance.css') ?>">
     
     <style>
         :root {
@@ -161,6 +160,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         <style><?php readfile(__DIR__ . '/../css/family-surfaces.css'); ?></style>
     <?php endif; ?>
     <style><?php readfile(__DIR__ . '/../css/site-navigation.css'); readfile(__DIR__ . '/../css/action-controls.css'); ?></style>
+    <style><?php readfile(__DIR__ . '/../css/footer-assistance.css'); ?></style>
 </head>
 <body class="<?= $workspacePage ? 'workspace-page' : (isset($homeStylesheet) ? 'home-page' : 'messages-page') ?><?= $familyPage ? ' family-page' : '' ?>" data-area="<?= htmlspecialchars($activePage) ?>" <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
     

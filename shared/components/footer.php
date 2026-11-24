@@ -227,37 +227,47 @@
             </header>
 
             <div class="assist-scroll voice-content">
-                <div class="voice-console">
-                    <button type="button" class="modal-mic-btn" id="modalMicBtn" onclick="SuziVoice.toggleListening()" aria-label="Start listening">
-                        <svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="9" y="2" width="6" height="12" rx="3"/>
-                            <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-3 0h6"/>
-                        </svg>
-                        <span class="assist-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
-                    </button>
+                <div class="voice-console" id="voiceConsole" data-state="ready">
+                    <div class="voice-orbit">
+                        <button type="button" class="modal-mic-btn" id="modalMicBtn" onclick="SuziVoice.toggleListening()" aria-label="Start listening" autofocus>
+                            <svg class="voice-mic-icon" aria-hidden="true" width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="2" width="6" height="12" rx="3"/>
+                                <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-3 0h6"/>
+                            </svg>
+                            <span class="voice-stop-icon" aria-hidden="true"></span>
+                            <span class="assist-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                        </button>
+                    </div>
                     <div class="voice-status" role="status">
-                        <span id="statusIcon" aria-hidden="true"></span>
                         <strong id="statusText">Tap to speak</strong>
-                        <p id="statusSubtext">Ask a question or try a suggestion below.</p>
+                        <p id="statusSubtext">Ask a question or try a command below.</p>
                     </div>
                 </div>
 
-                <p class="voice-transcript" id="voiceTranscript" hidden></p>
+                <div class="voice-exchange" id="voiceHeard" hidden>
+                    <h3>You</h3>
+                    <p id="voiceTranscript"></p>
+                </div>
+                <div class="voice-exchange voice-answer" id="voiceAnswer" hidden>
+                    <h3>Suzi</h3>
+                    <p id="voiceReply"></p>
+                    <button type="button" class="assist-secondary voice-replay" id="voiceReplay" onclick="SuziVoice.replay()" hidden>↻ Play reply again</button>
+                </div>
 
                 <div id="voiceSuggestions">
                     <h3 class="assist-prompt-heading">Try a voice command</h3>
                     <div class="assist-prompts">
                         <button type="button" onclick="SuziVoice.executeSuggestion('Tell me a bedtime story')" class="assist-prompt">
-                            <span aria-hidden="true">📖</span><span>Tell me a bedtime story</span>
+                            <span class="assist-tile-icon" aria-hidden="true">📖</span><span>Tell me a bedtime story</span>
                         </button>
                         <button type="button" onclick="SuziVoice.executeSuggestion('Who was Nelson Mandela')" class="assist-prompt">
-                            <span aria-hidden="true">💬</span><span>Who was Nelson Mandela?</span>
+                            <span class="assist-tile-icon" aria-hidden="true">💬</span><span>Who was Nelson Mandela?</span>
                         </button>
                         <button type="button" onclick="SuziVoice.executeSuggestion('Open the shopping list')" class="assist-prompt">
-                            <span aria-hidden="true">🛒</span><span>Open the shopping list</span>
+                            <span class="assist-tile-icon" aria-hidden="true">🛒</span><span>Open the shopping list</span>
                         </button>
                         <button type="button" onclick="SuziVoice.executeSuggestion('Tell me a joke')" class="assist-prompt">
-                            <span aria-hidden="true">😄</span><span>Tell me a joke</span>
+                            <span class="assist-tile-icon" aria-hidden="true">😄</span><span>Tell me a joke</span>
                         </button>
                     </div>
                 </div>

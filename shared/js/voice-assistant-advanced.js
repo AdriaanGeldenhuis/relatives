@@ -28,14 +28,18 @@
     var MAX_LISTEN_TIME = 20000;
 
     // DOM elements
-    var modal, statusIcon, statusText, statusSubtext, transcriptEl, micBtn, suggestionsEl, trigger;
+    var modal, consoleEl, statusText, statusSubtext, heardEl, transcriptEl, answerEl, replyEl, replayBtn, micBtn, suggestionsEl, trigger;
 
     function getElements() {
         modal = document.getElementById('voiceModal');
-        statusIcon = document.getElementById('statusIcon');
+        consoleEl = document.getElementById('voiceConsole');
         statusText = document.getElementById('statusText');
         statusSubtext = document.getElementById('statusSubtext');
+        heardEl = document.getElementById('voiceHeard');
         transcriptEl = document.getElementById('voiceTranscript');
+        answerEl = document.getElementById('voiceAnswer');
+        replyEl = document.getElementById('voiceReply');
+        replayBtn = document.getElementById('voiceReplay');
         micBtn = document.getElementById('modalMicBtn');
         suggestionsEl = document.getElementById('voiceSuggestions');
         trigger = document.getElementById('micBtn');
@@ -46,44 +50,41 @@
         if (listenTimer) { clearTimeout(listenTimer); listenTimer = null; }
     }
 
-    function setStatus(icon, text, sub) {
-        getElements();
-        if (statusIcon) statusIcon.textContent = icon;
+    function setStatus(text, sub) {
         if (statusText) statusText.textContent = text;
         if (statusSubtext) statusSubtext.textContent = sub || '';
     }
 
     function setReady() {
-        setStatus('', 'Tap to speak', 'Ask a question or try a suggestion below.');
+        setStatus('Tap to speak', 'Ask a question or try a command below.');
     }
 
     function setTranscript(text) {
-        getElements();
-        if (transcriptEl) {
-            transcriptEl.textContent = text;
-            transcriptEl.hidden = !text;
-            transcriptEl.scrollTop = 0;
-        }
+        transcriptEl.textContent = text;
+        heardEl.hidden = !text;
+    }
+
+    function setReply(text) {
+        replyEl.textContent = text;
+        replyEl.scrollTop = 0;
+        answerEl.hidden = !text;
+        replayBtn.hidden = !text || !synth;
     }
 
     function setMicState(state) {
-        getElements();
-        if (micBtn) {
-            micBtn.classList.remove('listening', 'speaking', 'thinking');
-            if (state) micBtn.classList.add(state);
-            var label = {
-                listening: 'Stop listening',
-                speaking: 'Stop speaking',
-                thinking: 'Suzi is working'
-            }[state] || 'Start listening';
-            micBtn.setAttribute('aria-label', label);
-            micBtn.setAttribute('aria-disabled', String(state === 'thinking'));
-        }
-        if (suggestionsEl) {
-            suggestionsEl.querySelectorAll('button').forEach(function(button) {
-                button.setAttribute('aria-disabled', String(Boolean(state)));
-            });
-        }
+        consoleEl.dataset.state = state || 'ready';
+        var label = {
+            listening: 'Stop listening',
+            speaking: 'Stop speaking',
+            thinking: 'Suzi is working'
+        }[state] || 'Start listening';
+        micBtn.setAttribute('aria-label', label);
+        micBtn.setAttribute('aria-disabled', String(state === 'thinking'));
+        replayBtn.textContent = state === 'speaking' ? '■ Stop reply' : '↻ Play reply again';
+        replayBtn.setAttribute('aria-disabled', String(state === 'listening' || state === 'thinking'));
+        suggestionsEl.querySelectorAll('button').forEach(function(button) {
+            button.setAttribute('aria-disabled', String(Boolean(state)));
+        });
     }
 
     // Initialize speech recognition
@@ -101,13 +102,14 @@
 
         recognition.onstart = function() {
             isStarting = false;
+            isListening = true;
             if (!isModalOpen) {
                 stopListening();
                 return;
             }
-            isListening = true;
             setTranscript('');
-            setStatus('🎤', 'Listening...', 'Speak now');
+            setReply('');
+            setStatus('Listening…', 'Speak now. Tap the circle to stop.');
             setMicState('listening');
 
             silenceTimer = setTimeout(function() {
@@ -154,11 +156,11 @@
             recognitionError = true;
             setMicState(null);
             if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-                setStatus('🚫', 'Microphone blocked', 'Allow microphone access or try a suggestion below.');
+                setStatus('Microphone blocked', 'Allow microphone access or try a suggestion below.');
             } else if (event.error === 'no-speech') {
-                setStatus('🎤', 'No speech detected', 'Tap the microphone and try again.');
+                setStatus('No speech detected', 'Tap the microphone and try again.');
             } else {
-                setStatus('🎤', 'Could not start listening', 'Try the microphone again or choose a suggestion.');
+                setStatus('Could not start listening', 'Try the microphone again or choose a suggestion.');
             }
         };
 
@@ -177,19 +179,19 @@
         if (!isModalOpen || isStarting || isListening || isProcessing || isSpeaking) return;
 
         if (!recognition) {
-            setStatus('🎤', 'Microphone unavailable', 'Try a suggestion below or use Help to type a question.');
+            setStatus('Microphone unavailable', 'Try a suggestion below or use Help to type a question.');
             return;
         }
 
         recognitionError = false;
         isStarting = true;
-        setStatus('🎤', 'Starting microphone…', '');
+        setStatus('Starting microphone…', '');
         setMicState('thinking');
         try {
             recognition.start();
         } catch (error) {
             isStarting = false;
-            setStatus('🎤', 'Could not start listening', 'Tap the microphone to try again.');
+            setStatus('Could not start listening', 'Tap the microphone to try again.');
             setMicState(null);
         }
     }
@@ -211,8 +213,8 @@
         }
 
         if (!isModalOpen) return;
+        setReply(text);
         if (!synth) {
-            setTranscript(text);
             setMicState(null);
             if (callback) callback();
             return;
@@ -221,9 +223,8 @@
         console.log('[Suzi] Speaking:', text.substring(0, 50));
 
         isSpeaking = true;
-        setStatus('🔊', 'Speaking...', '');
+        setStatus('Speaking…', 'Tap the circle to stop the reply.');
         setMicState('speaking');
-        setTranscript(text);
 
         // Cancel any current speech
         synth.cancel();
@@ -285,10 +286,11 @@
 
         // Send to AI
         isProcessing = true;
-        setStatus('🧠', 'Thinking...', '');
+        setStatus('Thinking…', 'Suzi is working on your request.');
         setMicState('thinking');
 
         setTranscript(text);
+        setReply('');
         var requestConversation = conversation;
         conversation.push({ role: 'user', content: text });
 
@@ -402,7 +404,7 @@
             var navigationConversation = conversation;
             isProcessing = true;
             setMicState('thinking');
-            setStatus('🧭', 'Opening...', '');
+            setStatus('Opening...', '');
             setTimeout(function() {
                 if (!isModalOpen || conversation !== navigationConversation) return;
                 closeModal();
@@ -415,7 +417,7 @@
 
     // Add item to shopping list via API
     function addShoppingItem(itemName, category, callback) {
-        setStatus('🛒', 'Adding to list...', '');
+        setStatus('Adding to list...', '');
 
         // First get available shopping lists
         fetch('/shopping/api/lists.php?action=get_all', {
@@ -477,7 +479,7 @@
 
     // Create a note via API
     function createNote(title, content, callback) {
-        setStatus('📝', 'Creating note...', '');
+        setStatus('Creating note...', '');
 
         var formData = new FormData();
         formData.append('action', 'create_note');
@@ -509,12 +511,12 @@
     }
 
     function createCalendarEvent(eventData, callback) {
-        setStatus('📅', 'Creating event...', '');
+        setStatus('Creating event...', '');
         saveVoiceEvent(eventData, 'event', callback);
     }
 
     function createReminder(reminderData, callback) {
-        setStatus('⏰', 'Setting reminder...', '');
+        setStatus('Setting reminder...', '');
         saveVoiceEvent(reminderData, 'reminder', callback);
     }
 
@@ -568,6 +570,7 @@
         window.closePlusMenu?.();
         setReady();
         setTranscript('');
+        setReply('');
         setMicState(null);
         modal.showModal();
         trigger?.setAttribute('aria-expanded', 'true');
@@ -606,6 +609,15 @@
         handleUserInput(text);
     }
 
+    function replay() {
+        if (!isModalOpen || isStarting || isProcessing || isListening || replayBtn.hidden) return;
+        if (isSpeaking) {
+            toggleListening();
+        } else {
+            speak(replyEl.textContent, setReady);
+        }
+    }
+
     // Initialize
     getElements();
     initRecognition();
@@ -641,6 +653,7 @@
         },
         toggleListening: toggleListening,
         executeSuggestion: executeSuggestion,
+        replay: replay,
         getInstance: function() { return window.SuziVoice; }
     };
 
