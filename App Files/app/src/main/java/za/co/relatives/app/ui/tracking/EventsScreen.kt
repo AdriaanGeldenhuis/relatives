@@ -69,13 +69,13 @@ fun EventsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F0F1A))
+            .background(Color(0xFF102219))
     ) {
         // Top bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF1A1A2E))
+                .background(Color(0xFF183125))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -154,7 +154,7 @@ fun EventsScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             CircularProgressIndicator(
-                                color = Color(0xFF667eea),
+                                color = Color(0xFFB6D986),
                                 modifier = Modifier.size(24.dp),
                                 strokeWidth = 2.dp,
                             )
@@ -168,7 +168,7 @@ fun EventsScreen(
 
 @Composable
 private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg = if (selected) Color(0xFF667eea) else Color(0xFF2D2D44)
+    val bg = if (selected) Color(0xFF396B47) else Color(0xFF203C2C)
     val textColor = if (selected) Color.White else Color(0xFF9CA3AF)
     Text(
         text = label,
@@ -193,7 +193,7 @@ private fun EventCard(event: TrackingViewModel.TrackingEvent) {
     }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF183125)),
         shape = RoundedCornerShape(10.dp),
     ) {
         Row(modifier = Modifier.padding(12.dp)) {

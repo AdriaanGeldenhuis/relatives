@@ -89,6 +89,7 @@ $cacheVersion = '1.0.0';
             background-clip: text;
         }
     </style>
+    <style><?php readfile(__DIR__ . '/../../shared/css/arcade-frame.css'); ?></style>
 </head>
 <body>
     <div class="app-container">

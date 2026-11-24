@@ -69,13 +69,13 @@ fun GeofencesScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F0F1A))
+            .background(Color(0xFF102219))
     ) {
         // Top bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF1A1A2E))
+                .background(Color(0xFF183125))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -102,7 +102,7 @@ fun GeofencesScreen(
             }
             Button(
                 onClick = { showAddDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF667eea)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF396B47)),
                 shape = RoundedCornerShape(8.dp),
             ) {
                 Text("+ Add", fontSize = 13.sp)
@@ -114,7 +114,7 @@ fun GeofencesScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator(color = Color(0xFF667eea), modifier = Modifier.size(32.dp))
+                CircularProgressIndicator(color = Color(0xFFB6D986), modifier = Modifier.size(32.dp))
             }
         } else if (geofences.isEmpty()) {
             Box(
@@ -163,7 +163,7 @@ fun GeofencesScreen(
     deleteTarget?.let { gf ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            containerColor = Color(0xFF1A1A2E),
+            containerColor = Color(0xFF183125),
             title = { Text("Delete Geofence", color = Color.White) },
             text = { Text("Delete \"${gf.name}\"?", color = Color(0xFF9CA3AF)) },
             confirmButton = {
@@ -189,7 +189,7 @@ private fun GeofenceCard(
     onDelete: () -> Unit,
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF183125)),
         shape = RoundedCornerShape(12.dp),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -203,7 +203,7 @@ private fun GeofenceCard(
                         modifier = Modifier
                             .size(10.dp)
                             .background(
-                                if (geofence.type == "circle") Color(0xFF667eea) else Color(0xFFf093fb),
+                                if (geofence.type == "circle") Color(0xFF396B47) else Color(0xFFf093fb),
                                 CircleShape,
                             )
                     )
@@ -304,16 +304,16 @@ private fun AddGeofenceDialog(
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.White,
         unfocusedTextColor = Color.White,
-        focusedBorderColor = Color(0xFF667eea),
-        unfocusedBorderColor = Color(0xFF374151),
-        cursorColor = Color(0xFF667eea),
-        focusedLabelColor = Color(0xFF667eea),
+        focusedBorderColor = Color(0xFFB6D986),
+        unfocusedBorderColor = Color(0xFF365444),
+        cursorColor = Color(0xFFB6D986),
+        focusedLabelColor = Color(0xFFB6D986),
         unfocusedLabelColor = Color(0xFF9CA3AF),
     )
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1A1A2E),
+        containerColor = Color(0xFF183125),
         title = { Text("Add Geofence", color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -371,7 +371,7 @@ private fun AddGeofenceDialog(
                     onSave(name, latD, lngD, radiusF)
                 },
             ) {
-                Text("Save", color = Color(0xFF667eea))
+                Text("Save", color = Color(0xFFB6D986))
             }
         },
         dismissButton = {

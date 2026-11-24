@@ -10,9 +10,9 @@
    ============================================ */
 /* Aurora theme tokens (aligned with /shared/css/aurora.css) */
 :root {
-    --trk-primary: #a78bfa;
+    --trk-primary: #b6d986;
     --trk-primary-dark: #f472b6;
-    --trk-gradient: linear-gradient(120deg, #a78bfa 0%, #f472b6 55%, #fb923c 100%);
+    --trk-gradient: linear-gradient(135deg, #28533a, #376344);
     --trk-pink: #f472b6;
     --trk-pink-dark: #fb7185;
     --trk-pink-gradient: linear-gradient(135deg, #f472b6 0%, #fb7185 100%);
@@ -22,8 +22,8 @@
     --trk-glass: rgba(255, 255, 255, 0.07);
     --trk-glass-heavy: rgba(255, 255, 255, 0.12);
     --trk-glass-border: rgba(255, 255, 255, 0.14);
-    --trk-glass-bg: rgba(11, 13, 26, 0.85);
-    --trk-panel-bg: rgba(11, 13, 26, 0.94);
+    --trk-glass-bg: rgba(23, 47, 35, 0.85);
+    --trk-panel-bg: rgba(23, 47, 35, 0.94);
     --trk-card-bg: rgba(255, 255, 255, 0.05);
     --trk-card-border: rgba(255, 255, 255, 0.09);
     --trk-text: #f5f6fb;
@@ -341,8 +341,8 @@ body.tracking-page {
 }
 
 .member-item.active {
-    background: rgba(102, 126, 234, 0.15);
-    border-color: rgba(102, 126, 234, 0.4);
+    background: rgba(73, 135, 87, 0.15);
+    border-color: rgba(73, 135, 87, 0.4);
 }
 
 .member-avatar {
@@ -561,12 +561,12 @@ body.tracking-page .menu-backdrop {
     background: var(--trk-gradient);
     border-color: transparent;
     color: white;
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 16px rgba(73, 135, 87, 0.4);
     text-decoration: none;
 }
 
 .tracking-toolbar-btn.home-btn:hover {
-    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.6);
+    box-shadow: 0 8px 24px rgba(73, 135, 87, 0.6);
 }
 
 .tracking-toolbar-btn.wake-btn.active {
@@ -631,7 +631,7 @@ body.tracking-page .menu-backdrop {
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 8px 24px rgba(73, 135, 87, 0.4);
 }
 
 .consent-icon::after {
@@ -704,10 +704,10 @@ body.tracking-page .menu-backdrop {
 .consent-btn-primary {
     background: var(--trk-gradient);
     color: white;
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 16px rgba(73, 135, 87, 0.4);
 }
 
-.consent-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(102, 126, 234, 0.6); }
+.consent-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(73, 135, 87, 0.6); }
 
 .consent-btn-secondary {
     background: var(--trk-card-bg);
@@ -846,7 +846,7 @@ body.tracking-page .menu-backdrop {
     display: none;
     align-items: center;
     gap: 16px;
-    box-shadow: 0 4px 24px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 24px rgba(73, 135, 87, 0.4);
 }
 
 .nav-header.active { display: flex; }
@@ -1031,8 +1031,8 @@ body.tracking-page .menu-backdrop {
 }
 
 .nav-step-item.current {
-    background: rgba(102, 126, 234, 0.15);
-    border: 1px solid rgba(102, 126, 234, 0.3);
+    background: rgba(73, 135, 87, 0.15);
+    border: 1px solid rgba(73, 135, 87, 0.3);
 }
 
 .nav-step-item.done { opacity: 0.4; }
@@ -1050,8 +1050,8 @@ body.tracking-page .menu-backdrop {
 }
 
 .nav-step-item.current .nav-step-icon {
-    background: rgba(102, 126, 234, 0.2);
-    border-color: rgba(102, 126, 234, 0.4);
+    background: rgba(73, 135, 87, 0.2);
+    border-color: rgba(73, 135, 87, 0.4);
 }
 
 .nav-step-icon svg {
@@ -1168,7 +1168,7 @@ body.tracking-page .menu-backdrop {
     flex-shrink: 0;
 }
 
-.geofence-type-badge.circle { background: rgba(102, 126, 234, 0.2); border: 1px solid rgba(102, 126, 234, 0.4); }
+.geofence-type-badge.circle { background: rgba(73, 135, 87, 0.2); border: 1px solid rgba(73, 135, 87, 0.4); }
 .geofence-type-badge.circle::after { content: ''; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--trk-primary); }
 .geofence-type-badge.polygon { background: rgba(240, 147, 251, 0.2); border: 1px solid rgba(240, 147, 251, 0.4); }
 .geofence-type-badge.polygon::after { content: ''; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 10px solid var(--trk-pink); }
@@ -1234,7 +1234,7 @@ body.tracking-page .menu-backdrop {
 }
 
 .geofence-type-option:hover { border-color: var(--trk-glass-border); }
-.geofence-type-option.active { border-color: var(--trk-primary); background: rgba(102, 126, 234, 0.1); color: var(--trk-text); }
+.geofence-type-option.active { border-color: var(--trk-primary); background: rgba(73, 135, 87, 0.1); color: var(--trk-text); }
 
 /* Events timeline */
 .events-timeline { position: relative; padding-left: 32px; }
@@ -1276,7 +1276,7 @@ body.tracking-page .menu-backdrop {
 .event-node.enter::after { content: ''; width: 0; height: 0; border-top: 3px solid transparent; border-bottom: 3px solid transparent; border-left: 5px solid var(--trk-green); }
 .event-node.exit { border-color: var(--trk-red); background: rgba(255, 71, 87, 0.15); }
 .event-node.exit::after { content: ''; width: 0; height: 0; border-top: 3px solid transparent; border-bottom: 3px solid transparent; border-right: 5px solid var(--trk-red); }
-.event-node.arrive { border-color: var(--trk-primary); background: rgba(102, 126, 234, 0.15); }
+.event-node.arrive { border-color: var(--trk-primary); background: rgba(73, 135, 87, 0.15); }
 .event-node.arrive::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--trk-primary); }
 .event-node.leave { border-color: var(--trk-yellow); background: rgba(249, 212, 35, 0.15); }
 .event-node.leave::after { content: ''; width: 6px; height: 2px; background: var(--trk-yellow); border-radius: 1px; }
@@ -1369,7 +1369,7 @@ body.tracking-page .menu-backdrop {
 }
 
 .form-input:focus,
-.form-select:focus { outline: none; border-color: var(--trk-primary); box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15); }
+.form-select:focus { outline: none; border-color: var(--trk-primary); box-shadow: 0 0 0 3px rgba(73, 135, 87, 0.15); }
 
 .form-input::placeholder { color: var(--trk-text-dim); }
 
@@ -1400,10 +1400,10 @@ body.tracking-page .menu-backdrop {
     color: white; font-size: 15px; font-weight: 700;
     cursor: pointer;
     transition: all var(--trk-transition);
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 16px rgba(73, 135, 87, 0.4);
 }
 
-.settings-save-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(102, 126, 234, 0.6); }
+.settings-save-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(73, 135, 87, 0.6); }
 .settings-save-btn:active { transform: translateY(0); }
 .settings-save-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
@@ -1439,11 +1439,11 @@ body.tracking-page .menu-backdrop {
     font-size: 13px; font-weight: 700;
     cursor: pointer; border: none;
     transition: all var(--trk-transition);
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 16px rgba(73, 135, 87, 0.4);
     text-decoration: none;
 }
 
-.tracking-add-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(102, 126, 234, 0.6); }
+.tracking-add-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(73, 135, 87, 0.6); }
 .tracking-add-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.5; }
 
 .tracking-back {

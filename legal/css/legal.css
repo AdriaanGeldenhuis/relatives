@@ -43,7 +43,7 @@
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
+    background: linear-gradient(180deg, #102219 0%, #172f23 50%, #203c2c 100%);
 }
 
 .bg-gradient {
@@ -175,10 +175,10 @@
 }
 
 .legal-tab.active {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #396b47, #28533a);
     border-color: rgba(255, 255, 255, 0.3);
     color: white;
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.5);
+    box-shadow: 0 4px 16px rgba(73, 135, 87, 0.5);
 }
 
 .tab-icon {
@@ -261,7 +261,7 @@
     margin-bottom: var(--space-lg);
     padding: var(--space-md);
     background: rgba(255, 255, 255, 0.05);
-    border-left: 4px solid #667eea;
+    border-left: 4px solid #396b47;
     border-radius: var(--radius-sm);
 }
 
@@ -313,7 +313,7 @@
 }
 
 .doc-body li::marker {
-    color: #667eea;
+    color: #396b47;
 }
 
 .doc-body strong {
@@ -322,8 +322,8 @@
 }
 
 .highlight {
-    background: rgba(102, 126, 234, 0.2);
-    border-left: 4px solid #667eea;
+    background: rgba(73, 135, 87, 0.2);
+    border-left: 4px solid #396b47;
     padding: var(--space-md);
     border-radius: var(--radius-sm);
     margin: var(--space-md) 0;
@@ -334,11 +334,11 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-xs);
-    background: rgba(102, 126, 234, 0.15);
+    background: rgba(73, 135, 87, 0.15);
     padding: var(--space-sm) var(--space-md);
     border-radius: var(--radius-md);
     margin: var(--space-md) 0;
-    border: 1px solid rgba(102, 126, 234, 0.3);
+    border: 1px solid rgba(73, 135, 87, 0.3);
 }
 
 .doc-body a {

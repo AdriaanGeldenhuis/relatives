@@ -113,23 +113,23 @@ fun SettingsScreen(
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.White,
         unfocusedTextColor = Color.White,
-        focusedBorderColor = Color(0xFF667eea),
-        unfocusedBorderColor = Color(0xFF374151),
-        cursorColor = Color(0xFF667eea),
-        focusedLabelColor = Color(0xFF667eea),
+        focusedBorderColor = Color(0xFFB6D986),
+        unfocusedBorderColor = Color(0xFF365444),
+        cursorColor = Color(0xFFB6D986),
+        focusedLabelColor = Color(0xFFB6D986),
         unfocusedLabelColor = Color(0xFF9CA3AF),
     )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F0F1A))
+            .background(Color(0xFF102219))
     ) {
         // Top bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF1A1A2E))
+                .background(Color(0xFF183125))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -231,7 +231,7 @@ fun SettingsScreen(
                     viewModel.saveSettings(settingsPayload, alertsPayload)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF667eea)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF396B47)),
                 shape = RoundedCornerShape(10.dp),
             ) {
                 Text("Save Settings", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
@@ -247,7 +247,7 @@ fun SettingsScreen(
 @Composable
 private fun SettingsCard(title: String, content: @Composable () -> Unit) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF183125)),
         shape = RoundedCornerShape(12.dp),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -291,8 +291,8 @@ private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedTrackColor = Color(0xFF667eea),
-                uncheckedTrackColor = Color(0xFF374151),
+                checkedTrackColor = Color(0xFF396B47),
+                uncheckedTrackColor = Color(0xFF365444),
             ),
         )
     }

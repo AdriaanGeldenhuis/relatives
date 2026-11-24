@@ -2,12 +2,6 @@
    UPGRADE PAGE - COMPLETE STYLING
    ============================================ */
 
-/* Import global styles */
-@import url('/shared/css/global.css');
-
-/* Reuse home animations */
-@import url('/home/css/home.css');
-
 /* ============================================
    HERO SECTION
    ============================================ */
@@ -110,9 +104,9 @@
 }
 
 .plan-card.featured {
-    border: 3px solid rgba(102, 126, 234, 0.6);
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15));
-    box-shadow: 0 20px 50px rgba(102, 126, 234, 0.3);
+    border: 3px solid rgba(73, 135, 87, 0.6);
+    background: linear-gradient(135deg, rgba(73, 135, 87, 0.15), rgba(52, 95, 66, 0.15));
+    box-shadow: 0 20px 50px rgba(73, 135, 87, 0.3);
 }
 
 .popular-badge {
@@ -213,7 +207,7 @@
 }
 
 .feature-item.highlighted {
-    background: rgba(102, 126, 234, 0.1);
+    background: rgba(73, 135, 87, 0.1);
     padding: 14px 12px;
     border-radius: 10px;
     border: none;
@@ -243,7 +237,7 @@
 }
 
 .feature-badge.pro {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #396b47, #28533a);
 }
 
 /* ============================================
@@ -268,7 +262,7 @@
 .btn-pro {
     width: 100%;
     padding: 18px 32px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #396b47, #28533a);
     color: white;
     border: none;
     border-radius: 16px;
@@ -280,12 +274,12 @@
     justify-content: center;
     gap: 12px;
     transition: all 0.3s ease;
-    box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 15px 35px rgba(73, 135, 87, 0.4);
 }
 
 .btn-pro:hover {
     transform: translateY(-3px);
-    box-shadow: 0 20px 45px rgba(102, 126, 234, 0.6);
+    box-shadow: 0 20px 45px rgba(73, 135, 87, 0.6);
 }
 
 .btn-arrow {
@@ -621,7 +615,7 @@
 }
 
 .result-footer a {
-    color: #667eea;
+    color: #396b47;
     font-weight: 700;
     text-decoration: none;
 }
@@ -701,7 +695,7 @@
 }
 
 .plan-badge.pro {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #396b47, #28533a);
     color: white;
 }
 

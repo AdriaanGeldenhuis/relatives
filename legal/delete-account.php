@@ -70,7 +70,7 @@ if (!empty($_SESSION['user_id'])) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Delete your account | Relatives</title>
-    <link rel="stylesheet" href="/legal/css/public-legal.css">
+    <style><?php readfile(__DIR__ . '/../legal/css/public-legal.css'); ?></style>
 </head>
 <body>
 <main>

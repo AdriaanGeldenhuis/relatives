@@ -57,6 +57,7 @@ $cacheVersion = '1.0.2';
 
     <!-- Styles -->
     <link rel="stylesheet" href="assets/css/flash.css?v=<?php echo $cacheVersion; ?>">
+    <style><?php readfile(__DIR__ . '/../../shared/css/arcade-frame.css'); ?></style>
 </head>
 <body>
     <!-- App Container -->

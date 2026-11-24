@@ -24,7 +24,7 @@
         linear-gradient(var(--ink-1), var(--ink-1)) padding-box,
         conic-gradient(from 120deg,
             rgba(56, 189, 248, 0.7),
-            rgba(167, 139, 250, 0.3) 30%,
+            rgba(116, 161, 102, 0.3) 30%,
             rgba(255, 255, 255, 0.05) 50%,
             rgba(56, 189, 248, 0.5) 78%,
             rgba(56, 189, 248, 0.7)) border-box;
@@ -381,7 +381,7 @@
 .filter-btn:hover { background: var(--card-strong); color: var(--text-0); }
 
 .filter-btn.active {
-    background: linear-gradient(120deg, rgba(56, 189, 248, 0.26), rgba(167, 139, 250, 0.18));
+    background: linear-gradient(120deg, rgba(56, 189, 248, 0.26), rgba(116, 161, 102, 0.18));
     border-color: rgba(56, 189, 248, 0.55);
     color: var(--text-0);
 }
@@ -520,7 +520,7 @@
 .hourly-card:hover { background: var(--card-strong); border-color: var(--line-strong); }
 
 .hourly-card.current {
-    background: linear-gradient(150deg, rgba(56, 189, 248, 0.2), rgba(167, 139, 250, 0.12));
+    background: linear-gradient(150deg, rgba(56, 189, 248, 0.2), rgba(116, 161, 102, 0.12));
     border-color: rgba(56, 189, 248, 0.55);
 }
 
@@ -620,7 +620,7 @@
     align-items: flex-start;
     padding: 11px 14px;
     border-radius: 14px;
-    background: rgba(16, 19, 42, 0.96);
+    background: rgba(32, 60, 44, 0.96);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid rgba(251, 191, 36, 0.5);
@@ -784,3 +784,10 @@
     .weather-temp { font-size: 3.8rem; }
     .weather-location { justify-self: start; }
 }
+
+.weather-hero {
+    padding: clamp(16px, 3vw, 28px);
+    border-color: #547b6d;
+    background: radial-gradient(ellipse at 95% 0, #315a4b, transparent 72%), #172f27;
+}
+.weather-hero::before { background: none; }

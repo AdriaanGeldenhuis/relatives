@@ -8,7 +8,7 @@
    ============================================ */
 /* Aurora theme tokens (aligned with /shared/css/aurora.css) */
 :root {
-    --ht-primary: linear-gradient(120deg, #a78bfa 0%, #f472b6 55%, #fb923c 100%);
+    --ht-primary: linear-gradient(135deg, #28533a, #376344);
     --ht-secondary: linear-gradient(135deg, #f472b6 0%, #fb7185 100%);
     --ht-success: linear-gradient(135deg, #34d399 0%, #2dd4bf 100%);
     --ht-warning: linear-gradient(135deg, #fbbf24 0%, #fb923c 100%);
@@ -513,8 +513,8 @@
 .ht-select:focus,
 .ht-textarea:focus {
     outline: none;
-    border-color: rgba(102, 126, 234, 0.5);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    border-color: rgba(73, 135, 87, 0.5);
+    box-shadow: 0 0 0 3px rgba(73, 135, 87, 0.2);
 }
 
 .ht-input::placeholder,
@@ -601,8 +601,8 @@
 
 .ht-prompt-input:focus {
     outline: none;
-    border-color: rgba(102, 126, 234, 0.6);
-    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.2);
+    border-color: rgba(73, 135, 87, 0.6);
+    box-shadow: 0 0 0 4px rgba(73, 135, 87, 0.2);
 }
 
 .ht-prompt-input::placeholder {
@@ -797,7 +797,7 @@
     height: 64px;
     margin: 0 auto 24px;
     border: 4px solid var(--ht-glass-border);
-    border-top-color: #667eea;
+    border-top-color: #396b47;
     border-radius: 50%;
     animation: htSpin 1s linear infinite;
 }
@@ -832,7 +832,7 @@
 }
 
 .ht-loading-step.active {
-    color: #667eea;
+    color: #396b47;
 }
 
 .ht-loading-step.done {
@@ -2389,7 +2389,7 @@
 .ht-btn-secondary:hover,
 .ht-btn-outline:hover {
     background: rgba(255, 255, 255, 0.14);
-    border-color: rgba(167, 139, 250, 0.6);
+    border-color: rgba(116, 161, 102, 0.6);
     transform: translateY(-1px);
 }
 
@@ -2407,7 +2407,7 @@
 }
 
 .ht-trip-card:hover {
-    border-color: rgba(167, 139, 250, 0.45);
+    border-color: rgba(116, 161, 102, 0.45);
     transform: translateY(-3px);
 }
 
@@ -2424,10 +2424,10 @@
 .ht-active-trip-banner,
 .ht-active-trip-card {
     background:
-        linear-gradient(#0b0d1a, #0b0d1a) padding-box,
+        linear-gradient(#172f23, #172f23) padding-box,
         conic-gradient(from 120deg,
             rgba(45, 212, 191, 0.7),
-            rgba(167, 139, 250, 0.3) 30%,
+            rgba(116, 161, 102, 0.3) 30%,
             rgba(255, 255, 255, 0.05) 50%,
             rgba(45, 212, 191, 0.55) 78%,
             rgba(45, 212, 191, 0.7)) border-box;
@@ -2444,7 +2444,7 @@
 
 /* Modals on ink */
 .ht-modal-content {
-    background: #0b0d1a;
+    background: #172f23;
     border: 1px solid rgba(255, 255, 255, 0.18);
     box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
 }
@@ -2471,8 +2471,8 @@ textarea.ht-form-control {
 .ht-input:focus,
 .ht-select:focus,
 .ht-textarea:focus {
-    border-color: #a78bfa;
-    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2);
+    border-color: #b6d986;
+    box-shadow: 0 0 0 3px rgba(116, 161, 102, 0.2);
     outline: none;
 }
 
@@ -2490,3 +2490,14 @@ textarea.ht-form-control {
 @media (min-width: 640px) {
     .ht-main { padding: 16px 20px 32px; }
 }
+
+.ht-container { max-width: 1000px; }
+.ht-page-header {
+    padding: clamp(16px, 3vw, 28px);
+    border: 1px solid #48684c;
+    border-radius: 20px;
+    background: radial-gradient(ellipse at 100% 0, #3f6348, transparent 73%), #18372a;
+}
+.ht-page-title { font-size: clamp(1.85rem, 5vw, 3.05rem); }
+.ht-btn-primary { background: #def788; color: #182c21; box-shadow: none; }
+.ht-btn-primary:hover { background: #edffb7; box-shadow: 0 4px 18px #bbda7540; }

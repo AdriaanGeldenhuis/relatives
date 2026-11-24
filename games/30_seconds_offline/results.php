@@ -88,6 +88,7 @@ $cacheVersion = '1.0.0';
             margin-top: var(--spacing-xl);
         }
     </style>
+    <style><?php readfile(__DIR__ . '/../../shared/css/arcade-frame.css'); ?></style>
 </head>
 <body>
     <div class="app-container">

@@ -7,9 +7,13 @@ $cacheVersion = '1.0.0';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Collage Builder</title>
-    <link rel="stylesheet" href="css/collage.css?v=<?php echo $cacheVersion; ?>">
+    <link rel="stylesheet" href="css/collage.css?v=<?= filemtime(__DIR__ . '/css/collage.css') ?>">
 </head>
-<body>
+<body class="collage-page">
+<header class="collage-heading">
+    <a href="/notes/">Back to notes</a>
+    <h1>Collage builder</h1>
+</header>
 
 <div class="modal">
     <div class="modal-body">

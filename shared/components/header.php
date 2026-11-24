@@ -20,7 +20,8 @@ if (empty($activePage) || $activePage === 'index.php') {
 $appVersion = '12.4.0';
 // Use static cache version - bump this when deploying CSS/JS changes
 // DO NOT use time() as it defeats browser caching!
-$cacheVersion = '12.11.0';
+$cacheVersion = '12.12.0';
+$workspacePage = !isset($homeStylesheet) && !isset($messagesStylesheets);
 $buildTime = $cacheVersion;
 
 // Avatar cache-busting: use file modification time so browsers fetch the new image after upload
@@ -47,7 +48,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="<?= isset($homeStylesheet) || isset($messagesStylesheets) ? '#f3f2e9' : '#06070f' ?>">
+    <meta name="theme-color" content="#f3f2e9">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -795,7 +796,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     
     <?php if (isset($pageCSS)): ?>
         <?php foreach ((array)$pageCSS as $css): ?>
-            <link rel="stylesheet" href="<?php echo $css; ?>?v=<?php echo $buildTime; ?>">
+            <link rel="stylesheet" href="<?= htmlspecialchars($css) ?><?= str_contains($css, '?') ? '&amp;' : '?' ?>v=<?= $buildTime ?>">
         <?php endforeach; ?>
     <?php endif; ?>
     <?php if (isset($homeStylesheet)): ?>
@@ -804,8 +805,11 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <?php foreach ($messagesStylesheets ?? [] as $stylesheet): ?>
         <style><?php readfile($stylesheet); ?></style>
     <?php endforeach; ?>
+    <?php if ($workspacePage): ?>
+        <style><?php readfile(__DIR__ . '/../css/workspace.css'); ?></style>
+    <?php endif; ?>
 </head>
-<body <?= isset($homeStylesheet) ? 'class="home-page"' : (isset($messagesStylesheets) ? 'class="messages-page"' : '') ?> <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
+<body class="<?= $workspacePage ? 'workspace-page' : (isset($homeStylesheet) ? 'home-page' : 'messages-page') ?>" data-area="<?= htmlspecialchars($activePage) ?>" <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
     
     <!-- App Loader -->
     <div id="appLoader" class="app-loader">
@@ -941,9 +945,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
                     <span></span>
                     <span></span>
                 </button>
-                <?php if (isset($homeStylesheet) || isset($messagesStylesheets)): ?>
-                    <a class="home-wordmark" href="/home/" aria-label="Relatives Home">Relatives<span>.</span></a>
-                <?php endif; ?>
+                <a class="home-wordmark" href="/home/" aria-label="Relatives Home">Relatives<span>.</span></a>
             </div>
 
             <div class="header-right">

@@ -5,7 +5,7 @@
 
 :root {
     /* Brand Colors */
-    --primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --primary: linear-gradient(135deg, #396b47 0%, #28533a 100%);
     --secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
     --success: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
     --warning: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
@@ -50,7 +50,7 @@
 body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     color: white;
-    background: #0f0c29;
+    background: #102219;
     overflow-x: hidden;
     line-height: 1.6;
 }
@@ -64,7 +64,7 @@ body {
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
+    background: linear-gradient(180deg, #102219 0%, #172f23 50%, #203c2c 100%);
 }
 
 /* ============================================
@@ -125,7 +125,7 @@ body {
 }
 
 .greeting-name {
-    background: linear-gradient(135deg, #fff 0%, #667eea 50%, #764ba2 100%);
+    background: linear-gradient(135deg, #fff 0%, #396b47 50%, #28533a 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -182,7 +182,7 @@ body {
 
 .date-nav-today:hover,
 .date-nav-today.active {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #396b47, #28533a);
     border-color: transparent;
 }
 
@@ -264,7 +264,7 @@ body {
 }
 
 .view-btn.active {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #396b47, #28533a);
     color: white;
     border-color: transparent;
 }
@@ -601,7 +601,7 @@ body {
 }
 
 .add-event-link {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #396b47, #28533a);
     color: white;
     padding: var(--space-sm) var(--space-lg);
     border-radius: var(--radius-full);
@@ -845,13 +845,13 @@ body {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #396b47, #28533a);
     color: white;
 }
 
 .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 16px rgba(73, 135, 87, 0.4);
 }
 
 .btn-secondary {

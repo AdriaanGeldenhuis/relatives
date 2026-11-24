@@ -107,8 +107,8 @@
 .game-card:hover {
     transform: translateY(-4px);
     background: var(--card-strong);
-    border-color: color-mix(in srgb, var(--glow, #a78bfa) 55%, transparent);
-    box-shadow: 0 14px 32px color-mix(in srgb, var(--glow, #a78bfa) 22%, transparent);
+    border-color: color-mix(in srgb, var(--glow, #b6d986) 55%, transparent);
+    box-shadow: 0 14px 32px color-mix(in srgb, var(--glow, #b6d986) 22%, transparent);
 }
 
 .game-card:active { transform: scale(0.97); }
@@ -117,9 +117,9 @@
     background:
         linear-gradient(var(--ink-1), var(--ink-1)) padding-box,
         linear-gradient(140deg,
-            color-mix(in srgb, var(--glow, #a78bfa) 55%, transparent),
+            color-mix(in srgb, var(--glow, #b6d986) 55%, transparent),
             rgba(255, 255, 255, 0.06) 45%,
-            color-mix(in srgb, var(--glow, #a78bfa) 35%, transparent)) border-box;
+            color-mix(in srgb, var(--glow, #b6d986) 35%, transparent)) border-box;
     border: 1px solid transparent;
 }
 
@@ -142,12 +142,12 @@
     border-radius: 16px;
     margin-bottom: 8px;
     background: linear-gradient(145deg,
-        color-mix(in srgb, var(--glow, #a78bfa) 26%, transparent),
-        color-mix(in srgb, var(--glow, #a78bfa) 7%, transparent));
-    border: 1px solid color-mix(in srgb, var(--glow, #a78bfa) 38%, transparent);
+        color-mix(in srgb, var(--glow, #b6d986) 26%, transparent),
+        color-mix(in srgb, var(--glow, #b6d986) 7%, transparent));
+    border: 1px solid color-mix(in srgb, var(--glow, #b6d986) 38%, transparent);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.09),
-        0 6px 18px color-mix(in srgb, var(--glow, #a78bfa) 20%, transparent);
+        0 6px 18px color-mix(in srgb, var(--glow, #b6d986) 20%, transparent);
 }
 
 .game-card .game-icon {
@@ -323,9 +323,9 @@
 .game-switch-btn:hover { color: var(--text-0); background: rgba(255, 255, 255, 0.06); }
 
 .game-switch-btn.active {
-    background: linear-gradient(120deg, rgba(167, 139, 250, 0.3), rgba(244, 114, 182, 0.22));
+    background: linear-gradient(120deg, rgba(116, 161, 102, 0.3), rgba(244, 114, 182, 0.22));
     color: var(--text-0);
-    box-shadow: 0 3px 12px rgba(167, 139, 250, 0.25);
+    box-shadow: 0 3px 12px rgba(116, 161, 102, 0.25);
 }
 
 .game-switch-btn .game-icon { font-size: 0.9rem; }
@@ -349,8 +349,8 @@
 .leaderboard-item:last-child { margin-bottom: 0; }
 
 .leaderboard-item.current-user {
-    background: linear-gradient(120deg, rgba(167, 139, 250, 0.16), rgba(244, 114, 182, 0.1));
-    border-color: rgba(167, 139, 250, 0.45);
+    background: linear-gradient(120deg, rgba(116, 161, 102, 0.16), rgba(244, 114, 182, 0.1));
+    border-color: rgba(116, 161, 102, 0.45);
 }
 
 .leaderboard-rank,
@@ -450,7 +450,7 @@
 .global-leaderboard-item:last-child { margin-bottom: 0; }
 
 .global-leaderboard-item.current-family {
-    background: linear-gradient(120deg, rgba(56, 189, 248, 0.14), rgba(167, 139, 250, 0.1));
+    background: linear-gradient(120deg, rgba(56, 189, 248, 0.14), rgba(116, 161, 102, 0.1));
     border-color: rgba(56, 189, 248, 0.45);
 }
 

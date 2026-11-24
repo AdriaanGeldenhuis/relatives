@@ -2,7 +2,7 @@
  * NEON NIBBLER - Service Worker
  * Offline-first caching strategy
  */
-var CACHE_NAME = 'neon-nibbler-v1';
+var CACHE_NAME = 'neon-nibbler-v2';
 var ASSETS = [
     '/games/neon_nibbler/',
     '/games/neon_nibbler/index.php',
@@ -33,7 +33,7 @@ self.addEventListener('activate', function(event) {
         caches.keys().then(function(keys) {
             return Promise.all(
                 keys.filter(function(key) {
-                    return key !== CACHE_NAME;
+                    return key.startsWith('neon-nibbler-') && key !== CACHE_NAME;
                 }).map(function(key) {
                     return caches.delete(key);
                 })

@@ -99,6 +99,7 @@ $cacheVersion = '1.0.0';
             background: linear-gradient(to top, var(--bg-gradient-3), transparent);
         }
     </style>
+    <style><?php readfile(__DIR__ . '/../../shared/css/arcade-frame.css'); ?></style>
 </head>
 <body>
     <div class="app-container">

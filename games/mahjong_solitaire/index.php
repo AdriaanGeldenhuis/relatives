@@ -41,6 +41,7 @@ $cacheVersion = '1.0.0';
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/game.css?v=<?php echo $cacheVersion; ?>">
+    <style><?php readfile(__DIR__ . '/../../shared/css/arcade-frame.css'); ?></style>
 </head>
 <body>
     <!-- Menu Screen -->

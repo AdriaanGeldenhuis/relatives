@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#667eea">
+    <meta name="theme-color" content="#18372a">
     <title>Offline - Family Tracking</title>
     <style>
         * {
@@ -14,7 +14,7 @@
 
         body {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #18372a 0%, #2d6040 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -75,7 +75,8 @@
 
         .offline-title {
             font-size: 28px;
-            font-weight: 800;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-weight: 400;
             margin-bottom: 12px;
             letter-spacing: -0.5px;
         }
@@ -92,10 +93,10 @@
             align-items: center;
             gap: 8px;
             padding: 14px 32px;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50px;
-            color: white;
+            background: #def788;
+            border: 2px solid #def788;
+            border-radius: 12px;
+            color: #182c21;
             font-size: 16px;
             font-weight: 700;
             cursor: pointer;
@@ -105,7 +106,7 @@
         }
 
         .offline-retry:hover {
-            background: rgba(255, 255, 255, 0.3);
+            background: #edffb7;
             transform: translateY(-2px);
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
         }
@@ -119,7 +120,7 @@
             display: inline-block;
             width: 16px;
             height: 16px;
-            border: 2px solid white;
+            border: 2px solid currentColor;
             border-radius: 50%;
             position: relative;
         }
@@ -133,7 +134,7 @@
             height: 0;
             border-left: 4px solid transparent;
             border-right: 4px solid transparent;
-            border-bottom: 6px solid white;
+            border-bottom: 6px solid currentColor;
             transform: rotate(45deg);
         }
 

@@ -54,6 +54,7 @@ $cacheVersion = '1.0.0';
     <title>Neon Nibbler</title>
     <link rel="manifest" href="/games/neon_nibbler/manifest.json">
     <link rel="stylesheet" href="/games/neon_nibbler/assets/css/game.css?v=<?php echo $cacheVersion; ?>">
+    <style><?php readfile(__DIR__ . '/../../shared/css/arcade-frame.css'); ?></style>
 </head>
 <body>
     <div id="game-wrapper">

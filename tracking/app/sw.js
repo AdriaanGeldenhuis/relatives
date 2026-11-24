@@ -1,5 +1,5 @@
 /* Cache public tracking assets only. Family data always uses the network. */
-const CACHE = 'tracking-static-v1.3.0';
+const CACHE = 'tracking-static-v1.3.1';
 const OFFLINE_URL = '/tracking/app/offline.html';
 const PUBLIC_FILES = new Set([
     OFFLINE_URL,

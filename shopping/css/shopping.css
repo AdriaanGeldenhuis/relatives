@@ -50,10 +50,10 @@
 .list-tab:hover { background: var(--card-strong); transform: translateY(-1px); }
 
 .list-tab.active {
-    background: linear-gradient(120deg, rgba(167, 139, 250, 0.22), rgba(244, 114, 182, 0.16));
-    border-color: rgba(167, 139, 250, 0.6);
+    background: linear-gradient(120deg, rgba(116, 161, 102, 0.22), rgba(244, 114, 182, 0.16));
+    border-color: rgba(116, 161, 102, 0.6);
     color: var(--text-0);
-    box-shadow: 0 4px 16px rgba(167, 139, 250, 0.2);
+    box-shadow: 0 4px 16px rgba(116, 161, 102, 0.2);
 }
 
 .list-icon { font-size: 1rem; line-height: 1; }
@@ -188,10 +188,10 @@
     flex-wrap: wrap;
     padding: 10px 14px;
     border-radius: var(--radius);
-    background: rgba(16, 19, 42, 0.92);
+    background: rgba(32, 60, 44, 0.92);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(167, 139, 250, 0.5);
+    border: 1px solid rgba(116, 161, 102, 0.5);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
@@ -443,7 +443,7 @@
 .bulk-checkbox {
     width: 18px;
     height: 18px;
-    accent-color: #a78bfa;
+    accent-color: #b6d986;
     cursor: pointer;
 }
 
@@ -528,7 +528,7 @@
 .empty-state .empty-icon,
 .empty-icon {
     font-size: 2.6rem;
-    filter: drop-shadow(0 6px 16px rgba(167, 139, 250, 0.35));
+    filter: drop-shadow(0 6px 16px rgba(116, 161, 102, 0.35));
 }
 
 .empty-state h2 {
@@ -576,7 +576,7 @@
     transition: background 0.15s ease, color 0.15s ease;
 }
 
-.suggestion-item:hover { background: rgba(167, 139, 250, 0.14); color: var(--text-0); }
+.suggestion-item:hover { background: rgba(116, 161, 102, 0.14); color: var(--text-0); }
 
 /* Icon picker */
 .icon-picker {
@@ -605,8 +605,8 @@
 
 .icon-picker input:checked + .icon-option {
     border-color: var(--violet);
-    background: rgba(167, 139, 250, 0.18);
-    box-shadow: 0 0 14px rgba(167, 139, 250, 0.35);
+    background: rgba(116, 161, 102, 0.18);
+    box-shadow: 0 0 14px rgba(116, 161, 102, 0.35);
 }
 
 /* Frequent items */
@@ -637,8 +637,8 @@
 }
 
 .frequent-chip:hover {
-    background: rgba(167, 139, 250, 0.16);
-    border-color: rgba(167, 139, 250, 0.5);
+    background: rgba(116, 161, 102, 0.16);
+    border-color: rgba(116, 161, 102, 0.5);
     color: var(--text-0);
 }
 
@@ -667,8 +667,8 @@
 }
 
 .category-option:hover {
-    background: rgba(167, 139, 250, 0.14);
-    border-color: rgba(167, 139, 250, 0.5);
+    background: rgba(116, 161, 102, 0.14);
+    border-color: rgba(116, 161, 102, 0.5);
     transform: translateY(-1px);
 }
 
@@ -846,7 +846,7 @@
     max-width: min(92vw, 420px);
     padding: 11px 16px;
     border-radius: var(--radius-full);
-    background: rgba(16, 19, 42, 0.95);
+    background: rgba(32, 60, 44, 0.95);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid var(--line-strong);
@@ -896,3 +896,14 @@
     .list-stats { grid-template-columns: repeat(2, 1fr); }
     .ph-actions .pill-btn { padding: 8px 11px; font-size: 0.72rem; }
 }
+
+.list-tab.active {
+    border-color: #8da267;
+    background: #344c32;
+    color: #eff7d7;
+}
+.item-card {
+    border-color: #a8c38b32;
+    background: #20392a;
+}
+.item-card:hover { background: #284432; }

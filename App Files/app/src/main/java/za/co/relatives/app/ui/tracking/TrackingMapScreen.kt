@@ -112,7 +112,7 @@ fun TrackingMapScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
-                .background(Color(0xCC1A1A2E))
+                .background(Color(0xCC183125))
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Row(
@@ -191,7 +191,7 @@ fun TrackingMapScreen(
                 .align(Alignment.BottomEnd)
                 .padding(end = 16.dp, bottom = if (showPanel) 200.dp else 16.dp)
                 .size(40.dp)
-                .background(Color(0xFF667eea), CircleShape),
+                .background(Color(0xFF396B47), CircleShape),
         ) {
             Text(
                 if (showPanel) "v" else "^",
@@ -228,7 +228,7 @@ private fun FamilyPanel(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF183125)),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Tracking toggle button
@@ -240,7 +240,7 @@ private fun FamilyPanel(
                     onClick = onToggleTracking,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (trackingEnabled) Color(0xFFEF4444) else Color(0xFF667eea),
+                        containerColor = if (trackingEnabled) Color(0xFFEF4444) else Color(0xFF396B47),
                     ),
                     shape = RoundedCornerShape(8.dp),
                 ) {
@@ -251,7 +251,7 @@ private fun FamilyPanel(
                 }
                 Button(
                     onClick = onWakeAll,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF374151)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF365444)),
                     shape = RoundedCornerShape(8.dp),
                 ) {
                     Text("Wake", fontSize = 13.sp)
@@ -292,10 +292,10 @@ private fun MemberCard(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val bgColor = if (isSelected) Color(0xFF667eea) else Color(0xFF2D2D44)
+    val bgColor = if (isSelected) Color(0xFF396B47) else Color(0xFF203C2C)
     val memberColor = member.avatarColor?.let {
         try { Color(AndroidColor.parseColor(it)) } catch (_: Exception) { null }
-    } ?: Color(0xFF667eea)
+    } ?: Color(0xFF396B47)
 
     Card(
         modifier = Modifier
@@ -363,7 +363,7 @@ private fun updateMapAnnotations(mapView: MapView, members: List<TrackingStore.M
             val lng = member.lng ?: return@forEach
             val color = member.avatarColor?.let {
                 try { AndroidColor.parseColor(it) } catch (_: Exception) { null }
-            } ?: AndroidColor.parseColor("#667eea")
+            } ?: AndroidColor.parseColor("#396b47")
 
             annotationManager.create(
                 CircleAnnotationOptions()

@@ -45,8 +45,8 @@
 }
 
 .nav-btn:hover {
-    background: rgba(167, 139, 250, 0.18);
-    border-color: rgba(167, 139, 250, 0.55);
+    background: rgba(116, 161, 102, 0.18);
+    border-color: rgba(116, 161, 102, 0.55);
     transform: scale(1.08);
 }
 
@@ -89,9 +89,9 @@
 .view-btn:hover { color: var(--text-0); }
 
 .view-btn.active {
-    background: linear-gradient(120deg, rgba(167, 139, 250, 0.3), rgba(244, 114, 182, 0.22));
+    background: linear-gradient(120deg, rgba(116, 161, 102, 0.3), rgba(244, 114, 182, 0.22));
     color: var(--text-0);
-    box-shadow: 0 3px 12px rgba(167, 139, 250, 0.25);
+    box-shadow: 0 3px 12px rgba(116, 161, 102, 0.25);
 }
 
 .view-icon { font-size: 0.85rem; }
@@ -155,12 +155,12 @@
 
 .calendar-day:nth-child(7n) { border-right: none; }
 
-.calendar-day:hover { background: rgba(167, 139, 250, 0.08); }
+.calendar-day:hover { background: rgba(116, 161, 102, 0.08); }
 
 .calendar-day.other-month { opacity: 0.32; }
 
 .calendar-day.today {
-    background: linear-gradient(150deg, rgba(167, 139, 250, 0.18), rgba(244, 114, 182, 0.1));
+    background: linear-gradient(150deg, rgba(116, 161, 102, 0.18), rgba(244, 114, 182, 0.1));
 }
 
 .calendar-day.today .day-number {
@@ -170,7 +170,7 @@
 }
 
 .calendar-day.selected {
-    outline: 2px solid rgba(167, 139, 250, 0.6);
+    outline: 2px solid rgba(116, 161, 102, 0.6);
     outline-offset: -2px;
     border-radius: 8px;
 }
@@ -241,8 +241,8 @@
 }
 
 .day-header-info.today {
-    background: linear-gradient(150deg, rgba(167, 139, 250, 0.2), rgba(244, 114, 182, 0.12));
-    border-color: rgba(167, 139, 250, 0.5);
+    background: linear-gradient(150deg, rgba(116, 161, 102, 0.2), rgba(244, 114, 182, 0.12));
+    border-color: rgba(116, 161, 102, 0.5);
 }
 
 .day-name {
@@ -344,8 +344,8 @@
 }
 
 .day-event-card:hover {
-    background: rgba(167, 139, 250, 0.1);
-    border-color: rgba(167, 139, 250, 0.4);
+    background: rgba(116, 161, 102, 0.1);
+    border-color: rgba(116, 161, 102, 0.4);
 }
 
 .day-event-color {
@@ -628,7 +628,7 @@
 
 .color-picker input:checked + .color-option {
     border-color: #fff;
-    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.4), 0 4px 12px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 0 3px rgba(116, 161, 102, 0.4), 0 4px 12px rgba(0, 0, 0, 0.4);
     transform: scale(1.12);
 }
 
@@ -652,8 +652,8 @@
 }
 
 .preset-btn:hover {
-    background: rgba(167, 139, 250, 0.16);
-    border-color: rgba(167, 139, 250, 0.5);
+    background: rgba(116, 161, 102, 0.16);
+    border-color: rgba(116, 161, 102, 0.5);
     color: var(--text-0);
 }
 
@@ -681,7 +681,7 @@
     max-width: min(92vw, 420px);
     padding: 11px 18px;
     border-radius: var(--radius-full);
-    background: rgba(16, 19, 42, 0.95);
+    background: rgba(32, 60, 44, 0.95);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid var(--line-strong);
@@ -717,4 +717,15 @@
     .calendar-day { min-height: 96px; }
 
     .day-number { width: 24px; height: 24px; font-size: 0.78rem; }
+}
+
+.calendar-header { background: #233f31; }
+.calendar-day.today { background: #2c4c36; }
+.calendar-day.today .day-number {
+    background: #def788;
+    color: #182c21;
+    box-shadow: none;
+}
+@media (min-width: 1000px) {
+    .calendar-day { min-height: 94px; padding: 8px; }
 }

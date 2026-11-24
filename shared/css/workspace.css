@@ -1,0 +1,130 @@
+/* The shared frame for the app's tools. Home and Messages have their own layouts. */
+.workspace-page {
+    --workspace-paper: #fbfaf2;
+    --workspace-ink: #182c21;
+    --workspace-forest: #153327;
+    --workspace-lime: #def788;
+    --workspace-display: Georgia, 'Times New Roman', serif;
+    background: #102219;
+    color: #f8f6e9;
+    color-scheme: dark;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.workspace-page .global-header {
+    border-bottom: 1px solid #dce0d3;
+    background: var(--workspace-paper);
+    color: var(--workspace-ink);
+    box-shadow: none;
+    color-scheme: light;
+    animation: none;
+}
+
+.workspace-page .header-container {
+    max-width: 1380px;
+}
+
+.workspace-page .home-wordmark {
+    color: var(--workspace-ink);
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -.07em;
+    text-decoration: none;
+}
+
+.workspace-page .home-wordmark span { color: #548541; }
+.workspace-page .hamburger-menu span,
+.workspace-page .hamburger-menu:hover span { background: var(--workspace-ink); }
+
+.workspace-page .header-btn {
+    border-color: #dce2d4;
+    background: #edf0e4;
+    color: var(--workspace-ink);
+}
+
+.workspace-page .header-btn:hover { background: #e2e9d9; }
+.workspace-page .mobile-sidebar,
+.workspace-page .app-loader { background: var(--workspace-forest); }
+.workspace-page .mobile-nav-link.active {
+    border-color: #6f9557;
+    background: #304c34;
+    color: var(--workspace-lime);
+}
+
+.workspace-page .global-footer :is(.mic-btn:where(:not(.listening, .wake-listening, .processing)), .help-btn-footer, .tracking-btn, .plus-btn) {
+    border: 1px solid #dce2d4;
+    background: var(--workspace-paper);
+    color: var(--workspace-ink);
+    box-shadow: 0 3px 12px #10221960;
+}
+
+.workspace-page .global-footer .plus-btn { background: var(--workspace-lime); }
+.workspace-page .global-footer .help-btn-footer svg { stroke: #315737; }
+
+.workspace-page :focus-visible {
+    outline: 2px solid #bde58d;
+    outline-offset: 3px;
+}
+
+.workspace-page .global-header :focus-visible { outline-color: #397443; }
+
+.workspace-page :is(.profile-header, .legal-hero, .hero-section) {
+    border: 1px solid #46634a;
+    border-radius: 22px;
+    padding: clamp(20px, 4vw, 38px);
+    background: radial-gradient(ellipse at 100% 0, #365d43, transparent 64%), var(--workspace-forest);
+}
+
+.workspace-page :is(.profile-header, .legal-hero, .hero-section, .ht-main, .settings-container) h1 {
+    font-family: var(--workspace-display);
+    font-weight: 400;
+    letter-spacing: -.04em;
+}
+
+.workspace-page[data-area="profile"] .profile-container { max-width: 690px; }
+.workspace-page[data-area="legal"] .legal-hero-title { color: #f8f6e9; }
+
+@media (max-width: 600px) {
+    .workspace-page .header-container { padding-inline: 10px; }
+    .workspace-page .header-left, .workspace-page .header-right { gap: 6px; }
+    .workspace-page .header-btn { width: 35px; height: 35px; font-size: 1rem; }
+    .workspace-page .home-wordmark { font-size: 1.27rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .workspace-page .mobile-sidebar,
+    .workspace-page .global-header { transition: none; }
+}
+
+.workspace-page .app-loader { display: none; }
+
+.workspace-page[data-area="calendar"] { --workspace-hero-edge: #2c5a4d; }
+.workspace-page[data-area="notes"] { --workspace-hero-edge: #59523b; }
+.workspace-page[data-area="shopping"] { --workspace-hero-edge: #52613b; }
+.workspace-page[data-area="schedule"] { --workspace-hero-edge: #424f40; }
+.workspace-page[data-area="notifications"] { --workspace-hero-edge: #615331; }
+.workspace-page[data-area="weather"] { --workspace-hero-edge: #2e5b54; }
+.workspace-page[data-area="games"] { --workspace-hero-edge: #4e5735; }
+
+.workspace-page .page-head {
+    background: radial-gradient(ellipse at 100% 0, var(--workspace-hero-edge, #365d43), transparent 75%), var(--workspace-forest);
+}
+
+.workspace-page .page-head::before {
+    inset: auto -84px -133px auto;
+    width: 280px;
+    height: 280px;
+    border: 1px solid #d7e8ac30;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: 0 0 0 21px #d7e8ac11, 0 0 0 48px #d7e8ac11;
+}
+
+.workspace-page .ph-glyph {
+    border-color: #d0e39936;
+    background: #d7e8ac18;
+    box-shadow: none;
+    filter: none;
+}
+
+.workspace-page :is(.ph-titles, .ph-actions, .mini-ring) { position: relative; }

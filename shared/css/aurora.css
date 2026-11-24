@@ -1,33 +1,28 @@
-/* ============================================
-   RELATIVES - AURORA THEME (shared)
-   Design language of the v4 home page:
-   ink-dark, aurora glow, starfield, compact
-   panels. Load BEFORE the page stylesheet.
-   ============================================ */
+/* Shared surfaces, controls and layout for the family tools. */
 
 :root {
-    --ink-0: #06070f;
-    --ink-1: #0b0d1a;
-    --ink-2: #10132a;
+    --ink-0: #102219;
+    --ink-1: #172f23;
+    --ink-2: #203c2c;
 
-    --card: rgba(255, 255, 255, 0.045);
-    --card-strong: rgba(255, 255, 255, 0.075);
+    --card: #183125;
+    --card-strong: #203e2e;
     --line: rgba(255, 255, 255, 0.09);
     --line-strong: rgba(255, 255, 255, 0.18);
 
-    --text-0: #f5f6fb;
-    --text-1: rgba(233, 236, 250, 0.72);
-    --text-2: rgba(226, 231, 250, 0.45);
+    --text-0: #fffdf2;
+    --text-1: #e0e9dc;
+    --text-2: #b8c8ba;
 
-    --violet: #a78bfa;
-    --pink: #f472b6;
+    --violet: #cce689;
+    --pink: #b9dca4;
     --amber: #fbbf24;
     --teal: #2dd4bf;
     --sky: #38bdf8;
     --coral: #fb7185;
     --green: #34d399;
 
-    --brand: linear-gradient(120deg, #a78bfa 0%, #f472b6 55%, #fb923c 100%);
+    --brand: linear-gradient(135deg, #28533a, #376344);
 
     --radius: 16px;
     --radius-lg: 22px;
@@ -35,7 +30,7 @@
 
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-    --font-display: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
 }
 
 * { -webkit-tap-highlight-color: transparent; }
@@ -55,134 +50,12 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* ============================================
-   AURORA BACKGROUND + STARFIELD
-   ============================================ */
-
 .aurora {
     position: fixed;
     inset: 0;
     z-index: -1;
-    overflow: hidden;
     pointer-events: none;
-    background:
-        radial-gradient(120% 90% at 50% -20%, #141838 0%, transparent 60%),
-        var(--ink-0);
-}
-
-.aurora-blob {
-    position: absolute;
-    width: 70vmax;
-    height: 70vmax;
-    border-radius: 50%;
-    mix-blend-mode: screen;
-    will-change: transform;
-    animation: drift 30s ease-in-out infinite alternate;
-}
-
-.aurora-a {
-    top: -30vmax;
-    left: -18vmax;
-    background: radial-gradient(circle at center, rgba(124, 92, 246, 0.26) 0%, transparent 62%);
-}
-
-.aurora-b {
-    top: -12vmax;
-    right: -28vmax;
-    background: radial-gradient(circle at center, rgba(45, 212, 191, 0.16) 0%, transparent 60%);
-    animation-duration: 38s;
-    animation-delay: -8s;
-}
-
-.aurora-c {
-    bottom: -34vmax;
-    left: 12vmax;
-    background: radial-gradient(circle at center, rgba(244, 114, 182, 0.15) 0%, transparent 60%);
-    animation-duration: 44s;
-    animation-delay: -16s;
-}
-
-@keyframes drift {
-    from { transform: translate3d(0, 0, 0) scale(1); }
-    to   { transform: translate3d(6vmax, 4vmax, 0) scale(1.15); }
-}
-
-.stars {
-    position: absolute;
-    inset: 0;
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
-}
-
-.stars-a {
-    background-image:
-        radial-gradient(1.4px 1.4px at 5% 14%,  rgba(255,255,255,0.9), transparent 100%),
-        radial-gradient(1.1px 1.1px at 13% 34%, rgba(255,255,255,0.6), transparent 100%),
-        radial-gradient(1.6px 1.6px at 19% 9%,  rgba(255,255,255,0.9), transparent 100%),
-        radial-gradient(1.1px 1.1px at 27% 24%, rgba(255,255,255,0.55), transparent 100%),
-        radial-gradient(1.3px 1.3px at 34% 16%, rgba(255,255,255,0.8), transparent 100%),
-        radial-gradient(1.1px 1.1px at 42% 7%,  rgba(255,255,255,0.6), transparent 100%),
-        radial-gradient(1.5px 1.5px at 49% 29%, rgba(255,255,255,0.85), transparent 100%),
-        radial-gradient(1.1px 1.1px at 56% 13%, rgba(255,255,255,0.55), transparent 100%),
-        radial-gradient(1.3px 1.3px at 64% 21%, rgba(255,255,255,0.8), transparent 100%),
-        radial-gradient(1.6px 1.6px at 71% 8%,  rgba(255,255,255,0.9), transparent 100%),
-        radial-gradient(1.1px 1.1px at 79% 26%, rgba(255,255,255,0.6), transparent 100%),
-        radial-gradient(1.4px 1.4px at 86% 15%, rgba(255,255,255,0.85), transparent 100%),
-        radial-gradient(1.1px 1.1px at 93% 32%, rgba(255,255,255,0.6), transparent 100%),
-        radial-gradient(1.3px 1.3px at 98% 10%, rgba(255,255,255,0.8), transparent 100%);
-    animation: twinkle 5.5s ease-in-out infinite alternate;
-}
-
-.stars-b {
-    background-image:
-        radial-gradient(1.1px 1.1px at 9% 22%,  rgba(255,255,255,0.7), transparent 100%),
-        radial-gradient(1.4px 1.4px at 16% 45%, rgba(255,255,255,0.5), transparent 100%),
-        radial-gradient(1.1px 1.1px at 23% 15%, rgba(255,255,255,0.75), transparent 100%),
-        radial-gradient(1.3px 1.3px at 31% 38%, rgba(255,255,255,0.5), transparent 100%),
-        radial-gradient(1.1px 1.1px at 38% 25%, rgba(255,255,255,0.7), transparent 100%),
-        radial-gradient(1.5px 1.5px at 46% 11%, rgba(255,255,255,0.8), transparent 100%),
-        radial-gradient(1.1px 1.1px at 53% 42%, rgba(255,255,255,0.5), transparent 100%),
-        radial-gradient(1.3px 1.3px at 61% 30%, rgba(255,255,255,0.7), transparent 100%),
-        radial-gradient(1.1px 1.1px at 68% 17%, rgba(255,255,255,0.55), transparent 100%),
-        radial-gradient(1.4px 1.4px at 76% 40%, rgba(255,255,255,0.7), transparent 100%),
-        radial-gradient(1.1px 1.1px at 83% 12%, rgba(255,255,255,0.6), transparent 100%),
-        radial-gradient(1.3px 1.3px at 90% 23%, rgba(255,255,255,0.75), transparent 100%),
-        radial-gradient(1.1px 1.1px at 96% 44%, rgba(255,255,255,0.5), transparent 100%);
-    animation: twinkle 7s ease-in-out infinite alternate-reverse;
-}
-
-@keyframes twinkle {
-    from { opacity: 0.35; }
-    to   { opacity: 1; }
-}
-
-.shooting-star {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 130px;
-    height: 2px;
-    border-radius: var(--radius-full);
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95));
-    box-shadow: 0 0 8px rgba(167, 139, 250, 0.8);
-    opacity: 0;
-    animation: shoot 11s linear infinite 4s;
-}
-
-@keyframes shoot {
-    0%   { opacity: 0; transform: translate3d(88vw, 4vh, 0)  rotate(148deg); }
-    2%   { opacity: 1; }
-    9%   { opacity: 0; transform: translate3d(52vw, 30vh, 0) rotate(148deg); }
-    100% { opacity: 0; transform: translate3d(52vw, 30vh, 0) rotate(148deg); }
-}
-
-.aurora-grid {
-    position: absolute;
-    inset: 0;
-    background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1.5px);
-    background-size: 28px 28px;
-    mask-image: linear-gradient(180deg, rgba(0,0,0,0.9), transparent 70%);
-    -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.9), transparent 70%);
+    background: radial-gradient(ellipse at 85% 0, #22422d, transparent 52%), var(--ink-0);
 }
 
 /* ============================================
@@ -196,7 +69,7 @@ body {
 }
 
 .hub {
-    max-width: 1200px;
+    max-width: 1320px;
     margin: 0 auto;
     padding: 0 14px;
     display: flex;
@@ -230,16 +103,9 @@ body {
     align-items: center;
     gap: 12px 14px;
     border-radius: var(--radius-lg);
-    padding: 14px 16px;
-    background:
-        linear-gradient(var(--ink-1), var(--ink-1)) padding-box,
-        conic-gradient(from 120deg,
-            rgba(167, 139, 250, 0.75),
-            rgba(56, 189, 248, 0.25) 30%,
-            rgba(255, 255, 255, 0.05) 50%,
-            rgba(244, 114, 182, 0.65) 78%,
-            rgba(167, 139, 250, 0.75)) border-box;
-    border: 1px solid transparent;
+    padding: clamp(16px, 2.8vw, 30px);
+    background: radial-gradient(ellipse at 100% 0, #365d43, transparent 67%), var(--ink-1);
+    border: 1px solid #46634a;
     animation: rise 0.55s var(--ease-out) both;
 }
 
@@ -278,10 +144,10 @@ body {
 }
 
 .ph-titles h1 {
-    font-family: var(--font-display);
-    font-size: clamp(1.2rem, 4vw, 1.55rem);
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(1.75rem, 5vw, 3.15rem);
+    font-weight: 400;
+    letter-spacing: -.045em;
     line-height: 1.15;
 }
 
@@ -345,15 +211,14 @@ body {
 .pill-btn:active { transform: scale(0.96); }
 
 .pill-btn.primary {
-    background: var(--brand);
-    border-color: transparent;
-    color: #fff;
-    box-shadow: 0 6px 20px rgba(244, 114, 182, 0.35);
+    background: #def788;
+    border-color: #c4dd77;
+    color: #182c21;
 }
 
 .pill-btn.primary:hover {
-    box-shadow: 0 8px 26px rgba(244, 114, 182, 0.5);
-    border-color: transparent;
+    background: #edffb7;
+    border-color: #def788;
 }
 
 .pill-btn.active {
