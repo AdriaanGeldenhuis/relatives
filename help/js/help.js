@@ -1,360 +1,201 @@
-/**
- * ============================================
- * HELP OVERLAY SYSTEM - FRONTEND
- * ============================================ */
-
-console.log('💡 Help system loading...');
-
+/* The footer Help Center keeps the chat open while questions are answered. */
 class HelpSystem {
     static instance = null;
-    
-    constructor() {
-        if (HelpSystem.instance) return HelpSystem.instance;
-        
-        this.isOpen = false;
-        this.messages = [];
-        this.isLoading = false;
-        this.rateLimitRemaining = 10;
-        
-        HelpSystem.instance = this;
-        this.init();
-    }
-    
+
     static getInstance() {
-        if (!HelpSystem.instance) {
-            HelpSystem.instance = new HelpSystem();
-        }
-        return HelpSystem.instance;
+        return this.instance ??= new this();
     }
-    
-    init() {
-        // Create help panel HTML if it doesn't exist
-        if (!document.getElementById('helpOverlay')) {
-            this.injectHTML();
-        }
-        
-        // Attach event listeners
+
+    constructor() {
+        this.trigger = document.getElementById('helpBtn');
+        this.isLoading = false;
+        if (!this.trigger) return;
+
+        this.injectHTML();
         this.attachListeners();
-        
-        console.log('✅ Help system initialized');
+        this.updateComposer();
     }
-    
+
     injectHTML() {
-        const helpHTML = `
-            <div class="help-overlay" id="helpOverlay">
-                <div class="help-panel" id="helpPanel">
-                    <div class="help-header">
-                        <div class="help-header-left">
-                            <div class="help-icon">💡</div>
-                            <div>
-                                <div class="help-title">Help Center</div>
-                                <div class="help-subtitle">Powered by Suzi AI</div>
-                            </div>
+        document.body.insertAdjacentHTML('beforeend', `
+            <dialog class="footer-assist-dialog help-panel" id="helpPanel" aria-labelledby="helpHeading">
+                <div class="assist-panel">
+                    <header class="assist-header">
+                        <span class="assist-header-icon" aria-hidden="true">?</span>
+                        <div>
+                            <h2 id="helpHeading">Help Center</h2>
+                            <p>App answers from Suzi</p>
                         </div>
-                        <button class="help-close-btn" id="helpCloseBtn" aria-label="Close help">✕</button>
-                    </div>
-                    
-                    <div class="help-chat" id="helpChat">
+                        <button type="button" class="assist-close" aria-label="Close help">×</button>
+                    </header>
+
+                    <div class="assist-scroll help-chat">
                         <div class="help-welcome">
-                            <div class="help-welcome-icon">👋</div>
-                            <h3>Hi! I'm Suzi</h3>
-                            <p>I can help you with anything about the Relatives app. Ask me a question or choose one below:</p>
-                            
-                            <div class="help-quick-questions">
-                                <button class="help-quick-btn" data-question="How do I add a shopping item?">
-                                    <span class="help-quick-icon">🛒</span>
-                                    <span>Add shopping item</span>
+                            <p>Choose a topic or ask your own question about Relatives.</p>
+                            <div class="assist-prompts">
+                                <button type="button" class="assist-prompt" data-question="How do I add a shopping item?">
+                                    <span aria-hidden="true">🛒</span><span>Add a shopping item</span>
                                 </button>
-                                <button class="help-quick-btn" data-question="How do I enable location tracking?">
-                                    <span class="help-quick-icon">📍</span>
-                                    <span>Enable location tracking</span>
+                                <button type="button" class="assist-prompt" data-question="How do I enable location tracking?">
+                                    <span aria-hidden="true">📍</span><span>Enable location tracking</span>
                                 </button>
-                                <button class="help-quick-btn" data-question="How do I use voice commands?">
-                                    <span class="help-quick-icon">🎤</span>
-                                    <span>Use voice commands</span>
+                                <button type="button" class="assist-prompt" data-question="How do I use voice commands?">
+                                    <span aria-hidden="true">🎤</span><span>Use voice commands</span>
                                 </button>
-                                <button class="help-quick-btn" data-question="Why can't I see weather data?">
-                                    <span class="help-quick-icon">🌤️</span>
-                                    <span>Weather not showing</span>
+                                <button type="button" class="assist-prompt" data-question="Why can't I see weather data?">
+                                    <span aria-hidden="true">🌤️</span><span>Weather not showing</span>
                                 </button>
                             </div>
                         </div>
+                        <div class="help-thread" role="log" aria-label="Help conversation"></div>
+                        <p class="help-loading" role="status" hidden>Suzi is looking up an answer…</p>
+                        <p class="help-error" role="alert" hidden></p>
                     </div>
-                    
-                    <div class="help-input-wrapper">
-                        <div class="help-input-container">
-                            <textarea 
-                                id="helpInput" 
-                                class="help-input" 
-                                placeholder="Ask me anything about the app..."
-                                rows="1"
-                                maxlength="500"
-                            ></textarea>
-                            <button id="helpSendBtn" class="help-send-btn" aria-label="Send message">
-                                ➤
-                            </button>
-                        </div>
-                    </div>
+
+                    <form class="help-input-wrapper">
+                        <textarea id="helpInput" class="help-input" aria-label="Your question"
+                                  placeholder="Ask about Relatives…" rows="1" maxlength="500"></textarea>
+                        <button type="submit" class="help-send-btn">Send</button>
+                    </form>
                 </div>
-            </div>
-        `;
-        
-        document.body.insertAdjacentHTML('beforeend', helpHTML);
+            </dialog>
+        `);
+
+        this.panel = document.getElementById('helpPanel');
+        this.closeButton = this.panel.querySelector('.assist-close');
+        this.chat = this.panel.querySelector('.help-chat');
+        this.thread = this.panel.querySelector('.help-thread');
+        this.loading = this.panel.querySelector('.help-loading');
+        this.error = this.panel.querySelector('.help-error');
+        this.input = this.panel.querySelector('.help-input');
+        this.sendButton = this.panel.querySelector('.help-send-btn');
+        this.prompts = this.panel.querySelectorAll('[data-question]');
     }
-    
+
     attachListeners() {
-        // Help button in footer
-        const helpBtn = document.getElementById('helpBtn');
-        if (helpBtn) {
-            helpBtn.addEventListener('click', () => this.open());
-        }
-        
-        // Close button
-        const closeBtn = document.getElementById('helpCloseBtn');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => this.close());
-        }
-        
-        // Overlay click
-        const overlay = document.getElementById('helpOverlay');
-        if (overlay) {
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) this.close();
-            });
-        }
-        
-        // ESC key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.isOpen) {
-                this.close();
-            }
+        this.trigger.addEventListener('click', () => this.open());
+        this.closeButton.addEventListener('click', () => this.close());
+        this.panel.addEventListener('click', event => {
+            if (event.target === this.panel) this.close();
         });
-        
-        // Send button
-        const sendBtn = document.getElementById('helpSendBtn');
-        if (sendBtn) {
-            sendBtn.addEventListener('click', () => this.sendMessage());
-        }
-        
-        // Input enter key
-        const input = document.getElementById('helpInput');
-        if (input) {
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    this.sendMessage();
-                }
-            });
-            
-            // Auto-resize textarea
-            input.addEventListener('input', () => {
-                input.style.height = 'auto';
-                input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-            });
-        }
-        
-        // Quick question buttons
-        document.addEventListener('click', (e) => {
-            const btn = e.target.closest('.help-quick-btn');
-            if (btn) {
-                const question = btn.dataset.question;
-                if (question) this.askQuestion(question);
-            }
+        this.panel.addEventListener('cancel', event => {
+            event.preventDefault();
+            this.close();
         });
-    }
-    
-    open() {
-        this.isOpen = true;
-        const overlay = document.getElementById('helpOverlay');
-        const panel = document.getElementById('helpPanel');
-        
-        if (overlay) overlay.classList.add('active');
-        if (panel) panel.classList.add('active');
-        
-        // Focus input
-        setTimeout(() => {
-            const input = document.getElementById('helpInput');
-            if (input) input.focus();
-        }, 300);
-        
-        console.log('💡 Help opened');
-    }
-    
-    close() {
-        this.isOpen = false;
-        const overlay = document.getElementById('helpOverlay');
-        const panel = document.getElementById('helpPanel');
-        
-        if (overlay) overlay.classList.remove('active');
-        if (panel) panel.classList.remove('active');
-        
-        console.log('💡 Help closed');
-    }
-    
-    askQuestion(question) {
-        const input = document.getElementById('helpInput');
-        if (input) {
-            input.value = question;
-            input.focus();
+
+        const viewport = window.visualViewport;
+        if (viewport) {
+            const fitPanel = () => {
+                if (!this.panel.open || viewport.scale !== 1) return;
+                const cutoff = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+                this.panel.style.setProperty('--assist-viewport-height', viewport.height + 'px');
+                this.panel.style.setProperty('--assist-viewport-cutoff', cutoff + 'px');
+            };
+            viewport.addEventListener('resize', fitPanel);
+            viewport.addEventListener('scroll', fitPanel);
+        }
+
+        this.panel.querySelector('form').addEventListener('submit', event => {
+            event.preventDefault();
             this.sendMessage();
-        }
+        });
+        this.input.addEventListener('input', () => this.updateComposer());
+        this.input.addEventListener('keydown', event => {
+            if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                event.preventDefault();
+                this.sendMessage();
+            }
+        });
+        this.prompts.forEach(button => button.addEventListener('click', () => {
+            this.sendMessage(button.dataset.question);
+        }));
     }
-    
-    async sendMessage() {
-        if (this.isLoading) return;
-        
-        const input = document.getElementById('helpInput');
-        if (!input) return;
-        
-        const message = input.value.trim();
-        if (!message) return;
-        
-        // Clear input
-        input.value = '';
-        input.style.height = 'auto';
-        
-        // Add user message
+
+    open() {
+        if (!this.panel || this.panel.open) return;
+        window.closePlusMenu?.();
+        this.panel.showModal();
+        this.trigger.setAttribute('aria-expanded', 'true');
+        if (this.thread.childElementCount) this.scrollToBottom();
+    }
+
+    close() {
+        if (!this.panel?.open) return;
+        this.panel.close();
+        this.panel.style.removeProperty('--assist-viewport-height');
+        this.panel.style.removeProperty('--assist-viewport-cutoff');
+        this.trigger.setAttribute('aria-expanded', 'false');
+        this.trigger.focus({ preventScroll: true });
+    }
+
+    updateComposer() {
+        this.input.style.height = 'auto';
+        this.input.style.height = Math.min(this.input.scrollHeight + 2, 108) + 'px';
+        this.sendButton.disabled = this.isLoading || !this.input.value.trim();
+    }
+
+    setLoading(loading) {
+        this.isLoading = loading;
+        this.loading.hidden = !loading;
+        this.prompts.forEach(button => { button.disabled = loading; });
+        this.updateComposer();
+        this.scrollToBottom();
+    }
+
+    async sendMessage(question) {
+        const message = (question ?? this.input.value).trim();
+        if (!message || this.isLoading) return;
+
+        if (question === undefined) this.input.value = '';
+        this.error.hidden = true;
         this.addMessage('user', message);
-        
-        // Show loading
-        this.showLoading();
-        this.isLoading = true;
-        
+        this.setLoading(true);
+
         try {
             const response = await fetch('/help/api/ask.php', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message })
             });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            
             const data = await response.json();
-            
-            this.hideLoading();
-            
-            if (data.ok) {
+            if (response.ok && data.ok) {
                 this.addMessage('assistant', data.answer);
-                
-                // Update rate limit info
-                if (data.meta && data.meta.rate_limit_remaining !== undefined) {
-                    this.rateLimitRemaining = data.meta.rate_limit_remaining;
-                }
             } else {
-                this.showError(data.error || 'Something went wrong. Please try again.');
+                this.showError(data.error || 'Suzi could not answer. Try again in a moment.');
             }
-            
         } catch (error) {
-            console.error('Help API error:', error);
-            this.hideLoading();
-            this.showError('Unable to connect. Please check your internet connection.');
+            this.showError('Could not reach Suzi. Check your connection and try again.');
         } finally {
-            this.isLoading = false;
+            this.setLoading(false);
         }
     }
-    
+
     addMessage(type, content) {
-        const chat = document.getElementById('helpChat');
-        if (!chat) return;
-        
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-        });
-        
-        const avatar = type === 'user' ? '👤' : '💡';
-        
-        const messageHTML = `
-            <div class="help-message ${type}">
-                <div class="help-message-avatar">${avatar}</div>
-                <div class="help-message-content">
-                    <div class="help-message-bubble">${this.sanitize(content)}</div>
-                    <div class="help-message-time">${timeStr}</div>
-                </div>
-            </div>
-        `;
-        
-        chat.insertAdjacentHTML('beforeend', messageHTML);
-        this.scrollToBottom();
-        
-        this.messages.push({ type, content, timestamp: now });
+        const message = document.createElement('div');
+        message.className = 'help-message ' + type;
+        const label = document.createElement('span');
+        label.className = 'help-message-label';
+        label.textContent = type === 'user' ? 'You' : 'Suzi';
+        const bubble = document.createElement('p');
+        bubble.className = 'help-message-bubble';
+        bubble.textContent = content;
+        message.append(label, bubble);
+        this.thread.append(message);
     }
-    
-    showLoading() {
-        const chat = document.getElementById('helpChat');
-        if (!chat) return;
-        
-        const loadingHTML = `
-            <div class="help-loading" id="helpLoading">
-                <div class="help-message-avatar">💡</div>
-                <div class="help-message-content">
-                    <div class="help-message-bubble">
-                        <div class="help-loading-dot"></div>
-                        <div class="help-loading-dot"></div>
-                        <div class="help-loading-dot"></div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        chat.insertAdjacentHTML('beforeend', loadingHTML);
-        this.scrollToBottom();
-    }
-    
-    hideLoading() {
-        const loading = document.getElementById('helpLoading');
-        if (loading) loading.remove();
-    }
-    
+
     showError(message) {
-        const chat = document.getElementById('helpChat');
-        if (!chat) return;
-        
-        const errorHTML = `
-            <div class="help-error">
-                <div class="help-error-icon">⚠️</div>
-                <div>${this.sanitize(message)}</div>
-            </div>
-        `;
-        
-        chat.insertAdjacentHTML('beforeend', errorHTML);
-        this.scrollToBottom();
+        this.error.textContent = message;
+        this.error.hidden = false;
     }
-    
+
     scrollToBottom() {
-        const chat = document.getElementById('helpChat');
-        if (!chat) return;
-        
-        setTimeout(() => {
-            chat.scrollTo({
-                top: chat.scrollHeight,
-                behavior: 'smooth'
-            });
-        }, 100);
-    }
-    
-    sanitize(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML.replace(/\n/g, '<br>');
+        this.chat.scrollTop = this.chat.scrollHeight;
     }
 }
 
-// Initialize on DOM ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        new HelpSystem();
-    });
-} else {
-    new HelpSystem();
-}
-
-// Expose globally
 window.HelpSystem = HelpSystem;
-
-console.log('✅ Help system loaded');
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => HelpSystem.getInstance(), { once: true });
+} else {
+    HelpSystem.getInstance();
+}

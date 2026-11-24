@@ -62,8 +62,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <!-- Help System -->
-    <link rel="stylesheet" href="/help/css/help.css?v=<?php echo $buildTime; ?>">
+    <link rel="stylesheet" href="/shared/css/footer-assistance.css?v=<?= filemtime(__DIR__ . '/../css/footer-assistance.css') ?>">
     
     <style>
         :root {
@@ -196,7 +195,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <?php endif; ?>
     <script src="/shared/js/app.js?v=<?php echo $buildTime; ?>"></script>
     <!-- Help System -->
-    <script src="/help/js/help.js?v=<?php echo $buildTime; ?>"></script>
+    <script src="/help/js/help.js?v=<?= filemtime(__DIR__ . '/../../help/js/help.js') ?>"></script>
    
     <script>
         console.log('%c🏠 Relatives v<?php echo $appVersion; ?>', 'font-size: 16px; font-weight: bold; color: #667eea;');

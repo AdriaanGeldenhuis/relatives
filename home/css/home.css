@@ -33,7 +33,7 @@
 
 .home-page .footer-container { max-width: 1380px; }
 
-.home-page .global-footer :is(.mic-btn:where(:not(.listening, .wake-listening, .processing)), .tracking-btn, .help-btn-footer, .plus-btn) {
+.home-page .global-footer :is(.tracking-btn, .plus-btn) {
     width: 44px;
     height: 44px;
     border: 1px solid #dce2d4;
@@ -42,7 +42,6 @@
     box-shadow: 0 3px 10px #273e2320;
 }
 
-.home-page .global-footer .help-btn-footer svg { stroke: #315737; }
 .home-page .global-footer .plus-btn { background: var(--home-lime); border-color: #c6df73; }
 
 .home-wordmark {

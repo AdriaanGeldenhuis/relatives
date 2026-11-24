@@ -13,6 +13,8 @@
     var recognition = null;
     var currentUtterance = null;
     var isListening = false;
+    var isStarting = false;
+    var recognitionError = false;
     var isSpeaking = false;
     var isProcessing = false;
     var isModalOpen = false;
@@ -20,12 +22,13 @@
 
     var silenceTimer = null;
     var speakTimer = null;
+    var listenTimer = null;
 
     var SILENCE_TIMEOUT = 3000;
     var MAX_LISTEN_TIME = 20000;
 
     // DOM elements
-    var modal, statusIcon, statusText, statusSubtext, transcriptEl, micBtn, suggestionsEl;
+    var modal, statusIcon, statusText, statusSubtext, transcriptEl, micBtn, suggestionsEl, trigger;
 
     function getElements() {
         modal = document.getElementById('voiceModal');
@@ -35,11 +38,12 @@
         transcriptEl = document.getElementById('voiceTranscript');
         micBtn = document.getElementById('modalMicBtn');
         suggestionsEl = document.getElementById('voiceSuggestions');
+        trigger = document.getElementById('micBtn');
     }
 
     function clearTimers() {
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-        if (speakTimer) { clearTimeout(speakTimer); speakTimer = null; }
+        if (listenTimer) { clearTimeout(listenTimer); listenTimer = null; }
     }
 
     function setStatus(icon, text, sub) {
@@ -49,9 +53,17 @@
         if (statusSubtext) statusSubtext.textContent = sub || '';
     }
 
+    function setReady() {
+        setStatus('', 'Tap to speak', 'Ask a question or try a suggestion below.');
+    }
+
     function setTranscript(text) {
         getElements();
-        if (transcriptEl) transcriptEl.textContent = text;
+        if (transcriptEl) {
+            transcriptEl.textContent = text;
+            transcriptEl.hidden = !text;
+            transcriptEl.scrollTop = 0;
+        }
     }
 
     function setMicState(state) {
@@ -59,13 +71,18 @@
         if (micBtn) {
             micBtn.classList.remove('listening', 'speaking', 'thinking');
             if (state) micBtn.classList.add(state);
+            var label = {
+                listening: 'Stop listening',
+                speaking: 'Stop speaking',
+                thinking: 'Suzi is working'
+            }[state] || 'Start listening';
+            micBtn.setAttribute('aria-label', label);
+            micBtn.setAttribute('aria-disabled', String(state === 'thinking'));
         }
-    }
-
-    function showSuggestions(show) {
-        getElements();
         if (suggestionsEl) {
-            suggestionsEl.style.display = show ? 'block' : 'none';
+            suggestionsEl.querySelectorAll('button').forEach(function(button) {
+                button.setAttribute('aria-disabled', String(Boolean(state)));
+            });
         }
     }
 
@@ -83,8 +100,13 @@
         recognition.lang = 'en-US';
 
         recognition.onstart = function() {
-            console.log('[Suzi] Listening...');
+            isStarting = false;
+            if (!isModalOpen) {
+                stopListening();
+                return;
+            }
             isListening = true;
+            setTranscript('');
             setStatus('🎤', 'Listening...', 'Speak now');
             setMicState('listening');
 
@@ -93,7 +115,7 @@
                 if (isListening) stopListening();
             }, SILENCE_TIMEOUT);
 
-            setTimeout(function() {
+            listenTimer = setTimeout(function() {
                 if (isListening) {
                     console.log('[Suzi] Max time reached');
                     stopListening();
@@ -102,6 +124,7 @@
         };
 
         recognition.onresult = function(event) {
+            if (!isModalOpen || !isListening) return;
             if (silenceTimer) clearTimeout(silenceTimer);
 
             var result = event.results[event.results.length - 1];
@@ -123,67 +146,61 @@
         };
 
         recognition.onerror = function(event) {
-            console.log('[Suzi] Error:', event.error);
+            isStarting = false;
             isListening = false;
             clearTimers();
+            if (!isModalOpen || isProcessing || isSpeaking || event.error === 'aborted') return;
 
-            if (event.error === 'not-allowed') {
-                setStatus('🚫', 'Microphone blocked', 'Check browser settings');
-                setMicState(null);
-            } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
-                setStatus('🎤', 'Tap to speak', 'Ask me anything');
-                setMicState(null);
+            recognitionError = true;
+            setMicState(null);
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                setStatus('🚫', 'Microphone blocked', 'Allow microphone access or try a suggestion below.');
+            } else if (event.error === 'no-speech') {
+                setStatus('🎤', 'No speech detected', 'Tap the microphone and try again.');
+            } else {
+                setStatus('🎤', 'Could not start listening', 'Try the microphone again or choose a suggestion.');
             }
         };
 
         recognition.onend = function() {
-            console.log('[Suzi] Recognition ended');
+            isStarting = false;
             isListening = false;
             clearTimers();
-
-            if (isModalOpen && !isProcessing && !isSpeaking) {
-                setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            if (isModalOpen && !isProcessing && !isSpeaking && !recognitionError) {
+                setReady();
                 setMicState(null);
             }
         };
-
-        console.log('[Suzi] Recognition initialized');
     }
 
     function startListening() {
-        if (isListening || isProcessing || isSpeaking) {
-            console.log('[Suzi] Busy, cannot listen');
+        if (!isModalOpen || isStarting || isListening || isProcessing || isSpeaking) return;
+
+        if (!recognition) {
+            setStatus('🎤', 'Microphone unavailable', 'Try a suggestion below or use Help to type a question.');
             return;
         }
 
-        stopSpeaking();
-
-        if (!recognition) {
-            initRecognition();
-        }
-
-        if (recognition) {
-            try {
-                recognition.start();
-            } catch (e) {
-                console.log('[Suzi] Start error:', e);
-                try {
-                    recognition.abort();
-                    setTimeout(function() { recognition.start(); }, 100);
-                } catch (e2) {
-                    console.error('[Suzi] Failed to start:', e2);
-                }
-            }
+        recognitionError = false;
+        isStarting = true;
+        setStatus('🎤', 'Starting microphone…', '');
+        setMicState('thinking');
+        try {
+            recognition.start();
+        } catch (error) {
+            isStarting = false;
+            setStatus('🎤', 'Could not start listening', 'Tap the microphone to try again.');
+            setMicState(null);
         }
     }
 
     function stopListening() {
         clearTimers();
-        isListening = false;
-
-        if (recognition) {
-            try { recognition.abort(); } catch (e) {}
+        if (recognition && (isStarting || isListening)) {
+            try { recognition.abort(); } catch (error) {}
         }
+        isStarting = false;
+        isListening = false;
     }
 
     // Text to Speech
@@ -193,10 +210,11 @@
             return;
         }
 
+        if (!isModalOpen) return;
         if (!synth) {
-            console.log('[Suzi] No speech synthesis');
             setTranscript(text);
-            if (callback) setTimeout(callback, 1000);
+            setMicState(null);
+            if (callback) callback();
             return;
         }
 
@@ -206,7 +224,6 @@
         setStatus('🔊', 'Speaking...', '');
         setMicState('speaking');
         setTranscript(text);
-        showSuggestions(false);
 
         // Cancel any current speech
         synth.cancel();
@@ -228,52 +245,30 @@
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
 
-        // Fallback timer
-        var fallbackMs = Math.max(3000, text.length * 80);
-        speakTimer = setTimeout(function() {
-            console.log('[Suzi] Speech timeout fallback');
-            isSpeaking = false;
-            setMicState(null);
-            if (callback) callback();
-        }, fallbackMs);
-
-        utterance.onstart = function() {
-            console.log('[Suzi] Speech started');
-        };
-
-        utterance.onend = function() {
-            console.log('[Suzi] Speech ended');
+        function finishSpeaking() {
+            if (currentUtterance !== utterance) return;
+            currentUtterance = null;
             clearTimeout(speakTimer);
             isSpeaking = false;
             setMicState(null);
             if (callback) callback();
-        };
+        }
 
-        utterance.onerror = function(e) {
-            console.log('[Suzi] Speech error:', e.error);
-            clearTimeout(speakTimer);
-            isSpeaking = false;
-            setMicState(null);
-            if (callback) callback();
-        };
-
+        utterance.onend = finishSpeaking;
+        utterance.onerror = finishSpeaking;
         currentUtterance = utterance;
+        speakTimer = setTimeout(finishSpeaking, Math.max(3000, text.length * 80));
 
-        // Small delay helps Chrome
         setTimeout(function() {
-            synth.speak(utterance);
+            if (currentUtterance === utterance) synth.speak(utterance);
         }, 100);
     }
 
     function stopSpeaking() {
         clearTimeout(speakTimer);
         isSpeaking = false;
-
-        if (synth) {
-            synth.cancel();
-        }
-
         currentUtterance = null;
+        if (synth) synth.cancel();
     }
 
     // Handle user input
@@ -284,9 +279,7 @@
         var lower = text.toLowerCase().trim();
         if (lower === 'bye' || lower === 'goodbye' || lower === 'close' ||
             lower === 'stop' || lower === 'exit' || lower === 'cancel') {
-            speak('Goodbye!', function() {
-                setTimeout(closeModal, 500);
-            });
+            speak('Goodbye!', closeModal);
             return;
         }
 
@@ -294,8 +287,9 @@
         isProcessing = true;
         setStatus('🧠', 'Thinking...', '');
         setMicState('thinking');
-        showSuggestions(false);
 
+        setTranscript(text);
+        var requestConversation = conversation;
         conversation.push({ role: 'user', content: text });
 
         fetch('/api/voice-chat.php', {
@@ -309,6 +303,7 @@
         })
         .then(function(response) { return response.json(); })
         .then(function(data) {
+            if (!isModalOpen || conversation !== requestConversation) return;
             isProcessing = false;
 
             if (data.success && data.response) {
@@ -325,22 +320,22 @@
                 } else {
                     // No action: just speak
                     speak(data.response, function() {
-                        setStatus('🎤', 'Tap to speak', 'Ask me anything');
-                        showSuggestions(conversation.length <= 2);
+                        setReady();
                     });
                 }
             } else {
                 speak('Sorry, I had trouble with that. Please try again.', function() {
-                    setStatus('🎤', 'Tap to speak', 'Ask me anything');
+                    setReady();
                 });
             }
         })
         .catch(function(error) {
+            if (!isModalOpen || conversation !== requestConversation) return;
             console.error('[Suzi] API error:', error);
             isProcessing = false;
 
             speak('Sorry, something went wrong. Please try again.', function() {
-                setStatus('🎤', 'Tap to speak', 'Ask me anything');
+                setReady();
             });
         });
     }
@@ -367,27 +362,21 @@
             actionFn = function(cb) { createReminder(action.data, cb); };
         }
 
-        if (actionFn) {
-            actionFn(function(success, errorMsg) {
-                if (success) {
-                    speak(aiResponse, function() {
-                        setStatus('🎤', 'Tap to speak', 'Ask me anything');
-                        showSuggestions(false);
-                    });
-                } else {
-                    var errText = errorMsg || 'Sorry, I couldn\'t complete that action. Please try again.';
-                    speak(errText, function() {
-                        setStatus('🎤', 'Tap to speak', 'Ask me anything');
-                        showSuggestions(false);
-                    });
-                }
-            });
-        } else {
-            speak(aiResponse, function() {
-                setStatus('🎤', 'Tap to speak', 'Ask me anything');
-                showSuggestions(false);
-            });
+        if (!actionFn) {
+            speak(aiResponse, setReady);
+            return;
         }
+
+        var actionConversation = conversation;
+        isProcessing = true;
+        actionFn(function(success, errorMsg) {
+            if (!isModalOpen || conversation !== actionConversation) return;
+            isProcessing = false;
+            var reply = success
+                ? aiResponse
+                : errorMsg || 'Sorry, I couldn’t complete that action. Please try again.';
+            speak(reply, setReady);
+        });
     }
 
     // Execute non-data actions (navigation etc)
@@ -410,14 +399,17 @@
         };
 
         if (action.type === 'navigate' && action.data && action.data.to) {
+            var navigationConversation = conversation;
+            isProcessing = true;
+            setMicState('thinking');
             setStatus('🧭', 'Opening...', '');
             setTimeout(function() {
+                if (!isModalOpen || conversation !== navigationConversation) return;
                 closeModal();
                 window.location.href = paths[action.data.to] || '/home/';
             }, 500);
         } else {
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
-            showSuggestions(conversation.length <= 2);
+            setReady();
         }
     }
 
@@ -568,47 +560,29 @@
         console.log('[Suzi] Opening modal');
         getElements();
 
-        if (!modal) {
-            console.error('[Suzi] Modal element not found!');
-            return;
-        }
+        if (!modal || modal.open) return;
 
-        // Reset state
-        isModalOpen = true;
-        isListening = false;
-        isSpeaking = false;
-        isProcessing = false;
         conversation = [];
-        clearTimers();
-        stopSpeaking();
-        stopListening();
-
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-
-        setStatus('🎤', 'Tap to speak', 'Ask me anything');
-        setTranscript("Hi! I'm Suzi. Tap the microphone to talk to me!");
+        recognitionError = false;
+        isModalOpen = true;
+        window.closePlusMenu?.();
+        setReady();
+        setTranscript('');
         setMicState(null);
-        showSuggestions(true);
+        modal.showModal();
+        trigger?.setAttribute('aria-expanded', 'true');
     }
 
     function closeModal() {
-        console.log('[Suzi] Closing modal');
-
-        stopListening();
-        stopSpeaking();
-        clearTimers();
+        if (!isModalOpen) return;
 
         isModalOpen = false;
-        isListening = false;
-        isSpeaking = false;
+        stopListening();
+        stopSpeaking();
         isProcessing = false;
-
-        getElements();
-        if (modal) {
-            modal.classList.remove('active');
-        }
-        document.body.style.overflow = '';
+        modal.close();
+        trigger?.setAttribute('aria-expanded', 'false');
+        trigger?.focus({ preventScroll: true });
     }
 
     function toggleListening() {
@@ -616,25 +590,34 @@
 
         if (isSpeaking) {
             stopSpeaking();
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            setReady();
             setMicState(null);
         } else if (isListening) {
             stopListening();
-            setStatus('🎤', 'Tap to speak', 'Ask me anything');
+            setReady();
             setMicState(null);
-        } else if (!isProcessing) {
+        } else if (!isStarting && !isProcessing) {
             startListening();
         }
     }
 
     function executeSuggestion(text) {
-        if (isProcessing || isSpeaking || isListening) return;
+        if (!isModalOpen || isStarting || isProcessing || isSpeaking || isListening) return;
         handleUserInput(text);
     }
 
     // Initialize
-    console.log('[Suzi] Initializing...');
+    getElements();
     initRecognition();
+    if (modal) {
+        modal.addEventListener('cancel', function(event) {
+            event.preventDefault();
+            closeModal();
+        });
+        modal.addEventListener('click', function(event) {
+            if (event.target === modal) closeModal();
+        });
+    }
 
     // Preload voices
     if (synth) {

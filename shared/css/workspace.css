@@ -13,7 +13,7 @@
 
 .workspace-page .app-loader { background: var(--workspace-forest); }
 
-.workspace-page .global-footer :is(.mic-btn:where(:not(.listening, .wake-listening, .processing)), .help-btn-footer, .tracking-btn, .plus-btn) {
+.workspace-page .global-footer :is(.tracking-btn, .plus-btn) {
     border: 1px solid #dce2d4;
     background: var(--workspace-paper);
     color: var(--workspace-ink);
@@ -21,7 +21,6 @@
 }
 
 .workspace-page .global-footer .plus-btn { background: var(--workspace-lime); }
-.workspace-page .global-footer .help-btn-footer svg { stroke: #315737; }
 
 .workspace-page :focus-visible {
     outline: 2px solid #bde58d;

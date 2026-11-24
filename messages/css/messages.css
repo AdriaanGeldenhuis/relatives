@@ -27,7 +27,7 @@
     color-scheme: light;
 }
 
-.messages-page .global-footer :is(.mic-btn:where(:not(.listening, .wake-listening, .processing)), .help-btn-footer, .tracking-btn, .plus-btn) {
+.messages-page .global-footer :is(.tracking-btn, .plus-btn) {
     width: 42px;
     height: 42px;
     background: var(--card);
@@ -35,7 +35,6 @@
     border: 1px solid var(--line);
     box-shadow: 0 3px 10px #273e2320;
 }
-.messages-page .global-footer .help-btn-footer svg { stroke: var(--accent); }
 .messages-page .global-footer .plus-btn { background: var(--brand); }
 
 .messages-page .app-loader { display: none; }

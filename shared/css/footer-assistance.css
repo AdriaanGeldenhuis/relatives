@@ -1,0 +1,387 @@
+/* Suzi and Help share the footer controls and dialog frame. */
+:root {
+    --assist-paper: #fbfaf2;
+    --assist-ink: #182c21;
+    --assist-muted: #4b5e50;
+    --assist-forest: #153327;
+    --assist-lime: #def788;
+    --assist-sage: #e8efde;
+    --assist-line: #d7dfce;
+    --assist-focus: #437a49;
+}
+
+.global-footer .footer-assist-btn {
+    -webkit-tap-highlight-color: transparent;
+    gap: 7px;
+    min-height: 44px;
+    padding: 5px 12px 5px 5px;
+    border: 1px solid #c4d0bd;
+    border-radius: 999px;
+    background: var(--assist-paper);
+    color: var(--assist-forest);
+    box-shadow: 0 3px 10px #1022192b;
+    font: 750 13px/1 system-ui, sans-serif;
+    transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.global-footer .mic-btn {
+    border-color: #557357;
+    background: var(--assist-forest);
+    color: var(--assist-paper);
+}
+
+.footer-assist-icon,
+.assist-header-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: 30px;
+    block-size: 30px;
+    border-radius: 50%;
+    background: var(--assist-sage);
+    color: var(--assist-forest);
+    font-size: 17px;
+    font-weight: 800;
+}
+
+.mic-btn .footer-assist-icon,
+.voice-modal .assist-header-icon {
+    background: var(--assist-lime);
+}
+
+.global-footer .footer-assist-btn[aria-expanded="true"] {
+    box-shadow: 0 0 0 3px #82aa5480, 0 4px 14px #10221945;
+}
+
+@media (hover: hover) {
+    .global-footer .help-btn-footer:hover { background: var(--assist-sage); }
+    .global-footer .mic-btn:hover { background: #27533d; }
+
+    .global-footer .footer-assist-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 14px #10221938;
+    }
+}
+
+.global-footer .footer-assist-btn:active { transform: scale(.96); }
+
+.global-footer .footer-assist-btn:focus-visible,
+.footer-assist-dialog :focus-visible {
+    outline: 2px solid var(--assist-focus);
+    outline-offset: 2px;
+}
+
+.global-footer .footer-assist-btn:focus-visible {
+    box-shadow: 0 0 0 2px var(--assist-paper);
+}
+
+body:has(.footer-assist-dialog[open]) { overflow: hidden; }
+
+.footer-assist-dialog {
+    -webkit-tap-highlight-color: transparent;
+    position: fixed;
+    inset: auto 16px max(16px, env(safe-area-inset-bottom), var(--assist-viewport-cutoff, 0px));
+    box-sizing: border-box;
+    width: min(440px, calc(100% - 32px));
+    max-width: none;
+    max-height: none;
+    margin: 0 auto;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--assist-line);
+    border-radius: 24px;
+    background: var(--assist-paper);
+    color: var(--assist-ink);
+    color-scheme: light;
+    box-shadow: 0 18px 56px #10221955;
+    font: 400 15px/1.45 var(--family-body, system-ui), sans-serif;
+    text-align: start;
+}
+
+.footer-assist-dialog[open] { animation: assist-rise 190ms ease-out; }
+.footer-assist-dialog::backdrop { background: #10221985; }
+
+@keyframes assist-rise {
+    from { transform: translateY(12px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.assist-panel {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 32px);
+    max-height: calc(var(--assist-viewport-height, 100dvh) - 16px - max(16px, env(safe-area-inset-bottom)));
+}
+
+.assist-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: radial-gradient(ellipse at top right, #365b41, transparent 72%), var(--assist-forest);
+    color: var(--assist-paper);
+}
+
+.assist-header-icon { inline-size: 42px; block-size: 42px; font-size: 22px; }
+
+.assist-header h2 {
+    margin: 0;
+    color: inherit;
+    font: 400 clamp(24px, 5vw, 30px)/1.15 Georgia, 'Times New Roman', serif;
+    letter-spacing: -.025em;
+}
+
+.assist-header p {
+    margin: 2px 0 0;
+    color: #e2eddc;
+    font-size: 13px;
+}
+
+.assist-close {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-inline-start: auto;
+    padding: 0;
+    border: 1px solid #a0b59880;
+    border-radius: 14px;
+    background: #ffffff10;
+    color: inherit;
+    font: 26px/1 system-ui, sans-serif;
+    cursor: pointer;
+}
+
+.assist-header .assist-close:focus-visible { outline-color: var(--assist-lime); }
+.assist-close:is(:hover, :active) { background: #ffffff26; }
+
+.assist-scroll {
+    min-height: 0;
+    padding: 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.assist-prompt-heading {
+    margin: 0 0 8px;
+    color: var(--assist-ink);
+    font-size: 14px;
+    font-weight: 750;
+}
+
+.assist-prompts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.assist-prompt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+    padding: 8px 10px;
+    border: 1px solid var(--assist-line);
+    border-radius: 12px;
+    background: var(--assist-sage);
+    color: var(--assist-ink);
+    font: 700 13px/1.3 system-ui, sans-serif;
+    text-align: start;
+    cursor: pointer;
+    transition: background 150ms ease, transform 150ms ease;
+}
+
+.assist-prompt:not(:disabled, [aria-disabled="true"]):is(:hover, :focus-visible) { background: #dce9cc; }
+.assist-prompt:not(:disabled, [aria-disabled="true"]):active { transform: scale(.97); }
+.assist-prompt:is(:disabled, [aria-disabled="true"]) { opacity: .58; cursor: default; }
+
+.assist-wave {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+}
+
+.assist-wave i {
+    width: 2px;
+    height: 12px;
+    border-radius: 2px;
+    background: currentColor;
+}
+
+.assist-wave i:nth-child(odd) { height: 7px; }
+.assist-wave i:nth-child(3) { height: 16px; }
+
+.voice-console {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 16px;
+    padding: 13px;
+    border: 1px solid var(--assist-line);
+    border-radius: 18px;
+    background: linear-gradient(115deg, #e8f0db, #f4f6eb);
+}
+
+.modal-mic-btn {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 66px;
+    height: 66px;
+    padding: 0;
+    border: 1px solid #a2bd64;
+    border-radius: 50%;
+    background: var(--assist-lime);
+    color: var(--assist-forest);
+    box-shadow: 0 3px 0 #93ab5f;
+    cursor: pointer;
+    transition: transform 150ms ease, background 150ms ease;
+}
+
+.modal-mic-btn:not([aria-disabled="true"]):hover { background: #e7fba7; }
+.modal-mic-btn:not([aria-disabled="true"]):active { transform: translateY(2px); }
+.modal-mic-btn .assist-wave { display: none; }
+.modal-mic-btn[aria-disabled="true"] { cursor: wait; }
+
+.modal-mic-btn:is(.listening, .speaking, .thinking) {
+    border-color: var(--assist-forest);
+    background: var(--assist-forest);
+    color: var(--assist-lime);
+    box-shadow: 0 0 0 4px #83a65246;
+}
+
+.modal-mic-btn:is(.listening, .speaking, .thinking) svg { display: none; }
+.modal-mic-btn:is(.listening, .speaking, .thinking) .assist-wave { display: inline-flex; gap: 4px; }
+.modal-mic-btn .assist-wave i { width: 3px; animation: assist-wave 950ms ease-in-out infinite alternate; }
+.modal-mic-btn .assist-wave i:nth-child(2n) { animation-delay: 180ms; }
+.modal-mic-btn .assist-wave i:nth-child(3) { animation-delay: 380ms; }
+
+@keyframes assist-wave {
+    from { transform: scaleY(.65); }
+    to { transform: scaleY(1.65); }
+}
+
+.voice-status strong { font-size: 16px; }
+.voice-status p { margin: 3px 0 0; color: var(--assist-muted); font-size: 13px; }
+.voice-status :empty { display: none; }
+
+.voice-transcript {
+    max-height: 180px;
+    overflow: auto;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--assist-line);
+    border-radius: 12px;
+    background: #fffdf7;
+}
+
+.help-welcome { margin-bottom: 14px; }
+.help-welcome p { margin: 0 0 12px; color: var(--assist-muted); }
+.help-thread:empty { display: none; }
+
+.help-message,
+.help-loading,
+.help-error { margin-top: 10px; }
+
+.help-message {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.help-message.user { align-items: flex-end; }
+
+.help-message-bubble {
+    max-width: 90%;
+    margin: 0;
+    padding: 9px 12px;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    border: 1px solid var(--assist-line);
+    border-radius: 14px 14px 14px 4px;
+    background: #fffdf7;
+}
+
+.help-message.user .help-message-bubble {
+    border-color: #cadc99;
+    border-radius: 14px 14px 4px;
+    background: #e8f3cd;
+}
+
+.help-message-label {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--assist-muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.help-loading { color: var(--assist-muted); font-size: 13px; }
+.help-error { color: #8c332b; font-size: 13px; }
+
+.help-input-wrapper {
+    display: flex;
+    flex: none;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--assist-line);
+    background: #f3f4eb;
+}
+
+.help-input {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    resize: none;
+    border: 1px solid #becab7;
+    border-radius: 12px;
+    background: #fffdf7;
+    color: var(--assist-ink);
+    font: inherit;
+    font-size: 16px;
+}
+
+.help-input::placeholder { color: var(--assist-muted); }
+
+.help-send-btn {
+    flex: none;
+    min-width: 60px;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid #b8ce79;
+    border-radius: 12px;
+    background: var(--assist-lime);
+    color: var(--assist-ink);
+    font: 750 14px/1 system-ui, sans-serif;
+    cursor: pointer;
+}
+
+.help-send-btn:not(:disabled):is(:hover, :active) { background: #cce77b; }
+
+.help-send-btn:disabled {
+    border-color: var(--assist-line);
+    background: var(--assist-sage);
+    color: var(--assist-muted);
+    cursor: default;
+}
+
+@media (min-width: 600px) {
+    .footer-assist-dialog.voice-modal { margin-inline: 4px auto; }
+    .footer-assist-dialog.help-panel { margin-inline: auto 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .footer-assist-dialog[open],
+    .modal-mic-btn .assist-wave i { animation: none; }
+
+    .global-footer .footer-assist-btn,
+    .footer-assist-dialog :is(.modal-mic-btn, .assist-prompt) { transition: none; }
+}
