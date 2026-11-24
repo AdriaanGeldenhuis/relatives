@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#06070f">
+    <title>Home offline - Relatives</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/home/css/home.css">
+    <script src="/home/js/home.js" defer></script>
+</head>
+<body class="offline-home">
+    <div class="aurora" aria-hidden="true">
+        <div class="aurora-blob aurora-a"></div>
+        <div class="aurora-blob aurora-b"></div>
+        <div class="stars stars-a"></div>
+    </div>
+
+    <main class="main-content">
+        <div class="hub">
+            <section class="hero" aria-labelledby="offline-title">
+                <div class="hero-main">
+                    <div class="hero-greeting">
+                        <p class="hero-kicker"><span id="heroDate"></span></p>
+                        <h1 class="hero-title" id="offline-title">Relatives Home</h1>
+                        <p class="hero-sub" id="offline-app-status" role="status">You’re offline. Family activity and apps will be available when you reconnect.</p>
+                        <div class="hero-actions">
+                            <a class="pill-btn" href="/home/">Try again <span aria-hidden="true">↻</span></a>
+                        </div>
+                    </div>
+                    <div class="hero-clock" aria-hidden="true">
+                        <div class="clock-ring" id="clockRing">
+                            <div class="clock-core">
+                                <span class="clock-hm" id="clockHM"></span>
+                                <span class="clock-sec" id="clockSec"></span>
+                            </div>
+                        </div>
+                        <span class="clock-cap" id="dayCap"></span>
+                    </div>
+                </div>
+            </section>
+            <ul class="launcher offline-apps" aria-label="Family apps available online">
+                <li><a class="launch-tile" data-app-url="/messages/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">💬</span></span><span class="launch-label">Messages</span></a></li>
+                <li><a class="launch-tile" data-app-url="/shopping/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">🛒</span></span><span class="launch-label">Shopping</span></a></li>
+                <li><a class="launch-tile" data-app-url="/calendar/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">📅</span></span><span class="launch-label">Calendar</span></a></li>
+                <li><a class="launch-tile" data-app-url="/notes/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">📝</span></span><span class="launch-label">Notes</span></a></li>
+                <li><a class="launch-tile" data-app-url="/schedule/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">⏰</span></span><span class="launch-label">Schedule</span></a></li>
+                <li><a class="launch-tile" data-app-url="/tracking/app/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">📍</span></span><span class="launch-label">Tracking</span></a></li>
+                <li><a class="launch-tile" data-app-url="/weather/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">🌤️</span></span><span class="launch-label">Weather</span></a></li>
+                <li><a class="launch-tile" data-app-url="/holiday_traveling/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">✈️</span></span><span class="launch-label">Travel</span></a></li>
+                <li><a class="launch-tile" data-app-url="/games/" role="link" aria-disabled="true"><span class="launch-chip" aria-hidden="true"><span class="launch-icon">🎮</span></span><span class="launch-label">Games</span></a></li>
+            </ul>
+        </div>
+    </main>
+</body>
+</html>

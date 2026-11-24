@@ -1254,3 +1254,41 @@ a.pulse-tile:hover {
 
     body { background: #fff; color: #000; }
 }
+
+.offline-status {
+    margin: 0;
+    padding: 10px 14px;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: var(--radius);
+    background: #282113;
+    color: #fde7a1;
+    font-size: 0.875rem;
+}
+
+.offline-home {
+    margin: 0;
+}
+
+.offline-home .hero-kicker {
+    color: var(--text-1);
+}
+
+.offline-home .hero-title {
+    margin: 0;
+}
+
+.offline-home .offline-apps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.offline-home .hero,
+.offline-home .launch-tile {
+    animation: none;
+}
+
+.offline-home .launch-tile[aria-disabled="true"] {
+    opacity: 0.7;
+    pointer-events: none;
+}

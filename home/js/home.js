@@ -9,6 +9,41 @@
 (function () {
     'use strict';
 
+    const connectionStatus = document.getElementById('home-connection');
+    if (connectionStatus) {
+        const updateConnection = () => { connectionStatus.hidden = navigator.onLine; };
+        window.addEventListener('online', updateConnection);
+        window.addEventListener('offline', updateConnection);
+        updateConnection();
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/home/sw.js', { updateViaCache: 'none' })
+                .catch((error) => console.warn('Offline home could not be prepared.', error));
+        }
+    }
+
+    const offlineAppStatus = document.getElementById('offline-app-status');
+    if (offlineAppStatus) {
+        const shortcuts = document.querySelectorAll('[data-app-url]');
+        const showConnected = (connected) => {
+            offlineAppStatus.textContent = connected
+                ? 'You’re back online. Choose an app or reload home.'
+                : 'You’re offline. Family activity and apps will be available when you reconnect.';
+            shortcuts.forEach((shortcut) => {
+                if (connected) {
+                    shortcut.href = shortcut.dataset.appUrl;
+                    shortcut.removeAttribute('aria-disabled');
+                } else {
+                    shortcut.removeAttribute('href');
+                    shortcut.setAttribute('aria-disabled', 'true');
+                }
+            });
+        };
+
+        window.addEventListener('online', () => showConnected(true));
+        window.addEventListener('offline', () => showConnected(false));
+    }
+
     function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
     // Flag @property support so the rotating hero border only runs where it animates smoothly

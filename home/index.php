@@ -11,6 +11,8 @@ declare(strict_types=1);
 // Start session with correct name to match bootstrap config
 require_once __DIR__ . '/../core/session_boot.php';
 
+header('Cache-Control: private, no-store');
+
 // Quick session check
 if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
     header('Location: /login.php', true, 302);
@@ -284,6 +286,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <main class="main-content">
     <div class="hub">
+        <p class="offline-status" id="home-connection" role="status" hidden>
+            You’re offline. Live family activity and apps need a connection.
+        </p>
 
         <?php if ($showWelcome): ?>
         <div class="welcome-banner" role="status">
