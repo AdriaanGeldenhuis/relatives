@@ -2,7 +2,8 @@
     'use strict';
 
     const $ = id => document.getElementById(id);
-    const { notes: initialNotes, csrf, prefill, maxPhotos } = JSON.parse($('notesData').textContent);
+    const { notes: initialNotes, csrf, prefill, maxPhotos, event: initialEvent, openNote: initialNote, linkNotice } = JSON.parse($('notesData').textContent);
+    const planner = window.RelativesPlanner;
     const notes = new Map(initialNotes.map(note => [note.id, note]));
     const colors = {
         '#ffffff': 'paper', '#ffeb3b': 'honey', '#ff9800': 'peach', '#e91e63': 'rose',
@@ -11,6 +12,7 @@
     const taskPattern = /^[ \t]*[-*] \[([ xX])\][ \t]+(\S.*)$/u;
     const taskPrefix = /^([ \t]*[-*] )\[[ xX]\](?:[ \t]+|$)/;
     const bulletPrefix = /^([ \t]*)[-*•][ \t]+/;
+    const eventMarker = /^\[Calendar event\]\(\/calendar\/\?event=[1-9][0-9]*\)$/;
     const dateFormat = new Intl.DateTimeFormat('en-ZA', {
         day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Johannesburg'
     });
@@ -27,6 +29,9 @@
     const deleteButton = $('notesConfirmDelete');
     const pending = new Set();
     let filter = 'all';
+    let sourceEvent = null;
+    let boardRevision = 0;
+    let boardRefreshTimer;
     let layout = preference('layout') === 'list' ? 'list' : 'grid';
     let editing = null;
     let editorType = 'text';
@@ -99,6 +104,7 @@
         }
 
         note.body.split('\n').forEach((line, index) => {
+            if (eventMarker.test(line)) return;
             const match = taskPattern.exec(line);
             if (!match) {
                 flushTasks();
@@ -171,7 +177,8 @@
             if (filter === 'text' && note.type !== 'text') return false;
             if (filter === 'photos' && !note.images.length) return false;
             if (filter === 'voice' && note.type !== 'voice') return false;
-            const searchable = `${noteTitle(note)} ${note.body} ${note.author}`.toLocaleLowerCase();
+            const eventTitles = (note.eventLinks || []).map(event => event.title).join(' ');
+            const searchable = `${noteTitle(note)} ${note.body} ${note.author} ${eventTitles}`.toLocaleLowerCase();
             return terms.every(word => searchable.includes(word));
         });
         const sort = $('notesSort').value;
@@ -206,14 +213,19 @@
         const [glyph, kind] = noteType(note);
         const voice = note.type === 'voice';
         const text = voice ? null : noteBody(note);
+        const events = note.eventLinks || [];
         $('notesReaderSurface').dataset.tone = colors[note.color.toLowerCase()] || 'paper';
         $('notesReaderKind').innerHTML = `${icon(glyph)} ${kind}`;
         $('notesReaderHeading').textContent = noteTitle(note);
         $('notesReaderContent').innerHTML = `<div class="notes-reader-meta">${authorLine(note)}</div>
             ${voice ? `<div class="notes-audio">${audioPlayer(note)}</div>` : `${text.progress}${text.content}`}
-            ${note.images.length ? `<div class="notes-reader-photos">${note.images.map((path, index) => photoButton(path, index)).join('')}</div>` : ''}`;
+            ${note.images.length ? `<div class="notes-reader-photos">${note.images.map((path, index) => photoButton(path, index)).join('')}</div>` : ''}
+            ${events.length ? `<div class="notes-linked-events"><h3>Calendar events</h3>${events.map(event => event.title
+                ? `<a href="/calendar/?event=${encodeURIComponent(event.id)}">${escape(event.title)} ${icon('arrow')}</a>`
+                : '<span>Event unavailable</span>').join('')}</div>` : ''}`;
         $('notesReaderActions').innerHTML = `<button type="button" class="notes-button notes-reader-delete" data-action="delete">${icon('trash')} Delete</button>
             ${voice ? '' : `<button type="button" class="notes-button" data-action="copy">${icon('copy')} Copy</button>`}
+            <a class="notes-button notes-calendar-action" href="/calendar/?new=1&amp;note=${encodeURIComponent(note.id)}">${icon('plus')} Plan event</a>
             <button type="button" class="notes-button" data-action="pin" aria-pressed="${note.pinned}">${icon('pin')} ${note.pinned ? 'Unpin' : 'Pin'}</button>
             <button type="button" class="notes-button notes-button-primary" data-action="edit">${icon('pencil')} Edit</button>`;
     }
@@ -244,6 +256,7 @@
             error.missing = response.status === 404;
             throw error;
         }
+        planner.broadcast(planner.noteSignal);
         return result;
     }
 
@@ -261,6 +274,7 @@
     }
 
     function refreshNote(note, id) {
+        boardRevision++;
         if (note) notes.set(note.id, note);
         else notes.delete(id);
         renderBoard();
@@ -268,6 +282,29 @@
             if (note) renderReader(note);
             else reader.close();
         }
+    }
+
+    function refreshLinkedNotes() {
+        clearTimeout(boardRefreshTimer);
+        boardRefreshTimer = setTimeout(async () => {
+            const revision = ++boardRevision;
+            try {
+                const response = await fetch('/notes/?ajax=1');
+                if (!response.ok || response.redirected) return;
+                const data = await response.json();
+                if (!data.success || revision !== boardRevision) return;
+                notes.clear();
+                data.notes.forEach(note => notes.set(note.id, note));
+                renderBoard();
+                if (reader.open && readerId) {
+                    const displayed = notes.get(readerId);
+                    if (displayed) renderReader(displayed);
+                    else reader.close();
+                }
+            } catch {
+                // The current board remains usable if a background refresh fails.
+            }
+        }, 160);
     }
 
     function recordMutationError(error, id) {
@@ -312,8 +349,9 @@
         return JSON.stringify([$('notesTitle').value, bodyInput.value, form.elements.color.value, photoPaths]);
     }
 
-    function openEditor(type, note = null, text = '') {
+    function openEditor(type, note = null, text = '', linkedEvent = null) {
         editing = note;
+        sourceEvent = linkedEvent;
         editorType = note?.type || (type === 'voice' ? 'voice' : 'text');
         previousFocus = document.activeElement;
         const recording = editorType === 'voice' && !note;
@@ -322,7 +360,14 @@
         clearPhotoFiles();
         photoPaths = note ? [...note.images] : [];
         $('notesEditorHeading').textContent = note ? 'Edit note' : { text: 'New note', list: 'New checklist', voice: 'Record a voice note' }[type];
-        $('notesTitle').value = note?.title || '';
+        $('notesTitle').value = note?.title || linkedEvent?.title.slice(0, 160) || '';
+        const eventHint = $('notesSourceEvent');
+        eventHint.hidden = !linkedEvent;
+        if (linkedEvent) {
+            const link = eventHint.querySelector('a');
+            link.href = '/calendar/?event=' + encodeURIComponent(linkedEvent.id);
+            link.textContent = linkedEvent.title;
+        }
         bodyInput.value = note?.body ?? (type === 'list' ? '- [ ] ' : text);
         bodyInput.placeholder = type === 'list' ? 'Add a checklist item…' : 'Write something to remember…';
         $('notesRecorder').hidden = !recording;
@@ -383,6 +428,8 @@
             data.set('note_id', editing.id);
             data.set('version', editing.version);
             editing.images.filter(path => !photoPaths.includes(path)).forEach(path => data.append('remove_images[]', path));
+        } else if (sourceEvent) {
+            data.set('event_id', sourceEvent.id);
         }
         photoFiles.forEach(({ file }) => data.append('images[]', file));
         if (editorType === 'voice' && !editing) {
@@ -821,6 +868,21 @@
         renderBoard();
     });
     window.addEventListener('relatives:note-created', event => refreshNote(event.detail, event.detail.id));
+    window.addEventListener('storage', event => {
+        if (event.key === planner.noteSignal || event.key === planner.eventSignal) refreshLinkedNotes();
+    });
+    window.addEventListener('relatives:event-saved', refreshLinkedNotes);
+    window.addEventListener('pageshow', event => {
+        if (event.persisted) refreshLinkedNotes();
+    });
     updateLayout();
-    if (prefill) openEditor('text', null, prefill);
+    if (initialNote) {
+        const note = notes.get(initialNote);
+        if (note) openNote(note);
+        else notify('This note is no longer available.');
+    } else if (initialEvent || prefill) {
+        openEditor('text', null, prefill, initialEvent);
+        history.replaceState(null, '', '/notes/');
+    }
+    if (linkNotice) notify(linkNotice);
 })();

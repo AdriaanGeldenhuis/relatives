@@ -44,11 +44,24 @@
         document.getElementById('timelineEventData').replaceChildren(values);
         document.getElementById('timelineEventNotes').textContent = item.notes || '';
         document.getElementById('timelineEditLink').href = '/schedule/?' + new URLSearchParams({ date, event: item.id });
+        document.getElementById('timelineCalendarLink').href = '/calendar/?' + new URLSearchParams({ date, event: item.id });
         dialog.showModal();
     });
 
     document.getElementById('timelineClose').addEventListener('click', () => dialog.close());
     dialog.addEventListener('click', event => {
         if (event.target === dialog) dialog.close();
+    });
+    let refreshOnClose = false;
+    function refreshTimeline() {
+        if (dialog.open) refreshOnClose = true;
+        else location.reload();
+    }
+    window.addEventListener('storage', event => {
+        if (event.key === window.RelativesPlanner.eventSignal) refreshTimeline();
+    });
+    window.addEventListener('relatives:event-saved', refreshTimeline);
+    dialog.addEventListener('close', () => {
+        if (refreshOnClose) location.reload();
     });
 })();

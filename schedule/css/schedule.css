@@ -1,4 +1,4 @@
-body.workspace-page[data-area="schedule"] {
+body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
     --planner-canvas: #f4f3e9;
     --planner-paper: #fffdf6;
     --planner-ink: #1e3128;
@@ -138,7 +138,7 @@ body.workspace-page[data-area="schedule"] {
     box-shadow: 0 8px 24px #142f1d20;
 }
 
-.planner-tools > div button, .planner-event-menu > div button {
+.planner-tools > div button, .planner-event-menu > div :is(button, a) {
     color: inherit;
     background: transparent;
     border: 0;
@@ -146,9 +146,10 @@ body.workspace-page[data-area="schedule"] {
     padding: 8px 12px;
     text-align: start;
     font-size: .83rem;
+    text-decoration: none;
     cursor: pointer;
 }
-.planner-tools > div button:hover, .planner-event-menu > div button:hover { background: #eef1e6; }
+.planner-tools > div button:hover, .planner-event-menu > div :is(button, a):hover { background: #eef1e6; }
 
 #scheduleDatePanel { position: relative; margin-top: 17px; }
 #scheduleDatePanel[aria-busy="true"]::after {

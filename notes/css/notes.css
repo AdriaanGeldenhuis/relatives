@@ -475,6 +475,13 @@ body.workspace-page[data-area="notes"] {
     font-size: .83rem;
 }
 .notes-reader-feedback { margin: 0 clamp(12px, 3vw, 24px) 12px; color: var(--notes-muted); font-size: .82rem; }
+.notes-linked-events { display: grid; gap: 5px; margin-top: 13px; padding: 9px; border-radius: 8px; background: #edf2e5; }
+.notes-linked-events h3 { font-size: .76rem; color: var(--notes-muted); }
+.notes-linked-events a, #notesSourceEvent a { color: var(--notes-green); font-weight: 750; overflow-wrap: anywhere; }
+.notes-linked-events a { display: inline-flex; align-items: center; gap: 4px; }
+.notes-linked-events .notes-icon { width: 14px; height: 14px; }
+.notes-calendar-action { color: var(--notes-ink); text-decoration: none; }
+#notesSourceEvent { margin-bottom: 9px; }
 
 @media (max-width: 1120px) { .notes-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 830px) {
@@ -508,7 +515,7 @@ body.workspace-page[data-area="notes"] {
     .notes-dialog { width: calc(100% - 16px); }
     .notes-dialog-footer { padding-block: 9px; }
     .notes-reader-actions { gap: 5px; }
-    .notes-reader-actions button { padding-inline: 8px; }
+    .notes-reader-actions :is(button, a) { padding-inline: 8px; }
     .notes-reader-actions .notes-icon { width: 14px; height: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { .notes-card { transition: none; } }

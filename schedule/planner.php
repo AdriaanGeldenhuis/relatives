@@ -61,7 +61,7 @@ function scheduleOnDay(array $events, DateTimeImmutable $day): array
 function scheduleEventVersion(array $event): string
 {
     $fields = [];
-    foreach (['title', 'starts_at', 'ends_at', 'notes', 'kind', 'all_day', 'assigned_to',
+    foreach (['title', 'starts_at', 'ends_at', 'notes', 'location', 'kind', 'all_day', 'assigned_to',
         'priority', 'color', 'reminder_minutes', 'focus_mode', 'status'] as $key) {
         $fields[] = (string)$event[$key];
     }

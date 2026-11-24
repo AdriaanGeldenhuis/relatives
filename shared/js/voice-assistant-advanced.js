@@ -6,7 +6,7 @@
 (function() {
     'use strict';
 
-    var notesCsrf = document.currentScript.dataset.notesCsrf;
+    var writeCsrf = document.currentScript.dataset.writeCsrf;
     var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     var synth = window.speechSynthesis;
 
@@ -489,7 +489,7 @@
 
         var formData = new FormData();
         formData.append('action', 'create_note');
-        formData.append('csrf_token', notesCsrf);
+        formData.append('csrf_token', writeCsrf);
         formData.append('title', (title || content.substring(0, 50)).slice(0, 160));
         formData.append('body', content);
 
@@ -503,6 +503,7 @@
             if (result.success) {
                 console.log('[Suzi] Note created');
                 window.dispatchEvent(new CustomEvent('relatives:note-created', { detail: result.note }));
+                window.RelativesPlanner.broadcast(window.RelativesPlanner.noteSignal);
                 if (callback) callback(true);
             } else {
                 console.error('[Suzi] Failed to create note:', result.error);
@@ -515,141 +516,51 @@
         });
     }
 
-    // Create a calendar event via API
     function createCalendarEvent(eventData, callback) {
         setStatus('📅', 'Creating event...', '');
-
-        var startTime = eventData.time || '09:00';
-        var endTime = calculateEndTime(startTime);
-        var eventDate = eventData.date || new Date().toISOString().split('T')[0];
-
-        var formData = new FormData();
-        formData.append('action', 'create');
-        formData.append('title', eventData.title);
-        formData.append('date', eventDate);
-        formData.append('start_time', startTime);
-        formData.append('end_time', endTime);
-        formData.append('kind', 'event');
-
-        fetch('/api/events.php', {
-            method: 'POST',
-            body: formData,
-            credentials: 'same-origin'
-        })
-        .then(function(response) { return response.json(); })
-        .then(function(result) {
-            if (result.success) {
-                console.log('[Suzi] Event created, id:', result.event_id);
-                refreshPageData('event', {
-                    id: result.event_id,
-                    title: eventData.title,
-                    date: eventDate,
-                    starts_at: eventDate + ' ' + startTime + ':00',
-                    ends_at: eventDate + ' ' + endTime + ':00',
-                    kind: 'event',
-                    color: '#3498db'
-                });
-                if (callback) callback(true);
-            } else {
-                console.error('[Suzi] Failed to create event:', result.error);
-                if (callback) callback(false, 'Sorry, I couldn\'t add that to your calendar. ' + (result.message || ''));
-            }
-        })
-        .catch(function(error) {
-            console.error('[Suzi] Event error:', error);
-            if (callback) callback(false, 'Sorry, there was a problem creating the event.');
-        });
+        saveVoiceEvent(eventData, 'event', callback);
     }
 
-    // Create a reminder via API
     function createReminder(reminderData, callback) {
         setStatus('⏰', 'Setting reminder...', '');
+        saveVoiceEvent(reminderData, 'reminder', callback);
+    }
 
-        var startTime = reminderData.time || '09:00';
-        var endTime = calculateEndTime(startTime);
-        var reminderDate = reminderData.date || new Date().toISOString().split('T')[0];
-
-        var formData = new FormData();
-        formData.append('action', 'create');
-        formData.append('title', reminderData.title);
-        formData.append('date', reminderDate);
-        formData.append('start_time', startTime);
-        formData.append('end_time', endTime);
-        formData.append('kind', 'todo');
-
-        fetch('/api/events.php', {
-            method: 'POST',
-            body: formData,
-            credentials: 'same-origin'
-        })
-        .then(function(response) { return response.json(); })
-        .then(function(result) {
-            if (result.success) {
-                console.log('[Suzi] Reminder created, id:', result.event_id);
-                refreshPageData('reminder', {
-                    id: result.event_id,
-                    title: reminderData.title,
-                    date: reminderDate,
-                    starts_at: reminderDate + ' ' + startTime + ':00',
-                    ends_at: reminderDate + ' ' + endTime + ':00',
-                    kind: 'todo',
-                    color: '#9b59b6'
-                });
-                if (callback) callback(true);
-            } else {
-                console.error('[Suzi] Failed to create reminder:', result.error);
-                if (callback) callback(false, 'Sorry, I couldn\'t set that reminder. ' + (result.message || ''));
-            }
-        })
-        .catch(function(error) {
-            console.error('[Suzi] Reminder error:', error);
-            if (callback) callback(false, 'Sorry, there was a problem setting the reminder.');
+    function saveVoiceEvent(details, kind, callback) {
+        var planner = window.RelativesPlanner;
+        var date = details.date || planner.today().date;
+        var time = details.time || '09:00';
+        var match = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time);
+        if (!match || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !details.title) {
+            if (callback) callback(false, 'Please give the event a title and a valid date and time.');
+            return;
+        }
+        var hour = Number(time.slice(0, 2));
+        var endHour = String((hour + 1) % 24).padStart(2, '0');
+        var endDate = hour === 23 && !Number.isNaN(Date.parse(date + 'T12:00:00Z')) ? planner.shiftDate(date, 1) : date;
+        planner.request(writeCsrf, 'add', {
+            surface: 'calendar',
+            title: String(details.title).slice(0, 200),
+            date: date,
+            end_date: endDate,
+            start_time: time,
+            end_time: endHour + time.slice(2),
+            kind: kind,
+            reminder_minutes: kind === 'reminder' ? 15 : 0
+        }).then(function(result) {
+            window.dispatchEvent(new CustomEvent('relatives:event-saved', { detail: result.event }));
+            if (callback) callback(true);
+        }).catch(function(error) {
+            console.error('[Suzi] Event error:', error);
+            if (callback) callback(false, error.message || 'Sorry, there was a problem saving the event.');
         });
     }
 
-    // Refresh the current page data after voice action
-    function refreshPageData(type, eventObj) {
-        var path = window.location.pathname;
-
-        try {
-            // Calendar page
-            if (path.indexOf('/calendar') === 0) {
-                if (typeof window.addEventToCalendar === 'function') {
-                    window.addEventToCalendar(eventObj);
-                    console.log('[Suzi] Calendar updated live');
-                } else if (typeof window.loadMonthData === 'function' && window.currentYear && window.currentMonth) {
-                    window.loadMonthData(window.currentYear, window.currentMonth, 'fadeIn');
-                    console.log('[Suzi] Calendar month reloaded');
-                }
-            }
-
-            // Schedule page
-            if (path.indexOf('/schedule') === 0) {
-                if (typeof window.loadScheduleData === 'function' && window.ScheduleApp && window.ScheduleApp.selectedDate) {
-                    window.loadScheduleData(window.ScheduleApp.selectedDate, 'fadeIn');
-                    console.log('[Suzi] Schedule reloaded');
-                }
-            }
-
-            // Shopping page
-            if (path.indexOf('/shopping') === 0 && type === 'shopping') {
-                if (typeof window.loadItems === 'function') {
-                    window.loadItems();
-                    console.log('[Suzi] Shopping list reloaded');
-                }
-            }
-
-        } catch (e) {
-            console.log('[Suzi] Page refresh skipped:', e.message);
+    function refreshPageData(type) {
+        if (type === 'shopping' && location.pathname.indexOf('/shopping') === 0
+            && typeof window.loadItems === 'function') {
+            window.loadItems();
         }
-    }
-
-    // Calculate end time as 1 hour after start time
-    function calculateEndTime(startTime) {
-        var parts = startTime.split(':');
-        var hour = (parseInt(parts[0], 10) + 1) % 24;
-        var minute = parts[1] || '00';
-        return (hour < 10 ? '0' : '') + hour + ':' + minute;
     }
 
     // Modal functions

@@ -108,11 +108,15 @@ function scheduleFields(PDO $db, int $userId, int $familyId, ?array $original): 
 {
     $title = trim(schedulePost('title'));
     $notes = str_replace(["\r\n", "\r"], "\n", schedulePost('notes', $original['notes'] ?? ''));
+    $location = trim(schedulePost('location', $original['location'] ?? ''));
     if ($title === '' || !preg_match('/^.{1,200}$/usD', $title)) {
         throw new DomainException('Enter a title of up to 200 characters.');
     }
     if (strlen($notes) > 65535 || !preg_match('//u', $notes)) {
         throw new DomainException('Shorten the notes before saving.');
+    }
+    if (!preg_match('/^.{0,200}$/usD', $location)) {
+        throw new DomainException('Enter a location of up to 200 characters.');
     }
     if (($original['status'] ?? null) === 'in_progress' && $original['focus_mode']) {
         throw new DomainException('Finish the focus session before editing it.');
@@ -192,6 +196,7 @@ function scheduleFields(PDO $db, int $userId, int $familyId, ?array $original): 
         'title' => $title,
         'kind' => $kind,
         'notes' => $notes === '' ? null : $notes,
+        'location' => $location === '' ? null : $location,
         'starts_at' => $start->format('Y-m-d H:i:s'),
         'ends_at' => $end?->format('Y-m-d H:i:s'),
         'all_day' => (int)$allDay,

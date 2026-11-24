@@ -2,36 +2,20 @@
 
 const scheduleElement = id => document.getElementById(id);
 const scheduleState = window.ScheduleApp = JSON.parse(scheduleElement('scheduleData').textContent);
-const scheduleEditor = scheduleElement('eventForm');
+const planner = window.RelativesPlanner;
 const scheduleFilters = { scheduleSearch: '', scheduleStatus: 'all', scheduleAssignee: 'all' };
 const selectedEvents = new Set();
 const savingEvents = new Set();
-const scheduleZone = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Africa/Johannesburg', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
-});
 let navigation = null;
+let refreshQueued = false;
 let bulkMode = false;
 let bulkSaving = false;
-let editingEvent = null;
-let editorStartDate = '';
 let focusSession = null;
 let focusTick = null;
 let focusPaused = null;
 let focusFinishing = false;
 let templateSaving = false;
 let scheduleToastTimeout;
-
-function scheduleToday() {
-    const parts = Object.fromEntries(scheduleZone.formatToParts(new Date()).map(({ type, value }) => [type, value]));
-    return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
-}
-
-function shiftScheduleDate(date, days) {
-    const midday = new Date(date + 'T12:00:00Z');
-    midday.setUTCDate(midday.getUTCDate() + days);
-    return midday.toISOString().slice(0, 10);
-}
 
 function scheduleTime(value) {
     return value ? Date.parse(value.replace(' ', 'T') + '+02:00') : NaN;
@@ -41,26 +25,8 @@ function scheduleEvent(id) {
     return scheduleState.allEvents.find(event => String(event.id) === String(id));
 }
 
-async function scheduleApi(action, values = {}, method = 'POST') {
-    const data = values instanceof FormData ? values : new URLSearchParams(values);
-    data.set('action', action);
-    let url = '/schedule/api/events.php';
-    const request = { method };
-    if (method === 'GET') {
-        url += '?' + data;
-    } else {
-        data.set('csrf_token', scheduleState.csrf);
-        request.body = data;
-    }
-    const response = await fetch(url, request);
-    if (response.status === 401) throw new Error('Your session expired. Sign in again before saving.');
-    const result = await response.json().catch(() => null);
-    if (!result?.success || !response.ok) {
-        const error = new Error(result?.message || result?.error || 'Schedule could not reach the server. Try again.');
-        error.status = response.status;
-        throw error;
-    }
-    return result;
+function scheduleApi(action, values = {}, method = 'POST') {
+    return planner.request(scheduleState.csrf, action, values, method);
 }
 
 function showToast(text, type = 'info') {
@@ -145,6 +111,10 @@ async function loadScheduleData(date = scheduleState.selectedDate, options = {})
         if (navigation === request) {
             navigation = null;
             scheduleElement('scheduleDatePanel').removeAttribute('aria-busy');
+            if (refreshQueued) {
+                refreshQueued = false;
+                refreshSchedule();
+            }
         }
     }
 }
@@ -159,11 +129,11 @@ function changeDate(direction) {
     const date = navigation?.date || scheduleState.selectedDate;
     const view = navigation?.view || scheduleState.viewMode;
     const step = view === 'week' ? 7 : 1;
-    return loadScheduleData(shiftScheduleDate(date, direction * step), { view, focus: true });
+    return loadScheduleData(planner.shiftDate(date, direction * step), { view, focus: true });
 }
 
 function goToToday() {
-    return loadScheduleData(scheduleToday().date, { view: navigation?.view || scheduleState.viewMode, focus: true });
+    return loadScheduleData(planner.today().date, { view: navigation?.view || scheduleState.viewMode, focus: true });
 }
 
 function showDatePicker() {
@@ -180,7 +150,7 @@ function goToPickedDate(event) {
 
 window.addEventListener('popstate', () => {
     const params = new URLSearchParams(location.search);
-    loadScheduleData(params.get('date') || scheduleToday().date, {
+    loadScheduleData(params.get('date') || planner.today().date, {
         view: params.get('view') === 'week' ? 'week' : 'day',
         historyMode: 'pop', focus: true
     });
@@ -315,125 +285,29 @@ async function clearDone() {
     }
 }
 
-function showQuickAdd() { openEventEditor(); }
-function editEvent(id) { openEventEditor(scheduleEvent(id)); }
-function duplicateEvent(id) {
-    const original = scheduleEvent(id);
-    if (original) openEventEditor(original, true);
-}
-
-function selectEditorValue(id, value, fallback) {
-    const input = scheduleElement(id);
-    const missing = input.querySelector('[data-previous-value]');
-    missing?.remove();
-    const desired = String(value ?? fallback);
-    if (desired && ![...input.options].some(option => option.value === desired)) {
-        const option = new Option(fallback, desired);
-        option.dataset.previousValue = '';
-        input.add(option);
-    }
-    input.value = desired;
-}
-
-function openEventEditor(event = null, duplicate = false) {
-    scheduleEditor.reset();
-    editingEvent = duplicate ? null : event;
-    const { date, time } = scheduleToday();
-    const dateField = scheduleElement('eventDate');
-    const startField = scheduleElement('eventStart');
-    const endField = scheduleElement('eventEnd');
-    const endDateField = scheduleElement('eventEndDate');
-    const color = scheduleState.types[event?.kind]?.color || scheduleState.types.event.color;
-    const startDate = event?.starts_at.slice(0, 10) || scheduleState.selectedDate;
-    const startTime = event?.starts_at.slice(11, 16) || (date === startDate ? time : '09:00');
-    const startHour = Number(startTime.slice(0, 2));
-    let endDay = event?.ends_at?.slice(0, 10) || startDate;
-    if (!event && startHour === 23) endDay = shiftScheduleDate(startDate, 1);
-    if (event?.all_day && event.ends_at?.slice(11, 19) === '00:00:00' && endDay > startDate) {
-        endDay = shiftScheduleDate(endDay, -1);
-    }
-
-    scheduleElement('eventEditorHeading').textContent = duplicate ? 'Duplicate event' : event ? 'Edit event' : 'Add event';
-    scheduleElement('eventTitle').value = duplicate ? Array.from(event.title).slice(0, 193).join('') + ' (copy)' : event?.title || '';
-    dateField.value = startDate;
-    editorStartDate = startDate;
-    endDateField.value = endDay;
-    startField.value = startTime;
-    endField.value = event ? (event.ends_at || event.starts_at).slice(11, 16) :
-        String((startHour + 1) % 24).padStart(2, '0') + startTime.slice(2);
-    scheduleElement('eventAllDay').checked = Boolean(event?.all_day);
-    scheduleElement('eventFocus').checked = Boolean(event?.focus_mode);
-    scheduleElement('eventPriority').value = event?.priority || 'medium';
-    scheduleElement('eventNotes').value = event?.notes || '';
-    selectEditorValue('eventType', event?.kind || 'event', 'Other');
-    selectEditorValue('eventAssign', event?.assigned_to || '', event?.assigned_to_name || 'Previous assignee');
-    selectEditorValue('eventRepeat', duplicate ? '' : event?.repeat_rule || '', 'Existing repeat interval');
-    scheduleElement('eventReminder').value = event?.reminder_minutes || '';
-    scheduleElement('eventColor').value = /^#[\da-f]{6}$/i.test(event?.color) ? event.color : color;
-    scheduleElement('eventRepeat').disabled = Boolean(editingEvent?.recurrence_parent_id);
-    const hint = scheduleElement('eventRepeatHint');
-    hint.textContent = editingEvent?.recurrence_parent_id
-        ? 'Changes affect only this occurrence. Edit the original event to change the repeat.'
-        : 'Changes to the original event also update its future pending occurrences.';
-    hint.hidden = !(editingEvent?.recurrence_parent_id || editingEvent?.repeat_rule);
-    scheduleElement('eventOptions').open = Boolean(event?.repeat_rule || event?.focus_mode || event?.reminder_minutes);
-    setEventEditorError('');
-    syncEventTimeFields();
-    showModal('eventEditor');
-}
-
-function syncEventTimeFields() {
-    const allDay = scheduleElement('eventAllDay').checked;
-    scheduleElement('eventTimeFields').hidden = allDay;
-    for (const id of ['eventStart', 'eventEnd']) scheduleElement(id).required = !allDay;
-    scheduleElement('eventFocus').disabled = allDay;
-}
-
-function setEventEditorError(message) {
-    const error = scheduleElement('eventFormError');
-    error.textContent = message;
-    error.hidden = !message;
-    if (message) error.scrollIntoView({ block: 'nearest' });
-}
-
-scheduleElement('eventDate').addEventListener('change', event => {
-    const end = scheduleElement('eventEndDate');
-    if (end.value === editorStartDate || end.value < event.target.value) end.value = event.target.value;
-    editorStartDate = event.target.value;
-});
-scheduleElement('eventAllDay').addEventListener('change', syncEventTimeFields);
-scheduleEditor.addEventListener('submit', async event => {
-    event.preventDefault();
-    const dialog = scheduleElement('eventEditor');
-    if (dialog.dataset.saving === '1') return;
-    const data = new FormData(scheduleEditor);
-    const isEdit = Boolean(editingEvent);
-    const submit = event.submitter || scheduleEditor.querySelector('[type="submit"]');
-    if (isEdit) {
-        data.set('event_id', editingEvent.id);
-        data.set('version', editingEvent.version);
-    }
-    dialog.dataset.saving = '1';
-    submit.disabled = true;
-    setEventEditorError('');
-    try {
-        const result = await scheduleApi(isEdit ? 'update' : 'add', data);
-        dialog.close();
+const eventEditor = planner.createEditor({
+    types: scheduleState.types,
+    getDate: () => scheduleState.selectedDate,
+    save: scheduleApi,
+    onConflict: refreshSchedule,
+    show: showModal,
+    async onSaved(result, isEdit) {
         const savedDate = result.event.starts_at.slice(0, 10);
-        const selected = scheduleState.selectedDate;
-        const overlapsCurrent = result.event.starts_at < shiftScheduleDate(selected, 1)
-            && (savedDate === selected || (result.event.ends_at || '') > selected + ' 00:00:00');
-        const loaded = overlapsCurrent ? await refreshSchedule()
+        const loaded = planner.onDay(result.event, scheduleState.selectedDate) ? await refreshSchedule()
             : await loadScheduleData(savedDate, { view: scheduleState.viewMode, focus: true });
         if (loaded) showToast(isEdit ? 'Changes saved.' : 'Event added.', 'success');
-    } catch (error) {
-        setEventEditorError(error.message);
-        if (error.status === 409) await refreshSchedule();
-    } finally {
-        dialog.dataset.saving = '';
-        submit.disabled = false;
     }
 });
+
+function showQuickAdd() { eventEditor.open(); }
+function editEvent(id) {
+    const event = scheduleEvent(id);
+    if (event) eventEditor.open(event);
+}
+function duplicateEvent(id) {
+    const event = scheduleEvent(id);
+    if (event) eventEditor.open(event, { duplicate: true });
+}
 
 function startFocusMode() {
     if (focusSession) {
@@ -553,7 +427,7 @@ async function showAnalytics() {
     const endDate = scheduleState.selectedDate;
     try {
         const { productivity } = await scheduleApi('get_productivity', {
-            start_date: shiftScheduleDate(endDate, -29), end_date: endDate
+            start_date: planner.shiftDate(endDate, -29), end_date: endDate
         }, 'GET');
         const totals = Object.fromEntries(['study_minutes', 'work_minutes', 'focus_minutes', 'completed_tasks', 'total_tasks']
             .map(key => [key, productivity.reduce((sum, row) => sum + Number(row[key]), 0)]));
@@ -564,7 +438,7 @@ async function showAnalytics() {
         const percent = Math.round(totals.completed_tasks / totals.total_tasks * 100);
         const days = new Map(productivity.map(row => [row.date, row]));
         const activity = Array.from({ length: 30 }, (_, index) => {
-            const date = shiftScheduleDate(endDate, index - 29);
+            const date = planner.shiftDate(endDate, index - 29);
             const row = days.get(date);
             const completed = Number(row?.completed_tasks || 0);
             const count = Number(row?.total_tasks || 0);
@@ -761,7 +635,17 @@ const scheduleInitialUrl = new URL(location.href);
 const scheduleInitialEvent = scheduleInitialUrl.searchParams.get('event');
 if (scheduleInitialEvent && scheduleState.viewMode === 'day') {
     const event = scheduleEvent(scheduleInitialEvent);
-    if (event) openEventEditor(event);
+    if (event) eventEditor.open(event);
     scheduleInitialUrl.searchParams.delete('event');
     history.replaceState(null, '', scheduleInitialUrl);
 }
+
+window.addEventListener('storage', event => {
+    if (event.key !== planner.eventSignal) return;
+    if (navigation) refreshQueued = true;
+    else refreshSchedule();
+});
+window.addEventListener('relatives:event-saved', refreshSchedule);
+window.addEventListener('pageshow', event => {
+    if (event.persisted) refreshSchedule();
+});

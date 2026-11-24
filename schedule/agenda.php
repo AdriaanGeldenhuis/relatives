@@ -14,6 +14,7 @@ $dateLabel = $viewMode === 'week'
             <a href="?date=<?= $selectedDate ?>&amp;view=day" data-schedule-view="day" <?= $viewMode === 'day' ? 'aria-current="page"' : '' ?>>Day</a>
             <a href="?date=<?= $selectedDate ?>&amp;view=week" data-schedule-view="week" <?= $viewMode === 'week' ? 'aria-current="page"' : '' ?>>Week</a>
             <a href="/schedule/timeline/?date=<?= $selectedDate ?>">Timeline</a>
+            <a href="/calendar/?date=<?= $selectedDate ?>">Calendar</a>
         </div>
         <div class="planner-date-actions">
             <button type="button" class="planner-icon-button" onclick="changeDate(-1)" aria-label="Previous <?= $viewMode ?>"><span aria-hidden="true">‹</span></button>
@@ -123,6 +124,7 @@ $dateLabel = $viewMode === 'week'
                                     <?php if ($notes): ?><p class="planner-event-notes"><?= scheduleEscape($notes) ?></p><?php endif; ?>
                                     <div class="planner-event-meta">
                                         <?php if ($item['assigned_to_name']): ?><span><?= scheduleEscape($item['assigned_to_name']) ?></span><?php endif; ?>
+                                        <?php if ($item['location']): ?><span><?= scheduleEscape($item['location']) ?></span><?php endif; ?>
                                         <?php if ($item['reminder_minutes']): ?><span>Reminder <?= (int)$item['reminder_minutes'] ?>m before</span><?php endif; ?>
                                         <?php if ($item['productivity_rating']): ?><span>Rating <?= (int)$item['productivity_rating'] ?>/5</span><?php endif; ?>
                                     </div>
@@ -137,6 +139,8 @@ $dateLabel = $viewMode === 'week'
                                         <div>
                                             <button type="button" onclick="editEvent(<?= $id ?>)">Edit</button>
                                             <button type="button" onclick="duplicateEvent(<?= $id ?>)">Duplicate</button>
+                                            <a href="/calendar/?date=<?= $selectedDate ?>&amp;event=<?= $id ?>">Open in Calendar</a>
+                                            <a href="/notes/?event=<?= $id ?>&amp;new=1">New linked note</a>
                                             <button type="button" class="planner-danger" onclick="deleteEvent(<?= $id ?>)">Delete</button>
                                         </div>
                                     </details>

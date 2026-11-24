@@ -33,8 +33,23 @@ if ($isPost) {
     notesHandlePost($db, $user, $imageCapacity, $csrfToken);
 }
 
-$notes = array_map('notesClientData', notesSelect($db, (int)$user['family_id']));
+$familyId = (int)$user['family_id'];
+$notes = notesBoardData($db, $familyId);
+if (($_GET['ajax'] ?? null) === '1') {
+    notesRespond(['success' => true, 'notes' => $notes]);
+}
 $prefill = ($_GET['new'] ?? null) === '1' && is_string($_GET['content'] ?? null) ? $_GET['content'] : '';
+$event = null;
+$linkNotice = '';
+if (isset($_GET['event']) && ($_GET['new'] ?? null) === '1') {
+    $id = eventNoteId($_GET['event']);
+    $event = $id ? eventNotePreview($db, $familyId, $id) : null;
+    if (!$event) {
+        $linkNotice = 'This calendar event is no longer available.';
+    }
+}
+$openNote = eventNoteId($_GET['note'] ?? null);
+$openNote = $openNote ? (string)$openNote : null;
 $pageTitle = 'Notes';
 $pageCSS = ['/notes/css/notes.css?build=' . filemtime(__DIR__ . '/css/notes.css')];
 $pageJS = ['/notes/js/notes.js'];
@@ -137,6 +152,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             <button type="button" class="notes-icon-button" data-close aria-label="Close editor"><?= notesIcon('close') ?></button>
         </header>
         <div class="notes-dialog-body">
+            <p id="notesSourceEvent" class="notes-hint" hidden>Linked calendar event <a target="_blank" rel="noopener"></a></p>
             <div id="notesRecorder" class="notes-recorder" hidden>
                 <div class="notes-recorder-icon"><?= notesIcon('mic') ?></div>
                 <output id="notesTimer">00:00</output>
@@ -224,7 +240,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 </dialog>
 
 <script type="application/json" id="notesData"><?= json_encode(
-    ['notes' => $notes, 'csrf' => $csrfToken, 'prefill' => $prefill, 'maxPhotos' => NOTES_MAX_PHOTOS],
+    ['notes' => $notes, 'csrf' => $csrfToken, 'prefill' => $prefill, 'maxPhotos' => NOTES_MAX_PHOTOS,
+        'event' => $event ? ['id' => (string)$event['id'], 'title' => $event['title']] : null,
+        'openNote' => $openNote, 'linkNotice' => $linkNotice],
     JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR
 ) ?></script>
 

@@ -70,6 +70,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
             <a href="/schedule/?date=<?= $date ?>&amp;view=day">Day</a>
             <a href="/schedule/?date=<?= $date ?>&amp;view=week">Week</a>
             <a href="?date=<?= $date ?>" aria-current="page">Timeline</a>
+            <a href="/calendar/?date=<?= $date ?>">Calendar</a>
         </div>
         <div class="planner-date-actions">
             <a class="planner-icon-button" href="?date=<?= $day->modify('-1 day')->format('Y-m-d') ?>" aria-label="Previous day">‹</a>
@@ -134,7 +135,10 @@ require_once __DIR__ . '/../../shared/components/header.php';
     <div class="modal-body">
         <dl class="timeline-info" id="timelineEventData"></dl>
         <p id="timelineEventNotes" class="timeline-event-notes"></p>
-        <footer class="modal-actions"><a class="btn btn-primary" id="timelineEditLink" href="/schedule/?date=<?= $date ?>">Edit event</a></footer>
+        <footer class="modal-actions">
+            <a class="btn btn-secondary" id="timelineCalendarLink" href="/calendar/?date=<?= $date ?>">Open in Calendar</a>
+            <a class="btn btn-primary" id="timelineEditLink" href="/schedule/?date=<?= $date ?>">Edit event</a>
+        </footer>
     </div>
 </dialog>
 <script type="application/json" id="timelineData"><?= scheduleJson([

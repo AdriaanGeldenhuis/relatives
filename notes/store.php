@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../core/EventNoteLinks.php';
+
 const NOTES_DEFAULT_COLOR = '#ffffff';
 const NOTES_MAX_PHOTOS = 7;
 const NOTES_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -57,7 +59,7 @@ function notesVersion(array $note): string
     ]));
 }
 
-function notesClientData(array $note): array
+function notesClientData(array $note, array $eventTitles = []): array
 {
     $audio = $note['audio_path'] ?? null;
     $audio = notesIsMediaPath($audio) && is_file(__DIR__ . '/..' . $audio) ? $audio : null;
@@ -69,6 +71,8 @@ function notesClientData(array $note): array
         'type' => $note['type'],
         'title' => (string)$note['title'],
         'body' => str_replace(["\r\n", "\r"], "\n", (string)$note['body']),
+        'eventLinks' => array_map(static fn(int $id) => ['id' => (string)$id, 'title' => $eventTitles[$id] ?? null],
+            eventNoteIds($note['body'])),
         'color' => $note['color'] ?: NOTES_DEFAULT_COLOR,
         'pinned' => (bool)$note['pinned'],
         'images' => notesImagePaths($note['image_path'] ?? null),
@@ -92,6 +96,13 @@ function notesSelect(PDO $db, int $familyId, ?int $noteId = null, bool $lock = f
     $stmt = $db->prepare($sql . ' AND n.id = ?' . ($lock ? ' FOR UPDATE' : ''));
     $stmt->execute([$familyId, $noteId]);
     return $stmt->fetch();
+}
+
+function notesBoardData(PDO $db, int $familyId): array
+{
+    $notes = notesSelect($db, $familyId);
+    $eventTitles = eventNoteTitles($db, $familyId, $notes);
+    return array_map(static fn(array $note) => notesClientData($note, $eventTitles), $notes);
 }
 
 function notesPost(string $key, string $default = ''): string
@@ -276,7 +287,7 @@ function notesHandlePost(PDO $db, array $user, int $imageCapacity, string $token
                 notesRespond([
                     'success' => false,
                     'error' => 'Someone changed this note. Review the latest version before trying again.',
-                    'note' => notesClientData($note)
+                    'note' => notesClientData($note, eventNoteTitles($db, $familyId, [$note]))
                 ], 409);
             }
         }
@@ -331,6 +342,14 @@ function notesHandlePost(PDO $db, array $user, int $imageCapacity, string $token
                 $columns = implode(', ', array_keys($fields));
                 $placeholders = implode(', ', array_fill(0, count($fields), '?'));
                 $db->beginTransaction();
+                $eventId = notesPost('event_id');
+                if ($eventId !== '') {
+                    $id = eventNoteId($eventId);
+                    if (!$id || !eventNotePreview($db, $familyId, $id, true)) {
+                        throw new DomainException('This calendar event is no longer available.');
+                    }
+                    $fields['body'] = eventNoteWithLink($body, $id);
+                }
                 $db->prepare("INSERT INTO notes ($columns) VALUES ($placeholders)")->execute(array_values($fields));
                 $noteId = (int)$db->lastInsertId();
             }
@@ -355,7 +374,8 @@ function notesHandlePost(PDO $db, array $user, int $imageCapacity, string $token
 
         $result = ['success' => true, 'note_id' => (string)$noteId];
         if ($action !== 'delete_note') {
-            $result['note'] = notesClientData(notesSelect($db, $familyId, $noteId));
+            $saved = notesSelect($db, $familyId, $noteId);
+            $result['note'] = notesClientData($saved, eventNoteTitles($db, $familyId, [$saved]));
         }
         $db->commit();
     } catch (Throwable $e) {

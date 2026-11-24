@@ -19,6 +19,7 @@ if (!isset($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../../core/CSRF.php';
+require_once __DIR__ . '/../../core/EventNoteLinks.php';
 require_once __DIR__ . '/write.php';
 
 $user = (new Auth($db))->getCurrentUser();
@@ -28,15 +29,15 @@ if (!$user) {
 $userId = (int)$user['id'];
 $familyId = (int)$user['family_id'];
 
-if ((new SubscriptionManager($db))->isFamilyLocked($familyId)) {
+$action = $_POST['action'] ?? $_GET['action'] ?? '';
+$read = in_array($action, ['get_productivity', 'get_week', 'get_suggestions', 'get_birthdays', 'get_event_notes'], true);
+if (!$read && (new SubscriptionManager($db))->isFamilyLocked($familyId)) {
     scheduleResponse(['success' => false, 'error' => 'subscription_locked', 'message' => 'Subscribe to continue editing your schedule.'], 402);
 }
 
-$action = $_POST['action'] ?? $_GET['action'] ?? '';
-$read = in_array($action, ['get_productivity', 'get_week', 'get_suggestions', 'get_birthdays'], true);
 if (!$read && ($_SERVER['REQUEST_METHOD'] !== 'POST' || !is_string($_POST['csrf_token'] ?? null)
     || !CSRF::validate($_POST['csrf_token']))) {
-    scheduleResponse(['success' => false, 'error' => 'Reload Schedule before saving changes.'], 403);
+    scheduleResponse(['success' => false, 'error' => 'Reload the page before saving changes.'], 403);
 }
 session_write_close();
 
@@ -44,6 +45,7 @@ try {
     switch ($action) {
         case 'add':
         case 'update':
+            $calendar = schedulePost('surface') === 'calendar';
             $db->beginTransaction();
             $eventId = $action === 'update' ? scheduleEventId() : null;
             $original = $eventId ? scheduleLockEvent($db, $familyId, $eventId) : null;
@@ -54,23 +56,49 @@ try {
             }
             $event = scheduleFields($db, $userId, $familyId, $original);
             $eventId = scheduleWriteEvent($db, $familyId, $userId, $event, $original);
+            $noteId = $action === 'add' ? scheduleNumber('note_id', 0, PHP_INT_MAX) : 0;
+            if ($noteId) {
+                eventNoteUpdateLink($db, $familyId, $eventId, $noteId, true);
+            }
             $stmt = $db->prepare('SELECT * FROM events WHERE id = ? AND family_id = ?');
             $stmt->execute([$eventId, $familyId]);
             $saved = $stmt->fetch();
             $db->commit();
-            if (!$original) {
+            if (!$original || ($calendar && ($original['title'] !== $saved['title']
+                || $original['starts_at'] !== $saved['starts_at'] || $original['ends_at'] !== $saved['ends_at']))) {
                 try {
                     require_once __DIR__ . '/../../core/NotificationManager.php';
                     require_once __DIR__ . '/../../core/NotificationTriggers.php';
-                    (new NotificationTriggers($db))->onScheduleTaskCreated(
-                        $eventId, $userId, $familyId, $event['title'],
-                        date('j M Y \a\t H:i', strtotime($event['starts_at']))
-                    );
+                    $triggers = new NotificationTriggers($db);
+                    if ($original) {
+                        $triggers->onEventUpdated($eventId, $userId, $familyId, $event['title'], 'Event details changed');
+                    } elseif ($calendar) {
+                        $triggers->onEventCreated($eventId, $userId, $familyId, $event['title'], $event['starts_at']);
+                    } else {
+                        $triggers->onScheduleTaskCreated($eventId, $userId, $familyId, $event['title'],
+                            date('j M Y \a\t H:i', strtotime($event['starts_at'])));
+                    }
                 } catch (Throwable $error) {
                     error_log('Schedule notification failed: ' . $error->getMessage());
                 }
             }
-            scheduleResponse(['success' => true, 'event' => $saved]);
+            scheduleResponse(['success' => true, 'event' => $saved, 'note_linked' => (bool)$noteId]);
+
+        case 'get_event_notes':
+            $id = eventNoteId($_GET['event_id'] ?? null);
+            if (!$id || !eventNotePreview($db, $familyId, $id)) {
+                scheduleResponse(['success' => false, 'error' => 'This event is no longer available.'], 404);
+            }
+            scheduleResponse(['success' => true] + eventNoteList($db, $familyId, $id));
+
+        case 'link_note':
+        case 'unlink_note':
+            $db->beginTransaction();
+            $id = scheduleEventId();
+            scheduleLockEvent($db, $familyId, $id);
+            eventNoteUpdateLink($db, $familyId, $id, scheduleNumber('note_id', 1, PHP_INT_MAX), $action === 'link_note');
+            $db->commit();
+            scheduleResponse(['success' => true]);
 
         case 'toggle':
             $db->beginTransaction();
