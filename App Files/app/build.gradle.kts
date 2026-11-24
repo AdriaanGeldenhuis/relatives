@@ -56,9 +56,12 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.navigation.compose)
 
     // Location
     implementation(libs.play.services.location)
+    implementation(libs.mapbox.maps)
+    implementation(libs.mapbox.sdk.geojson)
 
     // Networking
     implementation(libs.okhttp)
