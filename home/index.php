@@ -263,15 +263,15 @@ $calendarSummary = match ($stats['upcoming_events']) {
 };
 
 $launcherApps = [
-    'messages' => ['href' => '/messages/', 'icon' => '💬', 'label' => 'Messages', 'summary' => $messageSummary, 'glow' => '#7fb5f1'],
-    'shopping' => ['href' => '/shopping/', 'label' => 'Shopping', 'summary' => $shoppingSummary, 'glow' => '#f5ba55'],
-    'calendar' => ['href' => '/calendar/', 'icon' => '📅', 'label' => 'Calendar', 'summary' => $calendarSummary, 'glow' => '#6bcba1'],
-    'notes' => ['href' => '/notes/', 'icon' => '📝', 'label' => 'Notes', 'summary' => 'Shared notes', 'glow' => '#be9be4'],
-    'schedule' => ['href' => '/schedule/', 'icon' => '⏰', 'label' => 'Schedule', 'summary' => 'Daily agenda', 'glow' => '#e992ba'],
     'tracking' => ['href' => '/tracking/app/', 'icon' => '📍', 'label' => 'Tracking', 'summary' => 'Family locations', 'glow' => '#f6a491'],
     'weather' => ['href' => '/weather/', 'label' => 'Weather', 'summary' => 'Local forecast', 'glow' => '#8ccbea'],
+    'notes' => ['href' => '/notes/', 'icon' => '📝', 'label' => 'Notes', 'summary' => 'Shared notes', 'glow' => '#be9be4'],
+    'shopping' => ['href' => '/shopping/', 'label' => 'Shopping', 'summary' => $shoppingSummary, 'glow' => '#f5ba55'],
+    'calendar' => ['href' => '/calendar/', 'icon' => '📅', 'label' => 'Calendar', 'summary' => $calendarSummary, 'glow' => '#6bcba1'],
+    'schedule' => ['href' => '/schedule/', 'icon' => '⏰', 'label' => 'Schedule', 'summary' => 'Daily agenda', 'glow' => '#e992ba'],
     'travel' => ['href' => '/holiday_traveling/', 'icon' => '✈️', 'label' => 'Travel', 'summary' => 'Trips and itineraries', 'glow' => '#6fcbbf'],
     'games' => ['href' => '/games/', 'icon' => '🎮', 'label' => 'Games', 'summary' => 'Family arcade', 'glow' => '#a89aee'],
+    'messages' => ['href' => '/messages/', 'icon' => '💬', 'label' => 'Messages', 'summary' => $messageSummary, 'glow' => '#7fb5f1'],
 ];
 
 $pageTitle = 'Home';
