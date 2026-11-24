@@ -78,11 +78,9 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <div class="members-list">
                     <!-- Current User -->
                     <div class="member-item current-user">
-                        <div class="member-avatar" style="background: <?php echo $user['has_avatar'] ? 'transparent' : htmlspecialchars($user['avatar_color']); ?>">
-                            <?php
-                            $myAvatarPath = __DIR__ . "/../saves/{$user['id']}/avatar/avatar.webp";
-                            if (file_exists($myAvatarPath)):
-                            ?>
+                        <?php $myAvatarExists = is_file(__DIR__ . "/../saves/{$user['id']}/avatar/avatar.webp"); ?>
+                        <div class="member-avatar" style="background: <?php echo $myAvatarExists ? 'transparent' : htmlspecialchars($user['avatar_color'] ?: '#667eea'); ?>">
+                            <?php if ($myAvatarExists): ?>
                                 <img src="<?php echo avatarUrl($user['id']); ?>" alt="You">
                             <?php else: ?>
                                 <?php echo htmlspecialchars(mb_strtoupper(mb_substr($user['name'], 0, 2))); ?>

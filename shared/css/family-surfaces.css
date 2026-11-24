@@ -1,0 +1,30 @@
+:root {
+    --family-canvas: #f4f3e9;
+    --family-paper: #fffdf6;
+    --family-ink: #1e3128;
+    --family-muted: #536358;
+    --family-line: #d9dfd1;
+    --family-forest: #19392c;
+    --family-green: #2d5c43;
+    --family-lime: #def69c;
+    --family-display: Georgia, 'Times New Roman', serif;
+    --family-hero: radial-gradient(ellipse at 88% 8%, #375e45, transparent 65%), var(--family-forest);
+}
+
+:is(.home-page, .messages-page, .workspace-page[data-area="shopping"]) .main-content {
+    width: min(100% - 64px, 1216px);
+    margin-inline: auto;
+    padding: clamp(20px, 3.4vw, 40px) 0 37px;
+}
+
+:is(.home-page, .messages-page, .workspace-page[data-area="shopping"]) .hub {
+    padding-inline: 0;
+}
+
+@media (max-width: 830px) {
+    :is(.home-page, .messages-page, .workspace-page[data-area="shopping"]) .main-content { width: calc(100% - 34px); }
+}
+
+@media (max-width: 555px) {
+    :is(.home-page, .messages-page, .workspace-page[data-area="shopping"]) .main-content { width: calc(100% - 24px); padding-top: 13px; }
+}

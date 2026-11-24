@@ -2,10 +2,10 @@
 
 const CACHE_PREFIX = 'relatives-home-offline-';
 // Bump this when any of the offline files change, including shared home CSS or JS.
-const OFFLINE_VERSION = '2';
+const OFFLINE_VERSION = '3';
 const CACHE_NAME = CACHE_PREFIX + OFFLINE_VERSION;
 const OFFLINE_PAGE = '/home/offline.html';
-const STATIC_ASSETS = [OFFLINE_PAGE, '/home/css/home.css', '/home/js/home.js', '/favicon.ico'];
+const STATIC_ASSETS = [OFFLINE_PAGE, '/home/css/home.css', '/shared/css/family-surfaces.css', '/home/js/home.js', '/favicon.ico'];
 
 self.addEventListener('install', (event) => {
     event.waitUntil((async () => {

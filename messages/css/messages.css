@@ -1092,3 +1092,35 @@
     .messages-page .message, .messages-page .emoji-picker, .messages-page .modal-dialog,
     .messages-page .search-dialog { animation: none; }
 }
+
+.messages-page {
+    --ink-1: var(--family-paper);
+    --ink-2: var(--family-paper);
+    --card: var(--family-paper);
+    --line: var(--family-line);
+    --text-0: var(--family-ink);
+    --text-2: var(--family-muted);
+    --brand: var(--family-lime);
+    --accent: var(--family-green);
+    background: var(--family-canvas);
+}
+.messages-page .chat-heading {
+    background: var(--family-hero);
+    color: #fffdf1;
+    border-bottom-color: #315641;
+    padding-block: 17px;
+}
+.messages-page .chat-title h1 { font-size: clamp(2rem, 4vw, 3.4rem); letter-spacing: -.065em; }
+.messages-page .chat-title p { color: #dce7d4; }
+.messages-page .chat-mark { color: #244a37; background: #e0f4a6; }
+.messages-page .chat-heading .toolbar-btn { background: #ffffff12; border-color: #ffffff61; color: #fffdf1; }
+.messages-page .chat-heading .toolbar-btn:hover { background: #ffffff29; }
+.messages-page .chat-heading .toolbar-btn.active { background: var(--family-lime); color: var(--family-ink); border-color: var(--family-lime); }
+.messages-page .chat-heading :focus-visible { outline-color: var(--family-lime); }
+.messages-page .messages-list { background-color: var(--family-canvas); }
+.messages-page .sidebar-header { background: #e8efdc; color: var(--family-green); }
+.messages-page .chat-main, .messages-page .messages-sidebar { box-shadow: 0 2px 6px #223d2210; }
+@media (max-width: 555px) {
+    .messages-page .chat-heading { padding-block: 10px; }
+    .messages-page .main-content { padding-bottom: 67px; }
+}

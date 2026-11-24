@@ -808,9 +808,6 @@ function updateProgressBar() {
     ShoppingApp.updateDebounceTimer = setTimeout(() => {
         const progressFill = document.querySelector('.progress-fill');
         const progressText = document.querySelector('.progress-text');
-        
-        if (!progressFill || !progressText) return;
-        
         const items = document.querySelectorAll('.item-card');
         const boughtItems = document.querySelectorAll('.item-card.bought');
         
@@ -818,6 +815,9 @@ function updateProgressBar() {
         const bought = boughtItems.length;
         const pending = total - bought;
         const percentage = total > 0 ? Math.round((bought / total) * 100) : 0;
+        const listCount = document.querySelector('.list-tab.active .list-count');
+        if (listCount) listCount.textContent = pending;
+        if (!progressFill || !progressText) return;
         
         progressFill.style.width = percentage + '%';
         progressText.innerHTML = `<span class="progress-icon">✓</span>${bought} of ${total} items bought (${percentage}%)`;
@@ -832,7 +832,7 @@ function updateProgressBar() {
         if (statBoughtEl) statBoughtEl.textContent = bought;
         
         // Calculate total price from pending items
-        const priceEls = document.querySelectorAll('.item-card.pending .item-price');
+        const priceEls = document.querySelectorAll('.item-card:not(.bought) .item-price');
         let totalPrice = 0;
         
         priceEls.forEach(el => {

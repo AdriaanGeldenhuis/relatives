@@ -808,6 +808,9 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <?php if ($workspacePage): ?>
         <style><?php readfile(__DIR__ . '/../css/workspace.css'); ?></style>
     <?php endif; ?>
+    <?php if (in_array($activePage, ['home', 'shopping', 'messages'], true)): ?>
+        <link rel="stylesheet" href="/shared/css/family-surfaces.css?v=<?= filemtime(__DIR__ . '/../css/family-surfaces.css') ?>">
+    <?php endif; ?>
 </head>
 <body class="<?= $workspacePage ? 'workspace-page' : (isset($homeStylesheet) ? 'home-page' : 'messages-page') ?>" data-area="<?= htmlspecialchars($activePage) ?>" <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
     

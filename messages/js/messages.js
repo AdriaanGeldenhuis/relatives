@@ -458,6 +458,8 @@ function displayMessages(messages, clearFirst = false) {
     if (clearFirst) {
         container.innerHTML = '';
         lastDisplayedDate = null;
+    } else if (messages.length) {
+        container.querySelector(':scope > .empty-state')?.remove();
     }
 
     const shouldScroll = isScrolledToBottom();

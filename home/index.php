@@ -298,14 +298,15 @@ require_once __DIR__ . '/../shared/components/header.php';
                             <span class="dot-sep" aria-hidden="true">·</span>
                             <?php echo $stats['family_members']; ?> member<?php echo $stats['family_members'] === 1 ? '' : 's'; ?>
                         </p>
-                        <?php if ($inviteLink): ?>
                         <div class="hero-actions">
+                            <a class="pill-btn home-calendar-button" href="/calendar/">Open Calendar</a>
+                            <?php if ($inviteLink): ?>
                             <button class="pill-btn" onclick="copyInviteLink()">
                                 <span aria-hidden="true">📨</span> Invite family
                             </button>
+                            <input type="hidden" id="homeInviteLink" value="<?php echo htmlspecialchars($inviteLink); ?>">
+                            <?php endif; ?>
                         </div>
-                        <input type="hidden" id="homeInviteLink" value="<?php echo htmlspecialchars($inviteLink); ?>">
-                        <?php endif; ?>
                     </div>
 
                     <?php $dayPct = round((((int)date('H')) * 3600 + ((int)date('i')) * 60 + (int)date('s')) / 864, 1); ?>
@@ -434,10 +435,12 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </header>
                 <ul class="family-list">
                     <?php foreach ($familyMembers as $member):
-                        $lastActive = strtotime($member['last_active']);
-                        $isOnline = (time() - $lastActive) < 300;
+                        $lastActive = !empty($member['last_active']) ? strtotime($member['last_active']) : false;
+                        $isOnline = $lastActive !== false && (time() - $lastActive) < 300;
                         if ($isOnline) {
                             $seen = 'Online';
+                        } elseif ($lastActive === false) {
+                            $seen = 'Offline';
                         } else {
                             $sd = time() - $lastActive;
                             if ($sd < 3600) { $seen = floor($sd / 60) . 'm ago'; }

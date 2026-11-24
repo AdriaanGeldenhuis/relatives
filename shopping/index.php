@@ -103,51 +103,26 @@ $percentage = $totalItems > 0 ? round(($boughtItems / $totalItems) * 100) : 0;
 $pageTitle = 'Shopping';
 $pageCSS = [
     '/shared/css/aurora.css',
-    '/shopping/css/shopping.css'
+    '/shopping/css/shopping.css?build=' . filemtime(__DIR__ . '/css/shopping.css')
 ];
 $pageJS = [
     '/shopping/js/shopping.js',
     '/shopping/js/bulk.js'
 ];
+$pageJSVersion = max(filemtime(__DIR__ . '/js/shopping.js'), filemtime(__DIR__ . '/js/bulk.js'));
 
 // Include header
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Aurora background -->
-<div class="aurora" aria-hidden="true">
-    <div class="aurora-blob aurora-a"></div>
-    <div class="aurora-blob aurora-b"></div>
-    <div class="aurora-blob aurora-c"></div>
-    <div class="stars stars-a"></div>
-    <div class="stars stars-b"></div>
-    <div class="shooting-star"></div>
-    <div class="aurora-grid"></div>
-</div>
-
-<!-- Main Content -->
 <main class="main-content">
     <div class="hub">
-
-        <!-- Compact page header -->
-        <header class="page-head" style="--glow:#fbbf24; --page-glow: rgba(251, 191, 36, 0.14)">
-            <span class="ph-glyph" aria-hidden="true">🛒</span>
+        <header class="page-head shopping-hero">
             <div class="ph-titles">
-                <h1>Shopping</h1>
-                <p class="ph-sub">
-                    <?php if ($totalItems > 0): ?>
-                        <?php echo $pendingItems; ?> to buy
-                        <?php if ($totalPrice > 0): ?> · ±R<?php echo number_format($totalPrice, 2); ?><?php endif; ?>
-                    <?php else: ?>
-                        <?php echo date('l, j F'); ?>
-                    <?php endif; ?>
-                </p>
+                <h1>Family shopping</h1>
+                <p class="ph-sub">Shared shopping lists and what’s still to buy.</p>
             </div>
-            <?php if ($totalItems > 0): ?>
-            <div class="mini-ring" style="--pct: <?php echo $percentage; ?>" title="<?php echo $boughtItems; ?> of <?php echo $totalItems; ?> bought">
-                <span class="mr-core"><?php echo $percentage; ?>%</span>
-            </div>
-            <?php endif; ?>
+            <div class="shopping-art" aria-hidden="true"><span></span><span></span><span></span></div>
             <div class="ph-actions">
                 <button onclick="showAddItemModal()" class="pill-btn primary">
                     <span aria-hidden="true">＋</span> Add item
@@ -162,7 +137,8 @@ require_once __DIR__ . '/../shared/components/header.php';
         </header>
 
         <!-- List tabs -->
-        <div class="lists-section">
+        <section class="lists-section" aria-labelledby="shopping-lists-heading">
+            <h2 id="shopping-lists-heading">Shopping lists</h2>
             <div class="lists-tabs">
                 <?php foreach ($lists as $list): ?>
                     <div class="list-tab-wrapper <?php echo $list['id'] == $currentListId ? 'active' : ''; ?>" data-list-id="<?php echo $list['id']; ?>">
@@ -179,7 +155,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                             <?php endif; ?>
                         </button>
                         <div class="list-gear-menu">
-                            <button class="list-action-btn gear-btn" onclick="toggleListGearMenu(event, <?php echo $list['id']; ?>)" title="Options">
+                            <button class="list-action-btn gear-btn" onclick="toggleListGearMenu(event, <?php echo $list['id']; ?>)" title="Options" aria-label="Options">
                                 ⚙️
                             </button>
                             <div class="list-gear-dropdown" id="listGearMenu_<?php echo $list['id']; ?>">
@@ -199,10 +175,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <?php endforeach; ?>
                 <button onclick="showCreateListModal()" class="list-tab-add">
                     <span class="list-icon">＋</span>
-                    <span class="list-name">New</span>
+                    <span class="list-name">New list</span>
                 </button>
             </div>
-        </div>
+        </section>
 
         <!-- Bulk Actions Bar (Hidden by default) -->
         <div id="bulkActionsBar" class="bulk-actions-bar" style="display: none;">
@@ -363,7 +339,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                             <div class="item-gear-menu">
                                                 <button class="item-action-btn gear-btn"
                                                         onclick="toggleGearMenu(event, <?php echo $item['id']; ?>)"
-                                                        title="Options">
+                                                        title="Options" aria-label="Options">
                                                     ⋯
                                                 </button>
                                                 <div class="gear-dropdown" id="gearMenu_<?php echo $item['id']; ?>">

@@ -454,3 +454,22 @@
 @media (prefers-reduced-motion: reduce) {
     .launch-tile { transition: none; }
 }
+
+.home-page {
+    --home-paper: var(--family-canvas, #f4f3e9);
+    --home-card: var(--family-paper, #fffdf6);
+    --home-ink: var(--family-ink, #1e3128);
+    --home-muted: var(--family-muted, #536358);
+    --home-line: var(--family-line, #d9dfd1);
+    --home-green: var(--family-forest, #19392c);
+    --home-lime: var(--family-lime, #def69c);
+}
+.home-page .hero { border: 1px solid #315641; }
+.home-page .hero-title { letter-spacing: -.065em; }
+.home-page .hero-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.home-page .hero-actions .pill-btn { min-height: 40px; border-radius: 9px; }
+.home-page .hero-actions button.pill-btn { background: #ffffff12; border-color: #ffffff61; color: #fffdf1; }
+.home-page .hero-actions button.pill-btn:hover { background: #ffffff29; }
+.home-page .hero-actions .home-calendar-button { background: var(--home-lime); color: var(--home-ink); border-color: var(--home-lime); }
+.home-page .hero-actions .home-calendar-button:hover { background: #ecffab; }
+.home-page :is(.weather-card, .panel, .launch-tile) { box-shadow: 0 2px 6px #223d2210; }
