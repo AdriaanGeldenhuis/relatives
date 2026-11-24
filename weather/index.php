@@ -1,10 +1,5 @@
 <?php
-/**
- * ============================================
- * RELATIVES - WEATHER CENTER
- * Styled exactly like Schedule page
- * ============================================
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/session_boot.php';
 
@@ -28,7 +23,7 @@ $userLocation = null;
 try {
     // First try tracking_current (most recent location)
     $stmt = $db->prepare("
-        SELECT lat, lng, accuracy_m, updated_at as created_at
+        SELECT lat, lng, UNIX_TIMESTAMP(updated_at) AS tracked_at
         FROM tracking_current
         WHERE user_id = ?
         LIMIT 1
@@ -39,7 +34,7 @@ try {
     // Fallback to tracking_locations if no current location
     if (!$userLocation) {
         $stmt = $db->prepare("
-            SELECT lat, lng, accuracy_m, created_at
+            SELECT latitude AS lat, longitude AS lng, UNIX_TIMESTAMP(created_at) AS tracked_at
             FROM tracking_locations
             WHERE user_id = ?
             ORDER BY created_at DESC
@@ -52,249 +47,109 @@ try {
     error_log('Location fetch error: ' . $e->getMessage());
 }
 
+header('Cache-Control: private, no-store');
 $pageTitle = 'Weather';
-$activePage = 'weather';
-$pageCSS = [
-    '/shared/css/aurora.css',
-    '/weather/css/weather.css'
-];
+$pageCSS = ['/weather/css/weather.css?build=' . filemtime(__DIR__ . '/css/weather.css')];
 $pageJS = ['/weather/js/weather.js'];
+$pageJSVersion = filemtime(__DIR__ . '/js/weather.js');
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Aurora background -->
-<div class="aurora" aria-hidden="true">
-    <div class="aurora-blob aurora-a"></div>
-    <div class="aurora-blob aurora-b"></div>
-    <div class="aurora-blob aurora-c"></div>
-    <div class="stars stars-a"></div>
-    <div class="stars stars-b"></div>
-    <div class="shooting-star"></div>
-    <div class="aurora-grid"></div>
-</div>
-
-<!-- Main Content -->
-<main class="main-content">
-    <div class="hub">
-
-        <!-- Compact page header -->
-        <header class="page-head" style="--glow:#38bdf8; --page-glow: rgba(56, 189, 248, 0.14)">
-            <span class="ph-glyph" aria-hidden="true">🌤️</span>
-            <div class="ph-titles">
-                <h1>Weather</h1>
-                <p class="ph-sub"><?php echo date('l, j F'); ?></p>
-            </div>
-            <div class="ph-actions" id="weatherActions" style="display: none;">
-                <button onclick="WeatherWidget.getInstance().refresh()" class="pill-btn">
-                    <span aria-hidden="true">🔄</span> Refresh
-                </button>
-                <button onclick="WeatherWidget.getInstance().toggleUnits()" class="pill-btn">
-                    <span aria-hidden="true">🌡️</span> Units
-                </button>
-                <button onclick="WeatherWidget.getInstance().shareWeather()" class="pill-btn">
-                    <span aria-hidden="true">📤</span> Share
-                </button>
-            </div>
-        </header>
-
-        <!-- Current conditions hero -->
-        <section class="weather-hero">
-            <div class="location-search">
-                <div class="search-input-wrapper">
-                    <span class="search-icon" aria-hidden="true">🔍</span>
-                    <input
-                        type="text"
-                        id="locationSearch"
-                        placeholder="Search city..."
-                        autocomplete="off"
-                    >
-                    <button id="useCurrentLocation" class="location-btn" title="Use current location">
-                        <span>📍</span>
-                    </button>
-                </div>
-                <div id="searchResults" class="search-results" style="display: none;"></div>
-            </div>
-
-            <!-- Current Weather Display -->
-            <div id="currentWeather" class="current-weather">
-                <div class="weather-loading">
-                    <div class="loading-spinner">☁️</div>
-                    <p><?php echo $userLocation ? 'Loading weather...' : 'Search for a location'; ?></p>
-                </div>
-            </div>
-        </section>
-
-        <!-- Today's Weather Summary Card -->
-        <div class="today-card glass-card" id="weatherStats" style="display: none;">
-            <div class="today-header">
-                <div class="today-title">📅 Today's Overview</div>
-                <div class="today-temps" id="todayTemps">
-                    <span class="temp-hi">--°</span>
-                    <span class="temp-sep">/</span>
-                    <span class="temp-lo">--°</span>
-                </div>
-            </div>
-            <div class="today-grid" id="weatherDetails">
-                <div class="today-stat" id="statHumidity">
-                    <span class="stat-icon">💧</span>
-                    <span class="stat-label">Humidity</span>
-                    <span class="stat-value">--%</span>
-                </div>
-                <div class="today-stat" id="statWind">
-                    <span class="stat-icon">💨</span>
-                    <span class="stat-label">Wind</span>
-                    <span class="stat-value">-- km/h</span>
-                </div>
-                <div class="today-stat" id="statVisibility">
-                    <span class="stat-icon">👁️</span>
-                    <span class="stat-label">Visibility</span>
-                    <span class="stat-value">-- km</span>
-                </div>
-                <div class="today-stat" id="statPressure">
-                    <span class="stat-icon">🌡️</span>
-                    <span class="stat-label">Pressure</span>
-                    <span class="stat-value">-- hPa</span>
-                </div>
-                <div class="today-stat" id="statUV">
-                    <span class="stat-icon">☀️</span>
-                    <span class="stat-label">UV Index</span>
-                    <span class="stat-value">--</span>
-                </div>
-                <div class="today-stat" id="statSunrise">
-                    <span class="stat-icon">🌅</span>
-                    <span class="stat-label">Sunrise</span>
-                    <span class="stat-value">--</span>
-                </div>
-                <div class="today-stat" id="statSunset">
-                    <span class="stat-icon">🌇</span>
-                    <span class="stat-label">Sunset</span>
-                    <span class="stat-value">--</span>
-                </div>
-                <div class="today-stat" id="statRain">
-                    <span class="stat-icon">🌧️</span>
-                    <span class="stat-label">Rain Chance</span>
-                    <span class="stat-value">--%</span>
-                </div>
+<main class="family-main wx-main" id="weatherApp">
+    <header class="family-hero wx-hero">
+        <div class="family-hero-content">
+            <h1 class="family-hero-title">Weather</h1>
+            <p class="family-hero-summary">Check the skies before you head out.</p>
+            <div class="family-actions">
+                <button type="button" class="family-button family-button-primary" id="useCurrentLocation">Use my location</button>
+                <button type="button" class="family-button" id="weatherUnits" aria-label="Show temperatures in Fahrenheit" aria-pressed="false">°C / °F</button>
+                <button type="button" class="family-button" id="weatherShare" hidden>Share</button>
             </div>
         </div>
+        <div class="family-hero-art" aria-hidden="true">
+            <span class="wx-art-paper wx-art-back"></span>
+            <span class="wx-art-paper wx-art-front"><i class="wx-art-sun"></i><i class="wx-art-cloud"></i></span>
+        </div>
+    </header>
 
-        <!-- 7-Day Forecast Section -->
-        <div class="notes-section">
-            <div class="section-header">
-                <h2 class="section-title">
-                    <span>📅</span> 7-Day Forecast
-                </h2>
-                <div class="filter-buttons">
-                    <button class="filter-btn active" data-view="cards" onclick="WeatherWidget.getInstance().setView('cards')">
-                        <span>📊</span> Cards
-                    </button>
-                    <button class="filter-btn" data-view="list" onclick="WeatherWidget.getInstance().setView('list')">
-                        <span>📋</span> List
-                    </button>
-                </div>
-            </div>
-
-            <div id="weeklyForecast" class="notes-grid forecast-grid">
-                <!-- Skeleton loading -->
-                <?php for ($i = 0; $i < 7; $i++): ?>
-                <div class="note-card skeleton-card">
-                    <div class="skeleton skeleton-icon"></div>
-                    <div class="skeleton skeleton-text"></div>
-                    <div class="skeleton skeleton-text-sm"></div>
-                </div>
-                <?php endfor; ?>
+    <div class="wx-toolbar">
+        <div class="wx-search">
+            <label class="wx-sr-only" for="locationSearch">Search for a city or town</label>
+            <input type="search" id="locationSearch" placeholder="Search city or town…" maxlength="100"
+                   autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="searchResults">
+            <div class="wx-search-popover" id="searchPopover" hidden>
+                <ul id="searchResults" role="listbox" aria-label="Matching places"></ul>
+                <p id="searchStatus" role="status"></p>
             </div>
         </div>
-
-        <!-- Hourly Forecast Section -->
-        <div class="notes-section">
-            <div class="section-header">
-                <h2 class="section-title">
-                    <span>🕐</span> 24-Hour Forecast
-                </h2>
-            </div>
-
-            <div class="hourly-scroll">
-                <div id="hourlyForecast" class="hourly-grid">
-                    <div class="weather-loading">
-                        <div class="loading-spinner">☁️</div>
-                        <p>Loading hourly forecast...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- AI Weather Insights Section -->
-        <div class="notes-section" id="insightsSection" style="display: none;">
-            <div class="section-header">
-                <h2 class="section-title">
-                    <span>💡</span> AI Insights
-                </h2>
-            </div>
-            <div id="weatherInsights" class="insights-grid"></div>
-        </div>
-
-        <!-- Weather Alerts Container -->
-        <div id="weatherAlerts" class="alerts-container"></div>
+        <div class="wx-places" id="weatherPlaces" aria-label="Quick locations"></div>
     </div>
+
+    <div class="wx-location-heading" id="weatherLocationHeading" hidden>
+        <div>
+            <h2 class="family-section-title" id="weatherLocation"></h2>
+            <p id="weatherUpdated"></p>
+        </div>
+        <button class="wx-button" type="button" id="weatherRefresh">Refresh</button>
+    </div>
+    <p class="wx-status" id="weatherStatus" role="status"></p>
+    <noscript><p class="wx-message">Enable JavaScript to search for a location and load its forecast.</p></noscript>
+
+    <section class="wx-overview" id="weatherOverview" aria-label="Weather at a glance" hidden>
+        <div class="wx-card wx-current" id="currentWeather"></div>
+        <div class="wx-card wx-plan" id="weatherPlan"></div>
+    </section>
+
+    <section class="wx-section" id="hourlySection" aria-labelledby="hourlyHeading" hidden>
+        <div class="wx-section-head">
+            <div><h2 class="family-section-title" id="hourlyHeading">Next 24 hours</h2><p>3-hour intervals · local time</p></div>
+        </div>
+        <div id="hourlyForecast" class="wx-hourly"></div>
+    </section>
+
+    <section class="wx-section" id="dailySection" aria-labelledby="dailyHeading" hidden>
+        <div class="wx-section-head">
+            <div><h2 class="family-section-title" id="dailyHeading">Daily forecast</h2><p>Choose a day to see its full forecast.</p></div>
+            <div class="wx-layout" role="group" aria-label="Forecast layout">
+                <button type="button" data-view="cards" aria-pressed="true">Cards</button>
+                <button type="button" data-view="list" aria-pressed="false">List</button>
+            </div>
+        </div>
+        <div id="weeklyForecast" class="wx-daily"></div>
+    </section>
+    <p class="wx-source" id="weatherSource" hidden>Weather data from OpenWeather.</p>
 </main>
 
-<!-- Day Detail Modal -->
-<div id="dayDetailModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2 id="modalTitle">Day Details</h2>
-            <button onclick="WeatherWidget.getInstance().closeModal()" class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body" id="dayDetailContent">
-            <div class="weather-loading">
-                <div class="loading-spinner">☁️</div>
-                <p>Loading...</p>
-            </div>
-        </div>
-    </div>
-</div>
+<dialog id="dayDetailModal" class="wx-dialog" aria-labelledby="weatherDayTitle">
+    <header>
+        <h2 id="weatherDayTitle"></h2>
+        <form method="dialog"><button class="wx-button" aria-label="Close day details" autofocus>Close</button></form>
+    </header>
+    <div id="dayDetailContent" class="wx-dialog-body"></div>
+</dialog>
 
-<!-- Share Modal -->
-<div id="shareModal" class="modal">
-    <div class="modal-content" style="max-width: 400px;">
-        <div class="modal-header">
-            <h2>📤 Share Weather</h2>
-            <button onclick="WeatherWidget.getInstance().closeShareModal()" class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <p class="modal-description">Choose export format:</p>
-            <div class="share-options">
-                <button onclick="WeatherWidget.getInstance().exportWeatherPDF()" class="btn btn-primary">
-                    <span>📄</span>
-                    <span>Export as PDF</span>
-                </button>
-                <button onclick="WeatherWidget.getInstance().exportWeatherCSV()" class="btn btn-secondary">
-                    <span>📊</span>
-                    <span>Export as CSV</span>
-                </button>
-                <button onclick="WeatherWidget.getInstance().exportWeatherText()" class="btn btn-secondary">
-                    <span>📝</span>
-                    <span>Export as Text</span>
-                </button>
-                <button onclick="WeatherWidget.getInstance().shareWeatherWhatsApp()" class="btn btn-whatsapp">
-                    <span>💬</span>
-                    <span>Share to WhatsApp</span>
-                </button>
-            </div>
-        </div>
+<dialog id="shareModal" class="wx-dialog wx-share-dialog" aria-labelledby="weatherShareTitle">
+    <header>
+        <h2 id="weatherShareTitle">Share weather</h2>
+        <form method="dialog"><button class="wx-button" aria-label="Close sharing" autofocus>Close</button></form>
+    </header>
+    <div class="wx-dialog-body wx-share-options">
+        <button type="button" class="wx-button" data-export="print">Print / save as PDF</button>
+        <button type="button" class="wx-button" data-export="csv">Download CSV</button>
+        <button type="button" class="wx-button" data-export="text">Download text</button>
+        <button type="button" class="wx-button" data-export="whatsapp">Share to WhatsApp</button>
     </div>
-</div>
+</dialog>
 
-<!-- Pass user location to JavaScript -->
-<script>
-window.USER_LOCATION = <?php echo $userLocation ? json_encode([
-    'lat' => (float)$userLocation['lat'],
-    'lng' => (float)$userLocation['lng'],
-    'accuracy' => isset($userLocation['accuracy_m']) ? (int)$userLocation['accuracy_m'] : null,
-    'timestamp' => $userLocation['created_at']
-]) : 'null'; ?>;
-</script>
+<script type="application/json" id="weatherSettings"><?= json_encode([
+    'userId' => (int)$user['id'],
+    'trackedLocation' => $userLocation ? [
+        'lat' => (float)$userLocation['lat'],
+        'lon' => (float)$userLocation['lng'],
+        'name' => 'Last shared location',
+        'trackedAt' => (int)$userLocation['tracked_at']
+    ] : null
+], JSON_HEX_TAG | JSON_THROW_ON_ERROR) ?></script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

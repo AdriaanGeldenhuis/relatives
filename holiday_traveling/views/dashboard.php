@@ -1,257 +1,84 @@
 <?php
-/**
- * Holiday Traveling - Dashboard View
- * Shows trip list and quick actions
- */
+$sections = [
+    ['id' => 'activeTrips', 'title' => 'Active trips', 'trips' => $activeTrips],
+    ['id' => 'upcomingTrips', 'title' => 'Upcoming trips', 'trips' => $upcomingTrips],
+    ['id' => 'pastTrips', 'title' => 'Past trips', 'trips' => $pastTrips]
+];
 ?>
 
 <div class="ht-dashboard">
-    <!-- Page Header -->
-    <div class="ht-page-header">
-        <div class="ht-page-header-content">
-            <h1 class="ht-page-title">
-                <span class="ht-title-icon">✈️</span>
-                Holiday & Traveling
-            </h1>
-            <p class="ht-page-subtitle">Plan your perfect getaway with AI assistance</p>
-        </div>
-        <a href="/holiday_traveling/trip_create.php" class="ht-btn ht-btn-primary ht-btn-create">
-            <span class="ht-btn-icon">+</span>
-            <span class="ht-btn-text">New Trip</span>
-        </a>
-    </div>
-
-    <?php if (!empty($activeTrips)): ?>
-    <!-- Active Trip Banner -->
-    <div class="ht-section">
-        <h2 class="ht-section-title">
-            <span class="ht-section-icon">🌟</span>
-            Active Trip
-        </h2>
-        <div class="ht-active-trip-banner">
-            <?php $trip = reset($activeTrips); ?>
-            <div class="ht-active-trip-card">
-                <div class="ht-active-trip-header">
-                    <h3 class="ht-active-trip-destination"><?php echo htmlspecialchars($trip['destination']); ?></h3>
-                    <?php echo ht_status_badge($trip['status']); ?>
-                </div>
-                <p class="ht-active-trip-title"><?php echo htmlspecialchars($trip['title']); ?></p>
-                <div class="ht-active-trip-meta">
-                    <span class="ht-meta-item">
-                        <span class="ht-meta-icon">📅</span>
-                        <?php echo ht_format_date($trip['start_date']); ?> - <?php echo ht_format_date($trip['end_date']); ?>
-                    </span>
-                    <span class="ht-meta-item">
-                        <span class="ht-meta-icon">👥</span>
-                        <?php echo $trip['travelers_count']; ?> traveler<?php echo $trip['travelers_count'] > 1 ? 's' : ''; ?>
-                    </span>
-                    <span class="ht-meta-item">
-                        <span class="ht-meta-icon">📍</span>
-                        Day <?php echo ht_trip_duration($trip['start_date'], date('Y-m-d')); ?> of <?php echo ht_trip_duration($trip['start_date'], $trip['end_date']); ?>
-                    </span>
-                </div>
-                <div class="ht-active-trip-actions">
-                    <a href="/holiday_traveling/trip_view.php?id=<?php echo $trip['id']; ?>" class="ht-btn ht-btn-secondary">View Plan</a>
-                    <a href="/holiday_traveling/wallet_view.php?id=<?php echo $trip['id']; ?>" class="ht-btn ht-btn-outline">Wallet</a>
-                    <a href="/holiday_traveling/expenses_view.php?id=<?php echo $trip['id']; ?>" class="ht-btn ht-btn-outline">Expenses</a>
-                </div>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
-
-    <!-- Quick Stats -->
-    <div class="ht-stats-grid">
-        <div class="ht-stat-card">
-            <span class="ht-stat-icon">🗓️</span>
-            <span class="ht-stat-value"><?php echo count($upcomingTrips); ?></span>
-            <span class="ht-stat-label">Upcoming</span>
-        </div>
-        <div class="ht-stat-card">
-            <span class="ht-stat-icon">✅</span>
-            <span class="ht-stat-value"><?php echo count(array_filter($trips, fn($t) => $t['status'] === 'completed')); ?></span>
-            <span class="ht-stat-label">Completed</span>
-        </div>
-        <div class="ht-stat-card">
-            <span class="ht-stat-icon">📝</span>
-            <span class="ht-stat-value"><?php echo count(array_filter($trips, fn($t) => $t['status'] === 'draft')); ?></span>
-            <span class="ht-stat-label">Drafts</span>
-        </div>
-    </div>
-
-    <?php if (!empty($upcomingTrips)): ?>
-    <!-- Upcoming Trips -->
-    <div class="ht-section">
-        <h2 class="ht-section-title">
-            <span class="ht-section-icon">🗓️</span>
-            Upcoming Trips
-        </h2>
-        <div class="ht-trips-list">
-            <?php foreach ($upcomingTrips as $trip): ?>
-            <div class="ht-trip-card" data-trip-id="<?php echo $trip['id']; ?>">
-                <div class="ht-trip-card-header">
-                    <div class="ht-trip-destination">
-                        <h3><?php echo htmlspecialchars($trip['destination']); ?></h3>
-                        <?php echo ht_status_badge($trip['status']); ?>
-                    </div>
-                </div>
-                <p class="ht-trip-title"><?php echo htmlspecialchars($trip['title']); ?></p>
-                <div class="ht-trip-meta">
-                    <span class="ht-meta-item">
-                        <span class="ht-meta-icon">📅</span>
-                        <?php echo ht_format_date($trip['start_date'], 'M j'); ?> - <?php echo ht_format_date($trip['end_date'], 'M j, Y'); ?>
-                    </span>
-                    <span class="ht-meta-item">
-                        <span class="ht-meta-icon">⏱️</span>
-                        <?php echo ht_trip_duration($trip['start_date'], $trip['end_date']); ?> days
-                    </span>
-                    <span class="ht-meta-item">
-                        <span class="ht-meta-icon">👥</span>
-                        <?php echo $trip['travelers_count']; ?>
-                    </span>
-                </div>
-                <?php if ($trip['budget_comfort']): ?>
-                <div class="ht-trip-budget">
-                    <span class="ht-budget-label">Budget:</span>
-                    <span class="ht-budget-value"><?php echo ht_format_currency($trip['budget_comfort'], $trip['budget_currency']); ?></span>
-                </div>
+    <header class="family-hero">
+        <div class="family-hero-content">
+            <h1 class="family-hero-title">Holiday &amp; traveling</h1>
+            <p class="family-hero-summary">Plan family trips and keep your bookings, packing and expenses together.</p>
+            <div class="family-actions">
+                <a href="/holiday_traveling/trip_create.php" class="family-button family-button-primary">＋ New trip</a>
+                <?php if ($activeTrips): ?>
+                    <a href="#activeTrips" class="family-button">Active trips</a>
                 <?php endif; ?>
-                <?php if ($trip['active_plan_version']): ?>
-                <div class="ht-trip-plan-indicator">
-                    <span class="ht-plan-badge">📋 Plan v<?php echo $trip['active_plan_version']; ?></span>
-                </div>
-                <?php else: ?>
-                <div class="ht-trip-plan-indicator">
-                    <span class="ht-plan-badge ht-plan-badge-empty">No plan yet</span>
-                </div>
-                <?php endif; ?>
-                <a href="/holiday_traveling/trip_view.php?id=<?php echo $trip['id']; ?>" class="ht-trip-card-link">
-                    View Details →
-                </a>
             </div>
-            <?php endforeach; ?>
         </div>
-    </div>
-    <?php endif; ?>
-
-    <?php if (!empty($pastTrips)): ?>
-    <!-- Past Trips -->
-    <div class="ht-section">
-        <h2 class="ht-section-title">
-            <span class="ht-section-icon">📚</span>
-            Past Trips
-        </h2>
-        <div class="ht-trips-list ht-trips-list-compact">
-            <?php foreach ($pastTrips as $trip): ?>
-            <div class="ht-trip-card ht-trip-card-past" data-trip-id="<?php echo $trip['id']; ?>">
-                <div class="ht-trip-card-header">
-                    <div class="ht-trip-destination">
-                        <h3><?php echo htmlspecialchars($trip['destination']); ?></h3>
-                        <?php echo ht_status_badge($trip['status']); ?>
-                    </div>
-                </div>
-                <p class="ht-trip-title"><?php echo htmlspecialchars($trip['title']); ?></p>
-                <div class="ht-trip-meta">
-                    <span class="ht-meta-item">
-                        <span class="ht-meta-icon">📅</span>
-                        <?php echo ht_format_date($trip['start_date'], 'M Y'); ?>
-                    </span>
-                </div>
-                <a href="/holiday_traveling/trip_view.php?id=<?php echo $trip['id']; ?>" class="ht-trip-card-link">
-                    View Trip →
-                </a>
-            </div>
-            <?php endforeach; ?>
+        <div class="family-hero-art ht-hero-art" aria-hidden="true">
+            <span class="ht-art-paper ht-art-back"></span>
+            <span class="ht-art-paper ht-art-front"><i></i><i></i><i></i></span>
         </div>
-    </div>
-    <?php endif; ?>
+    </header>
 
-    <?php if (empty($trips)): ?>
-    <!-- Empty State -->
-    <div class="ht-empty-state">
-        <div class="ht-empty-icon">🌴</div>
-        <h2 class="ht-empty-title">No trips yet</h2>
-        <p class="ht-empty-description">
-            Start planning your next adventure! Create a trip and let AI help you build the perfect itinerary.
-        </p>
-        <a href="/holiday_traveling/trip_create.php" class="ht-btn ht-btn-primary ht-btn-lg">
-            <span class="ht-btn-icon">+</span>
-            Create Your First Trip
-        </a>
-    </div>
+    <?php if (!$trips): ?>
+        <section class="ht-empty-state ht-board-empty">
+            <h2 class="family-section-title">No trips yet</h2>
+            <p class="ht-empty-description">Add a destination and travel dates to get started.</p>
+            <a href="/holiday_traveling/trip_create.php" class="ht-btn ht-btn-primary">Create a trip</a>
+        </section>
+    <?php else: ?>
+        <nav class="ht-board-nav" aria-label="Trip sections">
+            <?php foreach ($sections as $section): ?>
+                <?php if (!$section['trips']) continue; ?>
+                <a href="#<?= $section['id'] ?>"><?= $section['title'] ?> <span><?= count($section['trips']) ?></span></a>
+            <?php endforeach; ?>
+        </nav>
+
+        <?php foreach ($sections as $section): ?>
+            <?php if (!$section['trips']) continue; ?>
+            <section class="ht-board-section" id="<?= $section['id'] ?>" aria-labelledby="<?= $section['id'] ?>Heading">
+                <h2 class="family-section-title" id="<?= $section['id'] ?>Heading"><?= $section['title'] ?></h2>
+                <div class="ht-board-grid">
+                    <?php foreach ($section['trips'] as $trip): ?>
+                        <?php
+                        $id = (int)$trip['id'];
+                        $active = $trip['status'] === 'active';
+                        $travelers = (int)$trip['travelers_count'];
+                        $tripTitle = trim($trip['title']);
+                        ?>
+                        <article class="ht-trip-card ht-board-card" data-status="<?= htmlspecialchars($trip['status']) ?>">
+                            <div class="ht-board-card-top">
+                                <?= ht_status_badge($trip['status']) ?>
+                                <?php if ($trip['active_plan_version']): ?>
+                                    <span class="ht-plan-badge">Plan v<?= (int)$trip['active_plan_version'] ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <h3><?= htmlspecialchars($trip['destination']) ?></h3>
+                            <?php if ($tripTitle !== '' && strcasecmp($tripTitle, $trip['destination']) !== 0): ?>
+                                <p class="ht-board-trip-title"><?= htmlspecialchars($tripTitle) ?></p>
+                            <?php endif; ?>
+                            <div class="ht-board-card-meta">
+                                <span><?= ht_format_date($trip['start_date'], substr($trip['start_date'], 0, 4) === substr($trip['end_date'], 0, 4) ? 'j M' : 'j M Y') ?> – <?= ht_format_date($trip['end_date'], 'j M Y') ?></span>
+                                <span><?= $travelers ?> <?= $travelers === 1 ? 'traveler' : 'travelers' ?></span>
+                                <?php if ($trip['budget_comfort']): ?>
+                                    <span><?= htmlspecialchars(ht_format_currency((float)$trip['budget_comfort'], $trip['budget_currency'])) ?> budget</span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="ht-board-card-actions">
+                                <a href="/holiday_traveling/trip_view.php?id=<?= $id ?>" class="ht-btn ht-btn-secondary">View trip</a>
+                                <?php if ($active): ?>
+                                    <a href="/holiday_traveling/wallet_view.php?id=<?= $id ?>" class="ht-btn ht-btn-outline">Wallet</a>
+                                    <a href="/holiday_traveling/expenses_view.php?id=<?= $id ?>" class="ht-btn ht-btn-outline">Expenses</a>
+                                <?php endif; ?>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            </section>
+        <?php endforeach; ?>
     <?php endif; ?>
 </div>
-
-<!-- Delete Confirmation Modal -->
-<div id="deleteModal" class="ht-modal" style="display: none;">
-    <div class="ht-modal-backdrop"></div>
-    <div class="ht-modal-content">
-        <h3 class="ht-modal-title">Delete Trip?</h3>
-        <p class="ht-modal-text">Are you sure you want to delete this trip? This action cannot be undone.</p>
-        <div class="ht-modal-actions">
-            <button class="ht-btn ht-btn-outline" data-action="cancel">Cancel</button>
-            <button class="ht-btn ht-btn-danger" data-action="confirm">Delete</button>
-        </div>
-    </div>
-</div>
-
-<script>
-// Dropdown menu toggle on click
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.ht-menu-trigger').forEach(function(trigger) {
-        trigger.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const menu = this.closest('.ht-trip-actions-menu') || this.closest('.ht-actions-menu');
-            const dropdown = menu.querySelector('.ht-menu-dropdown');
-            const isActive = menu.classList.contains('active');
-
-            // Close all other dropdowns
-            document.querySelectorAll('.ht-trip-actions-menu.active, .ht-actions-menu.active').forEach(function(m) {
-                m.classList.remove('active');
-            });
-
-            // Toggle this dropdown
-            if (!isActive) {
-                // Temporarily show dropdown off-screen to measure it
-                dropdown.style.visibility = 'hidden';
-                dropdown.style.opacity = '0';
-                dropdown.style.display = 'block';
-                dropdown.style.position = 'fixed';
-                dropdown.style.top = '0';
-                dropdown.style.left = '0';
-                menu.classList.add('active');
-
-                const ddWidth = dropdown.offsetWidth;
-                const ddHeight = dropdown.offsetHeight;
-                const buttonRect = this.getBoundingClientRect();
-                const vw = window.innerWidth;
-                const vh = window.innerHeight;
-
-                // Default: position below the trigger button, right-aligned
-                let top = buttonRect.bottom + 8;
-                let left = buttonRect.right - ddWidth;
-
-                // Clamp to viewport
-                if (left < 8) left = 8;
-                if (left + ddWidth > vw - 8) left = vw - ddWidth - 8;
-                if (top + ddHeight > vh - 8) top = buttonRect.top - ddHeight - 8;
-                if (top < 8) top = 8;
-
-                dropdown.style.top = top + 'px';
-                dropdown.style.left = left + 'px';
-                dropdown.style.right = 'auto';
-                dropdown.style.visibility = '';
-                dropdown.style.opacity = '';
-                dropdown.style.display = '';
-            }
-        });
-    });
-
-    // Close dropdown when clicking outside
-    document.addEventListener('click', function() {
-        document.querySelectorAll('.ht-trip-actions-menu.active, .ht-actions-menu.active').forEach(function(m) {
-            m.classList.remove('active');
-        });
-    });
-});
-</script>
