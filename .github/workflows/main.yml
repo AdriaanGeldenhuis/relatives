@@ -82,7 +82,7 @@ jobs:
             --exclude='/.env' --exclude='/.env.cache.php' \
             --exclude='/config/' --exclude='/help/config.php' \
             --exclude='logs/' --exclude='uploads/' --exclude='saves/' \
-            --exclude='/REBUILD_RECIPE.md' --exclude='/test_cache.php' \
+            --exclude='/AGENTS.md' --exclude='/REBUILD_RECIPE.md' --exclude='/test_cache.php' \
             "$temp/site/" "relatives-production:${DEPLOY_PATH%/}/"
 
           # This tracked source was removed from Git and cannot compile with the new project.
