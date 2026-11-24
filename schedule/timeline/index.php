@@ -1,379 +1,148 @@
 <?php
-/**
- * ============================================
- * RELATIVES - TIMELINE VIEW
- * Visual time-based schedule representation
- * Shows start, end, and duration of events
- * ============================================
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../../core/session_boot.php';
-
 if (!isset($_SESSION['user_id'])) {
     header('Location: /login.php');
     exit;
 }
-
 require_once __DIR__ . '/../../core/bootstrap.php';
-
-$auth = new Auth($db);
-$user = $auth->getCurrentUser();
-
+require_once __DIR__ . '/../planner.php';
+$user = (new Auth($db))->getCurrentUser();
 if (!$user) {
     header('Location: /login.php');
     exit;
 }
+header('Cache-Control: private, no-store');
+$day = scheduleDate($_GET['date'] ?? null) ?? new DateTimeImmutable('today');
+$date = $day->format('Y-m-d');
+$tomorrow = $day->modify('+1 day');
+$events = scheduleEvents($db, (int)$user['family_id'], $day, $tomorrow);
+$types = scheduleTypes();
+$allDay = [];
+$blocks = [];
+$lanes = [];
+$timelineStart = 7 * 60;
+$timelineEnd = 20 * 60;
+$anchor = $day->getTimestamp();
 
-$selectedDate = $_GET['date'] ?? date('Y-m-d');
-$selectedDate = date('Y-m-d', strtotime($selectedDate));
-
-// Timeline settings
-$timelineStart = 5; // Start at 5 AM
-$timelineEnd = 23;  // End at 11 PM
-$totalHours = $timelineEnd - $timelineStart;
-
-// Get family members
-try {
-    $stmt = $db->prepare("
-        SELECT id, full_name, avatar_color
-        FROM users
-        WHERE family_id = ? AND status = 'active'
-        ORDER BY full_name
-    ");
-    $stmt->execute([$user['family_id']]);
-    $familyMembers = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $familyMembers = [];
-}
-
-// Get events for selected date
-$events = [];
-try {
-    $stmt = $db->prepare("
-        SELECT
-            e.*,
-            e.recurrence_rule as repeat_rule,
-            u.full_name as added_by_name, u.avatar_color,
-            a.full_name as assigned_to_name, a.avatar_color as assigned_color,
-            TIMESTAMPDIFF(MINUTE, e.starts_at, e.ends_at) as duration_minutes
-        FROM events e
-        LEFT JOIN users u ON e.created_by = u.id
-        LEFT JOIN users a ON e.assigned_to = a.id
-        WHERE e.family_id = ?
-        AND DATE(e.starts_at) = ?
-        AND e.status != 'cancelled'
-        ORDER BY e.starts_at ASC
-    ");
-    $stmt->execute([$user['family_id'], $selectedDate]);
-    $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $events = [];
-}
-
-// Type metadata
-$types = [
-    'work' => ['icon' => '💼', 'name' => 'Work', 'color' => '#43e97b'],
-    'study' => ['icon' => '📚', 'name' => 'Study', 'color' => '#667eea'],
-    'church' => ['icon' => '⛪', 'name' => 'Church', 'color' => '#9b59b6'],
-    'event' => ['icon' => '📅', 'name' => 'Event', 'color' => '#3498db'],
-    'focus' => ['icon' => '🎯', 'name' => 'Focus', 'color' => '#4facfe'],
-    'break' => ['icon' => '☕', 'name' => 'Break', 'color' => '#feca57'],
-    'todo' => ['icon' => '✅', 'name' => 'To-Do', 'color' => '#f093fb'],
-    'birthday' => ['icon' => '🎂', 'name' => 'Birthday', 'color' => '#ff6b6b'],
-    'anniversary' => ['icon' => '💍', 'name' => 'Anniversary', 'color' => '#ff9ff3'],
-    'holiday' => ['icon' => '🎉', 'name' => 'Holiday', 'color' => '#feca57'],
-    'family_event' => ['icon' => '👨‍👩‍👧‍👦', 'name' => 'Family', 'color' => '#00d2d3'],
-    'date' => ['icon' => '❤️', 'name' => 'Date', 'color' => '#ee5a6f'],
-    'reminder' => ['icon' => '🔔', 'name' => 'Reminder', 'color' => '#f39c12']
-];
-
-// Calculate total time scheduled and done
-$totalScheduledMinutes = 0;
-$totalDoneMinutes = 0;
 foreach ($events as $event) {
-    $duration = $event['duration_minutes'] ?? 0;
-    $totalScheduledMinutes += $duration;
-    if ($event['status'] === 'done') {
-        $totalDoneMinutes += $duration;
+    $event['time_label'] = scheduleDayTime($event, $day);
+    if ($event['all_day']) {
+        $allDay[] = $event;
+        continue;
     }
+    $start = max(0, intdiv(strtotime($event['starts_at']) - $anchor, 60));
+    $end = $event['ends_at'] ? min(1440, intdiv(strtotime($event['ends_at']) - $anchor + 59, 60)) : $start;
+    $visibleEnd = min(1440, max($start + 25, $end));
+    $lane = 0;
+    while (isset($lanes[$lane]) && $lanes[$lane] > $start) {
+        $lane++;
+    }
+    $lanes[$lane] = $visibleEnd;
+    $blocks[] = ['event' => $event, 'start' => $start, 'end' => $visibleEnd, 'lane' => $lane];
+    $timelineStart = min($timelineStart, intdiv($start, 60) * 60);
+    $timelineEnd = max($timelineEnd, (int)(ceil($visibleEnd / 60) * 60));
 }
 
-// Format duration helper
-function formatDuration($minutes) {
-    if ($minutes < 60) {
-        return $minutes . 'm';
-    }
-    $hours = floor($minutes / 60);
-    $mins = $minutes % 60;
-    return $mins > 0 ? "{$hours}h {$mins}m" : "{$hours}h";
-}
-
-// Current time for progress indicator
-$currentHour = (int)date('G');
-$currentMinute = (int)date('i');
-$isToday = ($selectedDate === date('Y-m-d'));
-
-$pageTitle = 'Timeline';
-$activePage = 'schedule';
-$pageCSS = ['/schedule/timeline/css/timeline.css'];
+$timelineStart = max(0, $timelineStart);
+$timelineEnd = min(1440, $timelineEnd);
+$timelineMinutes = $timelineEnd - $timelineStart;
+$today = (new DateTimeImmutable('today'))->format('Y-m-d');
+$pageTitle = 'Schedule timeline';
+$pageCSS = [
+    '/schedule/css/schedule.css?build=' . filemtime(__DIR__ . '/../css/schedule.css'),
+    '/schedule/timeline/css/timeline.css?build=' . filemtime(__DIR__ . '/css/timeline.css')
+];
 $pageJS = ['/schedule/timeline/js/timeline.js'];
-
+$pageJSVersion = filemtime(__DIR__ . '/js/timeline.js');
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
-
-<!-- Animated Background -->
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-</div>
-
-<!-- Main Content -->
-<main class="main-content">
-    <div class="container">
-
-        <!-- Hero Section -->
-        <div class="hero-section">
-            <div class="greeting-card">
-                <div class="greeting-time"><?php echo date('l, F j, Y', strtotime($selectedDate)); ?></div>
-                <h1 class="greeting-text">
-                    <span class="greeting-icon">📊</span>
-                    <span class="greeting-name">Timeline View</span>
-                </h1>
-                <p class="greeting-subtitle">Visual overview of your day from start to finish</p>
-
-                <!-- Date Navigation -->
-                <div class="date-nav">
-                    <button onclick="changeDate(-1)" class="date-nav-btn" title="Previous Day">
-                        <span>◀</span>
-                    </button>
-                    <button onclick="goToToday()" class="date-nav-today <?php echo $isToday ? 'active' : ''; ?>">
-                        Today
-                    </button>
-                    <button onclick="changeDate(1)" class="date-nav-btn" title="Next Day">
-                        <span>▶</span>
-                    </button>
-                </div>
-
-                <!-- Quick Stats -->
-                <div class="timeline-stats">
-                    <div class="stat-card">
-                        <span class="stat-icon">📋</span>
-                        <span class="stat-value"><?php echo count($events); ?></span>
-                        <span class="stat-label">Events</span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-icon">⏱️</span>
-                        <span class="stat-value"><?php echo formatDuration($totalScheduledMinutes); ?></span>
-                        <span class="stat-label">Scheduled</span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-icon">✅</span>
-                        <span class="stat-value"><?php echo formatDuration($totalDoneMinutes); ?></span>
-                        <span class="stat-label">Completed</span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-icon">📈</span>
-                        <span class="stat-value"><?php echo $totalScheduledMinutes > 0 ? round(($totalDoneMinutes / $totalScheduledMinutes) * 100) : 0; ?>%</span>
-                        <span class="stat-label">Progress</span>
-                    </div>
-                </div>
-
-                <!-- View Toggle -->
-                <div class="view-toggle">
-                    <a href="/schedule/?date=<?php echo $selectedDate; ?>" class="view-btn">
-                        <span>📅</span> Schedule
-                    </a>
-                    <a href="/schedule/timeline/?date=<?php echo $selectedDate; ?>" class="view-btn active">
-                        <span>📊</span> Timeline
-                    </a>
-                </div>
-            </div>
+<main class="planner-main">
+    <header class="planner-hero timeline-hero">
+        <div>
+            <h1>Timeline</h1>
+            <p><?= $day->format('l, j F Y') ?></p>
         </div>
-
-        <!-- Timeline Container -->
-        <div class="timeline-container glass-card">
-
-            <!-- Timeline Header -->
-            <div class="timeline-header">
-                <div class="timeline-title">
-                    <span class="title-icon">🕐</span>
-                    <span>Day Timeline</span>
-                    <?php if ($isToday): ?>
-                        <span class="current-time-badge"><?php echo date('H:i'); ?></span>
-                    <?php endif; ?>
-                </div>
-                <div class="timeline-legend">
-                    <span class="legend-item"><span class="legend-dot done"></span> Done</span>
-                    <span class="legend-item"><span class="legend-dot pending"></span> Pending</span>
-                    <span class="legend-item"><span class="legend-dot in-progress"></span> In Progress</span>
-                </div>
-            </div>
-
-            <!-- Timeline Grid -->
-            <div class="timeline-grid" id="timelineGrid">
-
-                <!-- Time Labels -->
-                <div class="time-labels">
-                    <?php for ($hour = $timelineStart; $hour <= $timelineEnd; $hour++): ?>
-                        <div class="time-label" style="top: <?php echo (($hour - $timelineStart) / $totalHours) * 100; ?>%">
-                            <span><?php echo sprintf('%02d:00', $hour); ?></span>
-                        </div>
-                    <?php endfor; ?>
-                </div>
-
-                <!-- Timeline Track -->
-                <div class="timeline-track">
-
-                    <!-- Hour Lines -->
-                    <?php for ($hour = $timelineStart; $hour <= $timelineEnd; $hour++): ?>
-                        <div class="hour-line" style="top: <?php echo (($hour - $timelineStart) / $totalHours) * 100; ?>%"></div>
-                    <?php endfor; ?>
-
-                    <!-- Events -->
-                    <?php if (empty($events)): ?>
-                        <div class="no-events">
-                            <div class="no-events-icon">📭</div>
-                            <p>No events scheduled for this day</p>
-                            <a href="/schedule/?date=<?php echo $selectedDate; ?>" class="add-event-link">
-                                + Add Event
-                            </a>
-                        </div>
-                    <?php else: ?>
-                        <?php foreach ($events as $index => $event): ?>
-                            <?php
-                            $startTime = strtotime($event['starts_at']);
-                            $endTime = strtotime($event['ends_at']);
-                            $startHour = (int)date('G', $startTime);
-                            $startMin = (int)date('i', $startTime);
-                            $endHour = (int)date('G', $endTime);
-                            $endMin = (int)date('i', $endTime);
-
-                            // Calculate position and height
-                            $startPos = max(0, (($startHour - $timelineStart) + ($startMin / 60)) / $totalHours * 100);
-                            $endPos = min(100, (($endHour - $timelineStart) + ($endMin / 60)) / $totalHours * 100);
-                            $height = max(3, $endPos - $startPos); // Minimum 3% height
-
-                            $type = $event['kind'] ?? 'todo';
-                            $typeInfo = $types[$type] ?? $types['todo'];
-                            $duration = $event['duration_minutes'] ?? 0;
-                            $status = $event['status'] ?? 'pending';
-                            ?>
-                            <div class="timeline-event <?php echo $status; ?> <?php echo $event['focus_mode'] ? 'focus-event' : ''; ?>"
-                                 style="top: <?php echo $startPos; ?>%; height: <?php echo $height; ?>%; background: <?php echo $typeInfo['color']; ?>20; border-left-color: <?php echo $typeInfo['color']; ?>;"
-                                 data-event-id="<?php echo $event['id']; ?>"
-                                 onclick="showEventDetails(<?php echo $event['id']; ?>)">
-
-                                <div class="event-content">
-                                    <div class="event-title">
-                                        <span class="event-icon"><?php echo $typeInfo['icon']; ?></span>
-                                        <span class="event-name"><?php echo htmlspecialchars($event['title']); ?></span>
-                                        <?php if ($event['focus_mode']): ?>
-                                            <span class="focus-badge">🎯</span>
-                                        <?php endif; ?>
-                                        <?php if ($event['repeat_rule']): ?>
-                                            <span class="repeat-badge">🔁</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-
-                                <div class="event-status-indicator <?php echo $status; ?>">
-                                    <?php if ($status === 'done'): ?>
-                                        ✓
-                                    <?php elseif ($status === 'in_progress'): ?>
-                                        ▶
-                                    <?php else: ?>
-                                        ○
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </div>
-            </div>
+    </header>
+    <div class="planner-toolbar timeline-toolbar">
+        <div class="planner-views" aria-label="Schedule views">
+            <a href="/schedule/?date=<?= $date ?>&amp;view=day">Day</a>
+            <a href="/schedule/?date=<?= $date ?>&amp;view=week">Week</a>
+            <a href="?date=<?= $date ?>" aria-current="page">Timeline</a>
         </div>
-
-        <!-- Event List (Alternative view) -->
-        <div class="event-list-section glass-card">
-            <div class="section-header">
-                <span class="section-icon">📋</span>
-                <span class="section-title">Event Details</span>
-            </div>
-
-            <?php if (empty($events)): ?>
-                <div class="empty-list">
-                    <p>No events to display</p>
-                </div>
-            <?php else: ?>
-                <div class="event-list">
-                    <?php foreach ($events as $event): ?>
-                        <?php
-                        $type = $event['kind'] ?? 'todo';
-                        $typeInfo = $types[$type] ?? $types['todo'];
-                        $startTime = strtotime($event['starts_at']);
-                        $endTime = strtotime($event['ends_at']);
-                        $duration = $event['duration_minutes'] ?? 0;
-                        $status = $event['status'] ?? 'pending';
-                        ?>
-                        <div class="event-list-item <?php echo $status; ?>" onclick="showEventDetails(<?php echo $event['id']; ?>)">
-                            <div class="event-list-time">
-                                <div class="start-time"><?php echo date('H:i', $startTime); ?></div>
-                                <div class="time-arrow">↓</div>
-                                <div class="end-time"><?php echo date('H:i', $endTime); ?></div>
-                            </div>
-
-                            <div class="event-list-color" style="background: <?php echo $typeInfo['color']; ?>;"></div>
-
-                            <div class="event-list-content">
-                                <div class="event-list-title">
-                                    <?php echo $typeInfo['icon']; ?> <?php echo htmlspecialchars($event['title']); ?>
-                                </div>
-                                <div class="event-list-meta">
-                                    <span class="duration-badge">⏱️ <?php echo formatDuration($duration); ?></span>
-                                    <?php if ($event['assigned_to_name']): ?>
-                                        <span class="assigned-badge">👤 <?php echo htmlspecialchars($event['assigned_to_name']); ?></span>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-
-                            <div class="event-list-status">
-                                <?php if ($status === 'done'): ?>
-                                    <span class="status-done">✅ Done</span>
-                                <?php elseif ($status === 'in_progress'): ?>
-                                    <span class="status-progress">▶️ Active</span>
-                                <?php else: ?>
-                                    <span class="status-pending">⏳ Pending</span>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
+        <div class="planner-date-actions">
+            <a class="planner-icon-button" href="?date=<?= $day->modify('-1 day')->format('Y-m-d') ?>" aria-label="Previous day">‹</a>
+            <a class="planner-control" href="?date=<?= $today ?>">Today</a>
+            <a class="planner-icon-button" href="?date=<?= $tomorrow->format('Y-m-d') ?>" aria-label="Next day">›</a>
         </div>
-
     </div>
+
+    <?php if (!$events): ?>
+        <div class="planner-empty"><h2>Nothing scheduled</h2><p>No events on <?= $day->format('l') ?>.</p><a class="btn btn-primary" href="/schedule/?date=<?= $date ?>">Open day agenda</a></div>
+    <?php else: ?>
+        <div class="timeline-board">
+            <section class="timeline-chart planner-panel" aria-labelledby="timelineHeading">
+                <h2 id="timelineHeading">Day timeline</h2>
+                <?php if ($allDay): ?>
+                    <div class="timeline-all-day">
+                        <h3>All day</h3>
+                        <div>
+                            <?php foreach ($allDay as $item): ?>
+                                <button type="button" class="planner-control" data-timeline-event="<?= (int)$item['id'] ?>"><?= scheduleEscape($item['title']) ?></button>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+                <?php if ($blocks): ?>
+                    <div class="timeline-scroll" tabindex="0" aria-label="Scheduled times">
+                        <div class="timeline-scale" style="--timeline-lanes: <?= max(1, count($lanes)) ?>; --timeline-height: <?= intdiv($timelineMinutes * 13, 20) ?>px">
+                            <?php for ($minute = $timelineStart; $minute <= $timelineEnd; $minute += 60): ?>
+                                <div class="timeline-hour" style="top: <?= (($minute - $timelineStart) / $timelineMinutes) * 100 ?>%">
+                                    <span><?= sprintf('%02d:00', intdiv($minute, 60)) ?></span>
+                                </div>
+                            <?php endfor; ?>
+                            <?php foreach ($blocks as ['event' => $item, 'start' => $start, 'end' => $end, 'lane' => $lane]):
+                                $color = preg_match('/^#[0-9a-f]{6}$/iD', $item['color'] ?? '') ? $item['color'] : ($types[$item['kind']]['color'] ?? '#327451'); ?>
+                                <button type="button" class="timeline-block<?= $item['status'] === 'done' ? ' is-done' : '' ?>"
+                                    data-timeline-event="<?= (int)$item['id'] ?>" aria-label="<?= scheduleEscape($item['title'] . ', ' . $item['time_label']) ?>"
+                                    style="--top: <?= (($start - $timelineStart) / $timelineMinutes) * 100 ?>%; --height: <?= (($end - $start) / $timelineMinutes) * 100 ?>%; --lane: <?= $lane ?>; --accent: <?= $color ?>">
+                                    <span><?= scheduleEscape($item['title']) ?></span>
+                                </button>
+                            <?php endforeach; ?>
+                            <?php if ($date === $today): ?>
+                                <div id="timelineNow" class="timeline-now" data-start="<?= $timelineStart ?>" data-end="<?= $timelineEnd ?>" data-date="<?= $date ?>" aria-hidden="true" hidden></div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </section>
+            <aside class="timeline-details planner-panel">
+                <h2>Events</h2>
+                <?php foreach ($events as $item): ?>
+                    <button type="button" class="timeline-summary" data-timeline-event="<?= (int)$item['id'] ?>">
+                        <strong><?= scheduleEscape($item['title']) ?></strong>
+                        <span><?= scheduleDayTime($item, $day) ?><?= $item['assigned_to_name'] ? ' · ' . scheduleEscape($item['assigned_to_name']) : '' ?></span>
+                    </button>
+                <?php endforeach; ?>
+            </aside>
+        </div>
+    <?php endif; ?>
 </main>
-
-<!-- Event Details Modal -->
-<div id="eventDetailModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2 id="modalEventTitle">Event Details</h2>
-            <button onclick="closeModal('eventDetailModal')" class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body" id="modalEventBody">
-            <!-- Content loaded dynamically -->
-        </div>
-        <div class="modal-actions">
-            <a href="#" id="editEventLink" class="btn btn-primary">✏️ Edit</a>
-            <button onclick="closeModal('eventDetailModal')" class="btn btn-secondary">Close</button>
-        </div>
+<dialog id="timelineEventDialog" class="planner-modal" aria-labelledby="timelineEventTitle">
+    <header class="modal-header"><h2 id="timelineEventTitle"></h2><button type="button" id="timelineClose" class="modal-close" aria-label="Close">&times;</button></header>
+    <div class="modal-body">
+        <dl class="timeline-info" id="timelineEventData"></dl>
+        <p id="timelineEventNotes" class="timeline-event-notes"></p>
+        <footer class="modal-actions"><a class="btn btn-primary" id="timelineEditLink" href="/schedule/?date=<?= $date ?>">Edit event</a></footer>
     </div>
-</div>
-
-<script>
-    // Pass events data to JavaScript
-    window.timelineEvents = <?php echo json_encode($events); ?>;
-    window.selectedDate = '<?php echo $selectedDate; ?>';
-    window.eventTypes = <?php echo json_encode($types); ?>;
-</script>
-
+</dialog>
+<script type="application/json" id="timelineData"><?= scheduleJson([
+    'events' => array_map(static fn($item) => [
+        'id' => (string)$item['id'], 'title' => $item['title'], 'time' => scheduleDayTime($item, $day),
+        'kind' => $types[$item['kind']]['name'] ?? 'Other', 'status' => $item['status'],
+        'notes' => $item['notes'] ?: $item['description'], 'assigned' => $item['assigned_to_name']
+    ], $events),
+    'date' => $date
+]) ?></script>
 <?php require_once __DIR__ . '/../../shared/components/footer.php'; ?>
