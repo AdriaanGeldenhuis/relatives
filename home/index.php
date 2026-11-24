@@ -36,7 +36,7 @@ $userLocation = null;
 try {
     // First try tracking_current (most recent location)
     $stmt = $db->prepare("
-        SELECT lat, lng, accuracy_m, updated_at as created_at
+        SELECT lat, lng, UNIX_TIMESTAMP(updated_at) AS tracked_at
         FROM tracking_current
         WHERE user_id = ?
         LIMIT 1
@@ -47,7 +47,7 @@ try {
     // Fallback to tracking_locations if no current location
     if (!$userLocation) {
         $stmt = $db->prepare("
-            SELECT lat, lng, accuracy_m, created_at
+            SELECT latitude AS lat, longitude AS lng, UNIX_TIMESTAMP(created_at) AS tracked_at
             FROM tracking_locations
             WHERE user_id = ?
             ORDER BY created_at DESC
@@ -299,8 +299,9 @@ require_once __DIR__ . '/../shared/components/header.php';
         </div>
         <?php endif; ?>
 
-        <section class="hero family-hero" data-time="<?php echo $greetingColor; ?>">
-            <div class="hero-main">
+        <section class="hero family-hero sky-hero" data-time="<?= $greetingColor ?>" data-light="<?= $hour >= 6 && $hour < 18 ? 'day' : 'night' ?>">
+            <?php renderWeatherSky(); ?>
+            <div class="sky-layout">
                 <div class="hero-greeting family-hero-content">
                     <p class="hero-kicker">
                         <span id="heroPeriodIcon" aria-hidden="true"><?= $greetingIcon ?></span>
@@ -325,16 +326,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </div>
                 </div>
 
-                <?php $dayPct = round(($hour * 3600 + (int)$now->format('i') * 60 + (int)$now->format('s')) / 864, 1); ?>
-                <div class="hero-clock" aria-hidden="true">
-                    <div class="clock-ring" id="clockRing" style="--day: <?php echo $dayPct; ?>">
-                        <div class="clock-core">
-                            <span class="clock-hm" id="clockHM"><?= $now->format('H:i') ?></span>
-                            <span class="clock-sec" id="clockSec"><?= $now->format('s') ?></span>
-                        </div>
-                    </div>
-                    <span class="clock-cap" id="dayCap"><?php echo round($dayPct); ?>% of today</span>
-                </div>
+                <?php renderWeatherHeroPanel(true); ?>
             </div>
         </section>
 
@@ -479,17 +471,6 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </ul>
             </section>
 
-            <section class="weather-card panel-weather" aria-labelledby="home-weather-title">
-                <h2 id="home-weather-title">Weather</h2>
-                <a class="hero-weather" id="heroWeather" href="/weather/" aria-label="Open weather forecast">
-                    <div class="wx-skeleton">
-                        <span class="wx-skel-icon" aria-hidden="true">🌤️</span>
-                        <span class="wx-skel-bar"></span>
-                        <span class="wx-skel-bar short"></span>
-                    </div>
-                </a>
-            </section>
-
             <!-- Recent activity -->
             <?php if (!empty($recentActivity)): ?>
             <section class="panel panel-activity" style="--glow:#38bdf8">
@@ -540,8 +521,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 window.USER_LOCATION = <?php echo $userLocation ? json_encode([
     'lat' => (float)$userLocation['lat'],
     'lng' => (float)$userLocation['lng'],
-    'accuracy' => isset($userLocation['accuracy_m']) ? (int)$userLocation['accuracy_m'] : null,
-    'timestamp' => $userLocation['created_at']
+    'trackedAt' => (int)$userLocation['tracked_at']
 ]) : 'null'; ?>;
 </script>
 

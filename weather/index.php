@@ -57,17 +57,21 @@ require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
 <main class="family-main wx-main" id="weatherApp">
-    <header class="family-hero wx-hero app-hero">
-        <div class="family-hero-content">
-            <h1 class="family-hero-title">Weather</h1>
-            <p class="family-hero-summary">Check the skies before you head out.</p>
-            <div class="family-actions">
-                <button type="button" class="family-button family-button-primary" id="useCurrentLocation">Use my location</button>
-                <button type="button" class="family-button" id="weatherUnits" aria-label="Show temperatures in Fahrenheit" aria-pressed="false">°C / °F</button>
-                <button type="button" class="family-button" id="weatherShare" hidden>Share</button>
+    <header class="family-hero wx-hero sky-hero" data-light="unknown">
+        <?php renderWeatherSky(); ?>
+        <div class="sky-layout">
+            <div class="family-hero-content">
+                <h1 class="family-hero-title" id="weatherHeroTitle">Weather</h1>
+                <p class="family-hero-summary" id="weatherHeroSummary">Search for a city or use your location to see its weather.</p>
+                <div class="family-actions">
+                    <button type="button" class="family-button family-button-primary" id="useCurrentLocation">Use my location</button>
+                    <button type="button" class="family-button" id="weatherUnits" aria-label="Use Fahrenheit" aria-pressed="false">°C / °F</button>
+                    <button type="button" class="family-button" id="weatherRefresh" hidden>Refresh</button>
+                    <button type="button" class="family-button" id="weatherShare" hidden>Share</button>
+                </div>
             </div>
+            <?php renderWeatherHeroPanel(); ?>
         </div>
-        <?php renderFamilyAppArt('weather', true); ?>
     </header>
 
     <div class="wx-toolbar">
@@ -88,7 +92,6 @@ require_once __DIR__ . '/../shared/components/header.php';
             <h2 class="family-section-title" id="weatherLocation"></h2>
             <p id="weatherUpdated"></p>
         </div>
-        <button class="wx-button" type="button" id="weatherRefresh">Refresh</button>
     </div>
     <p class="wx-status" id="weatherStatus" role="status"></p>
     <noscript><p class="wx-message">Enable JavaScript to search for a location and load its forecast.</p></noscript>

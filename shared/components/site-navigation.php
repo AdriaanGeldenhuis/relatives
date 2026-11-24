@@ -1,7 +1,12 @@
 <?php
+require_once __DIR__ . '/avatar.php';
+
 $navigationPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $navigationArea = explode('/', trim($navigationPath, '/'))[0];
 $navigationUser = $user ?? null;
+$navigationUserId = (int)($navigationUser['id'] ?? 0);
+$navigationAvatar = $navigationUserId > 0 && is_file(avatarPath($navigationUserId))
+    ? avatarUrl($navigationUserId) : null;
 $navigationGroups = $navigationUser ? [
     'Family' => [
         'home' => ['/home/', 'Home', '🏠'], 'messages' => ['/messages/', 'Messages', '💬'],
@@ -43,7 +48,12 @@ $navigationHome = $navigationUser ? '/home/' : '/';
                     <a href="/notifications/" class="site-control" id="notificationBell" aria-label="Notifications" title="Notifications">🔔</a>
                     <span class="notification-badge" id="notificationBadge" aria-hidden="true" hidden></span>
                 </div>
-                <a href="/profile/" class="site-control site-account" aria-label="Profile &amp; settings" title="Profile &amp; settings"><?= htmlspecialchars(mb_strtoupper(mb_substr($navigationUser['name'] ?? $navigationUser['full_name'] ?? 'R', 0, 1))) ?></a>
+                <a href="/profile/" class="site-control site-account" aria-label="Profile &amp; settings" title="Profile &amp; settings">
+                    <span aria-hidden="true"><?= htmlspecialchars(mb_strtoupper(mb_substr($navigationUser['name'] ?? $navigationUser['full_name'] ?? 'R', 0, 1))) ?></span>
+                    <?php if ($navigationAvatar): ?>
+                    <img class="site-account-photo" src="<?= htmlspecialchars($navigationAvatar) ?>" alt="">
+                    <?php endif; ?>
+                </a>
             <?php else: ?>
                 <a class="site-control site-sign-in" href="/login.php">Sign in</a>
             <?php endif; ?>

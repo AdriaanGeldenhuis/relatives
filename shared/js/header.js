@@ -27,6 +27,12 @@
         if (history.length > 1) history.back();
         else location.assign('/home/');
     });
+    const profilePhoto = document.querySelector('.site-account-photo');
+    if (profilePhoto) {
+        const showInitial = () => { profilePhoto.hidden = true; };
+        profilePhoto.addEventListener('error', showInitial, { once: true });
+        if (profilePhoto.complete && !profilePhoto.naturalWidth) showInitial();
+    }
     document.getElementById('appLoader')?.classList.add('hidden');
 
     const bell = document.getElementById('notificationBell');

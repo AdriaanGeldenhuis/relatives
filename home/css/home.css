@@ -65,8 +65,7 @@
     margin-inline: auto;
 }
 
-.hero,
-.weather-card {
+.hero {
     position: relative;
     min-width: 0;
     overflow: hidden;
@@ -225,36 +224,12 @@
 .clock-sec, .clock-cap { color: var(--welcome-muted); font-size: .7rem; font-weight: 680; }
 .clock-cap { text-align: center; }
 
-.weather-card {
-    padding: 20px clamp(18px, 2.3vw, 30px);
-    border: 1px solid #d9e3b4;
-    background: radial-gradient(ellipse at 95% 0, #d5eda2, transparent 78%), #e9f0d3;
-    display: grid;
-    grid-template-rows: auto 1fr;
-    gap: 12px;
-}
-
-.weather-card h2, .panel-head h2 {
+.panel-head h2 {
     margin: 0;
     font-size: 1rem;
     font-weight: 760;
     letter-spacing: -.025em;
 }
-
-.hero-weather { display: grid; align-content: center; gap: 12px; color: var(--home-ink); text-decoration: none; }
-.wx-now { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-.wx-skel-icon, .wx-emoji { font-size: 2rem; line-height: 1; }
-.wx-temp { font-size: clamp(1.6rem, 3vw, 2.85rem); font-weight: 800; letter-spacing: -.065em; line-height: 1; }
-.wx-meta { display: grid; font-size: .8rem; font-weight: 700; }
-.wx-hilo { color: var(--home-muted); font-size: .72rem; font-weight: 550; }
-.wx-stats, .wx-skeleton, .wx-fallback { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.wx-stat { padding: 4px 7px; border-radius: 7px; background: #fefff6a7; font-size: .7rem; font-weight: 660; }
-.wx-stat.rain-high { background: #e5edf6; }
-.wx-skel-bar { width: 70px; height: 11px; border-radius: 7px; background: #a9be884f; }
-.wx-skel-bar.short { width: 48px; }
-.wx-fallback { font-size: .85rem; font-weight: 650; }
-.wx-arrow { justify-self: end; font-weight: 700; }
-.hero-weather:hover .wx-arrow { transform: translateX(3px); }
 
 .home-section-title {
     margin: 0 0 10px;
@@ -529,12 +504,8 @@
         border-top: 1px solid var(--home-line);
         background: #fbfaf2;
     }
-    .home-page .hero.family-hero, .weather-card { border-radius: 17px; }
+    .home-page .hero.family-hero { border-radius: 17px; }
     .hero::after { right: -23%; }
-    .weather-card { gap: 6px; padding: 9px 12px; }
-    .hero-weather { grid-template-columns: auto auto; gap: 5px; align-items: center; }
-    .wx-stats { grid-row: 2; }
-    .wx-arrow { grid-column: 2; grid-row: 1; }
     .bento { grid-template-columns: 1fr; }
 }
 
@@ -564,4 +535,3 @@
 }
 
 .home-page .hero-main { width: 100%; }
-.home-page .panel-weather { grid-column: 1 / -1; min-height: 0; background: var(--home-card); border-color: var(--home-line); }

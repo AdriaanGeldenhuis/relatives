@@ -119,10 +119,12 @@
         }
     }
 
-    tick();
-    tickDate();
-    setInterval(tick, 1000);
-    setInterval(tickDate, 60000);
+    if (!welcomeHero?.classList.contains('sky-hero')) {
+        tick();
+        tickDate();
+        setInterval(tick, 1000);
+        setInterval(tickDate, 60000);
+    }
 
     // ============================================
     // LIVE EVENT COUNTDOWNS ("In 38 min" ticks down)
@@ -168,150 +170,114 @@
     refreshEventTimes();
     setInterval(refreshEventTimes, 30000);
 
-    // ============================================
-    // HOME WEATHER
-    // ============================================
-    const weatherShortcut = document.querySelector('[data-app="weather"] .launch-summary');
-    const weatherShortcutFallback = weatherShortcut?.textContent;
-
-    var weather = {
-        el: document.getElementById('heroWeather'),
-        location: null,
-        loadedAt: 0,
-
-        init: function () {
-            if (!this.el) return;
-
-            if (Number.isFinite(window.USER_LOCATION?.lat) && Number.isFinite(window.USER_LOCATION?.lng)) {
-                this.location = { lat: window.USER_LOCATION.lat, lng: window.USER_LOCATION.lng };
-                this.load();
-            } else if ('geolocation' in navigator) {
-                var self = this;
-                navigator.geolocation.getCurrentPosition(
-                    function (pos) {
-                        self.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                        self.load();
-                    },
-                    function () { self.renderFallback(); },
-                    { timeout: 8000, maximumAge: 600000 }
-                );
-            } else {
-                this.renderFallback();
+    // Home uses a fresh shared location or the device's location permission.
+    const weatherPanel = welcomeHero?.querySelector('[data-weather-panel]');
+    if (weatherPanel) {
+        const locationButton = weatherPanel.querySelector('[data-sky-locate]');
+        const forecastLink = weatherPanel.querySelector('[data-sky-forecast]');
+        const feedback = weatherPanel.querySelector('[data-sky-feedback]');
+        const shortcut = document.querySelector('[data-app="weather"] .launch-summary');
+        const shortcutFallback = shortcut.textContent;
+        const sky = window.RelativesWeatherHero.mount(welcomeHero, {
+            onTime: ({ period, date }) => {
+                const phrase = `Good ${period}`;
+                if (greeting.textContent !== phrase) greeting.textContent = phrase;
+                if (periodIcon.textContent !== periodIcons[period]) periodIcon.textContent = periodIcons[period];
+                if (dateEl.textContent !== date) dateEl.textContent = date;
             }
-        },
+        });
 
-        load: function () {
-            var self = this;
-            if (!this.location) return;
+        let location;
+        let activeRequest;
+        let lastAttempt = 0;
+        let hasWeather = false;
 
-            var base = '/weather/api/api.php?lat=' + this.location.lat + '&lon=' + this.location.lng;
-
-            Promise.all([
-                fetch(base + '&action=current').then(function (r) {
-                    if (!r.ok) throw new Error('HTTP ' + r.status);
-                    return r.json();
-                }),
-                fetch(base + '&action=forecast').then(function (r) {
-                    return r.ok ? r.json() : null;
-                }).catch(function () { return null; })
-            ]).then(function (results) {
-                var current = results[0];
-                var forecast = results[1];
-                if (!current || current.error) throw new Error(current && current.error);
-
-                if (forecast && forecast.forecast && forecast.forecast[0]) {
-                    current.temp_high = forecast.forecast[0].temp_max;
-                    current.temp_low = forecast.forecast[0].temp_min;
-                }
-
-                self.loadedAt = Date.now();
-                self.render(current);
-            }).catch(function (err) {
-                console.warn('Weather load failed:', err);
-                self.renderFallback();
-            });
-        },
-
-        rainChance: function (w) {
-            var condition = (w.condition || '').toLowerCase();
-            if (condition.indexOf('rain') !== -1 || condition.indexOf('drizzle') !== -1) return 100;
-            if (condition.indexOf('thunder') !== -1 || condition.indexOf('storm') !== -1) return 95;
-
-            var p = Math.max(0, Math.min(100, w.clouds * 0.4 + (w.humidity - 50) * 0.6));
-            if (condition.indexOf('overcast') !== -1) p += 15;
-            else if (condition.indexOf('clear') !== -1 || condition.indexOf('sunny') !== -1) p = Math.min(p, 20);
-            return Math.min(100, Math.round(p));
-        },
-
-        emoji: function (condition, day) {
-            var c = (condition || '').toLowerCase();
-            if (c.indexOf('clear') !== -1 || c.indexOf('sunny') !== -1) return day ? '☀️' : '🌙';
-            if (c.indexOf('partly') !== -1 && c.indexOf('cloud') !== -1) return day ? '⛅' : '☁️';
-            if (c.indexOf('overcast') !== -1 || c.indexOf('cloud') !== -1) return '☁️';
-            if (c.indexOf('drizzle') !== -1) return '🌦️';
-            if (c.indexOf('rain') !== -1) return '🌧️';
-            if (c.indexOf('thunder') !== -1 || c.indexOf('storm') !== -1) return '⛈️';
-            if (c.indexOf('snow') !== -1) return '❄️';
-            if (c.indexOf('mist') !== -1 || c.indexOf('fog') !== -1 || c.indexOf('haze') !== -1) return '🌫️';
-            if (c.indexOf('wind') !== -1) return '💨';
-            return day ? '🌤️' : '🌙';
-        },
-
-        render: function (w) {
-            if (weatherShortcut && Number.isFinite(w.temperature)) {
-                const description = w.description || w.condition;
-                weatherShortcut.textContent = description ? `${w.temperature}° · ${description}` : `${w.temperature}°`;
-            }
-
-            var now = new Date();
-            var day = true;
-            if (w.sunrise && w.sunset) {
-                day = now >= new Date(w.sunrise * 1000) && now <= new Date(w.sunset * 1000);
-            }
-
-            var rain = this.rainChance(w);
-            var hilo = '';
-            if (w.temp_high !== undefined) {
-                hilo = '<span class="wx-hilo"><span class="hi">H ' + w.temp_high + '°</span> · <span class="lo">L ' + w.temp_low + '°</span></span>';
-            }
-
-            this.el.innerHTML =
-                '<div class="wx-now">' +
-                    '<span class="wx-emoji" aria-hidden="true">' + this.emoji(w.condition, day) + '</span>' +
-                    '<span class="wx-temp">' + w.temperature + '°</span>' +
-                    '<span class="wx-meta">' +
-                        '<span class="wx-desc">' + w.description + '</span>' +
-                        hilo +
-                    '</span>' +
-                '</div>' +
-                '<div class="wx-stats">' +
-                    '<span class="wx-stat' + (rain >= 60 ? ' rain-high' : '') + '">☔ ' + rain + '%</span>' +
-                    '<span class="wx-stat">💨 ' + w.wind_speed + ' km/h</span>' +
-                    '<span class="wx-stat">📍 ' + w.location + '</span>' +
-                '</div>' +
-                '<span class="wx-arrow" aria-hidden="true">→</span>';
-        },
-
-        renderFallback: function () {
-            if (!this.el) return;
-            if (weatherShortcut) weatherShortcut.textContent = weatherShortcutFallback;
-            this.el.innerHTML =
-                '<span class="wx-fallback">' +
-                    '<span aria-hidden="true">🌍</span>' +
-                    '<span>Tap for the full weather forecast</span>' +
-                '</span>' +
-                '<span class="wx-arrow" aria-hidden="true">→</span>';
+        function showFeedback(message) {
+            feedback.textContent = message;
+            feedback.hidden = !message;
         }
-    };
 
-    weather.init();
+        async function loadWeather(place, quietly = false) {
+            activeRequest?.abort();
+            const request = new AbortController();
+            activeRequest = request;
+            location = place;
+            lastAttempt = Date.now();
 
-    // Refresh weather when the app returns to the foreground (stale after 10 min)
-    document.addEventListener('visibilitychange', function () {
-        if (!document.hidden && weather.location && Date.now() - weather.loadedAt > 600000) {
-            weather.load();
+            const forecastQuery = new URLSearchParams({ lat: place.lat.toFixed(2), lon: place.lon.toFixed(2) });
+            forecastLink.href = `/weather/?${forecastQuery}`;
+            if (!quietly) {
+                hasWeather = false;
+                shortcut.textContent = shortcutFallback;
+                sky.update({ place: 'Near you', source: place.source, message: 'Loading current weather…' });
+            }
+            showFeedback('');
+            try {
+                const query = new URLSearchParams({ action: 'current', lat: place.lat, lon: place.lon });
+                const response = await fetch(`/weather/api/api.php?${query}`, { signal: request.signal, cache: 'no-store' });
+                if (!response.ok) throw new Error('Weather request failed.');
+                const current = await response.json();
+                if (request.signal.aborted) return;
+                if (!Number.isFinite(current.temperature)) throw new Error('Current conditions are missing.');
+                hasWeather = true;
+                const providerName = current.location_name || current.location;
+                sky.update({
+                    place: providerName && providerName !== 'Unknown' ? providerName : 'Near you',
+                    source: place.source,
+                    current,
+                    offset: current.timezone
+                });
+                shortcut.textContent = [`${current.temperature}°`, current.description || current.condition].filter(Boolean).join(' · ');
+            } catch {
+                if (request.signal.aborted) return;
+                if (!hasWeather) sky.update({ place: 'Near you', source: place.source, message: 'Current weather is unavailable' });
+                showFeedback(hasWeather
+                    ? 'Weather could not refresh. Showing the last available conditions.'
+                    : 'Try your location again or choose a place under Full forecast.');
+            } finally {
+                if (activeRequest === request) activeRequest = null;
+            }
         }
-    });
+
+        function locate() {
+            if (locationButton.disabled) return;
+            locationButton.disabled = true;
+            showFeedback('Finding your location…');
+            navigator.geolocation.getCurrentPosition(({ coords }) => {
+                locationButton.disabled = false;
+                loadWeather({ lat: coords.latitude, lon: coords.longitude, source: 'Device location' });
+            }, error => {
+                locationButton.disabled = false;
+                showFeedback(error.code === 1
+                    ? 'Location access is off. You can still choose a city under Full forecast.'
+                    : 'Your location could not be found. Try again or choose a city.');
+            }, { timeout: 8000, maximumAge: 120000 });
+        }
+
+        if (navigator.geolocation) {
+            locationButton.hidden = false;
+            locationButton.addEventListener('click', locate);
+        }
+        const tracked = window.USER_LOCATION;
+        if (Number.isFinite(tracked?.lat) && Number.isFinite(tracked?.lng) && tracked.trackedAt > Date.now() / 1000 - 1800) {
+            loadWeather({ lat: tracked.lat, lon: tracked.lng, source: 'Last shared location' });
+        } else if (navigator.geolocation) {
+            navigator.permissions?.query({ name: 'geolocation' }).then(permission => {
+                if (permission.state === 'granted' && !location) locate();
+            }).catch(() => {});
+        } else {
+            sky.update({ message: 'Choose a city under Full forecast' });
+        }
+
+        function refresh() {
+            if (location && !document.hidden && navigator.onLine && !activeRequest && !locationButton.disabled
+                && Date.now() - lastAttempt >= 600000) {
+                loadWeather(location, true);
+            }
+        }
+        setInterval(refresh, 600000);
+        document.addEventListener('visibilitychange', refresh);
+    }
 
     // ============================================
     // COUNT-UP NUMBERS (with a spring pop at the end)

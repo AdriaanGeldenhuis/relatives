@@ -28,11 +28,10 @@ if ($familyAppPage) {
     require_once __DIR__ . '/family-app-art.php';
 }
 
-// Avatar cache-busting: use file modification time so browsers fetch the new image after upload
-function avatarUrl($userId) {
-    $file = __DIR__ . '/../../saves/' . (int)$userId . '/avatar/avatar.webp';
-    $v = file_exists($file) ? filemtime($file) : 0;
-    return '/saves/' . (int)$userId . '/avatar/avatar.webp?v=' . $v;
+require_once __DIR__ . '/avatar.php';
+$hasWeatherHero = in_array($activePage, ['home', 'weather'], true);
+if ($hasWeatherHero) {
+    require_once __DIR__ . '/weather-hero.php';
 }
 
 // Get unread notification count
@@ -165,6 +164,10 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <?php endif; ?>
     <?php if ($familyAppPage): ?>
         <style><?php readfile(__DIR__ . '/../css/family-app-art.css'); readfile(__DIR__ . '/../css/family-app-themes.css'); ?></style>
+    <?php endif; ?>
+    <?php if ($hasWeatherHero): ?>
+        <style><?php readfile(__DIR__ . '/../css/weather-hero.css'); ?></style>
+        <script><?php readfile(__DIR__ . '/../js/weather-hero.js'); ?></script>
     <?php endif; ?>
     <style><?php readfile(__DIR__ . '/../css/site-navigation.css'); readfile(__DIR__ . '/../css/action-controls.css'); ?></style>
     <style><?php readfile(__DIR__ . '/../css/footer-assistance.css'); ?></style>

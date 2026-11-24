@@ -71,6 +71,8 @@
     const refreshButton = byId('weatherRefresh');
     const dayDialog = byId('dayDetailModal');
     const shareDialog = byId('shareModal');
+    const heroTitle = byId('weatherHeroTitle');
+    const heroSummary = byId('weatherHeroSummary');
 
     let preferences = {};
     try {
@@ -85,6 +87,7 @@
     let searchTimer;
     let results = [];
     let activeResult = -1;
+    const sky = window.RelativesWeatherHero.mount(app.querySelector('.sky-hero'), { formatTemperature: temperature });
 
     function savePreferences() {
         try {
@@ -327,6 +330,7 @@
         } else {
             pageStatus.textContent = '';
         }
+        renderSky();
     }
 
     function locationName() {
@@ -345,7 +349,27 @@
         return `<dl class="wx-metrics">${values.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>`;
     }
 
+    function renderSky(hours = upcomingHours()) {
+        const name = locationName();
+        const precipitation = hours.map(hour => hour.precipitation).filter(Number.isFinite);
+        const observedAt = current?.dt ? localTime(current.dt, current.timezone) : '';
+        heroTitle.textContent = name.replace(/ · last shared location$/, '') || 'Weather';
+        heroSummary.textContent = precipitation.length
+            ? `Rain chance peaks at ${Math.max(...precipitation)}% over the next 24 hours.`
+            : observedAt ? `Conditions observed at ${observedAt} local time.`
+                : !location ? 'Search for a city or use your location to see its weather.'
+                    : refreshButton.disabled ? 'Loading the local forecast…' : 'Refresh or choose another city.';
+        refreshButton.hidden = !location;
+        sky.update({
+            current,
+            offset: current?.timezone ?? forecast?.timezone,
+            message: location && (refreshButton.disabled ? 'Loading current weather…' : 'Current weather is unavailable')
+        });
+    }
+
     function renderWeather() {
+        const hours = upcomingHours();
+        renderSky(hours);
         const name = locationName();
         byId('weatherLocationHeading').hidden = !location;
         byId('weatherLocation').textContent = name;
@@ -358,7 +382,6 @@
         byId('weatherOverview').hidden = !current && !forecast;
         byId('weatherSource').hidden = !current && !forecast;
         renderCurrent();
-        const hours = upcomingHours();
         renderPlan(hours);
         byId('hourlySection').hidden = !hours.length;
         byId('hourlyForecast').innerHTML = hours.map(hour => renderHour(hour)).join('');
@@ -563,7 +586,13 @@
     setView(preferences.view === 'list' ? 'list' : 'cards');
     unitButton.setAttribute('aria-pressed', String(Boolean(preferences.fahrenheit)));
     const tracked = settings.trackedLocation;
-    if (validPlace(preferences.recent)) {
+    const query = new URLSearchParams(window.location.search);
+    const linked = query.get('lat')?.trim() && query.get('lon')?.trim()
+        ? { lat: Number(query.get('lat')), lon: Number(query.get('lon')), name: 'Your location', useProviderName: true }
+        : null;
+    if (validPlace(linked)) {
+        selectPlace(linked);
+    } else if (validPlace(preferences.recent)) {
         selectPlace(preferences.recent);
     } else if (validPlace(tracked) && tracked.trackedAt > Date.now() / 1000 - 1800) {
         selectPlace({ ...tracked, useProviderName: true });

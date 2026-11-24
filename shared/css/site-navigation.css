@@ -132,3 +132,13 @@ html:has(.site-menu[open]) { overflow: hidden; }
     .site-menu-label { display: none; }
     .site-header .site-control { min-width: 38px; min-height: 38px; }
 }
+
+.site-header .site-account { position: relative; overflow: hidden; flex: none; padding: 0; }
+.site-account-photo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: var(--nav-paper);
+}
