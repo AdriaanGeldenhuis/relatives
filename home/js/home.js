@@ -88,9 +88,20 @@
     var ringEl = document.getElementById('clockRing');
     var capEl = document.getElementById('dayCap');
     var dateEl = document.getElementById('heroDate');
+    const welcomeHero = document.querySelector('.hero[data-time]');
+    const greeting = document.getElementById('heroGreeting');
+    const periodIcon = document.getElementById('heroPeriodIcon');
+    const periodIcons = { morning: '🌅', afternoon: '☀️', evening: '🌙' };
 
     function tick() {
         var now = new Date();
+        const hour = now.getHours();
+        const period = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
+        if (welcomeHero && welcomeHero.dataset.time !== period) {
+            welcomeHero.dataset.time = period;
+            if (greeting) greeting.textContent = `Good ${period}`;
+            if (periodIcon) periodIcon.textContent = periodIcons[period];
+        }
 
         if (hmEl) hmEl.textContent = pad(now.getHours()) + ':' + pad(now.getMinutes());
         if (secEl) secEl.textContent = pad(now.getSeconds());

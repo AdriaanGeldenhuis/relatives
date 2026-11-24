@@ -226,8 +226,9 @@ try {
     error_log('Members error: ' . $e->getMessage());
 }
 
-// Greeting
-$hour = (int)date('H');
+// Initial greeting and clock use the server timezone until the browser takes over.
+$now = new DateTimeImmutable();
+$hour = (int)$now->format('G');
 if ($hour < 12) {
     $greeting = 'Good morning';
     $greetingIcon = '🌅';
@@ -263,15 +264,15 @@ $calendarSummary = match ($stats['upcoming_events']) {
 };
 
 $launcherApps = [
-    'tracking' => ['href' => '/tracking/app/', 'label' => 'Tracking', 'summary' => 'Family locations', 'glow' => '#f6a491'],
-    'weather' => ['href' => '/weather/', 'label' => 'Weather', 'summary' => 'Local forecast', 'glow' => '#8ccbea'],
-    'notes' => ['href' => '/notes/', 'label' => 'Notes', 'summary' => 'Shared notes', 'glow' => '#be9be4'],
-    'shopping' => ['href' => '/shopping/', 'label' => 'Shopping', 'summary' => $shoppingSummary, 'glow' => '#f5ba55'],
-    'calendar' => ['href' => '/calendar/', 'label' => 'Calendar', 'summary' => $calendarSummary, 'glow' => '#6bcba1'],
-    'schedule' => ['href' => '/schedule/', 'icon' => '⏰', 'label' => 'Schedule', 'summary' => 'Daily agenda', 'glow' => '#e992ba'],
-    'travel' => ['href' => '/holiday_traveling/', 'icon' => '✈️', 'label' => 'Travel', 'summary' => 'Trips and itineraries', 'glow' => '#6fcbbf'],
-    'games' => ['href' => '/games/', 'icon' => '🎮', 'label' => 'Games', 'summary' => 'Family arcade', 'glow' => '#a89aee'],
-    'messages' => ['href' => '/messages/', 'label' => 'Messages', 'summary' => $messageSummary, 'glow' => '#7fb5f1'],
+    'tracking' => ['href' => '/tracking/app/', 'label' => 'Tracking', 'summary' => 'Family locations'],
+    'weather' => ['href' => '/weather/', 'label' => 'Weather', 'summary' => 'Local forecast'],
+    'notes' => ['href' => '/notes/', 'label' => 'Notes', 'summary' => 'Shared notes'],
+    'shopping' => ['href' => '/shopping/', 'label' => 'Shopping', 'summary' => $shoppingSummary],
+    'calendar' => ['href' => '/calendar/', 'label' => 'Calendar', 'summary' => $calendarSummary],
+    'schedule' => ['href' => '/schedule/', 'label' => 'Schedule', 'summary' => 'Daily agenda'],
+    'travel' => ['href' => '/holiday_traveling/', 'label' => 'Travel', 'summary' => 'Trips and itineraries'],
+    'games' => ['href' => '/games/', 'label' => 'Games', 'summary' => 'Family arcade'],
+    'messages' => ['href' => '/messages/', 'label' => 'Messages', 'summary' => $messageSummary],
 ];
 
 $pageTitle = 'Home';
@@ -302,11 +303,11 @@ require_once __DIR__ . '/../shared/components/header.php';
             <div class="hero-main">
                 <div class="hero-greeting family-hero-content">
                     <p class="hero-kicker">
-                        <span aria-hidden="true"><?php echo $greetingIcon; ?></span>
-                        <span id="heroDate"><?php echo date('l, j F Y'); ?></span>
+                        <span id="heroPeriodIcon" aria-hidden="true"><?= $greetingIcon ?></span>
+                        <span id="heroDate"><?= $now->format('l, j F Y') ?></span>
                     </p>
                     <h1 class="family-hero-title">
-                        <?php echo $greeting; ?>, <span class="hero-name"><?php echo htmlspecialchars($firstName); ?></span>
+                        <span id="heroGreeting"><?= $greeting ?></span>, <span class="hero-name"><?php echo htmlspecialchars($firstName); ?></span>
                     </h1>
                     <p class="family-hero-summary">
                         The <?php echo htmlspecialchars($user['family_name']); ?> hub
@@ -324,12 +325,12 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </div>
                 </div>
 
-                <?php $dayPct = round((((int)date('H')) * 3600 + ((int)date('i')) * 60 + (int)date('s')) / 864, 1); ?>
+                <?php $dayPct = round(($hour * 3600 + (int)$now->format('i') * 60 + (int)$now->format('s')) / 864, 1); ?>
                 <div class="hero-clock" aria-hidden="true">
                     <div class="clock-ring" id="clockRing" style="--day: <?php echo $dayPct; ?>">
                         <div class="clock-core">
-                            <span class="clock-hm" id="clockHM"><?php echo date('H:i'); ?></span>
-                            <span class="clock-sec" id="clockSec"><?php echo date('s'); ?></span>
+                            <span class="clock-hm" id="clockHM"><?= $now->format('H:i') ?></span>
+                            <span class="clock-sec" id="clockSec"><?= $now->format('s') ?></span>
                         </div>
                     </div>
                     <span class="clock-cap" id="dayCap"><?php echo round($dayPct); ?>% of today</span>
@@ -344,47 +345,12 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
             <nav class="launcher" id="family-apps-list" aria-labelledby="family-apps-heading">
                 <?php foreach ($launcherApps as $appKey => $app): ?>
-                <a class="launch-tile" href="<?= $app['href'] ?>" data-app="<?= $appKey ?>" style="--glow: <?= $app['glow'] ?>">
-                    <?php if ($appKey === 'weather'): ?>
-                    <span class="launch-rain" aria-hidden="true">
-                        <?php for ($drop = 0; $drop < 16; $drop++): ?>
-                        <span style="--drop: <?= $drop ?>"></span>
-                        <?php endfor; ?>
-                    </span>
-                    <?php endif; ?>
+                <a class="launch-tile" href="<?= $app['href'] ?>" data-app="<?= $appKey ?>">
                     <span class="launch-copy">
                         <span class="launch-label"><?= $app['label'] ?></span>
                         <span class="launch-summary"><?= $app['summary'] ?></span>
                     </span>
-                    <span class="launch-art" aria-hidden="true">
-                        <?php if ($appKey === 'tracking'): ?>
-                        <span class="launch-map">
-                            <span class="launch-map-pin"></span>
-                        </span>
-                        <?php elseif ($appKey === 'weather'): ?>
-                        <span class="launch-cloud"></span>
-                        <?php elseif ($appKey === 'notes'): ?>
-                        <span class="launch-note">
-                            <span class="launch-paper">
-                                <span class="launch-ink"></span>
-                                <span class="launch-ink"></span>
-                            </span>
-                            <span class="launch-pen"></span>
-                        </span>
-                        <?php elseif ($appKey === 'shopping'): ?>
-                        <span class="launch-trolley">
-                            <span class="launch-basket"></span>
-                            <span class="launch-wheel"></span>
-                            <span class="launch-wheel"></span>
-                        </span>
-                        <?php elseif ($appKey === 'calendar'): ?>
-                        <span class="launch-calendar"><span class="launch-calendar-page"></span></span>
-                        <?php elseif ($appKey === 'messages'): ?>
-                        <span class="launch-message"><span></span><span></span><span></span></span>
-                        <?php else: ?>
-                        <span class="launch-icon"><?= $app['icon'] ?></span>
-                        <?php endif; ?>
-                    </span>
+                    <?php renderFamilyAppArt($appKey); ?>
                     <span class="launch-arrow" aria-hidden="true">→</span>
                 </a>
                 <?php endforeach; ?>

@@ -23,6 +23,10 @@ $cacheVersion = '12.12.0';
 $workspacePage = !isset($homeStylesheet) && !isset($messagesStylesheets);
 $buildTime = $cacheVersion;
 $familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'weather', 'holiday_traveling', 'games', 'admin', 'profile'], true);
+$familyAppPage = in_array($activePage, ['home', 'tracking', 'weather', 'notes', 'shopping', 'calendar', 'schedule', 'holiday_traveling', 'games', 'messages'], true);
+if ($familyAppPage) {
+    require_once __DIR__ . '/family-app-art.php';
+}
 
 // Avatar cache-busting: use file modification time so browsers fetch the new image after upload
 function avatarUrl($userId) {
@@ -156,8 +160,11 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <?php foreach ($pageInlineStylesheets ?? [] as $stylesheet): ?>
         <style><?php readfile($stylesheet); ?></style>
     <?php endforeach; ?>
-    <?php if ($familyPage): ?>
+    <?php if ($familyPage || $familyAppPage): ?>
         <style><?php readfile(__DIR__ . '/../css/family-surfaces.css'); ?></style>
+    <?php endif; ?>
+    <?php if ($familyAppPage): ?>
+        <style><?php readfile(__DIR__ . '/../css/family-app-art.css'); readfile(__DIR__ . '/../css/family-app-themes.css'); ?></style>
     <?php endif; ?>
     <style><?php readfile(__DIR__ . '/../css/site-navigation.css'); readfile(__DIR__ . '/../css/action-controls.css'); ?></style>
     <style><?php readfile(__DIR__ . '/../css/footer-assistance.css'); ?></style>

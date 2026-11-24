@@ -46,11 +46,12 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
     <a href="/tracking/app/" class="tracking-back">Back to Map</a>
 
-    <div class="tracking-content-header">
+    <div class="tracking-content-header app-hero">
         <div>
             <h1 class="tracking-content-title">Settings</h1>
             <p class="tracking-content-subtitle">Configure tracking behavior for your family.</p>
         </div>
+        <?php renderFamilyAppArt('tracking', true); ?>
     </div>
 
     <?php if (!$isAdmin): ?>

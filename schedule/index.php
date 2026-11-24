@@ -64,7 +64,7 @@ $pageJSVersion = max(filemtime(__DIR__ . '/js/schedule.js'), filemtime(__DIR__ .
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 <main class="planner-main">
-    <header class="planner-hero">
+    <header class="planner-hero app-hero">
         <div>
             <h1>Family schedule</h1>
             <p>See what’s coming up and make time for what matters.</p>
@@ -81,13 +81,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </details>
             </div>
         </div>
-        <div class="planner-art" aria-hidden="true">
-            <div class="planner-art-page">
-                <div class="planner-art-grid">
-                    <?php for ($index = 0; $index < 14; $index++): ?><span></span><?php endfor; ?>
-                </div>
-            </div>
-        </div>
+        <?php renderFamilyAppArt('schedule', true); ?>
     </header>
     <?php require __DIR__ . '/agenda.php'; ?>
 </main>

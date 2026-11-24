@@ -57,7 +57,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
 <main class="family-main wx-main" id="weatherApp">
-    <header class="family-hero wx-hero">
+    <header class="family-hero wx-hero app-hero">
         <div class="family-hero-content">
             <h1 class="family-hero-title">Weather</h1>
             <p class="family-hero-summary">Check the skies before you head out.</p>
@@ -67,10 +67,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <button type="button" class="family-button" id="weatherShare" hidden>Share</button>
             </div>
         </div>
-        <div class="family-hero-art" aria-hidden="true">
-            <span class="wx-art-paper wx-art-back"></span>
-            <span class="wx-art-paper wx-art-front"><i class="wx-art-sun"></i><i class="wx-art-cloud"></i></span>
-        </div>
+        <?php renderFamilyAppArt('weather', true); ?>
     </header>
 
     <div class="wx-toolbar">

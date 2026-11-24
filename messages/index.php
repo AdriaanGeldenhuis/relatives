@@ -66,10 +66,13 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <main class="main-content family-main">
     <div class="hub">
-        <div class="messages-toolbar">
-            <h1 id="messages-title">Messages</h1>
-            <div id="messagesActions" role="group" aria-label="Conversation tools"></div>
-        </div>
+        <header class="messages-toolbar app-hero">
+            <div class="messages-hero-content">
+                <h1 id="messages-title">Messages</h1>
+                <div id="messagesActions" role="group" aria-label="Conversation tools"></div>
+            </div>
+            <?php renderFamilyAppArt('messages', true); ?>
+        </header>
         <div class="messages-container">
             
             <!-- Sidebar -->

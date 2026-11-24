@@ -115,7 +115,7 @@ $calendarScripts = ['/shared/js/planner-events.js', '/shared/js/event-editor.js'
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 <main class="planner-main calendar-main">
-    <header class="planner-hero calendar-hero">
+    <header class="planner-hero calendar-hero app-hero">
         <div>
             <h1>Family calendar</h1>
             <p>Birthdays, appointments and plans for the whole family.</p>
@@ -124,12 +124,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <a class="planner-hero-button" id="calendarScheduleLink" href="/schedule/?date=<?= $selectedDate ?>">Open Schedule</a>
             </div>
         </div>
-        <div class="calendar-art" aria-hidden="true">
-            <div class="calendar-art-paper">
-                <span></span><span></span><span></span><span></span><span></span><span></span>
-                <span></span><span></span><span></span><span></span><span></span><span></span>
-            </div>
-        </div>
+        <?php renderFamilyAppArt('calendar', true); ?>
     </header>
 
     <div class="planner-toolbar calendar-toolbar">

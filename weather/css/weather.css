@@ -6,21 +6,6 @@ body[data-area="weather"] { --footer-height: 56px; }
 .wx-main .family-hero :focus-visible { outline-color: var(--family-lime); }
 .wx-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.wx-art-paper {
-    position: absolute;
-    width: clamp(120px, 16vw, 196px);
-    aspect-ratio: 1.13;
-    border-radius: 12px 12px 23px 12px;
-    box-shadow: 0 12px 29px #122c1c55;
-}
-.wx-art-back { background: #bddd92; transform: translate(30px, 5px) rotate(13deg); }
-.wx-art-front { background: #f9f4d4; transform: translate(-16px, 3px) rotate(-11deg); }
-.wx-art-sun { position: absolute; top: 18%; left: 49%; width: 31%; aspect-ratio: 1; border-radius: 50%; background: #ecc67a; }
-.wx-art-cloud { position: absolute; top: 52%; left: 19%; width: 60%; height: 22%; border-radius: 50px; background: #779d78; }
-.wx-art-cloud::before, .wx-art-cloud::after { content: ''; position: absolute; border-radius: 50%; background: inherit; }
-.wx-art-cloud::before { left: 15%; bottom: 22%; width: 45%; aspect-ratio: 1; }
-.wx-art-cloud::after { right: 12%; bottom: 12%; width: 35%; aspect-ratio: 1; }
-
 .wx-toolbar {
     display: flex;
     align-items: center;
@@ -52,7 +37,7 @@ body[data-area="weather"] { --footer-height: 56px; }
 }
 .wx-search-popover ul { list-style: none; }
 .wx-search-popover li { padding: 9px 10px; border-radius: 7px; cursor: pointer; }
-.wx-search-popover li:hover, .wx-search-popover li[aria-selected="true"] { background: #e8efdc; }
+.wx-search-popover li:hover, .wx-search-popover li[aria-selected="true"] { background: var(--app-soft); }
 .wx-search-popover li small { display: block; color: var(--family-muted); }
 .wx-search-popover p { padding: 8px 10px; color: var(--family-muted); }
 .wx-search-popover p:empty { display: none; }
@@ -68,7 +53,7 @@ body[data-area="weather"] { --footer-height: 56px; }
 }
 .wx-places button { background: transparent; border-color: transparent; }
 .wx-button:hover, .wx-layout button:hover, .wx-places button:hover,
-.wx-layout button[aria-pressed="true"], .wx-places button[aria-pressed="true"] { background: #e8efdc; border-color: #d9e3cb; }
+.wx-layout button[aria-pressed="true"], .wx-places button[aria-pressed="true"] { background: var(--app-soft); border-color: var(--family-line); }
 
 .wx-location-heading, .wx-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .wx-location-heading { margin: 20px 0 12px; }

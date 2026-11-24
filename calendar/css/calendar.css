@@ -5,47 +5,6 @@
     background: radial-gradient(ellipse at 88% 6%, #365f52, transparent 65%), #19392f;
 }
 
-.calendar-art {
-    position: absolute;
-    inset: 0 0 0 auto;
-    display: grid;
-    place-items: center;
-    width: 41%;
-    background: repeating-linear-gradient(0deg, transparent 0 16px, #d8efd426 16px 17px);
-    mask-image: linear-gradient(to right, transparent, black 30%);
-    pointer-events: none;
-}
-
-.calendar-art-paper {
-    position: relative;
-    width: clamp(157px, 18vw, 228px);
-    aspect-ratio: 1.54;
-    padding: 25px 13px 12px;
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    grid-template-rows: repeat(2, 1fr);
-    gap: 5px;
-    border-radius: 12px 12px 19px 12px;
-    background: #f6f1d6;
-    box-shadow: 12px 11px #a5c7aa, 14px 17px 23px #16352988;
-    transform: translateX(-10px) rotate(-7deg);
-}
-.calendar-art-paper::before, .calendar-art-paper::after {
-    content: '';
-    position: absolute;
-    top: -6px;
-    width: 10px;
-    height: 17px;
-    border-radius: 8px;
-    background: #d1ad72;
-}
-.calendar-art-paper::before { left: 20%; }
-.calendar-art-paper::after { right: 20%; }
-.calendar-art-paper span { border-radius: 4px; background: #e1e4c9; }
-.calendar-art-paper span:nth-child(3n) { background: #c4d8ac; }
-.calendar-art-paper span:nth-child(4n) { background: #e4c596; }
-.calendar-art-paper span:nth-child(5) { background: #accfc6; }
-
 .calendar-toolbar { margin-top: 15px; }
 .calendar-heading {
     display: flex;
@@ -256,8 +215,6 @@
 }
 @media (max-width: 555px) {
     .calendar-hero { min-height: 0; }
-    .calendar-art { width: 38%; opacity: .31; }
-    .calendar-art-paper { width: 112px; padding: 16px 7px 6px; gap: 3px; }
     .calendar-event-actions .btn { padding-inline: 7px; }
 }
 

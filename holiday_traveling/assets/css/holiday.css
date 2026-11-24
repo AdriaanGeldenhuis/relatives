@@ -17,8 +17,8 @@ body[data-area="holiday_traveling"] {
     --ht-accent: var(--family-green);
 
     --ht-glass-light: var(--family-paper);
-    --ht-glass-medium: #f0f2e6;
-    --ht-glass-heavy: #e9eedc;
+    --ht-glass-medium: var(--family-canvas);
+    --ht-glass-heavy: var(--app-soft);
     --ht-glass-border: var(--family-line);
 
     --ht-text-primary: var(--family-ink);
@@ -2365,7 +2365,7 @@ body[data-area="holiday_traveling"] {
 .ht-btn-primary { background: var(--family-lime); color: var(--family-ink); box-shadow: none; }
 .ht-btn-primary:hover { background: #edffb5; box-shadow: var(--ht-shadow-sm); }
 .ht-btn-secondary, .ht-btn-outline { background: var(--family-paper); color: var(--family-green); }
-.ht-btn-secondary:hover, .ht-btn-outline:hover { background: #e8efdc; }
+.ht-btn-secondary:hover, .ht-btn-outline:hover { background: var(--app-soft); }
 
 .ht-section-title, .ht-empty-title, .ht-modal-title {
     font-family: var(--family-display);
@@ -2383,35 +2383,6 @@ body[data-area="holiday_traveling"] {
 .ht-main :is(.ht-input, .ht-select, .ht-textarea, .ht-form-control):focus { border-color: #3c7548; }
 .ht-main :is(.ht-input, .ht-select, .ht-textarea, .ht-form-control)::placeholder { color: var(--ht-text-muted); opacity: 1; }
 
-.ht-art-paper {
-    position: absolute;
-    width: clamp(115px, 15vw, 180px);
-    aspect-ratio: 1.28;
-    border-radius: 11px 11px 22px 11px;
-    box-shadow: 0 12px 29px #122c1c55;
-}
-.ht-art-back { background: #bddd92; transform: translate(34px, 10px) rotate(15deg); }
-.ht-art-front {
-    display: grid;
-    align-content: center;
-    gap: 10px;
-    padding: clamp(19px, 2.6vw, 32px);
-    background: #f9f4d4;
-    transform: translate(-14px, -2px) rotate(-12deg);
-}
-.ht-art-front i { height: 5px; border-radius: 8px; background: #8da377; }
-.ht-art-front i:nth-child(2) { width: 76%; }
-.ht-art-front i:nth-child(3) { width: 48%; }
-.ht-art-front::after {
-    content: '';
-    position: absolute;
-    top: -8px;
-    left: 34%;
-    width: 32%;
-    height: 18px;
-    background: #deb077cb;
-    transform: rotate(5deg);
-}
 .ht-board-nav {
     display: flex;
     flex-wrap: wrap;
@@ -2429,13 +2400,13 @@ body[data-area="holiday_traveling"] {
     color: var(--family-green);
     border: 1px solid #d9e3cb;
     border-radius: 9px;
-    background: #e8efdc;
+    background: var(--app-soft);
     font-size: .82rem;
     font-weight: 730;
     text-decoration: none;
 }
-.ht-board-nav a:hover { background: #dce8cd; }
-.ht-board-nav span { padding: 0 5px; border-radius: 5px; background: #d9e5ca; font-size: .71rem; }
+.ht-board-nav a:hover { background: var(--app-soft); }
+.ht-board-nav span { padding: 0 5px; border-radius: 5px; background: var(--app-soft); font-size: .71rem; }
 .ht-board-section { margin-top: 20px; scroll-margin-top: 16px; }
 .ht-board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; margin-top: 12px; }
 .ht-board-card { display: flex; flex-direction: column; gap: 9px; padding: 17px; box-shadow: var(--family-card-shadow); }

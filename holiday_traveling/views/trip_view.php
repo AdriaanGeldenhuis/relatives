@@ -58,7 +58,7 @@ $statusDisplay = $tripStatus ?? 'upcoming';
     <?php endif; ?>
 
     <!-- Trip Header -->
-    <div class="ht-trip-header">
+    <div class="ht-trip-header app-hero">
         <div class="ht-trip-header-top">
             <a href="/holiday_traveling/" class="ht-back-link">← Back to Trips</a>
             <div class="ht-trip-actions-menu">
@@ -125,6 +125,7 @@ $statusDisplay = $tripStatus ?? 'upcoming';
             <?php endif; ?>
         </div>
         <?php endif; ?>
+        <?php renderFamilyAppArt('travel', true); ?>
     </div>
 
     <!-- Tab Navigation -->

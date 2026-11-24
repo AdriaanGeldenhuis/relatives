@@ -17,7 +17,7 @@ $categories = [
 
 <div class="ht-expenses-page">
     <!-- Page Header -->
-    <div class="ht-page-header">
+    <div class="ht-page-header app-hero">
         <a href="/holiday_traveling/trip_view.php?id=<?php echo $trip['id']; ?>" class="ht-back-link">← Back to Trip</a>
         <div class="ht-page-header-content">
             <h1 class="ht-page-title">
@@ -32,6 +32,7 @@ $categories = [
             Add Expense
         </button>
         <?php endif; ?>
+        <?php renderFamilyAppArt('travel', true); ?>
     </div>
 
     <!-- Summary Card -->
@@ -42,7 +43,7 @@ $categories = [
             <span class="ht-expense-count"><?php echo count($expenses); ?> expense<?php echo count($expenses) !== 1 ? 's' : ''; ?></span>
         </div>
 
-        <?php if ($trip['budget_comfort']): ?>
+        <?php if ((float)$trip['budget_comfort'] > 0): ?>
         <div class="ht-budget-progress">
             <div class="ht-budget-bar">
                 <?php $percent = min(100, ($grandTotal / $trip['budget_comfort']) * 100); ?>

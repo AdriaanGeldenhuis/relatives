@@ -86,7 +86,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 </svg>
 
 <main class="notes-main family-main" id="notesApp">
-    <header class="family-hero">
+    <header class="family-hero app-hero">
         <div class="family-hero-content">
             <h1 class="family-hero-title">Family notes</h1>
             <p class="family-hero-summary">Keep lists, photos and little reminders in one place.</p>
@@ -96,15 +96,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <button type="button" class="family-button" data-create="voice"><?= notesIcon('mic') ?> Record</button>
             </div>
         </div>
-        <div class="family-hero-art" aria-hidden="true">
-            <span class="notes-art-paper notes-art-back"></span>
-            <span class="notes-art-paper notes-art-front">
-                <span class="notes-art-tape"></span>
-                <span class="notes-art-line"><?= notesIcon('check') ?><i></i></span>
-                <span class="notes-art-line"><?= notesIcon('check') ?><i></i></span>
-                <span class="notes-art-line"><svg class="notes-icon" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3"/></svg><i></i></span>
-            </span>
-        </div>
+        <?php renderFamilyAppArt('notes', true); ?>
     </header>
 
     <div class="notes-toolbar">

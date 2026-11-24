@@ -59,11 +59,12 @@ $pageJSVersion = filemtime(__DIR__ . '/js/timeline.js');
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 <main class="planner-main">
-    <header class="planner-hero timeline-hero">
+    <header class="planner-hero timeline-hero app-hero">
         <div>
             <h1>Timeline</h1>
             <p><?= $day->format('l, j F Y') ?></p>
         </div>
+        <?php renderFamilyAppArt('schedule', true); ?>
     </header>
     <div class="planner-toolbar timeline-toolbar">
         <div class="planner-views" aria-label="Schedule views">

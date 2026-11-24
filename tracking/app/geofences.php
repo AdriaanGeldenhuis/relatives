@@ -46,7 +46,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
     <a href="/tracking/app/" class="tracking-back">Back to Map</a>
 
-    <div class="tracking-content-header">
+    <div class="tracking-content-header app-hero">
         <div>
             <h1 class="tracking-content-title">Geofences</h1>
             <p class="tracking-content-subtitle">Set up zones to get alerts when family members enter or leave.</p>
@@ -57,6 +57,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
             Add Geofence
         </button>
         <?php endif; ?>
+        <?php renderFamilyAppArt('tracking', true); ?>
     </div>
 
     <!-- Add Geofence Form (hidden by default) -->

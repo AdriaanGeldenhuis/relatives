@@ -53,47 +53,6 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
 .planner-hero p { color: #dce7d4; margin-top: 10px; }
 .planner-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 20px; }
 
-.planner-art {
-    position: absolute;
-    inset: 0 0 0 auto;
-    width: 40%;
-    overflow: hidden;
-    display: grid;
-    place-items: center;
-    border-radius: inherit;
-    background-image: radial-gradient(#e1edc24d 1px, transparent 1px);
-    background-size: 16px 16px;
-    mask-image: linear-gradient(to right, transparent, black 24%);
-    pointer-events: none;
-}
-
-.planner-art-page {
-    position: relative;
-    width: clamp(153px, 20vw, 239px);
-    aspect-ratio: 1.45;
-    padding: 30px 14px 12px;
-    border-radius: 13px 13px 21px 13px;
-    background: #f6f2d8;
-    box-shadow: 13px 14px 0 #afca8d, 15px 22px 28px #122d2290;
-    transform: translate(-8px, -3px) rotate(-8deg);
-}
-.planner-art-page::before, .planner-art-page::after {
-    content: '';
-    position: absolute;
-    top: -8px;
-    width: 10px;
-    height: 20px;
-    border-radius: 12px;
-    background: #cfab73;
-}
-.planner-art-page::before { left: 21%; }
-.planner-art-page::after { right: 21%; }
-.planner-art-grid { display: grid; height: 100%; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(2, 1fr); gap: 6px; }
-.planner-art-grid span { border-radius: 4px; background: #e4e4c8; }
-.planner-art-grid span:nth-child(3), .planner-art-grid span:nth-child(12) { background: #b3cc8b; }
-.planner-art-grid span:nth-child(6), .planner-art-grid span:nth-child(10) { background: #e4bf90; }
-.planner-art-grid span:nth-child(8) { background: #c4d4c9; }
-
 .planner-hero-button, .planner-control, .planner-icon-button, .planner-main .btn, dialog.planner-modal .btn {
     display: inline-flex;
     align-items: center;
@@ -112,7 +71,7 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
     text-decoration: none;
     white-space: nowrap;
 }
-.planner-control:hover, .planner-icon-button:hover, dialog.planner-modal .btn-secondary:hover { background: #eaf0e2; }
+.planner-control:hover, .planner-icon-button:hover, dialog.planner-modal .btn-secondary:hover { background: var(--app-soft); }
 .planner-main .btn-primary, dialog.planner-modal .btn-primary { background: var(--planner-green); border-color: var(--planner-green); color: #fffdf4; }
 .planner-main .btn-primary:hover, dialog.planner-modal .btn-primary:hover { background: #254b37; }
 .planner-hero .btn-primary { background: var(--planner-lime); color: #203828; border-color: var(--planner-lime); }
@@ -189,7 +148,7 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
     font-size: .85rem;
     text-decoration: none;
 }
-.planner-views a:hover { background: #eaf0e2; }
+.planner-views a:hover { background: var(--app-soft); }
 .planner-views a[aria-current="page"], .planner-control[aria-pressed="true"] { color: #28513a; background: #e4edd8; border-color: #d3dfc7; }
 .planner-icon-button { width: 38px; padding: 5px; font-size: 1.34rem; }
 
@@ -238,7 +197,7 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
 
 .planner-event-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; color: var(--planner-muted); font-size: .72rem; font-weight: 650; }
 .planner-event-meta:empty { display: none; }
-.planner-kind, .planner-priority { color: #29513a; background: #eaf0e2; border-radius: 5px; padding: 2px 6px; }
+.planner-kind, .planner-priority { color: var(--planner-green); background: var(--app-soft); border-radius: 5px; padding: 2px 6px; }
 .planner-priority { color: #842f24; background: #f9e9dd; }
 .planner-event-notes {
     display: -webkit-box;
@@ -254,7 +213,7 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
 .planner-event-actions { display: flex; align-items: center; gap: 4px; }
 .planner-event-actions .planner-control { font-size: .72rem; padding-inline: 6px; }
 .planner-event-actions .planner-icon-button { background: transparent; border-color: transparent; }
-.planner-event-actions .planner-icon-button:hover { background: #eaf0e2; }
+.planner-event-actions .planner-icon-button:hover { background: var(--app-soft); }
 .planner-complete, .planner-select { display: grid; place-items: center; width: 35px; height: 40px; cursor: pointer; }
 .planner-complete input, .planner-select input { width: 19px; height: 19px; accent-color: var(--planner-green); cursor: pointer; }
 .planner-event-menu .planner-danger, .planner-danger { color: #923a2f; }
@@ -287,7 +246,7 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
 .planner-week-stat { display: flex; justify-content: space-between; gap: 5px; margin-top: 8px; color: var(--planner-muted); font-size: .79rem; }
 .planner-week-stat strong { color: var(--planner-ink); }
 .planner-empty { text-align: center; padding: 32px 12px; border-style: dashed; }
-.planner-empty > span { display: inline-grid; place-items: center; width: 36px; height: 36px; margin-bottom: 8px; border-radius: 9px; background: #e8efdc; color: #386048; font-size: 1.2rem; }
+.planner-empty > span { display: inline-grid; place-items: center; width: 36px; height: 36px; margin-bottom: 8px; border-radius: 9px; background: var(--app-soft); color: #386048; font-size: 1.2rem; }
 .planner-empty h3 { margin-bottom: 3px; }
 .planner-empty p, .planner-no-results { color: var(--planner-muted); }
 .planner-empty .btn { margin-top: 11px; }
@@ -364,7 +323,7 @@ dialog.planner-modal button:disabled, .planner-main button:disabled { opacity: .
 .planner-form-error { margin-top: 8px; padding: 7px 9px; border-radius: 8px; background: #f9e9dd; color: #842f24; font-size: .82rem; }
 .type-grid, .assign-grid, #templatesContent { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .type-btn, .assign-btn { padding: 7px; border: 1px solid var(--planner-line); border-radius: 9px; background: #f7f8ef; color: var(--planner-ink); cursor: pointer; }
-.type-btn:hover, .assign-btn:hover { background: #eaf0e2; }
+.type-btn:hover, .assign-btn:hover { background: var(--app-soft); }
 .planner-focus { text-align: center; }
 .planner-focus output { display: block; color: var(--planner-green); font-size: 2.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .rating-stars { display: flex; justify-content: center; gap: 6px; margin: 10px 0; }
@@ -417,9 +376,6 @@ dialog.planner-modal .schedule-toast { position: static; transform: none; width:
     .planner-hero h1 { font-size: clamp(2.25rem, 10vw, 3.65rem); }
     .planner-hero p { max-width: 240px; font-size: .85rem; margin-top: 6px; }
     .planner-hero-actions { margin-top: 14px; gap: 4px; }
-    .planner-art { width: 38%; opacity: .31; }
-    .planner-art-page { width: 120px; transform: translate(4px, 8px) rotate(-8deg); padding: 21px 8px 7px; }
-    .planner-art-grid { gap: 4px; }
     .planner-hero-button, .planner-hero .btn { padding-inline: 8px; }
     .planner-toolbar { gap: 5px; padding-bottom: 7px; }
     .planner-views a { padding-inline: 8px; }

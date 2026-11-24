@@ -1033,7 +1033,7 @@
     background: var(--family-canvas);
 }
 .messages-page .messages-list { background-color: var(--family-canvas); }
-.messages-page .sidebar-header { background: #e8efdc; color: var(--family-green); }
+.messages-page .sidebar-header { background: var(--app-soft); color: var(--family-green); }
 @media (max-width: 555px) {
     .messages-page .main-content { padding-bottom: 67px; }
 }
@@ -1052,4 +1052,4 @@
     font: 700 .8rem var(--family-body);
     cursor: pointer;
 }
-#messagesActions button:hover, #messagesActions button.active { background: #e8efdc; }
+#messagesActions button:hover, #messagesActions button.active { background: var(--app-soft); }

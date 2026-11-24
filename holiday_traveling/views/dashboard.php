@@ -7,7 +7,7 @@ $sections = [
 ?>
 
 <div class="ht-dashboard">
-    <header class="family-hero">
+    <header class="family-hero app-hero">
         <div class="family-hero-content">
             <h1 class="family-hero-title">Holiday &amp; traveling</h1>
             <p class="family-hero-summary">Plan family trips and keep your bookings, packing and expenses together.</p>
@@ -18,10 +18,7 @@ $sections = [
                 <?php endif; ?>
             </div>
         </div>
-        <div class="family-hero-art ht-hero-art" aria-hidden="true">
-            <span class="ht-art-paper ht-art-back"></span>
-            <span class="ht-art-paper ht-art-front"><i></i><i></i><i></i></span>
-        </div>
+        <?php renderFamilyAppArt('travel', true); ?>
     </header>
 
     <?php if (!$trips): ?>

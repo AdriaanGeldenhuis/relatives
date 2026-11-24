@@ -6,12 +6,13 @@
 
 <div class="ht-edit-trip">
     <!-- Page Header -->
-    <div class="ht-page-header">
+    <div class="ht-page-header app-hero">
         <a href="/holiday_traveling/trip_view.php?id=<?php echo $trip['id']; ?>" class="ht-back-link">← Back to Trip</a>
         <h1 class="ht-page-title">
             <span class="ht-title-icon">✏️</span>
             Edit Trip
         </h1>
+        <?php renderFamilyAppArt('travel', true); ?>
     </div>
 
     <!-- Edit Trip Form -->

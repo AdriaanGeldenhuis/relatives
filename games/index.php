@@ -111,7 +111,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
 <main class="family-main games-main">
-    <header class="family-hero">
+    <header class="family-hero app-hero">
         <div class="family-hero-content">
             <h1 class="family-hero-title">Games</h1>
             <p class="family-hero-summary">Play a quick round or get the family together for game night.</p>
@@ -120,9 +120,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <a href="#familyLeaderboard" class="family-button">Leaderboards</a>
             </div>
         </div>
-        <div class="family-hero-art" aria-hidden="true">
-            <span class="games-art-board"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-        </div>
+        <?php renderFamilyAppArt('games', true); ?>
     </header>
 
     <dl class="games-stats" aria-label="Your recorded scores">

@@ -119,7 +119,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <main class="main-content family-main">
     <div class="hub">
-        <header class="shopping-hero family-hero">
+        <header class="shopping-hero family-hero app-hero">
             <div class="family-hero-content">
                 <h1 class="family-hero-title">Family shopping</h1>
                 <p class="family-hero-summary">Shared shopping lists and what’s still to buy.</p>
@@ -135,7 +135,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </button>
                 </div>
             </div>
-            <div class="family-hero-art" aria-hidden="true"><div class="shopping-art"><span></span><span></span><span></span></div></div>
+            <?php renderFamilyAppArt('shopping', true); ?>
         </header>
 
         <!-- List tabs -->

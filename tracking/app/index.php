@@ -79,10 +79,11 @@ requestAnimationFrame(function() {
                 <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
             </a>
             <div>
-                <div class="tracking-topbar-title">Family Tracking</div>
+                <h1 class="tracking-topbar-title">Family Tracking</h1>
                 <div class="tracking-topbar-subtitle" id="trackingStatus">Connecting...</div>
             </div>
         </div>
+        <?php renderFamilyAppArt('tracking', true); ?>
         <div class="tracking-topbar-actions">
             <a href="/tracking/app/events.php" class="tracking-topbar-btn" title="Events">
                 <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>

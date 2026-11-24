@@ -1,0 +1,237 @@
+/* The launcher and its destination pages share one accent for each app. */
+:is(body[data-area="tracking"], [data-app="tracking"]) { --app-accent: #f6a491; --app-deep: #873b49; }
+:is(body[data-area="weather"], [data-app="weather"]) {
+    --app-accent: #8ccbea;
+    --app-deep: #235875;
+    --app-storm: radial-gradient(ellipse at 87% 6%, #497a96, transparent 72%), #1b3b53;
+}
+:is(body[data-area="notes"], [data-app="notes"]) { --app-accent: #be9be4; --app-deep: #67427e; }
+:is(body[data-area="shopping"], [data-app="shopping"]) { --app-accent: #f5ba55; --app-deep: #775019; }
+:is(body[data-area="calendar"], [data-app="calendar"]) { --app-accent: #6bcba1; --app-deep: #28644d; }
+:is(body[data-area="schedule"], [data-app="schedule"]) { --app-accent: #e992ba; --app-deep: #803e60; }
+:is(body[data-area="holiday_traveling"], [data-app="travel"]) { --app-accent: #6fcbbf; --app-deep: #235e57; }
+:is(body[data-area="games"], [data-app="games"]) { --app-accent: #a89aee; --app-deep: #514184; }
+:is(body[data-area="messages"], [data-app="messages"]) { --app-accent: #7fb5f1; --app-deep: #2d5680; }
+
+body:is([data-area="tracking"], [data-area="weather"], [data-area="notes"], [data-area="shopping"],
+    [data-area="calendar"], [data-area="schedule"], [data-area="holiday_traveling"], [data-area="games"], [data-area="messages"]) {
+    --family-canvas: color-mix(in srgb, var(--app-accent) 15%, #f8f5ed);
+    --family-paper: color-mix(in srgb, var(--app-accent) 5%, #fffdf6);
+    --family-ink: color-mix(in srgb, var(--app-deep) 52%, #191d26);
+    --family-muted: color-mix(in srgb, var(--app-deep) 63%, #495058);
+    --family-line: color-mix(in srgb, var(--app-accent) 46%, #dedcd8);
+    --family-green: var(--app-deep);
+    --family-lime: color-mix(in srgb, var(--app-accent) 62%, #fffaf1);
+    --app-soft: color-mix(in srgb, var(--app-accent) 26%, #fffdf6);
+    --app-hero-fill: linear-gradient(114deg, var(--family-paper) 12%, color-mix(in srgb, var(--app-accent) 42%, #fffdf6));
+    --app-hero-ink: var(--family-ink);
+    --app-hero-muted: var(--family-muted);
+    --app-hero-edge: var(--family-line);
+    --app-button-fill: #ffffff8c;
+    --app-button-ink: var(--app-deep);
+    --app-focus: var(--app-deep);
+}
+
+body[data-area="weather"] {
+    --app-hero-fill: var(--app-storm);
+    --app-hero-ink: #f5fbff;
+    --app-hero-muted: #d5edff;
+    --app-hero-edge: #326280;
+    --app-button-fill: #18394f;
+    --app-button-ink: #f5fbff;
+    --app-focus: #c4e5ff;
+}
+
+/* The same illustrations as the launcher, sized for the available space. */
+.app-hero-scene {
+    position: absolute;
+    z-index: 0;
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    place-items: center;
+    inset: 0 0 0 auto;
+    width: 34%;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+    isolation: isolate;
+    background: radial-gradient(circle at center, color-mix(in srgb, var(--app-accent) 20%, transparent), transparent 65%);
+}
+.app-hero-scene::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(color-mix(in srgb, var(--app-deep) 23%, transparent) 1px, transparent 1px) 0 0 / 15px 15px;
+    mask-image: radial-gradient(ellipse at 62% 50%, #000, transparent 75%);
+}
+.app-hero-scene .launch-art { scale: 2.1; }
+.app-hero-scene[data-app="weather"] .launch-rain { inset-inline-start: 0; }
+.app-hero-scene[data-app="weather"]::before { background-image: radial-gradient(#b8e5ff63 1px, transparent 1px); }
+
+:is(.launcher, .app-hero-scene) .launch-art span,
+:is(.launcher, .app-hero-scene) .launch-art::after,
+:is(.launcher, .app-hero-scene) .launch-map::before,
+:is(.launcher, .app-hero-scene) .launch-map::after,
+:is(.launcher, .app-hero-scene) .launch-rain span {
+    animation-play-state: var(--launch-play-state, running);
+}
+.app-hero-scene .launch-art span,
+.app-hero-scene .launch-art::after,
+.app-hero-scene .launch-map::before,
+.app-hero-scene .launch-map::after,
+.app-hero-scene .launch-rain span { animation-iteration-count: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+    :is(.launcher, .app-hero-scene) .launch-art span,
+    :is(.launcher, .app-hero-scene) .launch-art::after,
+    :is(.launcher, .app-hero-scene) .launch-map::before,
+    :is(.launcher, .app-hero-scene) .launch-map::after,
+    :is(.launcher, .app-hero-scene) .launch-rain span { animation: none; }
+}
+
+.app-hero {
+    position: relative;
+    isolation: isolate;
+    padding-inline-end: 34%;
+}
+.family-main .family-hero.app-hero,
+.planner-main .planner-hero.app-hero { padding-inline-end: 34%; }
+
+:is(.family-main, .planner-main) .app-hero,
+.tracking-content-header.app-hero,
+body[data-area="holiday_traveling"] :is(.ht-page-header, .ht-trip-header) {
+    background: var(--app-hero-fill);
+    border-color: var(--app-hero-edge);
+    color: var(--app-hero-ink);
+}
+
+.app-hero :is(.family-hero-summary, .tracking-content-subtitle),
+.planner-hero.app-hero p,
+body[data-area="holiday_traveling"] :is(.ht-page-header, .ht-trip-header) :is(.ht-page-subtitle, .ht-back-link, .ht-trip-title-sub, .ht-meta-item) {
+    color: var(--app-hero-muted);
+}
+
+.app-hero :is(h1, .tracking-content-title) { color: inherit; }
+.app-hero .tracking-content-title { font: 400 clamp(1.7rem, 4vw, 2.45rem)/1.05 var(--family-display); }
+body[data-area] .app-hero :focus-visible { outline-color: var(--app-focus); }
+
+.app-hero .family-button,
+.app-hero .planner-hero-button,
+.app-hero #messagesActions button,
+body[data-area="holiday_traveling"] :is(.ht-page-header, .ht-trip-header) :is(.ht-btn-secondary, .ht-btn-outline, .ht-menu-trigger) {
+    background: var(--app-button-fill);
+    border-color: var(--app-hero-edge);
+    color: var(--app-button-ink);
+}
+.app-hero .family-button:hover,
+.app-hero .planner-hero-button:hover,
+.app-hero #messagesActions button:is(:hover, .active),
+body[data-area="holiday_traveling"] :is(.ht-page-header, .ht-trip-header) :is(.ht-btn-secondary, .ht-btn-outline, .ht-menu-trigger):hover {
+    background: var(--family-lime);
+    color: var(--family-ink);
+}
+.family-hero.app-hero :is(.family-button-primary, .family-button.active),
+.planner-main .app-hero .btn-primary,
+.app-hero .tracking-add-btn {
+    background: var(--app-deep);
+    border-color: var(--app-deep);
+    color: #fff;
+}
+.family-hero.app-hero :is(.family-button-primary, .family-button.active):hover,
+.planner-main .app-hero .btn-primary:hover,
+.app-hero .tracking-add-btn:hover {
+    background: color-mix(in srgb, var(--app-deep) 82%, #14121c);
+    border-color: var(--app-deep);
+    color: #fff;
+}
+
+body.workspace-page:is([data-area="calendar"], [data-area="schedule"]) {
+    --planner-canvas: var(--family-canvas);
+    --planner-paper: var(--family-paper);
+    --planner-ink: var(--family-ink);
+    --planner-muted: var(--family-muted);
+    --planner-forest: var(--app-deep);
+    --planner-green: var(--app-deep);
+    --planner-line: var(--family-line);
+    --planner-lime: var(--family-lime);
+}
+body[data-area="holiday_traveling"] :is(.ht-page-header, .ht-trip-header).app-hero {
+    padding-inline-end: max(76px, 21%);
+}
+.ht-main :is(.ht-page-header, .ht-trip-header) .app-hero-scene {
+    width: 21%;
+    min-width: 75px;
+}
+.ht-main :is(.ht-page-header, .ht-trip-header) .launch-art { scale: 1.25; }
+
+.messages-toolbar.app-hero {
+    min-height: 138px;
+    padding: clamp(14px, 3vw, 30px);
+    padding-inline-end: 34%;
+    border: 1px solid var(--app-hero-edge);
+    border-radius: 20px;
+}
+.messages-hero-content { z-index: 1; min-width: 0; }
+.messages-toolbar.app-hero h1 { font: 400 clamp(2.2rem, 5vw, 4rem)/1 var(--family-display); }
+.messages-toolbar.app-hero #messagesActions:not(:empty) { margin-top: 10px; }
+.messages-toolbar .app-hero-scene .launch-art { scale: 1.62; }
+
+body[data-area="tracking"] {
+    --trk-primary: var(--app-accent);
+    --trk-gradient: linear-gradient(135deg, #5c2836, var(--app-deep));
+    --trk-glass-bg: #3d2330e8;
+    --trk-panel-bg: #3d2330f5;
+    background: #321c29;
+}
+body[data-area="tracking"]:not(.tracking-page) {
+    background: var(--family-canvas);
+    color: var(--family-ink);
+    color-scheme: light;
+    --trk-text: var(--family-ink);
+    --trk-text-muted: var(--family-muted);
+    --trk-text-dim: var(--family-muted);
+    --trk-card-bg: var(--family-paper);
+    --trk-card-border: var(--family-line);
+    --trk-primary: var(--app-deep);
+    --trk-yellow: #84501c;
+}
+body[data-area="tracking"] .tracking-content-header.app-hero {
+    padding: 18px max(70px, 22%) 18px 18px;
+    border: 1px solid var(--app-hero-edge);
+    border-radius: 17px;
+}
+.tracking-content-header.app-hero .app-hero-scene { width: 22%; min-width: 68px; }
+.tracking-content-header.app-hero .launch-art { scale: 1; }
+body[data-area="tracking"] :is(.tracking-content, .tracking-settings) .tracking-back { color: var(--app-deep); }
+body[data-area="tracking"] .tracking-settings .settings-save-btn { background: var(--app-deep); color: #fff; }
+body[data-area="tracking"] .tracking-topbar {
+    background: var(--app-hero-fill);
+    --trk-text: var(--family-ink);
+    --trk-text-muted: var(--family-muted);
+    --trk-card-bg: var(--family-paper);
+    --trk-card-border: var(--family-line);
+    --trk-glass-heavy: var(--family-lime);
+}
+.tracking-topbar .app-hero-scene {
+    position: static;
+    align-self: stretch;
+    width: 58px;
+}
+.tracking-topbar .app-hero-scene .launch-art { scale: .63; }
+.tracking-topbar-actions { flex-shrink: 0; }
+
+@media (max-width: 820px) {
+    .app-hero-scene .launch-art { scale: 1.54; }
+}
+@media (max-width: 555px) {
+    .family-main .family-hero.app-hero,
+    .planner-main .planner-hero.app-hero,
+    .messages-toolbar.app-hero { padding-inline-end: 25%; }
+    .app-hero-scene { width: 25%; }
+    .app-hero-scene .launch-art, .messages-toolbar .app-hero-scene .launch-art { scale: .98; }
+    .ht-main :is(.ht-page-header, .ht-trip-header) .launch-art { scale: .85; }
+    .messages-toolbar.app-hero { min-height: 94px; }
+}
+@media (max-width: 360px) {
+    .tracking-topbar .app-hero-scene { display: none; }
+}

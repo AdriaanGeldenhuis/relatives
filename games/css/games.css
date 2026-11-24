@@ -4,23 +4,6 @@ body[data-area="games"] { --footer-height: 56px; }
 .games-main .family-hero :focus-visible { outline-color: var(--family-lime); }
 .games-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.games-art-board {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    width: clamp(118px, 16vw, 198px);
-    aspect-ratio: 1.12;
-    padding: 12px;
-    gap: 5px;
-    border-radius: 13px 13px 23px 13px;
-    background: #f8f4d3;
-    box-shadow: 24px 14px 0 #bddd92, 0 14px 30px #122c1c80;
-    transform: rotate(-12deg);
-}
-.games-art-board i { border-radius: 6px; background: #e4e8c4; }
-.games-art-board i:nth-child(1), .games-art-board i:nth-child(4), .games-art-board i:nth-child(5) { background: #81a47a; }
-.games-art-board i:nth-child(3), .games-art-board i:nth-child(7) { background: #dcca9d; }
-.games-art-board i:nth-child(6), .games-art-board i:nth-child(9) { background: #aac888; }
-
 .games-stats { display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 12px 0; margin-top: 15px; border-bottom: 1px solid var(--family-line); }
 .games-stats div { display: flex; align-items: baseline; gap: 6px; }
 .games-stats dt { color: var(--family-muted); font-size: .8rem; }
@@ -60,7 +43,7 @@ body[data-area="games"] { --footer-height: 56px; }
 .games-board { padding: 13px; border: 1px solid var(--family-line); border-radius: var(--family-card-radius); background: var(--family-paper); box-shadow: var(--family-card-shadow); }
 .games-filters { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--family-line); }
 .games-filters button { padding: 6px 8px; min-height: 36px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--family-muted); font: 700 .75rem/1.25 var(--family-body); cursor: pointer; }
-.games-filters button:hover, .games-filters button[aria-pressed="true"] { background: #e8efdc; border-color: #d9e3cb; color: var(--family-green); }
+.games-filters button:hover, .games-filters button[aria-pressed="true"] { background: var(--app-soft); border-color: var(--family-line); color: var(--family-green); }
 .games-ranks { display: grid; gap: 5px; margin-top: 8px; list-style: none; }
 .games-ranks li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px; border-radius: 9px; }
 .games-ranks li.is-current { background: #ecf1e1; }

@@ -6,13 +6,14 @@
 
 <div class="ht-share-trip">
     <!-- Page Header -->
-    <div class="ht-page-header">
+    <div class="ht-page-header app-hero">
         <a href="/holiday_traveling/trip_view.php?id=<?php echo $trip['id']; ?>" class="ht-back-link">← Back to Trip</a>
         <h1 class="ht-page-title">
             <span class="ht-title-icon">🔗</span>
             Share Trip
         </h1>
         <p class="ht-page-subtitle"><?php echo htmlspecialchars($trip['destination']); ?> - <?php echo htmlspecialchars($trip['title']); ?></p>
+        <?php renderFamilyAppArt('travel', true); ?>
     </div>
 
     <!-- Share Link Section -->
