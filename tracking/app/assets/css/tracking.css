@@ -43,33 +43,14 @@
    LAYOUT - Map between header & footer
    ============================================ */
 body.tracking-page {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    height: 100dvh;
-    min-height: 0;
-    padding-bottom: 0 !important;
     overflow: hidden;
 }
 
-body.tracking-page .app-loader,
-body.tracking-page:not([data-android-app]) .global-footer {
-    display: none;
-}
-
-body.tracking-page > .global-header,
-body.tracking-page > .global-footer {
-    flex: none;
-}
-
-body.tracking-page > .global-footer {
-    position: relative;
-}
-
 .tracking-app {
-    position: relative;
-    flex: 1;
-    min-height: 0;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 10;
     display: flex;
     flex-direction: column;
@@ -250,13 +231,13 @@ body.tracking-page > .global-footer {
    FAMILY PANEL
    ============================================ */
 .family-panel {
-    position: absolute;
+    position: fixed;
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     left: 0;
     right: 0;
     margin-inline: auto;
     width: var(--trk-panel-width);
-    max-height: calc(100% - var(--trk-topbar-height) - 20px - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100vh - var(--trk-topbar-height) - 64px);
     z-index: 1000;
     background: var(--trk-panel-bg);
     backdrop-filter: blur(40px) saturate(180%);
@@ -508,6 +489,15 @@ body.tracking-page > .global-footer {
    BOTTOM TOOLBAR - Home + Wake + Settings
    ============================================ */
 
+/* The site-wide floating footer (mic / help / tracking / plus) is
+   redundant on the fullscreen map page: it duplicated the toolbar's
+   Home action (its pin even links back to this page), covered the map
+   attribution, and forced everything 85px up the screen. */
+body.tracking-page .footer-container,
+body.tracking-page .menu-backdrop {
+    display: none !important;
+}
+
 .tracking-toolbar {
     position: absolute;
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
@@ -528,7 +518,7 @@ body.tracking-page > .global-footer {
 }
 
 .tracking-toolbar-btn {
-    height: 44px;
+    height: 42px;
     padding: 0 18px;
     border-radius: 9px;
     border: 1px solid #d9dfd0;
@@ -543,8 +533,6 @@ body.tracking-page > .global-footer {
     transition: all var(--trk-transition);
     white-space: nowrap;
 }
-
-.tracking-toolbar-btn[hidden] { display: none; }
 
 .tracking-toolbar-btn:hover {
     background: #e8efdc;
@@ -936,11 +924,11 @@ body.tracking-page .consent-overlay {
 
 /* Steps list panel */
 .nav-steps-panel {
-    position: absolute;
+    position: fixed;
     bottom: env(safe-area-inset-bottom, 0px);
     left: 0;
     right: 0;
-    max-height: 60%;
+    max-height: 50vh;
     z-index: 1010;
     background: var(--trk-panel-bg);
     backdrop-filter: blur(40px);
@@ -1444,13 +1432,12 @@ body.tracking-page .consent-overlay {
 @media (max-width: 768px) {
     :root {
         --trk-panel-width: 100%;
-        --trk-topbar-height: 44px;
         --trk-footer-offset: 90px;
     }
 
     .family-panel {
         width: calc(100% - 24px);
-        max-height: calc(100% - var(--trk-topbar-height) - 12px - env(safe-area-inset-bottom, 0px));
+        max-height: calc(100vh - 44px - 56px);
         z-index: 1005;
         bottom: calc(12px + env(safe-area-inset-bottom, 0px));
         border-radius: var(--trk-radius-lg);
@@ -1502,6 +1489,8 @@ body.tracking-page .consent-overlay {
     .nav-header-instruction { font-size: 13px; }
     .nav-bottom { padding: 12px 16px; }
     .nav-bottom-value { font-size: 16px; }
+    .nav-steps-panel { max-height: 55vh; }
+    .tracking-topbar { height: 44px; }
     .tracking-topbar-title { font-size: 14px; }
     .mapboxgl-ctrl-top-right { top: 56px !important; }
     .consent-card { padding: 20px; }

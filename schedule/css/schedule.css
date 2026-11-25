@@ -318,7 +318,7 @@ dialog.planner-modal button:disabled, .planner-main button:disabled { opacity: .
 }
 .planner-event-page .modal-header { position: static; border-radius: 17px 17px 0 0; flex-wrap: wrap; }
 .planner-event-page .planner-form-error { margin: 0 0 14px; }
-body:not([data-android-app]) .planner-add-main + .global-footer { position: static; }
+.planner-add-main + .global-footer { position: static; }
 
 .planner-form-more { padding: 7px 9px; border: 1px solid var(--planner-line); border-radius: 8px; background: #f5f6ee; }
 .planner-form-more summary { color: var(--planner-green); font-size: .82rem; font-weight: 750; cursor: pointer; }

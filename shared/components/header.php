@@ -22,7 +22,6 @@ $appVersion = '12.4.0';
 $cacheVersion = '12.13.0';
 $workspacePage = !isset($homeStylesheet) && !isset($messagesStylesheets);
 $buildTime = $cacheVersion;
-$androidWebView = str_contains($_SERVER['HTTP_USER_AGENT'] ?? '', 'RelativesAndroid/');
 $familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'weather', 'holiday_traveling', 'games', 'admin', 'profile', 'notifications', 'upgrade'], true);
 $familyAppPage = in_array($activePage, ['home', 'tracking', 'weather', 'notes', 'shopping', 'calendar', 'schedule', 'holiday_traveling', 'games', 'messages', 'notifications'], true);
 if ($familyAppPage) {
@@ -105,8 +104,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
             min-height: 100vh;
             color: white;
             overflow-x: hidden;
-            overflow-x: clip;
-            padding-bottom: max(var(--footer-height), var(--app-footer-height, 0px)) !important;
+            padding-bottom: var(--footer-height) !important;
             -webkit-font-smoothing: antialiased;
         }
 
@@ -175,7 +173,7 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <style><?php readfile(__DIR__ . '/../css/site-navigation.css'); readfile(__DIR__ . '/../css/action-controls.css'); ?></style>
     <style><?php readfile(__DIR__ . '/../css/footer-assistance.css'); ?></style>
 </head>
-<body class="<?= $workspacePage ? 'workspace-page' : (isset($homeStylesheet) ? 'home-page' : 'messages-page') ?><?= $familyPage ? ' family-page' : '' ?><?= isset($pageBodyClass) ? ' ' . htmlspecialchars($pageBodyClass) : '' ?>" data-area="<?= htmlspecialchars($activePage) ?>"<?= $androidWebView ? ' data-android-app' : '' ?> <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
+<body class="<?= $workspacePage ? 'workspace-page' : (isset($homeStylesheet) ? 'home-page' : 'messages-page') ?><?= $familyPage ? ' family-page' : '' ?>" data-area="<?= htmlspecialchars($activePage) ?>" <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
     
     <!-- App Loader -->
     <div id="appLoader" class="app-loader">

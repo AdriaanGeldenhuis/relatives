@@ -41,8 +41,8 @@ body .site-header.global-header {
     align-items: center;
     justify-content: center;
     gap: 7px;
-    min-height: 44px;
-    min-width: 44px;
+    min-height: 42px;
+    min-width: 42px;
     padding: 6px 10px;
     box-sizing: border-box;
     border: 1px solid var(--nav-line);
@@ -130,6 +130,7 @@ html:has(.site-menu[open]) { overflow: hidden; }
 @media (max-width: 480px) {
     .site-header .header-container { min-height: 57px; }
     .site-menu-label { display: none; }
+    .site-header .site-control { min-width: 38px; min-height: 38px; }
 }
 
 .site-header .site-account { position: relative; overflow: hidden; flex: none; padding: 0; }

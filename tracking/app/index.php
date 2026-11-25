@@ -41,13 +41,34 @@ $alertRules = $alertsRepo->get($familyId);
 $mapboxToken = $_ENV['MAPBOX_TOKEN'] ?? '';
 
 $pageTitle = 'Family Tracking';
-$pageBodyClass = 'tracking-page';
 $pageCSS = [
     'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css',
     '/tracking/app/assets/css/tracking.css?build=' . filemtime(__DIR__ . '/assets/css/tracking.css'),
 ];
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
+
+<style>
+/* Critical inline styles - must be here, not just in CSS file */
+body.tracking-page { overflow: hidden !important; padding-bottom: 0 !important; margin: 0 !important; }
+body.tracking-page .app-loader { display: none !important; }
+.tracking-app { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; }
+#trackingMap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+</style>
+<script>
+document.body.classList.add('tracking-page');
+// Position tracking app below the global header
+requestAnimationFrame(function() {
+    var header = document.querySelector('.global-header');
+    var app = document.querySelector('.tracking-app');
+    if (header && app) {
+        app.style.top = header.offsetHeight + 'px';
+    } else if (app) {
+        app.style.top = '0';
+    }
+    // Map resize handled in map.on('load') below - not here (map not yet created)
+});
+</script>
 
 <div class="tracking-app">
 
@@ -166,27 +187,28 @@ require_once __DIR__ . '/../../shared/components/header.php';
         </button>
     </div>
 
-    <!-- Family Members Panel -->
-    <div class="family-panel" id="familyPanel" style="display:none">
-        <div class="family-panel-header">
-            <div style="display:flex;align-items:center;gap:10px;">
-                <span class="family-panel-title">Family</span>
-                <span class="family-panel-badge" id="memberCount">0</span>
-            </div>
-            <button class="family-panel-close" id="familyPanelClose" title="Close panel">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
+</div><!-- .tracking-app -->
+
+<!-- Family Members Panel (outside tracking-app for correct z-index stacking) -->
+<div class="family-panel" id="familyPanel" style="display:none">
+    <div class="family-panel-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span class="family-panel-title">Family</span>
+            <span class="family-panel-badge" id="memberCount">0</span>
         </div>
-        <div class="family-panel-body" id="memberList">
-            <!-- Members loaded dynamically -->
-            <div class="member-empty" id="memberEmpty">
-                <div class="member-empty-icon"></div>
-                <div class="member-empty-text">No members online</div>
-                <div class="member-empty-sub">Waiting for family members to share location</div>
-            </div>
+        <button class="family-panel-close" id="familyPanelClose" title="Close panel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+    <div class="family-panel-body" id="memberList">
+        <!-- Members loaded dynamically -->
+        <div class="member-empty" id="memberEmpty">
+            <div class="member-empty-icon"></div>
+            <div class="member-empty-text">No members online</div>
+            <div class="member-empty-sub">Waiting for family members to share location</div>
         </div>
     </div>
-</div><!-- .tracking-app -->
+</div>
 
 <script>
     window.MAPBOX_TOKEN = <?php echo json_encode($mapboxToken); ?>;
@@ -277,9 +299,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             map.resize();
         });
 
-        if (typeof ResizeObserver === 'function') {
-            new ResizeObserver(function() { map.resize(); }).observe(map.getContainer());
-        }
+        // Force resize after layout settles
+        setTimeout(function() { if (map) map.resize(); }, 100);
+        setTimeout(function() { if (map) map.resize(); }, 500);
     } catch (mapErr) {
         console.error('[Tracking] Map init failed, continuing without map:', mapErr);
         map = null;
