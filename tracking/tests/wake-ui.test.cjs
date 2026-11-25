@@ -72,3 +72,14 @@ test('the map refreshes when the recipient uploads a fix', async () => {
     assert.equal(ui.mapReads(), 1);
     assert.equal(ui.localWakes(), 1);
 });
+
+test('Firebase setup failures explain why Wake could not start', async () => {
+    const ui = harness([[503, {
+        success: false,
+        error: 'wake_service_unavailable',
+        reason: 'firebase_key_missing'
+    }]]);
+    await ui.click();
+    assert.equal(ui.text[0], 'Wake needs a Firebase key on the server');
+    assert.equal(ui.localWakes(), 0);
+});

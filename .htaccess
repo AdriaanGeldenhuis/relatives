@@ -48,6 +48,10 @@
     Require all denied
 </Files>
 
+<Files "firebase-service-account.json">
+    Require all denied
+</Files>
+
 # PHP Settings
 <IfModule mod_php7.c>
     php_value opcache.enable 1

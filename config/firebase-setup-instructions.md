@@ -12,10 +12,13 @@ longer exists (Google shut that API down in June 2024).
 3. Click the gear icon ⚙️ → **Project Settings**
 4. Go to **Service Accounts** tab
 5. Click **Generate New Private Key**
-6. Save the JSON file on the server as: `/config/firebase-service-account.json`
-   (never commit it to git)
+6. Through SFTP or the hosting file manager, save the key as `firebase-service-account.json`
+   in the account folder that contains `public_html`. Give the website's PHP user read
+   access. Keep the key out of Git.
 
-That's it — the project ID is read from the JSON file automatically.
+Relatives reads the project ID from the key. The legacy location
+`public_html/config/firebase-service-account.json` is supported for existing setups
+and blocked from web access by the root Apache rules.
 
 ## Optional: .env override
 
@@ -33,7 +36,10 @@ FCM_PROJECT_ID=your-project-id
 - Delivery attempts are logged in the `notification_delivery_log` table:
   `status = 'sent'` means FCM accepted the message; `failed` rows include the
   error in `error_message`.
-- Configuration errors are written to the PHP error log prefixed with `FCM:`.
+- The Wake button reports the cause when Firebase setup blocks delivery. The
+  `wake_devices.php` response includes a `reason` code. Check the PHP error log for
+  the corresponding `FCM:` line, which gives the OAuth HTTP status and cURL error
+  number without logging the key or token.
 
 ## Database
 

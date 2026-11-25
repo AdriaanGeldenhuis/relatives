@@ -8,43 +8,51 @@
 
 class FirebaseMessaging {
     private $projectId;
-    private $serviceAccount;
+    private ?array $serviceAccount = null;
     private $accessToken;
     private $tokenExpiry;
     private string $lastFailure = '';
+    private string $configurationFailure = '';
 
     public function __construct() {
-        // Load service account from file
-        $serviceAccountPath = __DIR__ . '/../config/firebase-service-account.json';
+        // Prefer the account directory above public_html. Older installations
+        // can continue using the filename protected by the root .htaccess.
+        $privatePath = dirname(__DIR__, 2) . '/firebase-service-account.json';
+        $legacyPath = __DIR__ . '/../config/firebase-service-account.json';
+        $path = @is_file($privatePath) ? $privatePath : $legacyPath;
 
-        if (file_exists($serviceAccountPath)) {
-            $this->serviceAccount = json_decode(file_get_contents($serviceAccountPath), true);
-            if (!$this->serviceAccount) {
-                error_log('FCM: config/firebase-service-account.json exists but is not valid JSON — push notifications DISABLED');
-            }
+        if (!is_file($path)) {
+            $this->configurationFailure = 'firebase_key_missing';
         } else {
-            error_log('FCM: Service account file not found at ' . $serviceAccountPath . ' — push notifications DISABLED until it is provisioned (see config/firebase-setup-instructions.md)');
+            $json = @file_get_contents($path);
+            $account = $json === false ? null : json_decode($json, true);
+            if (is_array($account)) {
+                $this->serviceAccount = $account;
+            }
+            $this->projectId = !empty($_ENV['FCM_PROJECT_ID'])
+                ? $_ENV['FCM_PROJECT_ID']
+                : ($this->serviceAccount['project_id'] ?? null);
+            if (!$this->isConfigured()) {
+                $this->configurationFailure = $json === false ? 'firebase_key_unreadable' : 'firebase_key_invalid';
+            }
         }
 
-        // Project ID: the service-account JSON already contains it; the env
-        // var is only an override. Requiring the env var separately meant a
-        // fully valid credential on disk was ignored when the optional-looking
-        // FCM_PROJECT_ID line was missing from .env, and every push was
-        // silently dropped. empty() (not ??) so a scaffolded blank
-        // "FCM_PROJECT_ID=" line in .env doesn't defeat the fallback either.
-        $this->projectId = !empty($_ENV['FCM_PROJECT_ID'])
-            ? $_ENV['FCM_PROJECT_ID']
-            : ($this->serviceAccount['project_id'] ?? null);
+        if ($this->configurationFailure !== '') {
+            error_log('FCM: ' . $this->configurationFailure);
+        }
     }
 
-    /**
-     * True when this server can actually reach FCM (credentials present).
-     */
     public function isConfigured(): bool {
-        return !empty($this->serviceAccount['client_email']) && !empty($this->serviceAccount['private_key']) && !empty($this->projectId);
+        foreach ([$this->serviceAccount['client_email'] ?? null, $this->serviceAccount['private_key'] ?? null, $this->projectId] as $field) {
+            if (!is_string($field) || trim($field) === '') {
+                return false;
+            }
+        }
+        return true;
     }
 
     public function prepareSend(): bool {
+        $this->lastFailure = $this->configurationFailure;
         return $this->isConfigured() && $this->getAccessToken() !== null;
     }
 
@@ -61,8 +69,11 @@ class FirebaseMessaging {
             return $this->accessToken;
         }
 
-        if (!$this->serviceAccount) {
+        if (!$this->isConfigured()) {
             return null;
+        }
+        if (!function_exists('openssl_sign') || !function_exists('curl_init')) {
+            return $this->tokenFailure('firebase_php_extension_missing');
         }
 
         try {
@@ -85,7 +96,9 @@ class FirebaseMessaging {
             $signingInput = implode('.', $segments);
 
             $signature = '';
-            openssl_sign($signingInput, $signature, $this->serviceAccount['private_key'], OPENSSL_ALGO_SHA256);
+            if (!@openssl_sign($signingInput, $signature, $this->serviceAccount['private_key'], OPENSSL_ALGO_SHA256)) {
+                return $this->tokenFailure('firebase_key_invalid');
+            }
             $segments[] = $this->base64UrlEncode($signature);
             $jwt = implode('.', $segments);
 
@@ -105,25 +118,31 @@ class FirebaseMessaging {
 
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $transportCode = curl_errno($ch);
             curl_close($ch);
 
             if ($httpCode === 200 && is_string($response)) {
                 $data = json_decode($response, true);
-                if (!is_string($data['access_token'] ?? null)) {
-                    return null;
+                if (!is_string($data['access_token'] ?? null) || $data['access_token'] === '') {
+                    return $this->tokenFailure('firebase_auth_unavailable', $httpCode);
                 }
                 $this->accessToken = $data['access_token'];
                 $this->tokenExpiry = $now + ($data['expires_in'] ?? 3600);
                 return $this->accessToken;
             }
 
-            error_log("FCM: Failed to get access token. HTTP $httpCode");
-            return null;
-
-        } catch (Exception $e) {
-            error_log("FCM: Access token error");
-            return null;
+            $reason = $httpCode >= 400 && $httpCode < 500 && $httpCode !== 429
+                ? 'firebase_auth_rejected' : 'firebase_auth_unavailable';
+            return $this->tokenFailure($reason, $httpCode, $transportCode);
+        } catch (Throwable) {
+            return $this->tokenFailure('firebase_auth_unavailable');
         }
+    }
+
+    private function tokenFailure(string $reason, int $httpCode = 0, int $transportCode = 0): ?string {
+        $this->lastFailure = $reason;
+        error_log("FCM: $reason (OAuth HTTP $httpCode, cURL $transportCode)");
+        return null;
     }
 
     /**

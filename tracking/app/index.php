@@ -1254,7 +1254,17 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                     nativeBridge.wakeAllDevices();
                 }
             } else {
-                displayWake(body.error === 'tracking_disabled' ? 'Family tracking is off' : 'Wake temporarily unavailable');
+                var failureMessages = {
+                    tracking_disabled: 'Family tracking is off',
+                    wake_setup_required: 'Wake needs a server database update',
+                    firebase_key_missing: 'Wake needs a Firebase key on the server',
+                    firebase_key_unreadable: 'The server cannot read its Firebase key',
+                    firebase_key_invalid: 'The server Firebase key is invalid',
+                    firebase_php_extension_missing: 'Wake needs PHP cURL and OpenSSL on the server',
+                    firebase_auth_rejected: 'Google rejected the server Firebase credentials',
+                    firebase_auth_unavailable: 'The server could not reach Firebase authentication'
+                };
+                displayWake(failureMessages[body.reason] || failureMessages[body.error] || 'Wake temporarily unavailable');
             }
         } catch (error) {
             displayWake('Couldn’t reach the Wake service · tap Wake to retry');

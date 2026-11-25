@@ -42,7 +42,11 @@ if (!$eligible) {
 $confirmed = TrackingPolicy::confirmedWake($db);
 $fcm = new FirebaseMessaging();
 if (!$fcm->prepareSend()) {
-    Response::error('wake_service_unavailable', 503);
+    Response::json([
+        'success' => false,
+        'error' => 'wake_service_unavailable',
+        'reason' => $fcm->lastFailure(),
+    ], 503);
 }
 
 if ($useLedger) {
