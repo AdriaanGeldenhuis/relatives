@@ -23,10 +23,6 @@
         });
         menu.querySelectorAll('a').forEach(link => link.addEventListener('click', close));
     }
-    document.getElementById('siteBack')?.addEventListener('click', () => {
-        if (history.length > 1) history.back();
-        else location.assign('/home/');
-    });
     const profilePhoto = document.querySelector('.site-account-photo');
     if (profilePhoto) {
         const showInitial = () => { profilePhoto.hidden = true; };

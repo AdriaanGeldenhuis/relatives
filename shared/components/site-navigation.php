@@ -43,7 +43,7 @@ $navigationHome = $navigationUser ? '/home/' : '/';
         </div>
         <div class="header-right">
             <?php if ($navigationUser): ?>
-                <button type="button" class="site-control" id="siteBack" aria-label="Go back" title="Go back">←</button>
+                <a href="/home/" class="site-control" aria-label="Home" title="Home"<?= $navigationArea === 'home' ? ' aria-current="page"' : '' ?>><span aria-hidden="true">🏠</span></a>
                 <div class="notification-bell">
                     <a href="/notifications/" class="site-control" id="notificationBell" aria-label="Notifications" title="Notifications">🔔</a>
                     <span class="notification-badge" id="notificationBadge" aria-hidden="true" hidden></span>
