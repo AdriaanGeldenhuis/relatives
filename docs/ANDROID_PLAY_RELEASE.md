@@ -1,6 +1,6 @@
 # Relatives Android release checks
 
-The Android project lives in `App Files`. This release uses package `za.co.relatives.app`, target SDK 36, version 1.8, version code 9, and Google Play Billing 8.3.0. Compare the version code against the highest code already uploaded in Play Console before signing.
+The Android project lives in `App Files`. This release uses package `za.co.relatives.app`, target SDK 36, version 1.9, version code 10, and Google Play Billing 8.3.0. Compare the version code against the highest code already uploaded in Play Console before signing.
 
 ## Build and deploy
 
