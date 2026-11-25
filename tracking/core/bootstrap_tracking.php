@@ -24,6 +24,7 @@ require_once __DIR__ . '/../../core/NotificationManager.php';
 // Load tracking core
 require_once __DIR__ . '/SiteContext.php';
 require_once __DIR__ . '/Time.php';
+require_once __DIR__ . '/../../core/CSRF.php';
 require_once __DIR__ . '/Validator.php';
 
 // Load services
@@ -46,3 +47,7 @@ require_once $reposDir . '/EventsRepo.php';
 require_once $reposDir . '/GeofenceRepo.php';
 require_once $reposDir . '/PlacesRepo.php';
 require_once $reposDir . '/AlertsRepo.php';
+
+require_once $servicesDir . '/TrackingPolicy.php';
+require_once $servicesDir . '/TrackingWake.php';
+require_once $servicesDir . '/LocationIngest.php';

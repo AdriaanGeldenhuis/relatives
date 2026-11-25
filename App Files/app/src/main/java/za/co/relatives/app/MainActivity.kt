@@ -35,11 +35,14 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withResumed
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import za.co.relatives.app.data.TrackingStore
 import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.services.FcmRegistrationWorker
 import za.co.relatives.app.tracking.FamilyPoller
+import za.co.relatives.app.tracking.FamilyWake
+import za.co.relatives.app.tracking.GmsSupport
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
 import za.co.relatives.app.tracking.TrackingService
@@ -92,6 +95,9 @@ class MainActivity : ComponentActivity() {
     private var offlineHome: View? = null
     private var webLocationPermissionUntil = 0L
     private var webPageLoad = 0L
+    private var webOwnsFamilyPolling = false
+    private var handledWake: String? = null
+    private var visiblePolicyRefresh: Job? = null
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var pendingMediaRequest: PermissionRequest? = null
@@ -154,6 +160,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleDeepLink(intent)
+        maybeRunWakeFromNotification()
     }
 
     override fun onResume() {
@@ -175,7 +182,15 @@ class MainActivity : ComponentActivity() {
         }
 
         // Poll only while the app is actually in the foreground.
+        syncNativeSession(webView.url)
         familyPoller.start()
+        syncFcmToken()
+        FcmRegistrationWorker.enqueue(this)
+        maybeRunWakeFromNotification()
+        if (isTrackingMap(webView.url)) {
+            refreshVisibleTrackingPolicy()
+            webView.evaluateJavascript("window.dispatchEvent(new Event('relativestrackingresume'))", null)
+        }
 
         if (TrackingService.isTrackingEnabled(this) &&
             permissionGate.hasForegroundLocation() &&
@@ -184,6 +199,19 @@ class MainActivity : ComponentActivity() {
         ) {
             TrackingService.revive(this)
         }
+    }
+
+    override fun onPostResume() {
+        super.onPostResume()
+        maybeRunWakeFromNotification()
+    }
+
+    private fun maybeRunWakeFromNotification() {
+        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
+        val wake = FamilyWake.from(intent) ?: return
+        if (handledWake == wake.id || prefs.trackingConsent()?.scope != wake.scope) return
+        handledWake = wake.id
+        TrackingService.startFamilyWake(this, wake)
     }
 
     override fun onPause() {
@@ -263,15 +291,34 @@ class MainActivity : ComponentActivity() {
     fun stopTrackingService() = TrackingService.stop(this)
 
     fun getTrackingMode(): String = when {
+        prefs.sessionToken == null -> "signed_out"
+        !prefs.trackingPolicy().accountAllowsSharing -> "account_off"
+        prefs.trackingPolicy().mode == 0 -> "family_off"
         !permissionGate.hasForegroundLocation() -> "no_permission"
         !TrackingService.canShowTrackingNotification(this) -> "notifications_disabled"
-        TrackingService.isTrackingEnabled(this) -> if (TrackingService.isRunning) "enabled" else "paused"
+        TrackingService.isTrackingEnabled(this) -> when {
+            !TrackingService.providersEnabled(this) -> "providers_disabled"
+            !TrackingService.isRunning -> "paused"
+            TrackingService.batterySaver(this) -> "battery_saver"
+            else -> "enabled"
+        }
         else -> "disabled"
     }
 
     fun requestNotificationPermission() = permissionGate.requestNotifications()
 
-    fun wakeAllDevices() = TrackingService.requestWakeFix(this)
+    fun wakeAllDevices() {
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            TrackingService.requestWakeFix(this)
+        }
+    }
+
+    fun supportsRemoteWake(): Boolean = GmsSupport.available(this)
+
+    fun claimFamilyPolling() {
+        webOwnsFamilyPolling = true
+        familyPoller.setActive(false)
+    }
 
     fun prepareWebNavigation(): Boolean = isTrackingMap(webView.url) && prepareWebLocation()
 
@@ -288,8 +335,28 @@ class MainActivity : ComponentActivity() {
     }
 
     fun onTrackingScreenVisible() {
-        familyPoller.setActive(true)
+        familyPoller.setActive(!webOwnsFamilyPolling)
     }
+
+    fun refreshVisibleTrackingPolicy() {
+        if (visiblePolicyRefresh?.isActive == true || !isTrackingMap(webView.url) || !hasActiveNetwork()) return
+        val cookie = prefs.sessionToken ?: return
+        val page = webPageLoad
+        visiblePolicyRefresh = lifecycleScope.launch {
+            TrackingService.refreshServerPolicy(this@MainActivity, cookie)
+            if (page != webPageLoad || !isTrackingMap(webView.url)) return@launch
+            val mode = org.json.JSONObject.quote(getTrackingMode())
+            webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('relativestrackingstate',{detail:$mode}))", null)
+            if (prefs.trackingConsent() != null && prefs.trackingPolicy().canCollect &&
+                !TrackingService.isRunning && isResumedForSharing() && permissionGate.hasForegroundLocation()
+            ) {
+                TrackingService.revive(this@MainActivity)
+            }
+        }
+    }
+
+    private fun isResumedForSharing(): Boolean =
+        lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
 
     fun onTrackingScreenHidden() {
         familyPoller.setActive(false)
@@ -382,6 +449,8 @@ class MainActivity : ComponentActivity() {
                 super.onPageStarted(view, url, favicon)
                 if (view != webView) return
                 familyPoller.setActive(false)
+                webOwnsFamilyPolling = false
+                visiblePolicyRefresh?.cancel()
                 webLocationPermissionUntil = 0L
                 webPageLoad++
                 val uri = url?.let(Uri::parse)
@@ -410,7 +479,9 @@ class MainActivity : ComponentActivity() {
                 syncNativeSession(url)
                 CookieManager.getInstance().flush()
                 if (Uri.parse(url).path !in setOf("/", "/login.php", "/logout.php")) syncFcmToken()
-                familyPoller.setActive(isTrackingMap(url))
+                val isMap = isTrackingMap(url)
+                familyPoller.setActive(isMap && !webOwnsFamilyPolling)
+                if (isMap) refreshVisibleTrackingPolicy()
             }
 
             override fun shouldOverrideUrlLoading(
@@ -688,6 +759,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun clearNativeSession() {
+        if (::webView.isInitialized && isTrackingMap(webView.url) && prefs.sessionToken != null) {
+            webView.evaluateJavascript("window.dispatchEvent(new Event('relativesfamilyclear'))", null)
+        }
         if (prefs.sessionToken != null) TrackingService.stop(this)
         prefs.clearSession()
         FcmRegistrationWorker.cancel(this)
@@ -701,6 +775,7 @@ class MainActivity : ComponentActivity() {
     private var fcmTokenSynced = false
 
     private fun syncFcmToken() {
+        if (!GmsSupport.available(this)) return
         val session = prefs.sessionToken ?: return
         if (fcmTokenSynced) return
         fcmTokenSynced = true

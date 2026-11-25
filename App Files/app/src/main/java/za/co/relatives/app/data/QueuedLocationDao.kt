@@ -14,8 +14,14 @@ interface QueuedLocationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: QueuedLocationEntity)
 
-    @Query("SELECT * FROM queued_locations WHERE consent_scope = :scope AND sent = 0 ORDER BY timestamp ASC LIMIT :limit")
+    @Query("SELECT * FROM queued_locations WHERE consent_scope = :scope AND sent = 0 ORDER BY priority DESC, timestamp ASC LIMIT :limit")
     suspend fun getUnsent(scope: String, limit: Int = 100): List<QueuedLocationEntity>
+
+    @Query("SELECT * FROM queued_locations WHERE consent_scope = :scope AND client_event_id = :id AND sent = 0")
+    suspend fun getUnsentById(scope: String, id: String): QueuedLocationEntity?
+
+    @Query("DELETE FROM queued_locations WHERE wake_deadline_ms IS NOT NULL AND wake_deadline_ms <= :now")
+    suspend fun deleteExpiredWake(now: Long)
 
     @Query("UPDATE queued_locations SET sent = 1 WHERE client_event_id = :id")
     suspend fun markSent(id: String)
@@ -39,7 +45,7 @@ interface QueuedLocationDao {
         """
         DELETE FROM queued_locations WHERE client_event_id IN (
             SELECT client_event_id FROM queued_locations
-            ORDER BY sent DESC, timestamp ASC
+            ORDER BY sent DESC, priority ASC, timestamp ASC
             LIMIT MAX(0, (SELECT COUNT(*) FROM queued_locations) - :maxSize)
         )
         """

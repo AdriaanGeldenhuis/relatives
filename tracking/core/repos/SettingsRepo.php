@@ -72,6 +72,14 @@ class SettingsRepo
         return $settings;
     }
 
+    public function lockForTracking(int $familyId, bool $write = false): array
+    {
+        $lock = $write ? 'FOR UPDATE' : 'LOCK IN SHARE MODE';
+        $stmt = $this->db->prepare("SELECT * FROM tracking_family_settings WHERE family_id = ? $lock");
+        $stmt->execute([$familyId]);
+        return array_merge(self::DEFAULTS, $stmt->fetch(PDO::FETCH_ASSOC) ?: []);
+    }
+
     /**
      * Update settings for a family
      */
@@ -95,13 +103,7 @@ class SettingsRepo
         $params[] = $familyId;
         $sql = "UPDATE tracking_family_settings SET " . implode(', ', $sets) . " WHERE family_id = ?";
         $stmt = $this->db->prepare($sql);
-        $result = $stmt->execute($params);
-
-        if ($result) {
-            $this->cache->deleteSettings($familyId);
-        }
-
-        return $result;
+        return $stmt->execute($params);
     }
 
     private function createDefaults(int $familyId): void

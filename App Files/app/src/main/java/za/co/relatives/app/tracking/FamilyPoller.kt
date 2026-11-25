@@ -16,10 +16,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import okhttp3.CookieJar
 import okhttp3.Request
 import za.co.relatives.app.data.TrackingStore
 import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.network.readTextResponse
+import za.co.relatives.app.utils.PreferencesManager
 
 /**
  * FamilyPoller — periodically fetches family member locations from the server
@@ -39,7 +41,9 @@ class FamilyPoller(context: Context, private val store: TrackingStore) {
         private const val ACTIVE_INTERVAL_MS = 15_000L  // tracking map visible
     }
 
-    private val http = NetworkClient.getInstance(context.applicationContext)
+    private val preferences = PreferencesManager(context)
+    private val http = NetworkClient.getInstance(context.applicationContext).newBuilder()
+        .cookieJar(CookieJar.NO_COOKIES).followRedirects(false).build()
     private val gson = Gson()
     private val fetchMutex = Mutex()
 
@@ -82,9 +86,12 @@ class FamilyPoller(context: Context, private val store: TrackingStore) {
         // Serialize a rapid map reopen with cancellation of the previous poll.
         fetchMutex.lock()
         try {
-            val request = Request.Builder().url(CURRENT_URL).get().build()
+            val cookie = preferences.sessionToken ?: return
+            val request = Request.Builder().url(CURRENT_URL).get()
+                .header("Cookie", "RELATIVES_SESSION=$cookie").build()
             val (status, responseBody) = http.newCall(request).readTextResponse()
             if (status !in 200..299) {
+                if ((status == 401 || status == 403) && preferences.sessionToken == cookie) store.clearFamilyLocations()
                 Log.w(TAG, "Poll failed: $status")
                 return
             }
@@ -113,7 +120,7 @@ class FamilyPoller(context: Context, private val store: TrackingStore) {
                 if (member != null) members.add(member)
             }
             currentCoroutineContext().ensureActive()
-            store.putFamilyLocations(members)
+            if (preferences.sessionToken == cookie) store.putFamilyLocations(members)
             Log.d(TAG, "Cached ${members.size} family members")
         } catch (cancelled: CancellationException) {
             throw cancelled

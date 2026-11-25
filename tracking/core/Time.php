@@ -6,6 +6,32 @@ declare(strict_types=1);
  */
 class Time
 {
+    public static function nowMs(): int
+    {
+        return (int) floor(microtime(true) * 1000);
+    }
+
+    /** Parse supported capture timestamps without treating bad input as a fresh fix. */
+    public static function captureMs(mixed $value): ?int
+    {
+        if (is_int($value) && $value > 0) {
+            return $value < 100000000000 ? $value * 1000 : $value;
+        }
+        if (!is_string($value) || !preg_match(
+            '/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2}| UTC| GMT)?$/iD',
+            $value
+        )) {
+            return null;
+        }
+        try {
+            $time = new DateTimeImmutable($value, new DateTimeZone('UTC'));
+            $errors = DateTimeImmutable::getLastErrors();
+            return ($errors['warning_count'] ?? 0) || ($errors['error_count'] ?? 0) ? null : (int) $time->format('Uv');
+        } catch (Exception) {
+            return null;
+        }
+    }
+
     /**
      * Current UTC timestamp in MySQL format
      */

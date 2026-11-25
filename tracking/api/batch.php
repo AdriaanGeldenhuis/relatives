@@ -6,141 +6,14 @@ require_once __DIR__ . '/../core/bootstrap_tracking.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('method_not_allowed', 405);
 }
-
 $ctx = SiteContext::require($db);
 $ctx->requireLocationSharing();
+session_write_close();
 
 $body = json_decode(file_get_contents('php://input'), true);
-$locations = $body['locations'] ?? $body ?? [];
-
-if (!is_array($locations) || empty($locations)) {
+$points = $body['locations'] ?? $body;
+if (!is_array($points) || $points === []) {
     Response::error('locations array is required', 422);
 }
-
-// Cap batch size to prevent abuse
-$maxBatch = 100;
-if (count($locations) > $maxBatch) {
-    $locations = array_slice($locations, 0, $maxBatch);
-}
-
-// Initialize services
 $trackingCache = new TrackingCache($cache);
-$settingsRepo = new SettingsRepo($db, $trackingCache);
-$settings = $settingsRepo->get($ctx->familyId);
-
-// Mode 0 = Off: the family explicitly disabled tracking, so honour it —
-// accept nothing, store nothing. Returning success with mode 0 in
-// server_settings lets devices back off instead of retrying.
-if ((int) ($settings['mode'] ?? 1) === 0) {
-    Response::success([
-        'processed' => 0,
-        'stored' => 0,
-        'results' => [],
-        'server_settings' => ['mode' => 0],
-    ], 'tracking_disabled');
-}
-
-$locationRepo = new LocationRepo($db, $trackingCache);
-$eventsRepo = new EventsRepo($db);
-$alertsRepo = new AlertsRepo($db, $trackingCache);
-$alertsEngine = new AlertsEngine($db, $trackingCache, $alertsRepo);
-$geofenceRepo = new GeofenceRepo($db, $trackingCache);
-$placesRepo = new PlacesRepo($db, $trackingCache);
-$geofenceEngine = new GeofenceEngine($db, $trackingCache, $geofenceRepo, $placesRepo, $eventsRepo, $alertsEngine);
-
-$dedupe = new Dedupe(
-    $trackingCache,
-    (int) ($settings['dedupe_radius_m'] ?? 10),
-    (int) ($settings['dedupe_time_seconds'] ?? 60)
-);
-$motionGate = new MotionGate(
-    (float) ($settings['speed_threshold_mps'] ?? 1.0),
-    (float) ($settings['distance_threshold_m'] ?? 50)
-);
-
-$validator = new TrackingValidator();
-$results = [];
-$storedCount = 0;
-$lastStored = null;
-
-foreach ($locations as $i => $input) {
-    if (!is_array($input)) {
-        $results[] = ['index' => $i, 'status' => 'error', 'error' => 'each location must be an object'];
-        continue;
-    }
-
-    $loc = $validator->validateLocation($input);
-
-    if ($loc === null) {
-        $results[] = ['index' => $i, 'status' => 'error', 'error' => implode('; ', $validator->getErrors())];
-        // Reset validator errors for next iteration
-        $validator = new TrackingValidator();
-        continue;
-    }
-
-    // Accuracy is a quality hint, not a reason to drop a fix. Rejecting
-    // every fix worse than min_accuracy_m (100m) silently stopped native
-    // devices from ever updating — indoor/urban GPS is routinely 50-150m,
-    // and this endpoint (unlike location.php) exempted no platform at all,
-    // so the whole family disappeared from each other's maps. Store the
-    // fix; only drop clearly-garbage cell-tower fixes.
-    if ($loc['accuracy_m'] !== null && $loc['accuracy_m'] > 2000) {
-        $results[] = ['index' => $i, 'status' => 'skipped', 'reason' => 'accuracy_too_low'];
-        continue;
-    }
-
-    // Dedupe check
-    if ($dedupe->isDuplicate($ctx->userId, $loc['lat'], $loc['lng'], $loc['recorded_at'])) {
-        $results[] = ['index' => $i, 'status' => 'skipped', 'reason' => 'deduplicated'];
-        continue;
-    }
-
-    // Determine motion state
-    $prev = $locationRepo->getCurrent($ctx->userId);
-    $motion = $motionGate->evaluate($loc, $prev);
-
-    // Upsert current location
-    $locationRepo->upsertCurrent($ctx->userId, $ctx->familyId, $loc, $motion['motion_state']);
-
-    // Store history if motion gate says to
-    if ($motion['store_history']) {
-        $locationRepo->insertHistory($ctx->familyId, $ctx->userId, $loc, $motion['motion_state']);
-    }
-
-    // Remember the newest successfully-stored fix; geofences are evaluated
-    // once after the loop. Keying off array_key_last meant that if the final
-    // element was invalid, low-accuracy or a duplicate, NO geofence
-    // processing ran for the whole batch and every enter/exit event was lost.
-    $lastStored = $loc;
-
-    $storedCount++;
-    $results[] = [
-        'index' => $i,
-        'status' => 'stored',
-        'motion_state' => $motion['motion_state'],
-        'stored_history' => $motion['store_history'],
-    ];
-}
-
-if ($lastStored !== null) {
-    $geofenceEngine->process(
-        $ctx->familyId,
-        $ctx->userId,
-        $lastStored['lat'],
-        $lastStored['lng'],
-        $ctx->name,
-        $lastStored['accuracy_m'] ?? null
-    );
-}
-
-Response::success([
-    'processed' => count($locations),
-    'stored' => $storedCount,
-    'results' => $results,
-    'server_settings' => [
-        'mode' => (int) ($settings['mode'] ?? 1),
-        'moving_interval' => (int) ($settings['moving_interval_seconds'] ?? 30),
-        'idle_interval' => (int) ($settings['idle_interval_seconds'] ?? 300),
-        'min_accuracy_m' => (int) ($settings['min_accuracy_m'] ?? 100),
-    ],
-]);
+LocationIngest::respond((new LocationIngest($db, $trackingCache))->process($ctx, array_values(array_slice($points, 0, 100))), false);

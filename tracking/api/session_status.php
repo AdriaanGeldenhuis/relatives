@@ -8,6 +8,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 $ctx = SiteContext::require($db);
+session_write_close();
+header('Cache-Control: private, no-store');
 
 $trackingCache = new TrackingCache($cache);
 $sessionsRepo = new SessionsRepo($db);
@@ -22,4 +24,5 @@ $sessionGate = new SessionGate(
 
 $status = $sessionGate->getStatus($ctx->familyId, $settings);
 
+$status['tracking_policy'] = TrackingPolicy::native($settings, $ctx->locationSharing);
 Response::success($status);

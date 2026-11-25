@@ -45,6 +45,7 @@ if (!class_exists('FirebaseMessaging')) {
 $staleMinutes = 15;
 
 try {
+    $legacyOnly = TrackingPolicy::hasInstallationRegistry($db) ? 'AND ft.installation_id IS NULL' : '';
     $sql = "
         SELECT ft.id AS token_id, ft.token, u.id AS user_id, u.family_id
         FROM tracking_family_settings s
@@ -55,6 +56,7 @@ try {
         JOIN fcm_tokens ft
             ON ft.user_id = u.id
            AND ft.device_type = 'android'
+           $legacyOnly
         LEFT JOIN tracking_current c
             ON c.user_id = u.id
         WHERE (
@@ -103,7 +105,7 @@ foreach ($targets as $t) {
     if ($result === 'invalid_token') {
         // Same pruning NotificationManager does — dead tokens never recover.
         try {
-            $db->prepare('DELETE FROM fcm_tokens WHERE id = ?')->execute([$t['token_id']]);
+            $db->prepare('DELETE FROM fcm_tokens WHERE id = ? AND BINARY token = BINARY ?')->execute([$t['token_id'], $t['token']]);
         } catch (Throwable $e) {
             error_log("$tag WARN: failed to prune token {$t['token_id']}: " . $e->getMessage());
         }

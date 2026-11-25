@@ -1,7 +1,6 @@
 package za.co.relatives.app.data
 
 import android.content.Context
-import android.location.Location
 import org.json.JSONArray
 import org.json.JSONObject
 import za.co.relatives.app.utils.PreferencesManager
@@ -111,46 +110,6 @@ class TrackingStore(context: Context) {
         arr.toString()
     }
 
-    // ── Device location dedup ───────────────────────────────────────────
-
-    /** Last device location used for dedup. */
-    @Volatile
-    var lastDeviceLocation: Location? = null
-        private set
-
-    @Volatile
-    var lastDeviceEnqueueTime: Long = 0L
-        private set
-
-    /** Minimum distance (metres) the device must move before we queue a new upload. */
-    private val dedupDistanceMetres = 10f
-
-    /** Minimum time (ms) between uploads even when moving. */
-    private val dedupTimeMs = 5_000L
-
-    /**
-     * Check whether a new location should be queued or deduped away.
-     * Returns true if the location is "new enough" to queue.
-     */
-    fun shouldEnqueue(location: Location): Boolean {
-        val prev = lastDeviceLocation ?: return true
-        val timeDelta = android.os.SystemClock.elapsedRealtime() - lastDeviceEnqueueTime
-        if (timeDelta < dedupTimeMs) return false
-        val distance = prev.distanceTo(location)
-        return distance >= dedupDistanceMetres
-    }
-
-    /** Record that we just enqueued this location. */
-    fun markEnqueued(location: Location) {
-        lastDeviceLocation = location
-        lastDeviceEnqueueTime = android.os.SystemClock.elapsedRealtime()
-    }
-
-    // ── Upload throttle ─────────────────────────────────────────────────
-
-    @Volatile
-    var lastUploadTime: Long = 0L
-
     // ── Offline queue (Room-backed) ─────────────────────────────────────
 
     suspend fun enqueueLocation(entity: QueuedLocationEntity, scope: String): Boolean {
@@ -172,6 +131,10 @@ class TrackingStore(context: Context) {
     }
 
     suspend fun getUnsentLocations(scope: String, limit: Int = 100) = dao.getUnsent(scope, limit)
+
+    suspend fun getUnsentLocation(scope: String, id: String) = dao.getUnsentById(scope, id)
+
+    suspend fun expireWake(now: Long) = dao.deleteExpiredWake(now)
 
     suspend fun markSent(id: String) = dao.markSent(id)
 

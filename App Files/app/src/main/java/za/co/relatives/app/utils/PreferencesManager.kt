@@ -2,8 +2,8 @@ package za.co.relatives.app.utils
 
 import android.content.Context
 import android.content.SharedPreferences
-import org.json.JSONObject
 import java.util.UUID
+import za.co.relatives.app.tracking.TrackingPolicy
 
 /**
  * Centralised SharedPreferences wrapper for all persistent app settings.
@@ -24,9 +24,6 @@ class PreferencesManager(context: Context) {
         // Keys
         private const val KEY_DEVICE_UUID = "device_uuid"
         private const val KEY_TRACKING_ENABLED = "tracking_enabled"
-        private const val KEY_UPDATE_INTERVAL = "update_interval"
-        private const val KEY_IDLE_HEARTBEAT_SECONDS = "idle_heartbeat_seconds"
-        private const val KEY_BURST_INTERVAL = "burst_interval"
         private const val KEY_SESSION_TOKEN = "session_token"
         private const val KEY_TRACKING_COOKIE_HASH = "tracking_cookie_hash"
         private const val KEY_TRACKING_SCOPE = "tracking_scope"
@@ -34,12 +31,15 @@ class PreferencesManager(context: Context) {
         private const val KEY_LAST_UPLOAD_TIME = "last_upload_time"
         private const val KEY_FCM_TOKEN = "fcm_token"
         private const val KEY_PUSH_RECIPIENT = "push_recipient"
+        private const val KEY_TRACKING_POLICY = "tracking_policy"
+        private const val KEY_POLICY_COOKIE = "tracking_policy_cookie"
+        private const val KEY_LAST_WAKE = "last_wake_request"
+        private const val KEY_WAKE_NOTICE = "last_wake_notice"
+        private const val KEY_FCM_REGISTRATION = "fcm_registration"
+        private const val KEY_FCM_REGISTERED_AT = "fcm_registered_at"
+        private val wakeLock = Any()
         private const val KEY_PUSH_COOKIE_HASH = "push_cookie_hash"
 
-        // Defaults
-        private const val DEFAULT_UPDATE_INTERVAL = 30        // seconds (MOVING mode)
-        private const val DEFAULT_IDLE_HEARTBEAT = 300         // seconds (IDLE mode)
-        private const val DEFAULT_BURST_INTERVAL = 5           // seconds (BURST mode)
     }
 
     // ── Device identity ────────────────────────────────────────────────────
@@ -85,24 +85,50 @@ class PreferencesManager(context: Context) {
             .remove(KEY_TRACKING_COOKIE_HASH).remove(KEY_TRACKING_SCOPE).apply()
     }
 
+    internal fun saveTrackingPolicy(cookie: String, policyJson: com.google.gson.JsonObject) {
+        if (sessionToken != cookie) return
+        prefs.edit().putString(KEY_TRACKING_POLICY, policyJson.toString())
+            .putString(KEY_POLICY_COOKIE, fingerprint(cookie)).apply()
+    }
+
+    internal fun trackingPolicy(): TrackingPolicy {
+        val values = prefs.all
+        val cookie = values[KEY_SESSION_TOKEN] as? String ?: return TrackingPolicy()
+        if (values[KEY_POLICY_COOKIE] != fingerprint(cookie)) return TrackingPolicy()
+        val json = values[KEY_TRACKING_POLICY] as? String ?: return TrackingPolicy()
+        return runCatching { TrackingPolicy.from(com.google.gson.JsonParser.parseString(json).asJsonObject) }
+            .getOrDefault(TrackingPolicy())
+    }
+
+    internal fun claimWake(scope: String, id: String): Boolean = synchronized(wakeLock) {
+        if (trackingConsent()?.scope != scope) return@synchronized false
+        val key = "$scope:$id"
+        if (prefs.getString(KEY_LAST_WAKE, null) == key) return@synchronized false
+        prefs.edit().putString(KEY_LAST_WAKE, key).commit()
+    }
+
+    internal fun claimWakeNotice(id: String): Boolean = synchronized(wakeLock) {
+        if (prefs.getString(KEY_WAKE_NOTICE, null) == id) return@synchronized false
+        prefs.edit().putString(KEY_WAKE_NOTICE, id).apply()
+        true
+    }
+
+    internal fun sessionBinding(): String? = sessionToken?.let(::fingerprint)
+
+    internal fun registrationMatches(cookie: String, token: String, capability: String): Boolean =
+        prefs.getString(KEY_FCM_REGISTRATION, null) == fingerprint("$cookie:$token:$capability") &&
+            System.currentTimeMillis() - prefs.getLong(KEY_FCM_REGISTERED_AT, 0) in 0L..86_400_000L
+
+    internal fun recordRegistration(cookie: String, token: String, capability: String) {
+        if (sessionToken == cookie && fcmToken == token) {
+            prefs.edit().putString(KEY_FCM_REGISTRATION, fingerprint("$cookie:$token:$capability"))
+                .putLong(KEY_FCM_REGISTERED_AT, System.currentTimeMillis()).apply()
+        }
+    }
+
     private fun fingerprint(cookie: String): String = java.security.MessageDigest.getInstance("SHA-256")
         .digest(cookie.toByteArray(Charsets.UTF_8))
         .let { java.util.Base64.getEncoder().encodeToString(it) }
-
-    /** Interval (in seconds) for the MOVING tracking mode. */
-    var updateInterval: Int
-        get() = prefs.getInt(KEY_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-        set(value) = prefs.edit().putInt(KEY_UPDATE_INTERVAL, value).apply()
-
-    /** Heartbeat interval (in seconds) for the IDLE tracking mode. */
-    var idleHeartbeatSeconds: Int
-        get() = prefs.getInt(KEY_IDLE_HEARTBEAT_SECONDS, DEFAULT_IDLE_HEARTBEAT)
-        set(value) = prefs.edit().putInt(KEY_IDLE_HEARTBEAT_SECONDS, value).apply()
-
-    /** Interval (in seconds) for the BURST tracking mode. */
-    var burstInterval: Int
-        get() = prefs.getInt(KEY_BURST_INTERVAL, DEFAULT_BURST_INTERVAL)
-        set(value) = prefs.edit().putInt(KEY_BURST_INTERVAL, value).apply()
 
     // ── Session / auth ─────────────────────────────────────────────────────
 
@@ -149,30 +175,6 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString(KEY_FCM_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_FCM_TOKEN, value).apply()
 
-    // ── Server-driven configuration ────────────────────────────────────────
-
-    /**
-     * Apply interval overrides received from the server.
-     *
-     * Expected JSON keys (all optional):
-     * - `update_interval`        -> MOVING interval in seconds
-     * - `idle_heartbeat_seconds` -> IDLE heartbeat in seconds
-     * - `burst_interval`         -> BURST interval in seconds
-     */
-    fun applyServerSettings(json: JSONObject) {
-        val editor = prefs.edit()
-        if (json.has("update_interval")) {
-            editor.putInt(KEY_UPDATE_INTERVAL, json.getInt("update_interval"))
-        }
-        if (json.has("idle_heartbeat_seconds")) {
-            editor.putInt(KEY_IDLE_HEARTBEAT_SECONDS, json.getInt("idle_heartbeat_seconds"))
-        }
-        if (json.has("burst_interval")) {
-            editor.putInt(KEY_BURST_INTERVAL, json.getInt("burst_interval"))
-        }
-        editor.apply()
-    }
-
     // ── Cleanup ────────────────────────────────────────────────────────────
 
     fun clearSession() {
@@ -180,6 +182,12 @@ class PreferencesManager(context: Context) {
             .remove(KEY_SESSION_TOKEN)
             .remove(KEY_PUSH_RECIPIENT)
             .remove(KEY_PUSH_COOKIE_HASH)
+            .remove(KEY_TRACKING_POLICY)
+            .remove(KEY_POLICY_COOKIE)
+            .remove(KEY_FCM_REGISTRATION)
+            .remove(KEY_FCM_REGISTERED_AT)
+            .remove(KEY_LAST_WAKE)
+            .remove(KEY_WAKE_NOTICE)
             .apply()
     }
 }

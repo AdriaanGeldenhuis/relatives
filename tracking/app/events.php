@@ -35,7 +35,7 @@ $allowedTypes = ['enter_geofence', 'exit_geofence', 'arrive_place', 'leave_place
 if ($filter && !in_array($filter, $allowedTypes, true)) {
     $filter = null;
 }
-$events = $eventsRepo->list($familyId, 30, 0, $filter);
+$events = $eventsRepo->list($familyId, 30, 0, $filter, (int) $user['id']);
 
 $pageTitle = 'Tracking Events';
 $pageCSS = ['/tracking/app/assets/css/tracking.css?build=' . filemtime(__DIR__ . '/assets/css/tracking.css')];

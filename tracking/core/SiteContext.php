@@ -12,11 +12,11 @@ class SiteContext
     public string $role;
     public string $name;
     public bool $locationSharing;
-    public PDO $db;
+    private string $sessionHash;
 
-    private function __construct(PDO $db, array $user)
+    private function __construct(array $user, string $sessionHash)
     {
-        $this->db = $db;
+        $this->sessionHash = $sessionHash;
         $this->userId = (int) $user['id'];
         $this->familyId = (int) $user['family_id'];
         $this->role = $user['role'];
@@ -42,14 +42,15 @@ class SiteContext
             WHERE u.id = ? AND u.status = 'active'
             LIMIT 1
         ");
-        $stmt->execute([hash('sha256', $sessionToken), $_SESSION['user_id']]);
+        $sessionHash = hash('sha256', $sessionToken);
+        $stmt->execute([$sessionHash, $_SESSION['user_id']]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user) {
             return null;
         }
 
-        return new self($db, $user);
+        return new self($user, $sessionHash);
     }
 
     /**
@@ -62,6 +63,30 @@ class SiteContext
             Response::error('not_authenticated', 401);
         }
         return $ctx;
+    }
+
+    public function sessionHash(): string
+    {
+        return $this->sessionHash;
+    }
+
+    /** Serialize writes against privacy changes and concurrent uploads for the same member. */
+    public function lockForLocationWrite(PDO $db): string
+    {
+        $stmt = $db->prepare("SELECT location_sharing FROM users
+            WHERE id = ? AND family_id = ? AND status = 'active' FOR UPDATE");
+        $stmt->execute([$this->userId, $this->familyId]);
+        $sharing = $stmt->fetchColumn();
+        if ($sharing === false) {
+            return 'not_authenticated';
+        }
+        $stmt = $db->prepare('SELECT id FROM sessions
+            WHERE user_id = ? AND session_token = ? AND expires_at > NOW() LOCK IN SHARE MODE');
+        $stmt->execute([$this->userId, $this->sessionHash]);
+        if (!$stmt->fetchColumn()) {
+            return 'not_authenticated';
+        }
+        return (int) $sharing === 1 ? 'allowed' : 'location_sharing_disabled';
     }
 
     /**

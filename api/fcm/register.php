@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once __DIR__ . '/../../core/bootstrap.php';
+require_once __DIR__ . '/../../tracking/core/services/TrackingPolicy.php';
 
 $auth = new Auth($db);
 $user = $auth->getCurrentUser();
@@ -96,35 +97,41 @@ try {
             $deviceType = 'unknown';
         }
 
-        // Remove any row already holding this token that is not the exact
-        // (user, device_type) row we are about to upsert: a different user's
-        // row means the device switched accounts, and a same-user row under
-        // another device_type would make the upsert below trip the
-        // (user_id, token) unique key.
-        $stmt = $db->prepare("DELETE FROM fcm_tokens WHERE token = ? AND (user_id != ? OR device_type != ?)");
-        $stmt->execute([$token, $user['id'], $deviceType]);
+        $installation = $input['installation_id'] ?? null;
+        $capability = $input['wake_capability'] ?? null;
+        $native = $deviceType === 'android'
+            && is_string($installation)
+            && preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/iD', $installation)
+            && in_array($capability, ['ready', 'paused', 'permission', 'notifications'], true)
+            && TrackingPolicy::hasInstallationRegistry($db);
 
-        // Upsert. The live schema has UNIQUE KEY user_device(user_id,
-        // device_type): a plain INSERT collided with the row holding the
-        // PREVIOUS token for this device and 500'd forever, so a device could
-        // never re-register after its FCM token rotated — the single biggest
-        // reason pushes stopped reaching the app. ON DUPLICATE KEY UPDATE
-        // turns that collision (and the user_id+token one) into an update of
-        // the existing row. id = LAST_INSERT_ID(id) makes lastInsertId()
-        // return the row id on the update path too.
-        $stmt = $db->prepare("
-            INSERT INTO fcm_tokens
-            (user_id, token, device_type, device_info, created_at, updated_at)
-            VALUES (?, ?, ?, ?, NOW(), NOW())
-            ON DUPLICATE KEY UPDATE
-                id = LAST_INSERT_ID(id),
-                token = VALUES(token),
-                device_type = VALUES(device_type),
-                device_info = VALUES(device_info),
-                updated_at = NOW()
-        ");
-        $stmt->execute([$user['id'], $token, $deviceType, $deviceInfo]);
-        $tokenId = (int)$db->lastInsertId();
+        $db->beginTransaction();
+        if ($native) {
+            // Remove a preceding legacy binding for this token. The installation key
+            // then handles token rotation and moves the binding at account switch.
+            $stmt = $db->prepare('DELETE FROM fcm_tokens WHERE token = ?
+                AND (installation_id IS NULL OR installation_id <> ? OR device_type <> ?)');
+            $stmt->execute([$token, $installation, $deviceType]);
+            $stmt = $db->prepare('INSERT INTO fcm_tokens
+                (user_id, token, device_type, device_info, installation_id, wake_capability, wake_session_hash, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), user_id = VALUES(user_id), token = VALUES(token),
+                    device_info = VALUES(device_info), wake_capability = VALUES(wake_capability),
+                    wake_session_hash = VALUES(wake_session_hash), updated_at = NOW()');
+            $stmt->execute([$user['id'], $token, $deviceType, $deviceInfo, $installation, $capability,
+                hash('sha256', (string) ($_SESSION['session_token'] ?? ''))]);
+        } else {
+            $stmt = $db->prepare('DELETE FROM fcm_tokens WHERE token = ? AND (user_id <> ? OR device_type <> ?)');
+            $stmt->execute([$token, $user['id'], $deviceType]);
+            $stmt = $db->prepare('INSERT INTO fcm_tokens
+                (user_id, token, device_type, device_info, created_at, updated_at)
+                VALUES (?, ?, ?, ?, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), token = VALUES(token),
+                    device_type = VALUES(device_type), device_info = VALUES(device_info), updated_at = NOW()');
+            $stmt->execute([$user['id'], $token, $deviceType, $deviceInfo]);
+        }
+        $tokenId = (int) $db->lastInsertId();
+        $db->commit();
 
         echo json_encode([
             'success' => true,

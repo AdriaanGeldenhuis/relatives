@@ -78,7 +78,7 @@ jobs:
             --exclude='/docs/' \
             --exclude='/App Files/.gradle/' --exclude='/App Files/.kotlin/' \
             --exclude='/App Files/local.properties' --exclude='/App Files/**/build/' \
-            --exclude='/migrations/' --exclude='*.sql' \
+            --exclude='/migrations/' --exclude='/tracking/tests/' --exclude='*.sql' \
             --exclude='/.env' --exclude='/.env.cache.php' \
             --exclude='/config/' --exclude='/help/config.php' \
             --exclude='logs/' --exclude='uploads/' --exclude='saves/' \
@@ -86,7 +86,19 @@ jobs:
             "$temp/site/" "relatives-production:${DEPLOY_PATH%/}/"
 
           # Archive removed tracked files that would otherwise remain after rsync.
-          for obsolete in 'App Files/app/src/main/java/za/co/relatives/app/tracking/OemBatteryHelper.kt' 'weather/.htaccess'; do
+          android_sources='App Files/app/src/main/java/za/co/relatives/app'
+          retired=(
+            'weather/.htaccess'
+            "$android_sources/tracking/OemBatteryHelper.kt"
+            "$android_sources/network/TrackingApiClient.kt"
+            "$android_sources/ui/tracking/EventsScreen.kt"
+            "$android_sources/ui/tracking/GeofencesScreen.kt"
+            "$android_sources/ui/tracking/SettingsScreen.kt"
+            "$android_sources/ui/tracking/TrackingActivity.kt"
+            "$android_sources/ui/tracking/TrackingMapScreen.kt"
+            "$android_sources/ui/tracking/TrackingViewModel.kt"
+          )
+          for obsolete in "${retired[@]}"; do
             [[ ! -e "$temp/site/$obsolete" ]] || continue
             ssh -F "$temp/ssh_config" relatives-production "sh -s -- '${DEPLOY_PATH%/}' '$obsolete'" <<'REMOTE'
           set -eu

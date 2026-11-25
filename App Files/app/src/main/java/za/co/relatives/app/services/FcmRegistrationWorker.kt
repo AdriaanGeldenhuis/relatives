@@ -15,6 +15,8 @@ import kotlinx.coroutines.CancellationException
 import za.co.relatives.app.network.ApiClient
 import za.co.relatives.app.network.ApiException
 import za.co.relatives.app.utils.PreferencesManager
+import za.co.relatives.app.tracking.GmsSupport
+import za.co.relatives.app.tracking.TrackingService
 
 /**
  * Registers the device's FCM token with the backend, retrying with backoff.
@@ -41,6 +43,11 @@ class FcmRegistrationWorker(
         }
 
         fun enqueue(ctx: Context) {
+            if (!GmsSupport.available(ctx)) return
+            val prefs = PreferencesManager(ctx)
+            val token = prefs.fcmToken ?: return
+            val cookie = prefs.sessionToken ?: return
+            if (prefs.registrationMatches(cookie, token, TrackingService.wakeCapability(ctx))) return
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
@@ -62,9 +69,14 @@ class FcmRegistrationWorker(
         val session = prefs.sessionToken ?: return Result.success()
 
         return try {
-            val registration = ApiClient(applicationContext).registerFcmToken(token, session)
+            val capability = TrackingService.wakeCapability(applicationContext)
+            if (prefs.registrationMatches(session, token, capability)) return Result.success()
+            val registration = ApiClient(applicationContext).registerFcmToken(token, session, prefs.deviceUuid, capability)
             val recipient = registration.get("recipient_user_id")?.asString ?: return Result.failure()
-            prefs.bindPushRecipient(session, recipient)
+            if (prefs.sessionToken == session && prefs.fcmToken == token) {
+                prefs.bindPushRecipient(session, recipient)
+                prefs.recordRegistration(session, token, capability)
+            }
             Result.success()
         } catch (cancelled: CancellationException) {
             throw cancelled

@@ -45,6 +45,8 @@ internal class TrackingBridge(private val activity: MainActivity) {
                 sendState(reply)
             }
             "refresh_device" -> activity.wakeAllDevices()
+            "web_family_polling" -> activity.claimFamilyPolling()
+            "refresh_tracking_policy" -> activity.refreshVisibleTrackingPolicy()
             "map_visible" -> {
                 activity.onTrackingScreenVisible()
                 sendState(reply)
@@ -60,6 +62,7 @@ internal class TrackingBridge(private val activity: MainActivity) {
         val store = activity.trackingStore
         val state = JSONObject().put("type", "state")
             .put("mode", activity.getTrackingMode())
+            .put("remoteWake", activity.supportsRemoteWake())
             .put("cacheAge", store.familyCacheAgeMillis())
             .put("family", store.familyLocationsJson())
         sendReply(reply, state)

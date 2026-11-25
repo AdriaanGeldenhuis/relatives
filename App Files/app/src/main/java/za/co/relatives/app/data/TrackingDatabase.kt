@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Room database backing the offline location queue.
  * Singleton — access via [getInstance].
  */
-@Database(entities = [QueuedLocationEntity::class], version = 2, exportSchema = false)
+@Database(entities = [QueuedLocationEntity::class], version = 3, exportSchema = false)
 abstract class TrackingDatabase : RoomDatabase() {
 
     abstract fun locationDao(): QueuedLocationDao
@@ -25,6 +25,14 @@ abstract class TrackingDatabase : RoomDatabase() {
             }
         }
 
+        private val wakeMigration = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE queued_locations ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE queued_locations ADD COLUMN wake_request_id TEXT")
+                db.execSQL("ALTER TABLE queued_locations ADD COLUMN wake_deadline_ms INTEGER")
+            }
+        }
+
         @Volatile
         private var INSTANCE: TrackingDatabase? = null
 
@@ -34,7 +42,7 @@ abstract class TrackingDatabase : RoomDatabase() {
                     context.applicationContext,
                     TrackingDatabase::class.java,
                     "tracking_queue.db",
-                ).addMigrations(consentMigration).build().also { INSTANCE = it }
+                ).addMigrations(consentMigration, wakeMigration).build().also { INSTANCE = it }
             }
     }
 }

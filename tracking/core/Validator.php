@@ -17,82 +17,61 @@ class TrackingValidator
         $lat = $input['lat'] ?? $input['latitude'] ?? null;
         $lng = $input['lng'] ?? $input['longitude'] ?? $input['lon'] ?? null;
 
-        if ($lat === null || $lng === null) {
-            $this->errors[] = 'lat and lng are required';
+        if (!is_numeric($lat) || !is_numeric($lng)
+            || !is_finite((float) $lat) || !is_finite((float) $lng)
+            || abs((float) $lat) > 90 || abs((float) $lng) > 180) {
+            $this->errors[] = 'invalid_coordinates';
             return null;
         }
 
-        $lat = (float) $lat;
-        $lng = (float) $lng;
-
-        if ($lat < -90 || $lat > 90) {
-            $this->errors[] = 'lat must be between -90 and 90';
+        $recorded = $input['recorded_at_ms'] ?? $input['recorded_at'] ?? $input['timestamp'] ?? null;
+        $recordedMs = $recorded === null ? Time::nowMs() : Time::captureMs($recorded);
+        if ($recordedMs === null || $recordedMs <= 0) {
+            $this->errors[] = 'invalid_capture_time';
             return null;
         }
-        if ($lng < -180 || $lng > 180) {
-            $this->errors[] = 'lng must be between -180 and 180';
+        $recordedMs = min($recordedMs, Time::nowMs());
+
+        $accuracy = $input['accuracy_m'] ?? $input['accuracy'] ?? null;
+        if ($accuracy !== null && (!is_numeric($accuracy) || !is_finite((float) $accuracy) || (float) $accuracy < 0)) {
+            $this->errors[] = 'invalid_accuracy';
             return null;
         }
 
-        // Speed: accept m/s or km/h
-        $speedMps = null;
-        if (isset($input['speed_mps'])) {
-            $speedMps = (float) $input['speed_mps'];
-        } elseif (isset($input['speed_kmh'])) {
-            $speedMps = (float) $input['speed_kmh'] / 3.6;
-        } elseif (isset($input['speed'])) {
-            $speedMps = (float) $input['speed'];
-        }
-
-        $accuracyM = $input['accuracy_m'] ?? $input['accuracy'] ?? null;
-        if ($accuracyM !== null) {
-            $accuracyM = (float) $accuracyM;
-        }
-
-        $bearingDeg = $input['bearing_deg'] ?? $input['bearing'] ?? $input['heading'] ?? null;
-        if ($bearingDeg !== null) {
-            $bearingDeg = fmod((float) $bearingDeg + 360, 360);
-        }
-
-        $altitudeM = $input['altitude_m'] ?? $input['altitude'] ?? null;
-        if ($altitudeM !== null) {
-            $altitudeM = (float) $altitudeM;
-        }
-
-        $recordedAt = $input['recorded_at'] ?? $input['timestamp'] ?? null;
-        if ($recordedAt) {
-            // Treat input as UTC — append UTC if no timezone info present
-            // Check for timezone markers at end of string (Z, +HH:MM, -HH:MM, UTC, GMT)
-            // Previous regex falsely matched date hyphens like "-02" in "2026-02-09"
-            $normalized = $recordedAt;
-            if (!preg_match('/(?:Z|[+\-]\d{2}:?\d{2}|UTC|GMT)\s*$/i', $recordedAt)) {
-                $normalized .= ' UTC';
-            }
-            $ts = strtotime($normalized);
-            // Clamp future timestamps (client clock skew) — clients treat
-            // recorded_at as authoritative for freshness display.
-            if ($ts !== false && $ts > time()) {
-                $ts = time();
-            }
-            $recordedAt = $ts ? gmdate('Y-m-d H:i:s', $ts) : gmdate('Y-m-d H:i:s');
-        } else {
-            $recordedAt = gmdate('Y-m-d H:i:s');
-        }
+        $speed = self::number($input['speed_mps'] ?? null)
+            ?? (isset($input['speed_kmh']) && is_numeric($input['speed_kmh'])
+                ? self::number((float) $input['speed_kmh'] / 3.6) : null)
+            ?? self::number($input['speed'] ?? null);
+        $bearing = self::number($input['bearing_deg'] ?? $input['bearing'] ?? $input['heading'] ?? null);
+        $altitude = self::number($input['altitude_m'] ?? $input['altitude'] ?? null);
+        $device = $input['device_id'] ?? $input['device_uuid'] ?? null;
+        $event = $input['client_event_id'] ?? null;
 
         return [
-            'lat' => $lat,
-            'lng' => $lng,
-            'accuracy_m' => $accuracyM,
-            'speed_mps' => $speedMps,
-            'bearing_deg' => $bearingDeg,
-            'altitude_m' => $altitudeM,
-            'recorded_at' => $recordedAt,
-            'device_id' => $input['device_id'] ?? $input['device_uuid'] ?? null,
-            'platform' => $input['platform'] ?? null,
-            'app_version' => $input['app_version'] ?? null,
-            'battery_level' => isset($input['battery_level']) ? (int) $input['battery_level'] : null,
-            'is_moving' => isset($input['is_moving']) ? (bool) $input['is_moving'] : null,
+            'lat' => (float) $lat,
+            'lng' => (float) $lng,
+            'accuracy_m' => $accuracy === null ? null : (float) $accuracy,
+            'speed_mps' => $speed !== null && $speed >= 0 && $speed < 100000 ? $speed : null,
+            'bearing_deg' => $bearing === null ? null : fmod(fmod($bearing, 360) + 360, 360),
+            'altitude_m' => $altitude !== null && abs($altitude) < 100000 ? $altitude : null,
+            'recorded_ms' => $recordedMs,
+            'recorded_at' => Time::format(intdiv($recordedMs, 1000)),
+            'device_id' => self::identifier($device),
+            'client_event_id' => self::identifier($event),
+            'wake_request_id' => self::identifier($input['wake_request_id'] ?? null),
+            'platform' => is_string($input['platform'] ?? null) ? substr($input['platform'], 0, 20) : null,
+            'app_version' => is_string($input['app_version'] ?? null) ? substr($input['app_version'], 0, 20) : null,
         ];
+    }
+
+    private static function number(mixed $value): ?float
+    {
+        return is_numeric($value) && is_finite((float) $value) ? (float) $value : null;
+    }
+
+    private static function identifier(mixed $value): ?string
+    {
+        return is_string($value) && preg_match('/^[a-zA-Z0-9_-]{1,64}$/D', $value) ? $value : null;
     }
 
     /**
