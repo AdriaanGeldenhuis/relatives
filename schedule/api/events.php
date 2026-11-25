@@ -46,43 +46,12 @@ try {
     switch ($action) {
         case 'add':
         case 'update':
-            $calendar = schedulePost('surface') === 'calendar';
-            $db->beginTransaction();
             $eventId = $action === 'update' ? scheduleEventId() : null;
-            $original = $eventId ? scheduleLockEvent($db, $familyId, $eventId) : null;
-            $version = schedulePost('version');
-            if ($original && $version !== '' && !hash_equals(scheduleEventVersion($original), $version)) {
-                $db->rollBack();
-                scheduleResponse(['success' => false, 'error' => 'This event changed since you opened it. Copy your edits before reopening the event.'], 409);
-            }
-            $event = scheduleFields($db, $userId, $familyId, $original);
-            $eventId = scheduleWriteEvent($db, $familyId, $userId, $event, $original);
             $noteId = $action === 'add' ? scheduleNumber('note_id', 0, PHP_INT_MAX) : 0;
-            if ($noteId) {
-                eventNoteUpdateLink($db, $familyId, $eventId, $noteId, true);
-            }
-            $stmt = $db->prepare('SELECT * FROM events WHERE id = ? AND family_id = ?');
-            $stmt->execute([$eventId, $familyId]);
-            $saved = $stmt->fetch();
-            $db->commit();
-            if (!$original || ($calendar && ($original['title'] !== $saved['title']
-                || $original['starts_at'] !== $saved['starts_at'] || $original['ends_at'] !== $saved['ends_at']))) {
-                try {
-                    require_once __DIR__ . '/../../core/NotificationManager.php';
-                    require_once __DIR__ . '/../../core/NotificationTriggers.php';
-                    $triggers = new NotificationTriggers($db);
-                    if ($original) {
-                        $triggers->onEventUpdated($eventId, $userId, $familyId, $event['title'], 'Event details changed');
-                    } elseif ($calendar) {
-                        $triggers->onEventCreated($eventId, $userId, $familyId, $event['title'], $event['starts_at']);
-                    } else {
-                        $triggers->onScheduleTaskCreated($eventId, $userId, $familyId, $event['title'],
-                            date('j M Y \a\t H:i', strtotime($event['starts_at'])));
-                    }
-                } catch (Throwable $error) {
-                    error_log('Schedule notification failed: ' . $error->getMessage());
-                }
-            }
+            $saved = scheduleSaveEvent(
+                $db, $familyId, $userId, $eventId, schedulePost('version'), $noteId,
+                schedulePost('surface') === 'calendar'
+            );
             scheduleResponse(['success' => true, 'event' => $saved, 'note_linked' => (bool)$noteId]);
 
         case 'get_event_notes':
@@ -332,7 +301,7 @@ try {
         $db->rollBack();
     }
     if ($error instanceof DomainException) {
-        scheduleResponse(['success' => false, 'error' => $error->getMessage()], 422);
+        scheduleResponse(['success' => false, 'error' => $error->getMessage()], $error->getCode() === 409 ? 409 : 422);
     }
     error_log('Schedule request failed: ' . $error->getMessage());
     scheduleResponse(['success' => false, 'error' => 'Could not save or load the schedule. Try again.'], 500);

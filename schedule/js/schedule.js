@@ -100,6 +100,7 @@ async function loadScheduleData(date = scheduleState.selectedDate, options = {})
         scheduleState.viewMode = data.view;
         scheduleState.allEvents = data.events;
         panel.replaceWith(nextPanel);
+        if (data.addUrl) scheduleElement('scheduleAddEvent').href = data.addUrl;
         applyScheduleFilters();
         renderBulkSelection();
         if (historyMode === 'push' && (changed || data.selectedEvent)) {
@@ -609,9 +610,19 @@ function shareToWhatsApp() {
 }
 
 document.addEventListener('click', event => {
-    if (event.target.closest('[data-schedule-add]')) eventEditor.open();
+    const plainClick = !event.defaultPrevented && !event.ctrlKey && !event.metaKey
+        && !event.shiftKey && !event.altKey && event.button === 0;
+    const editor = scheduleElement('eventEditor');
+    if (plainClick && event.target.closest('[data-schedule-add]') && typeof editor.showModal === 'function') {
+        try {
+            eventEditor.open();
+            if (editor.open && editor.getClientRects().length) event.preventDefault();
+        } catch (error) {
+            console.warn('Could not open the event dialog. Opening the event form page.', error);
+        }
+    }
     const link = event.target.closest('[data-schedule-view]');
-    if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.button === 0) {
+    if (link && plainClick) {
         event.preventDefault();
         const params = new URL(link.href).searchParams;
         loadScheduleData(params.get('date'), { view: link.dataset.scheduleView, focus: true, event: params.get('event') });

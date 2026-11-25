@@ -281,7 +281,7 @@ dialog.planner-modal:has(.modal-small) { width: min(100% - 22px, 425px); }
 dialog.planner-modal:has(.modal-large) { width: min(100% - 22px, 690px); }
 dialog.planner-modal::backdrop { background: #152e23a6; }
 dialog.planner-modal .modal-content { width: 100%; max-width: none; max-height: none; border: 0; border-radius: 0; background: transparent; }
-dialog.planner-modal .modal-header {
+:is(dialog.planner-modal, .planner-event-page) .modal-header {
     position: sticky;
     z-index: 1;
     top: 0;
@@ -293,21 +293,32 @@ dialog.planner-modal .modal-header {
     border-bottom: 1px solid var(--planner-line);
     background: var(--planner-paper);
 }
-dialog.planner-modal .modal-header h2 { font: 400 clamp(1.5rem, 4vw, 2.15rem)/1.15 var(--planner-display); letter-spacing: -.035em; }
+:is(dialog.planner-modal, .planner-event-page) .modal-header :is(h1, h2) { font: 400 clamp(1.5rem, 4vw, 2.15rem)/1.15 var(--planner-display); letter-spacing: -.035em; }
 dialog.planner-modal .modal-close { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border: 0; border-radius: 8px; background: transparent; color: var(--planner-ink); font-size: 1.35rem; cursor: pointer; }
 dialog.planner-modal .modal-close:hover { background: #edf1e5; }
-dialog.planner-modal .modal-body { padding: 15px 17px; }
-dialog.planner-modal .form-group { min-width: 0; margin-bottom: 11px; }
-dialog.planner-modal .form-group label { display: block; margin-bottom: 4px; font-size: .82rem; font-weight: 750; }
-dialog.planner-modal .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-dialog.planner-modal .form-control { width: 100%; min-width: 0; min-height: 40px; border: 1px solid #c8d3c4; border-radius: 8px; padding: 6px 8px; background: #fffef9; color: var(--planner-ink); font-size: 1rem; }
-dialog.planner-modal textarea.form-control { resize: vertical; }
-dialog.planner-modal :is(.option-toggle input, .form-control[type="color"]) { accent-color: var(--planner-green); }
-dialog.planner-modal .form-control[type="color"] { max-width: 75px; padding: 3px; }
-dialog.planner-modal .form-group .option-toggle { display: flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; }
-dialog.planner-modal .modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+:is(dialog.planner-modal, .planner-event-page) .modal-body { padding: 15px 17px; }
+:is(dialog.planner-modal, .planner-event-page) .form-group { min-width: 0; margin-bottom: 11px; }
+:is(dialog.planner-modal, .planner-event-page) .form-group label { display: block; margin-bottom: 4px; font-size: .82rem; font-weight: 750; }
+:is(dialog.planner-modal, .planner-event-page) .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+:is(dialog.planner-modal, .planner-event-page) .form-control { width: 100%; min-width: 0; min-height: 40px; border: 1px solid #c8d3c4; border-radius: 8px; padding: 6px 8px; background: #fffef9; color: var(--planner-ink); font-size: 1rem; }
+:is(dialog.planner-modal, .planner-event-page) textarea.form-control { resize: vertical; }
+:is(dialog.planner-modal, .planner-event-page) :is(.option-toggle input, .form-control[type="color"]) { accent-color: var(--planner-green); }
+:is(dialog.planner-modal, .planner-event-page) .form-control[type="color"] { max-width: 75px; padding: 3px; }
+:is(dialog.planner-modal, .planner-event-page) .form-group .option-toggle { display: flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; }
+:is(dialog.planner-modal, .planner-event-page) .modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 12px; }
 dialog.planner-modal button:disabled, .planner-main button:disabled { opacity: .55; cursor: default; }
-#eventForm .modal-actions { position: sticky; bottom: 0; z-index: 1; margin: 10px -17px -15px; padding: 9px 17px; background: var(--planner-paper); border-top: 1px solid var(--planner-line); }
+#eventEditor .modal-actions { position: sticky; bottom: 0; z-index: 1; margin: 10px -17px -15px; padding: 9px 17px; background: var(--planner-paper); border-top: 1px solid var(--planner-line); }
+
+.planner-event-page {
+    width: min(100%, 585px);
+    margin-inline: auto;
+    border: 1px solid var(--planner-line);
+    border-radius: 17px;
+    background: var(--planner-paper);
+}
+.planner-event-page .modal-header { position: static; border-radius: 17px 17px 0 0; flex-wrap: wrap; }
+.planner-event-page .planner-form-error { margin: 0 0 14px; }
+.planner-add-main + .global-footer { position: static; }
 
 .planner-form-more { padding: 7px 9px; border: 1px solid var(--planner-line); border-radius: 8px; background: #f5f6ee; }
 .planner-form-more summary { color: var(--planner-green); font-size: .82rem; font-weight: 750; cursor: pointer; }

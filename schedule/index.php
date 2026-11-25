@@ -67,7 +67,8 @@ if ($ajax) {
     $html = ob_get_clean();
     header('Content-Type: application/json; charset=utf-8');
     echo scheduleJson(['html' => $html, 'events' => $events, 'date' => $selectedDate, 'view' => $viewMode,
-        'activeFocusSession' => $activeFocusSession, 'selectedEvent' => $selectedEvent, 'notice' => $notice]);
+        'activeFocusSession' => $activeFocusSession, 'selectedEvent' => $selectedEvent, 'notice' => $notice,
+        'addUrl' => scheduleAddUrl($selectedDate, $viewMode)]);
     exit;
 }
 
@@ -77,7 +78,10 @@ $pageJS = [
     '/shared/js/event-editor.js',
     '/schedule/js/schedule.js'
 ];
-$pageJSVersion = max(filemtime(__DIR__ . '/js/schedule.js'), filemtime(__DIR__ . '/../shared/js/event-editor.js'));
+$pageJSVersion = substr(hash('sha256',
+    hash_file('sha256', __DIR__ . '/js/schedule.js')
+    . hash_file('sha256', __DIR__ . '/../shared/js/event-editor.js')
+), 0, 16);
 
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
@@ -87,7 +91,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             <h1>Family schedule</h1>
             <p>See what’s coming up and make time for what matters.</p>
             <div class="planner-hero-actions">
-                <button type="button" class="btn btn-primary" data-schedule-add aria-haspopup="dialog" aria-controls="eventEditor"><span aria-hidden="true">＋</span> Add event</button>
+                <a id="scheduleAddEvent" class="btn btn-primary" href="<?= scheduleEscape(scheduleAddUrl($selectedDate, $viewMode)) ?>" data-schedule-add><span aria-hidden="true">＋</span> Add event</a>
                 <button type="button" class="planner-hero-button" onclick="startFocusMode()" id="scheduleFocusButton"><?= $activeFocusSession ? 'Resume focus' : 'Start focus' ?></button>
                 <details class="planner-tools">
                     <summary class="planner-hero-button">Tools</summary>

@@ -208,6 +208,60 @@ function scheduleFields(PDO $db, int $userId, int $familyId, ?array $original): 
     ];
 }
 
+function scheduleSaveEvent(
+    PDO $db,
+    int $familyId,
+    int $userId,
+    ?int $eventId = null,
+    string $version = '',
+    int $noteId = 0,
+    bool $calendar = false
+): array {
+    $db->beginTransaction();
+    try {
+        $original = $eventId ? scheduleLockEvent($db, $familyId, $eventId) : null;
+        if ($original && $version !== '' && !hash_equals(scheduleEventVersion($original), $version)) {
+            throw new DomainException('This event changed since you opened it. Copy your edits before reopening the event.', 409);
+        }
+        $event = scheduleFields($db, $userId, $familyId, $original);
+        $eventId = scheduleWriteEvent($db, $familyId, $userId, $event, $original);
+        if ($noteId) {
+            eventNoteUpdateLink($db, $familyId, $eventId, $noteId, true);
+        }
+        $stmt = $db->prepare('SELECT * FROM events WHERE id = ? AND family_id = ?');
+        $stmt->execute([$eventId, $familyId]);
+        $saved = $stmt->fetch();
+        if (!$saved) {
+            throw new RuntimeException('The saved event could not be retrieved.');
+        }
+        $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $error;
+    }
+
+    if (!$original || ($calendar && ($original['title'] !== $saved['title']
+        || $original['starts_at'] !== $saved['starts_at'] || $original['ends_at'] !== $saved['ends_at']))) {
+        try {
+            require_once __DIR__ . '/../../core/NotificationTriggers.php';
+            $triggers = new NotificationTriggers($db);
+            if ($original) {
+                $triggers->onEventUpdated($eventId, $userId, $familyId, $event['title'], 'Event details changed');
+            } elseif ($calendar) {
+                $triggers->onEventCreated($eventId, $userId, $familyId, $event['title'], $event['starts_at']);
+            } else {
+                $triggers->onScheduleTaskCreated($eventId, $userId, $familyId, $event['title'],
+                    date('j M Y \a\t H:i', strtotime($event['starts_at'])));
+            }
+        } catch (Throwable $error) {
+            error_log('Schedule notification failed: ' . $error->getMessage());
+        }
+    }
+    return $saved;
+}
+
 function scheduleOccurrence(DateTimeImmutable $start, string $rule, int $index): DateTimeImmutable
 {
     if ($rule === 'monthly' || $rule === 'yearly') {

@@ -11,6 +11,11 @@ function scheduleDate(mixed $value): ?DateTimeImmutable
         ? $date : null;
 }
 
+function scheduleAddUrl(string $date, string $view): string
+{
+    return '/schedule/add.php?' . http_build_query(['date' => $date, 'view' => $view]);
+}
+
 function scheduleTypes(): array
 {
     return [
