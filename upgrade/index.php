@@ -23,6 +23,11 @@ if (!$user) {
     exit;
 }
 
+if (!class_exists('Yoco')) {
+    header('Location: /admin/plans-public.php', true, 303);
+    exit;
+}
+
 $yoco = new Yoco($db);
 $subscription = $yoco->getSubscription($user['family_id']);
 $isPro = $yoco->isPro($user['family_id']);
@@ -48,13 +53,7 @@ $pageJS = ['/upgrade/js/upgrade.js'];
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<!-- Animated Background -->
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
-</div>
-
-<main class="main-content">
+<main class="main-content family-main">
     <div class="container">
         
         <!-- Hero Section -->
@@ -202,7 +201,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </div>
                     
                     <div class="plan-footer">
-                        <button onclick="startCheckout()" class="btn btn-pro btn-large">
+                        <button onclick="startCheckout()" class="btn btn-primary btn-pro btn-large">
                             <span class="btn-icon">⚡</span>
                             Upgrade to Pro
                             <span class="btn-arrow">→</span>

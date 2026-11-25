@@ -160,22 +160,6 @@
 .hero-name { color: var(--welcome-accent); font-style: italic; }
 .dot-sep { padding-inline: 4px; }
 
-.pill-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 40px;
-    padding: 7px 13px;
-    border: 1px solid transparent;
-    border-radius: 9px;
-    background: var(--home-lime);
-    color: var(--home-ink);
-    font: 750 .83rem/1.25 var(--family-body);
-    text-decoration: none;
-    cursor: pointer;
-}
-
-.pill-btn:hover { background: #edffb7; }
 .home-page .hero :focus-visible { outline-color: var(--welcome-accent); }
 .home-page .hero.family-hero .family-hero-summary { color: var(--welcome-muted); }
 .home-page .hero.family-hero .family-button {

@@ -19,11 +19,11 @@ if (empty($activePage) || $activePage === 'index.php') {
 $appVersion = '12.4.0';
 // Use static cache version - bump this when deploying CSS/JS changes
 // DO NOT use time() as it defeats browser caching!
-$cacheVersion = '12.12.0';
+$cacheVersion = '12.13.0';
 $workspacePage = !isset($homeStylesheet) && !isset($messagesStylesheets);
 $buildTime = $cacheVersion;
-$familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'weather', 'holiday_traveling', 'games', 'admin', 'profile'], true);
-$familyAppPage = in_array($activePage, ['home', 'tracking', 'weather', 'notes', 'shopping', 'calendar', 'schedule', 'holiday_traveling', 'games', 'messages'], true);
+$familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'weather', 'holiday_traveling', 'games', 'admin', 'profile', 'notifications', 'upgrade'], true);
+$familyAppPage = in_array($activePage, ['home', 'tracking', 'weather', 'notes', 'shopping', 'calendar', 'schedule', 'holiday_traveling', 'games', 'messages', 'notifications'], true);
 if ($familyAppPage) {
     require_once __DIR__ . '/family-app-art.php';
 }

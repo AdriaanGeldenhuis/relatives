@@ -1,23 +1,97 @@
-/* Controls shared by the site's edit buttons, dialogs and action menus. */
-body :is(.notes-button, .notes-icon-button, .item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, [data-open-dialog].admin-button, .settings-link, .ht-btn, .wx-button, .admin-button, .site-control,
-    .planner-modal .btn, .planner-modal .modal-close, .modal-actions .btn, .modal-header .modal-close, .modal-dialog .btn, .context-menu button) {
+/* Standard actions use the same geometry and states in every workspace. */
+body[data-area] :is(.btn, .family-button, .notes-button, .notes-upload, .ht-btn, .admin-button,
+    .wx-button, .planner-control, .planner-hero-button, .consent-btn, .settings-save-btn, .tracking-add-btn) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: var(--button-height, 42px);
+    padding: var(--button-padding, 8px 14px);
+    border: 1px solid var(--button-border, var(--family-line));
     border-radius: 9px;
+    background: var(--button-fill, var(--family-paper));
+    color: var(--button-ink, var(--family-ink));
+    box-shadow: none;
+    font: 700 var(--button-size, .82rem)/1.25 var(--family-body);
+    text-align: center;
+    text-decoration: none;
+    white-space: normal;
+    cursor: pointer;
 }
 
-body :is(.notes-icon-button, .item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, .planner-modal .modal-close, .modal-header .modal-close) {
+body[data-area] :is(.btn-primary, .btn-success, .family-button-primary, .family-button.active,
+    .notes-button-primary, .ht-btn-primary, .admin-primary, .consent-btn-primary,
+    .settings-save-btn, .tracking-add-btn) {
+    --button-fill: var(--control-primary, var(--family-green));
+    --button-border: var(--button-fill);
+    --button-ink: var(--control-primary-ink, #fff);
+    --button-hover: var(--control-primary-hover, color-mix(in srgb, var(--button-fill) 82%, #171c1a));
+}
+
+body[data-area] :is(.btn-danger, .notes-button-danger, .ht-btn-danger, .admin-danger) {
+    --button-fill: #963c31;
+    --button-border: var(--button-fill);
+    --button-ink: #fff;
+    --button-hover: #7c3027;
+}
+
+body[data-area] :is(.btn, .family-button, .notes-button, .notes-upload, .ht-btn, .admin-button,
+    .wx-button, .planner-control, .planner-hero-button, .consent-btn, .settings-save-btn, .tracking-add-btn)[hidden] {
+    display: none;
+}
+
+body[data-area] :is(.btn, .family-button, .notes-button, .notes-upload, .ht-btn, .admin-button,
+    .wx-button, .planner-control, .planner-hero-button, .consent-btn, .settings-save-btn, .tracking-add-btn):where(:hover, :active):not(:disabled) {
+    background: var(--button-hover, var(--control-hover, var(--app-soft, #e8efdc)));
+}
+
+body[data-area] :is(.btn, .family-button, .notes-button, .notes-upload, .ht-btn, .admin-button,
+    .wx-button, .planner-control, .planner-hero-button, .consent-btn, .settings-save-btn, .tracking-add-btn):focus-visible {
+    outline: 2px solid var(--control-focus, var(--family-green));
+    outline-offset: 3px;
+}
+
+body[data-area] :is(.btn, .family-button, .notes-button, .notes-upload, .ht-btn, .admin-button,
+    .wx-button, .planner-control, .planner-hero-button, .consent-btn, .settings-save-btn, .tracking-add-btn):disabled {
+    opacity: .55;
+    cursor: not-allowed;
+}
+
+body[data-area] :is(.btn-sm, .ht-btn-sm, .notes-button-small) {
+    --button-height: 36px;
+    --button-padding: 6px 10px;
+    --button-size: .76rem;
+}
+
+body[data-area] .ht-btn-xs {
+    --button-height: 32px;
+    --button-padding: 4px 8px;
+    --button-size: .72rem;
+}
+
+body[data-area] :is(.btn-large, .ht-btn-lg) {
+    --button-height: 48px;
+    --button-padding: 10px 18px;
+    --button-size: .9rem;
+}
+
+body :is(.settings-link, .site-control, .context-menu button) { border-radius: 9px; }
+
+body :is(.notifications-icon, .notes-icon-button, .item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, .planner-modal .modal-close, .modal-header .modal-close) {
     min-width: 36px;
     min-height: 36px;
-    border: 1px solid #d9dfd0;
-    background: #fffdf6;
-    color: #28563e;
+    border: 1px solid var(--family-line);
+    border-radius: 9px;
+    background: var(--family-paper);
+    color: var(--family-green);
     box-shadow: none;
 }
 
-body :is(.notes-icon-button, .item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, .planner-modal .modal-close, .modal-header .modal-close):hover,
+body :is(.notifications-icon, .notes-icon-button, .item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, .planner-modal .modal-close, .modal-header .modal-close):hover,
 body :is(.item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn)[aria-expanded="true"] {
-    background: #e8efdc;
-    color: #28563e;
-    border-color: #d2dec5;
+    background: var(--app-soft, #e8efdc);
+    color: var(--family-green);
+    border-color: var(--family-line);
     transform: none;
 }
 
@@ -56,7 +130,7 @@ body :is(.planner-modal .modal-actions, .modal-dialog .modal-actions, .modal-con
 }
 
 @media (max-width: 600px) {
-    body :is(.item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, .planner-modal .modal-close, .modal-header .modal-close) {
+    body :is(.notifications-icon, .item-action-btn, .list-action-btn, .message-action-btn, .ht-menu-trigger, .ht-wallet-menu-btn, .planner-modal .modal-close, .modal-header .modal-close) {
         min-width: 40px;
         min-height: 40px;
     }

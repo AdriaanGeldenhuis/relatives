@@ -84,20 +84,22 @@
 .sky-hero .hero-kicker { color: var(--sky-muted); }
 .home-page .sky-hero .hero-name { color: var(--sky-accent); }
 body .family-main .family-hero.sky-hero .family-hero-summary { color: var(--sky-muted); }
-body .family-main .family-hero.sky-hero .family-button,
 .sky-hero .sky-links :is(a, button) {
     color: var(--sky-ink);
     background: var(--sky-panel);
     border-color: var(--sky-line);
 }
-body .family-main .family-hero.sky-hero .family-button-primary {
-    color: var(--sky-button-ink);
-    background: var(--sky-accent);
-    border-color: var(--sky-accent);
+.sky-hero {
+    --button-fill: var(--sky-panel);
+    --button-border: var(--sky-line);
+    --button-ink: var(--sky-ink);
+    --control-hover: color-mix(in srgb, var(--sky-panel) 88%, var(--sky-accent));
+    --control-primary: var(--sky-accent);
+    --control-primary-ink: var(--sky-button-ink);
+    --control-primary-hover: color-mix(in srgb, var(--sky-accent) 85%, white);
+    --control-focus: var(--sky-accent);
 }
-body .family-main .family-hero.sky-hero :is(.family-button, .sky-links button, .sky-links a):hover {
-    box-shadow: inset 0 0 0 1px var(--sky-accent);
-}
+.sky-hero .sky-links :is(a, button):hover { box-shadow: inset 0 0 0 1px var(--sky-accent); }
 body .family-main .family-hero.sky-hero :focus-visible { outline-color: var(--sky-accent); }
 
 .sky-scene {

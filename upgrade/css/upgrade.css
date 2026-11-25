@@ -16,19 +16,18 @@
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    background: rgba(255, 255, 255, 0.2);
+    background: #e8efdc;
     backdrop-filter: blur(10px);
     padding: 12px 24px;
     border-radius: 50px;
     margin-bottom: 25px;
     font-weight: 700;
-    color: white;
+    color: var(--family-ink);
     animation: bounceIn 1s ease;
 }
 
 .badge-icon {
     font-size: 24px;
-    animation: pulse 2s infinite;
 }
 
 @keyframes pulse {
@@ -39,21 +38,14 @@
 .hero-title {
     font-size: 56px;
     font-weight: 900;
-    color: white;
+    color: var(--family-ink);
     margin-bottom: 20px;
     line-height: 1.2;
 }
 
-.gradient-text {
-    background: linear-gradient(135deg, #fff, #f0f0f0);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
 .hero-subtitle {
     font-size: 20px;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--family-muted);
     font-weight: 500;
 }
 
@@ -84,9 +76,9 @@
    ============================================ */
 
 .plan-card {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--family-paper);
     backdrop-filter: blur(20px);
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--family-line);
     border-radius: 24px;
     padding: 40px;
     transition: all 0.4s ease;
@@ -99,29 +91,27 @@
 .plan-card:nth-child(2) { animation-delay: 0.2s; }
 
 .plan-card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--family-card-shadow);
 }
 
 .plan-card.featured {
     border: 3px solid rgba(73, 135, 87, 0.6);
-    background: linear-gradient(135deg, rgba(73, 135, 87, 0.15), rgba(52, 95, 66, 0.15));
-    box-shadow: 0 20px 50px rgba(73, 135, 87, 0.3);
+    background: #edf2e3;
+    box-shadow: var(--family-card-shadow);
 }
 
 .popular-badge {
     position: absolute;
     top: 20px;
     right: 20px;
-    background: linear-gradient(135deg, #f093fb, #f5576c);
-    color: white;
+    background: var(--family-lime);
+    color: var(--family-ink);
     padding: 8px 16px;
     border-radius: 20px;
     font-size: 12px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    animation: wiggle 1s ease infinite;
 }
 
 @keyframes wiggle {
@@ -137,19 +127,18 @@
     text-align: center;
     margin-bottom: 30px;
     padding-bottom: 25px;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 2px solid var(--family-line);
 }
 
 .plan-icon {
     font-size: 64px;
     margin-bottom: 20px;
-    animation: bounce 2s infinite;
 }
 
 .plan-name {
     font-size: 32px;
     font-weight: 900;
-    color: white;
+    color: var(--family-ink);
     margin-bottom: 15px;
 }
 
@@ -160,18 +149,18 @@
 .price-amount {
     font-size: 56px;
     font-weight: 900;
-    color: white;
+    color: var(--family-ink);
     line-height: 1;
 }
 
 .price-period {
     font-size: 18px;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--family-muted);
     font-weight: 600;
 }
 
 .plan-description {
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--family-muted);
     font-size: 16px;
 }
 
@@ -188,8 +177,8 @@
     align-items: center;
     gap: 12px;
     padding: 14px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    color: white;
+    border-bottom: 1px solid var(--family-line);
+    color: var(--family-ink);
     font-weight: 600;
     font-size: 15px;
     transition: all 0.3s ease;
@@ -197,7 +186,7 @@
 
 .feature-item:hover {
     padding-left: 10px;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--family-canvas);
     border-radius: 8px;
 }
 
@@ -225,7 +214,7 @@
 
 .feature-badge {
     padding: 4px 12px;
-    background: rgba(255, 255, 255, 0.2);
+    background: #e8efdc;
     border-radius: 12px;
     font-size: 12px;
     font-weight: 800;
@@ -233,11 +222,11 @@
 }
 
 .feature-badge.current {
-    background: linear-gradient(135deg, #4facfe, #00f2fe);
+    background: #dde9cf;
 }
 
 .feature-badge.pro {
-    background: linear-gradient(135deg, #396b47, #28533a);
+    background: #dde9cf;
 }
 
 /* ============================================
@@ -253,48 +242,18 @@
     align-items: center;
     gap: 8px;
     padding: 12px 24px;
-    background: rgba(255, 255, 255, 0.2);
+    background: #e8efdc;
     border-radius: 12px;
-    color: white;
+    color: var(--family-ink);
     font-weight: 700;
 }
 
-.btn-pro {
-    width: 100%;
-    padding: 18px 32px;
-    background: linear-gradient(135deg, #396b47, #28533a);
-    color: white;
-    border: none;
-    border-radius: 16px;
-    font-size: 18px;
-    font-weight: 800;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    transition: all 0.3s ease;
-    box-shadow: 0 15px 35px rgba(73, 135, 87, 0.4);
-}
-
-.btn-pro:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 20px 45px rgba(73, 135, 87, 0.6);
-}
-
-.btn-arrow {
-    font-size: 24px;
-    transition: transform 0.3s ease;
-}
-
-.btn-pro:hover .btn-arrow {
-    transform: translateX(5px);
-}
+.btn-pro { width: 100%; }
 
 .plan-note {
     margin-top: 15px;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--family-muted);
 }
 
 /* ============================================
@@ -308,7 +267,7 @@
 .section-title {
     font-size: 42px;
     font-weight: 900;
-    color: white;
+    color: var(--family-ink);
     text-align: center;
     margin-bottom: 50px;
 }
@@ -320,9 +279,9 @@
 }
 
 .benefit-card {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--family-paper);
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--family-line);
     border-radius: 20px;
     padding: 35px;
     text-align: center;
@@ -338,7 +297,7 @@
 .benefit-card:hover {
     transform: translateY(-10px);
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
-    background: rgba(255, 255, 255, 0.15);
+    background: #e8efdc;
 }
 
 .benefit-icon {
@@ -349,13 +308,13 @@
 .benefit-title {
     font-size: 24px;
     font-weight: 800;
-    color: white;
+    color: var(--family-ink);
     margin-bottom: 15px;
 }
 
 .benefit-text {
     font-size: 15px;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--family-muted);
     line-height: 1.7;
 }
 
@@ -375,16 +334,16 @@
 }
 
 .faq-item {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--family-paper);
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--family-line);
     border-radius: 16px;
     overflow: hidden;
     transition: all 0.3s ease;
 }
 
 .faq-item:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background: #e8efdc;
 }
 
 .faq-question {
@@ -392,7 +351,7 @@
     align-items: center;
     gap: 15px;
     padding: 20px 25px;
-    color: white;
+    color: var(--family-ink);
     font-weight: 700;
     font-size: 16px;
     cursor: pointer;
@@ -409,7 +368,7 @@
     overflow: hidden;
     transition: max-height 0.3s ease;
     padding: 0 25px;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--family-muted);
     line-height: 1.7;
 }
 
@@ -438,16 +397,16 @@
     align-items: center;
     gap: 10px;
     padding: 15px 25px;
-    background: rgba(255, 255, 255, 0.15);
+    background: #e8efdc;
     backdrop-filter: blur(10px);
     border-radius: 50px;
-    color: white;
+    color: var(--family-ink);
     font-weight: 700;
     transition: all 0.3s ease;
 }
 
 .trust-badge:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: #dfead0;
     transform: scale(1.05);
 }
 
@@ -460,14 +419,15 @@
    ============================================ */
 
 .result-card {
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--family-paper);
     backdrop-filter: blur(20px);
     border-radius: 32px;
     padding: 60px 50px;
     max-width: 700px;
     margin: 100px auto;
     text-align: center;
-    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--family-line);
+    box-shadow: var(--family-card-shadow);
     animation: scaleIn 0.5s ease;
 }
 
@@ -497,7 +457,7 @@
 .checkmark-circle {
     width: 100px;
     height: 100px;
-    background: linear-gradient(135deg, #43e97b, #38f9d7);
+    background: var(--family-green);
     border-radius: 50%;
     display: inline-flex;
     align-items: center;
@@ -524,19 +484,19 @@
 .result-title {
     font-size: 42px;
     font-weight: 900;
-    color: #333;
+    color: var(--family-ink);
     margin-bottom: 20px;
 }
 
 .result-text {
     font-size: 18px;
-    color: #666;
+    color: var(--family-muted);
     margin-bottom: 30px;
     line-height: 1.7;
 }
 
 .result-info {
-    background: #f7f7f7;
+    background: var(--family-canvas);
     padding: 25px;
     border-radius: 16px;
     margin-bottom: 30px;
@@ -544,7 +504,7 @@
 }
 
 .result-info h3 {
-    color: #333;
+    color: var(--family-ink);
     margin-bottom: 15px;
     font-size: 18px;
 }
@@ -556,19 +516,19 @@
 
 .result-info li {
     padding: 8px 0;
-    color: #666;
+    color: var(--family-muted);
     font-size: 15px;
 }
 
 .features-unlocked {
-    background: #f7f7f7;
+    background: var(--family-canvas);
     padding: 30px;
     border-radius: 20px;
     margin: 30px 0;
 }
 
 .features-unlocked h3 {
-    color: #333;
+    color: var(--family-ink);
     margin-bottom: 20px;
     font-size: 20px;
 }
@@ -587,9 +547,9 @@
 }
 
 .feature-list .feature-item {
-    color: #333;
+    color: var(--family-ink);
     padding: 10px;
-    background: white;
+    background: var(--family-paper);
     border-radius: 8px;
     font-size: 14px;
 }
@@ -601,16 +561,11 @@
     flex-wrap: wrap;
 }
 
-.btn-large {
-    padding: 18px 40px;
-    font-size: 18px;
-}
-
 .result-footer {
     margin-top: 30px;
     padding-top: 25px;
     border-top: 2px solid #e0e0e0;
-    color: #666;
+    color: var(--family-muted);
     font-size: 14px;
 }
 
@@ -635,7 +590,7 @@
     
     .result-card {
         padding: 40px 30px;
-        margin: 50px 20px;
+        margin: 10px auto;
     }
     
     .result-title {
@@ -660,7 +615,7 @@
 
 .page-subtitle {
     font-size: 18px;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--family-muted);
 }
 
 .billing-section {
@@ -668,9 +623,9 @@
 }
 
 .plan-status-card {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--family-paper);
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--family-line);
     border-radius: 24px;
     padding: 40px;
 }
@@ -681,7 +636,7 @@
     align-items: center;
     margin-bottom: 30px;
     padding-bottom: 25px;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 2px solid var(--family-line);
 }
 
 .plan-badge {
@@ -695,13 +650,13 @@
 }
 
 .plan-badge.pro {
-    background: linear-gradient(135deg, #396b47, #28533a);
-    color: white;
+    background: #dde9cf;
+    color: var(--family-ink);
 }
 
 .plan-badge.free {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
+    background: #e8efdc;
+    color: var(--family-ink);
 }
 
 .billing-info {
@@ -713,22 +668,22 @@
     justify-content: space-between;
     align-items: center;
     padding: 15px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--family-line);
 }
 
 .info-label {
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--family-muted);
     font-weight: 600;
 }
 
 .info-value {
-    color: white;
+    color: var(--family-ink);
     font-weight: 800;
     font-size: 16px;
 }
 
 .cancellation-note {
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--family-muted);
     background: rgba(245, 87, 108, 0.1);
     padding: 15px;
     border-radius: 12px;
@@ -743,9 +698,9 @@
 }
 
 .help-card {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--family-paper);
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--family-line);
     border-radius: 20px;
     padding: 35px;
     text-align: center;
@@ -757,28 +712,28 @@
 }
 
 .help-card h3 {
-    color: white;
+    color: var(--family-ink);
     font-size: 24px;
     font-weight: 800;
     margin-bottom: 15px;
 }
 
 .help-card p {
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--family-muted);
     line-height: 1.7;
 }
 
 .help-card a {
-    color: #4facfe;
+    color: var(--family-green);
     font-weight: 700;
     text-decoration: none;
 }
 
 /* Payment History Table */
 .payment-history-table {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--family-paper);
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--family-line);
     border-radius: 20px;
     padding: 30px;
     overflow-x: auto;
@@ -792,22 +747,22 @@
 .payment-history-table th {
     text-align: left;
     padding: 15px;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--family-muted);
     font-weight: 700;
     text-transform: uppercase;
     font-size: 12px;
     letter-spacing: 0.5px;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 2px solid var(--family-line);
 }
 
 .payment-history-table td {
     padding: 20px 15px;
-    color: white;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--family-ink);
+    border-bottom: 1px solid var(--family-line);
 }
 
 .payment-history-table tr:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--family-canvas);
 }
 
 .payment-status {
@@ -837,7 +792,7 @@
 }
 
 .modal-content {
-    background: white;
+    background: var(--family-paper);
     border-radius: 24px;
     max-width: 500px;
     width: 100%;
@@ -884,7 +839,7 @@
 
 .modal-header h2 {
     font-size: 28px;
-    color: #333;
+    color: var(--family-ink);
     margin-bottom: 10px;
 }
 
@@ -893,21 +848,21 @@
 }
 
 .warning-text {
-    color: #666;
+    color: var(--family-muted);
     font-size: 16px;
     margin-bottom: 25px;
     text-align: center;
 }
 
 .cancellation-details {
-    background: #f7f7f7;
+    background: var(--family-canvas);
     padding: 20px;
     border-radius: 16px;
     margin-bottom: 25px;
 }
 
 .cancellation-details h4 {
-    color: #333;
+    color: var(--family-ink);
     margin-bottom: 12px;
 }
 
@@ -918,7 +873,7 @@
 
 .cancellation-details li {
     padding: 8px 0;
-    color: #666;
+    color: var(--family-muted);
 }
 
 .modal-actions {
@@ -934,4 +889,23 @@
 .main-content {
     min-height: calc(100vh - 200px);
     padding-bottom: 40px;
+}
+
+body[data-area="upgrade"] { --footer-height: 56px; }
+body[data-area="upgrade"] .hero-section { border-color: var(--family-line); background: var(--family-paper); }
+.hero-title, .page-title, .result-title, .section-title, .plan-name {
+    font-family: var(--family-display);
+    font-weight: 400;
+    letter-spacing: -.04em;
+}
+.plan-card, .plan-status-card, .help-card, .payment-history-table, .result-card {
+    padding: clamp(16px, 4vw, 36px);
+    border-radius: var(--family-card-radius);
+}
+.result-card { margin: 12px auto; }
+.result-icon { font-size: 2.5rem; margin-bottom: 12px; }
+.result-info, .features-unlocked { padding: clamp(12px, 3vw, 22px); }
+
+@media (prefers-reduced-motion: reduce) {
+    body[data-area="upgrade"] :is(.main-content, .modal-content) * { animation-duration: 0.01ms; transition: none; }
 }

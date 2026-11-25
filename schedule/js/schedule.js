@@ -317,7 +317,6 @@ const eventEditor = planner.createEditor({
     }
 });
 
-function showQuickAdd() { eventEditor.open(); }
 function editEvent(id) {
     const event = scheduleEvent(id);
     if (!event) return;
@@ -610,6 +609,7 @@ function shareToWhatsApp() {
 }
 
 document.addEventListener('click', event => {
+    if (event.target.closest('[data-schedule-add]')) eventEditor.open();
     const link = event.target.closest('[data-schedule-view]');
     if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.button === 0) {
         event.preventDefault();

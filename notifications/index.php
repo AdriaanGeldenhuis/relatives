@@ -1,8 +1,8 @@
 <?php
-/**
- * RELATIVES - NOTIFICATIONS CENTER - COMPLETE REBUILD v2.0
- * Optimized for Native App | Production Ready
- */
+require_once __DIR__ . '/../shared/components/avatar.php';
+require_once __DIR__ . '/../shared/components/family-app-art.php';
+
+header('Cache-Control: private, no-store');
 
 require_once __DIR__ . '/../core/session_boot.php';
 
@@ -88,10 +88,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
+$notifTypes = [
+    'all' => ['label' => 'All'],
+    'unread' => ['label' => 'Unread'],
+    'message' => ['icon' => '💬', 'label' => 'Messages'],
+    'shopping' => ['icon' => '🛒', 'label' => 'Shopping'],
+    'calendar' => ['icon' => '📅', 'label' => 'Calendar'],
+    'schedule' => ['icon' => '⏰', 'label' => 'Schedule'],
+    'tracking' => ['icon' => '📍', 'label' => 'Location'],
+    'weather' => ['icon' => '🌤️', 'label' => 'Weather'],
+    'note' => ['icon' => '📝', 'label' => 'Notes'],
+    'system' => ['icon' => '⚙️', 'label' => 'System'],
+];
+
 // Get filter from URL
 $filter = $_GET['filter'] ?? 'all';
-$validFilters = ['all', 'unread', 'message', 'shopping', 'calendar', 'schedule', 'tracking', 'weather', 'note', 'system'];
-if (!in_array($filter, $validFilters)) {
+if (!is_string($filter) || !array_key_exists($filter, $notifTypes)) {
     $filter = 'all';
 }
 
@@ -110,8 +122,7 @@ if ($filter === 'unread') {
 try {
     $stmt = $db->prepare("
         SELECT n.*, 
-               u.full_name, 
-               u.avatar_color,
+               u.full_name,
                TIMESTAMPDIFF(SECOND, n.created_at, NOW()) as seconds_ago
         FROM notifications n
         LEFT JOIN users u ON n.from_user_id = u.id
@@ -128,336 +139,143 @@ try {
 
 // Get unread count
 try {
-    $stmt = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+    $stmt = $db->prepare("SELECT COUNT(CASE WHEN is_read = 0 THEN 1 END) AS unread_count, MAX(is_read) AS has_read FROM notifications WHERE user_id = ?");
     $stmt->execute([$user['id']]);
-    $unreadCount = (int)$stmt->fetchColumn();
+    $counts = $stmt->fetch(PDO::FETCH_ASSOC);
+    $unreadCount = (int) $counts['unread_count'];
+    $hasRead = (bool) $counts['has_read'];
 } catch (Exception $e) {
     $unreadCount = 0;
+    $hasRead = false;
 }
 
-// Group notifications by date
-$groupedNotifications = [];
-foreach ($notifications as $notif) {
-    $date = date('Y-m-d', strtotime($notif['created_at']));
-    $today = date('Y-m-d');
-    $yesterday = date('Y-m-d', strtotime('-1 day'));
-    
-    if ($date === $today) {
-        $dateLabel = 'Today';
-    } elseif ($date === $yesterday) {
-        $dateLabel = 'Yesterday';
-    } else {
-        $dateLabel = date('l, F j', strtotime($date));
-    }
-    
-    if (!isset($groupedNotifications[$dateLabel])) {
-        $groupedNotifications[$dateLabel] = [];
-    }
-    
-    $groupedNotifications[$dateLabel][] = $notif;
-}
-
-// Notification type configurations
-$notifTypes = [
-    'message' => ['icon' => '💬', 'color' => '#667eea', 'label' => 'Message'],
-    'shopping' => ['icon' => '🛒', 'color' => '#f093fb', 'label' => 'Shopping'],
-    'calendar' => ['icon' => '📅', 'color' => '#4facfe', 'label' => 'Calendar'],
-    'schedule' => ['icon' => '⏰', 'color' => '#43e97b', 'label' => 'Schedule'],
-    'tracking' => ['icon' => '📍', 'color' => '#fa709a', 'label' => 'Location'],
-    'weather' => ['icon' => '🌤️', 'color' => '#30cfd0', 'label' => 'Weather'],
-    'note' => ['icon' => '📝', 'color' => '#a8edea', 'label' => 'Notes'],
-    'system' => ['icon' => '⚙️', 'color' => '#95a5a6', 'label' => 'System']
-];
-
-// Function to format relative time
-function formatTimeAgo($secondsAgo) {
+function formatTimeAgo(int $secondsAgo): string
+{
     if ($secondsAgo < 60) return 'Just now';
-    if ($secondsAgo < 3600) return floor($secondsAgo / 60) . 'm';
-    if ($secondsAgo < 86400) return floor($secondsAgo / 3600) . 'h';
-    if ($secondsAgo < 604800) return floor($secondsAgo / 86400) . 'd';
+    if ($secondsAgo < 3600) return floor($secondsAgo / 60) . 'm ago';
+    if ($secondsAgo < 86400) return floor($secondsAgo / 3600) . 'h ago';
+    if ($secondsAgo < 604800) return floor($secondsAgo / 86400) . 'd ago';
     return date('M j', time() - $secondsAgo);
 }
 
-$pageTitle = 'Notifications';
-$activePage = 'notifications';
-$pageCSS = [
-    '/shared/css/aurora.css',
-    '/notifications/css/notifications.css'
-];
-require_once __DIR__ . '/../shared/components/header.php';
+$ajax = ($_GET['ajax'] ?? null) === '1';
+if (!$ajax) {
+    $pageTitle = 'Notifications';
+    $pageCSS = ['/notifications/css/notifications.css?build=' . filemtime(__DIR__ . '/css/notifications.css')];
+    $pageJS = ['/notifications/js/notifications.js'];
+    $pageJSVersion = filemtime(__DIR__ . '/js/notifications.js');
+    require __DIR__ . '/../shared/components/header.php';
+} else {
+    header('Content-Type: text/html; charset=utf-8');
+}
 ?>
 
-<!-- Aurora background -->
-<div class="aurora" aria-hidden="true">
-    <div class="aurora-blob aurora-a"></div>
-    <div class="aurora-blob aurora-b"></div>
-    <div class="aurora-blob aurora-c"></div>
-    <div class="stars stars-a"></div>
-    <div class="stars stars-b"></div>
-    <div class="shooting-star"></div>
-    <div class="aurora-grid"></div>
-</div>
-
-<main class="main-content">
-    <div class="hub">
-
-        <!-- Compact page header -->
-        <header class="page-head" style="--glow:#fbbf24; --page-glow: rgba(251, 191, 36, 0.13)">
-            <span class="ph-glyph" aria-hidden="true">🔔</span>
-            <div class="ph-titles">
-                <h1>Notifications</h1>
-                <p class="ph-sub"><?php echo $unreadCount > 0 ? $unreadCount . ' unread' : "You're all caught up"; ?></p>
-            </div>
-            <div class="ph-actions quick-actions">
-                <?php if ($unreadCount > 0): ?>
-                    <button onclick="markAllRead()" class="pill-btn primary">
-                        <span aria-hidden="true">✓</span> Mark read
-                    </button>
+<main class="family-main notifications-main" id="notificationsContent" data-unread="<?= $unreadCount ?>">
+    <header class="family-hero app-hero">
+        <div class="family-hero-content">
+            <h1 class="family-hero-title">Notifications</h1>
+            <p class="family-hero-summary"><?= $unreadCount ? $unreadCount . ' unread' : 'You’re all caught up.' ?></p>
+            <div class="family-actions">
+                <?php if ($unreadCount): ?>
+                    <button type="button" class="btn btn-primary" data-notification-action="mark_all_read">Mark all read</button>
                 <?php endif; ?>
-                <?php if (!empty($notifications)): ?>
-                    <button onclick="showClearConfirm()" class="pill-btn">
-                        <span aria-hidden="true">🗑️</span> Clear
-                    </button>
+                <?php if ($hasRead): ?>
+                    <button type="button" class="btn" data-notification-action="confirm_clear" aria-haspopup="dialog" aria-controls="clearConfirmModal">Clear read</button>
                 <?php endif; ?>
-                <button onclick="showPreferences()" class="pill-btn">
-                    <span aria-hidden="true">⚙️</span> Settings
-                </button>
-            </div>
-        </header>
-
-        <!-- Filter Section (Same as Schedule) -->
-        <div class="search-filter-section">
-            <div class="filter-buttons">
-                <a href="?filter=all" class="filter-btn <?php echo $filter === 'all' ? 'active' : ''; ?>">
-                    <span>📋</span> All
-                </a>
-                <a href="?filter=unread" class="filter-btn <?php echo $filter === 'unread' ? 'active' : ''; ?>">
-                    <span>🔔</span> Unread
-                    <?php if ($unreadCount > 0): ?>
-                        <span class="filter-badge"><?php echo $unreadCount; ?></span>
-                    <?php endif; ?>
-                </a>
-                <a href="?filter=message" class="filter-btn <?php echo $filter === 'message' ? 'active' : ''; ?>">
-                    <span>💬</span> Messages
-                </a>
-                <a href="?filter=shopping" class="filter-btn <?php echo $filter === 'shopping' ? 'active' : ''; ?>">
-                    <span>🛒</span> Shopping
-                </a>
-                <a href="?filter=calendar" class="filter-btn <?php echo $filter === 'calendar' ? 'active' : ''; ?>">
-                    <span>📅</span> Calendar
-                </a>
-                <a href="?filter=schedule" class="filter-btn <?php echo $filter === 'schedule' ? 'active' : ''; ?>">
-                    <span>⏰</span> Schedule
-                </a>
+                <button type="button" class="btn" data-notification-action="preferences" aria-haspopup="dialog" aria-controls="preferencesModal">Settings</button>
             </div>
         </div>
+        <?php renderFamilyAppArt('notifications', true); ?>
+    </header>
 
-        <!-- Stats Bar (Same as Schedule week-stats-bar) -->
-        <?php if ($unreadCount > 0 || !empty($notifications)): ?>
-        <div class="week-stats-bar glass-card">
-            <div class="week-stats-title">Status:</div>
-            <div class="week-stats-chips">
-                <div class="stat-chip unread-chip">
-                    🔔 <?php echo $unreadCount; ?> unread
-                </div>
-                <div class="stat-chip total-chip">
-                    📋 <?php echo count($notifications); ?> total
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
+    <nav class="notifications-filters" aria-label="Filter notifications">
+        <?php foreach ($notifTypes as $key => $type): ?>
+            <a href="<?= $key === 'all' ? '/notifications/' : '?filter=' . $key ?>" class="btn"
+                data-notification-filter="<?= $key ?>" <?= $key === $filter ? 'aria-current="page"' : '' ?>>
+                <?= $type['label'] ?>
+                <?php if ($key === 'unread' && $unreadCount): ?>
+                    <span class="notifications-count"><?= $unreadCount ?></span>
+                <?php endif; ?>
+            </a>
+        <?php endforeach; ?>
+    </nav>
 
-        <!-- Notifications Content -->
-        <div class="notes-section">
-
-            <?php if (empty($notifications)): ?>
-                <!-- Empty State -->
-                <div class="empty-state glass-card">
-                    <div class="empty-icon">🔕</div>
-                    <h2>No notifications</h2>
-                    <p>
-                        <?php if ($filter === 'unread'): ?>
-                            You're all caught up!
-                        <?php elseif ($filter !== 'all'): ?>
-                            No <?php echo $filter; ?> notifications yet.
-                        <?php else: ?>
-                            Check back later for updates.
-                        <?php endif; ?>
-                    </p>
-                    <?php if ($filter !== 'all'): ?>
-                        <button onclick="loadNotificationsData('all', 'fadeIn')" class="btn btn-primary btn-lg">
-                            View All
-                        </button>
-                    <?php endif; ?>
-                </div>
-
-            <?php else: ?>
-
-                <?php
-                $totalNotifs = count($notifications);
-                $readNotifs = count(array_filter($notifications, fn($n) => $n['is_read'] == 1));
-                $readPercentage = $totalNotifs > 0 ? round(($readNotifs / $totalNotifs) * 100) : 0;
-                ?>
-
-                <!-- Progress Bar -->
-                <div class="list-actions glass-card">
-                    <div class="list-progress">
-                        <div class="progress-text">
-                            <span class="progress-icon">✓</span>
-                            <?php echo $readNotifs; ?> of <?php echo $totalNotifs; ?> read (<?php echo $readPercentage; ?>%)
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: <?php echo $readPercentage; ?>%"></div>
-                        </div>
-                    </div>
-
-                    <div class="action-buttons">
-                        <?php if ($readNotifs > 0): ?>
-                            <button onclick="showClearConfirm()" class="btn btn-secondary btn-sm">
-                                <span class="btn-icon">🗑️</span>
-                                <span>Clear Read</span>
-                            </button>
-                        <?php endif; ?>
-                        <?php if ($unreadCount > 0): ?>
-                            <button onclick="markAllRead()" class="btn btn-secondary btn-sm">
-                                <span class="btn-icon">✓</span>
-                                <span>Mark All Read</span>
-                            </button>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <!-- Notifications Grid (Styled like schedule notes) -->
-                <div class="notes-grid">
-                    <?php foreach ($notifications as $notif): ?>
-                        <?php
-                        $typeConfig = $notifTypes[$notif['type']] ?? $notifTypes['system'];
-                        $isRead = $notif['is_read'] == 1;
-                        ?>
-                        <div class="note-card notification-card <?php echo $isRead ? 'read' : 'unread'; ?>"
-                             data-notification-id="<?php echo $notif['id']; ?>"
-                             style="background: <?php echo $typeConfig['color']; ?>;"
-                             onclick="handleNotificationClick(<?php echo $notif['id']; ?>, <?php echo $notif['action_url'] ? "'" . htmlspecialchars($notif['action_url'], ENT_QUOTES) . "'" : 'null'; ?>)">
-
-                            <!-- Header with type icon and actions -->
-                            <div class="note-header">
-                                <div class="notif-type-badge">
-                                    <?php echo $notif['icon'] ?: $typeConfig['icon']; ?>
-                                    <span class="type-label"><?php echo $typeConfig['label']; ?></span>
-                                </div>
-
-                                <div class="note-actions">
-                                    <?php if (!$isRead): ?>
-                                        <button onclick="event.stopPropagation(); markAsRead(<?php echo $notif['id']; ?>)"
-                                                class="note-action"
-                                                title="Mark Read">
-                                            ✓
-                                        </button>
-                                    <?php endif; ?>
-                                    <button onclick="event.stopPropagation(); deleteNotification(<?php echo $notif['id']; ?>)"
-                                            class="note-action"
-                                            title="Delete">
-                                        🗑️
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Notification Title -->
-                            <div class="note-title">
-                                <?php echo htmlspecialchars($notif['title']); ?>
-                                <?php if (!$isRead): ?>
-                                    <span class="unread-badge">NEW</span>
-                                <?php endif; ?>
-                            </div>
-
-                            <!-- Notification Message -->
-                            <?php if (!empty($notif['message'])): ?>
-                                <div class="note-body">
-                                    <?php echo htmlspecialchars($notif['message']); ?>
-                                </div>
-                            <?php endif; ?>
-
-                            <!-- Action Link -->
-                            <?php if ($notif['action_url']): ?>
-                                <div class="notif-action-hint">
-                                    <span>Tap to view</span>
-                                    <span class="action-arrow">→</span>
-                                </div>
-                            <?php endif; ?>
-
-                            <!-- Footer -->
-                            <div class="note-footer">
-                                <div class="note-author">
-                                    <?php if ($notif['from_user_id']): ?>
-                                        <div class="author-avatar-mini" style="background: <?php echo htmlspecialchars($notif['avatar_color'] ?? '#667eea'); ?>">
-                                            <img src="<?php echo avatarUrl($notif['from_user_id']); ?>"
-                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                                                 style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
-                                            <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;"><?php echo strtoupper(substr($notif['full_name'] ?? '?', 0, 1)); ?></span>
-                                        </div>
-                                        <span><?php echo htmlspecialchars($notif['full_name'] ?? 'User'); ?></span>
-                                    <?php else: ?>
-                                        <div class="author-avatar-mini" style="background: #95a5a6;">
-                                            ⚙
-                                        </div>
-                                        <span>System</span>
-                                    <?php endif; ?>
-                                </div>
-                                <span class="notif-time">
-                                    <?php echo formatTimeAgo($notif['seconds_ago']); ?>
-                                </span>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-
+    <?php if (!$notifications): ?>
+        <section class="notifications-empty">
+            <h2 class="family-section-title">No notifications</h2>
+            <p><?= $filter === 'unread' ? 'You’re all caught up.' : 'There are no notifications in this view.' ?></p>
+            <?php if ($filter !== 'all'): ?>
+                <a href="/notifications/" class="btn btn-primary" data-notification-filter="all">View all</a>
             <?php endif; ?>
-        </div>
-    </div>
+        </section>
+    <?php else: ?>
+        <ul class="notification-list" aria-label="Notifications">
+            <?php foreach ($notifications as $notif): ?>
+                <?php
+                $type = $notifTypes[$notif['type']] ?? $notifTypes['system'];
+                $isRead = (bool) $notif['is_read'];
+                $id = (int) $notif['id'];
+                $authorId = (int) $notif['from_user_id'];
+                $actionUrl = trim($notif['action_url'] ?? '');
+                $hasLink = preg_match('~^https?://~i', $actionUrl)
+                    || (str_starts_with($actionUrl, '/') && !str_starts_with($actionUrl, '//') && !str_contains($actionUrl, chr(92)));
+                ?>
+                <li class="notification-card" data-notification-id="<?= $id ?>" <?= $isRead ? '' : 'data-unread' ?>>
+                    <span class="notification-type-icon" aria-hidden="true"><?= htmlspecialchars($notif['icon'] ?: ($type['icon'] ?? $notifTypes['system']['icon'])) ?></span>
+                    <div class="notification-detail">
+                        <div class="notification-meta">
+                            <span><?= $type['label'] ?></span>
+                            <?php if (!$isRead): ?><span class="notification-unread">Unread</span><?php endif; ?>
+                        </div>
+                        <h2><?= htmlspecialchars($notif['title']) ?></h2>
+                        <?php if ($notif['message']): ?><p class="notification-message"><?= htmlspecialchars($notif['message']) ?></p><?php endif; ?>
+                        <div class="notification-meta notification-byline">
+                            <?php if ($authorId && is_file(avatarPath($authorId))): ?>
+                                <img class="notification-avatar" src="<?= avatarUrl($authorId) ?>" alt="" loading="lazy">
+                            <?php endif; ?>
+                            <span><?= htmlspecialchars($authorId ? ($notif['full_name'] ?? 'Family member') : 'System') ?></span>
+                            <time datetime="<?= date(DATE_ATOM, strtotime($notif['created_at'])) ?>"><?= formatTimeAgo((int) $notif['seconds_ago']) ?></time>
+                        </div>
+                        <?php if ($hasLink): ?>
+                            <a class="notification-link" href="<?= htmlspecialchars($actionUrl) ?>" data-notification-action="open">View details <span aria-hidden="true">→</span></a>
+                        <?php endif; ?>
+                    </div>
+                    <div class="notification-actions">
+                        <?php if (!$isRead): ?>
+                            <button type="button" class="notifications-icon" aria-label="Mark as read" title="Mark as read" data-notification-action="mark_read">✓</button>
+                        <?php endif; ?>
+                        <button type="button" class="notifications-icon" aria-label="Delete notification" title="Delete notification" data-notification-action="delete_notification">×</button>
+                    </div>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+    <?php endif; ?>
 </main>
 
-<!-- Clear Confirmation Modal -->
-<div id="clearConfirmModal" class="modal">
-    <div class="modal-content">
-        <button onclick="closeModal('clearConfirmModal')" class="modal-close">✕</button>
-        <div class="modal-body">
-            <div class="modal-icon">🗑️</div>
-            <h2>Clear Read Notifications</h2>
-            <p>Delete all read notifications? This cannot be undone.</p>
-            
-            <div class="modal-actions">
-                <button onclick="clearAllRead()" class="btn btn-danger">
-                    Yes, Clear All
-                </button>
-                <button onclick="closeModal('clearConfirmModal')" class="btn btn-secondary">
-                    Cancel
-                </button>
-            </div>
+<?php if ($ajax) exit; ?>
+
+<dialog id="clearConfirmModal" class="notifications-dialog" aria-labelledby="clearNotificationsTitle">
+    <div class="notifications-dialog-inner">
+        <header>
+            <h2 id="clearNotificationsTitle">Clear read notifications?</h2>
+            <button type="button" class="notifications-icon" aria-label="Close" data-notification-action="close">×</button>
+        </header>
+        <p>This permanently deletes your read notifications.</p>
+        <div class="notification-actions">
+            <button type="button" class="btn" data-notification-action="close" autofocus>Cancel</button>
+            <button type="button" class="btn btn-danger" data-notification-action="clear_all">Clear read</button>
         </div>
     </div>
-</div>
+</dialog>
 
-<!-- Preferences Modal -->
-<div id="preferencesModal" class="modal modal-large">
-    <div class="modal-content">
-        <button onclick="closeModal('preferencesModal')" class="modal-close">✕</button>
-        <div class="modal-body">
-            <div class="modal-icon">⚙️</div>
-            <h2>Notification Settings</h2>
-            <div id="preferencesContent">
-                <div class="loading">Loading...</div>
-            </div>
-        </div>
+<dialog id="preferencesModal" class="notifications-dialog notifications-dialog-wide" aria-labelledby="notificationSettingsTitle">
+    <div class="notifications-dialog-inner">
+        <header>
+            <h2 id="notificationSettingsTitle">Notification settings</h2>
+            <button type="button" class="notifications-icon" aria-label="Close" data-notification-action="close">×</button>
+        </header>
+        <div id="preferencesContent" aria-live="polite"></div>
     </div>
-</div>
+</dialog>
 
-<script>
-window.currentUser = <?php echo json_encode([
-    'id' => $user['id'],
-    'name' => $user['name'] ?? $user['full_name'] ?? 'User'
-]); ?>;
-</script>
-
-<script src="/notifications/js/notifications.js?v=<?php echo $cacheVersion; ?>"></script>
-
-<?php require_once __DIR__ . '/../shared/components/footer.php'; ?>
+<?php require __DIR__ . '/../shared/components/footer.php'; ?>

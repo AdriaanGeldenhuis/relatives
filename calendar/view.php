@@ -111,7 +111,7 @@ function calendarRender(array $data, array $types, array $filters, DateTimeImmut
         <?php endif; ?>
         <aside class="calendar-side" aria-label="Day agenda">
             <section class="calendar-day-panel">
-                <header><h3><?= $day->format('l, j F Y') ?></h3><button type="button" class="planner-control" data-calendar-add>Add event</button></header>
+                <header><h3><?= $day->format('l, j F Y') ?></h3><button type="button" class="btn btn-primary" data-calendar-add aria-haspopup="dialog" aria-controls="eventEditor">Add event</button></header>
                 <div class="calendar-day-list">
                     <?php $daily = scheduleOnDay($events, $day); ?>
                     <?php foreach ($daily as $event) calendarEntry($event, $day, $view, $filters, $types); ?>

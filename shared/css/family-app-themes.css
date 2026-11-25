@@ -13,8 +13,10 @@
 :is(body[data-area="games"], [data-app="games"]) { --app-accent: #a89aee; --app-deep: #514184; }
 :is(body[data-area="messages"], [data-app="messages"]) { --app-accent: #7fb5f1; --app-deep: #2d5680; }
 
+[data-area="notifications"], [data-app="notifications"] { --app-accent: #ecc276; --app-deep: #765318; }
+
 body:is([data-area="tracking"], [data-area="weather"], [data-area="notes"], [data-area="shopping"],
-    [data-area="calendar"], [data-area="schedule"], [data-area="holiday_traveling"], [data-area="games"], [data-area="messages"]) {
+    [data-area="calendar"], [data-area="schedule"], [data-area="holiday_traveling"], [data-area="games"], [data-area="messages"], [data-area="notifications"]) {
     --family-canvas: color-mix(in srgb, var(--app-accent) 15%, #f8f5ed);
     --family-paper: color-mix(in srgb, var(--app-accent) 5%, #fffdf6);
     --family-ink: color-mix(in srgb, var(--app-deep) 52%, #191d26);
@@ -27,8 +29,6 @@ body:is([data-area="tracking"], [data-area="weather"], [data-area="notes"], [dat
     --app-hero-ink: var(--family-ink);
     --app-hero-muted: var(--family-muted);
     --app-hero-edge: var(--family-line);
-    --app-button-fill: #ffffff8c;
-    --app-button-ink: var(--app-deep);
     --app-focus: var(--app-deep);
 }
 
@@ -37,8 +37,6 @@ body[data-area="weather"] {
     --app-hero-ink: #f5fbff;
     --app-hero-muted: #d5edff;
     --app-hero-edge: #326280;
-    --app-button-fill: #18394f;
-    --app-button-ink: #f5fbff;
     --app-focus: #c4e5ff;
 }
 
@@ -115,35 +113,23 @@ body[data-area="holiday_traveling"] :is(.ht-page-header, .ht-trip-header) :is(.h
 .app-hero .tracking-content-title { font: 400 clamp(1.7rem, 4vw, 2.45rem)/1.05 var(--family-display); }
 body[data-area] .app-hero :focus-visible { outline-color: var(--app-focus); }
 
-.app-hero .family-button,
-.app-hero .planner-hero-button,
-.app-hero #messagesActions button,
-body[data-area="holiday_traveling"] :is(.ht-page-header, .ht-trip-header) :is(.ht-btn-secondary, .ht-btn-outline, .ht-menu-trigger) {
-    background: var(--app-button-fill);
-    border-color: var(--app-hero-edge);
-    color: var(--app-button-ink);
+.app-hero {
+    --button-fill: #ffffff8c;
+    --button-border: var(--app-hero-edge);
+    --button-ink: var(--app-deep);
+    --control-hover: var(--app-soft);
+    --control-primary: var(--app-deep);
+    --control-primary-ink: #fff;
+    --control-primary-hover: color-mix(in srgb, var(--app-deep) 82%, #171c1a);
+    --control-focus: var(--app-focus);
 }
-.app-hero .family-button:hover,
-.app-hero .planner-hero-button:hover,
-.app-hero #messagesActions button:is(:hover, .active),
-body[data-area="holiday_traveling"] :is(.ht-page-header, .ht-trip-header) :is(.ht-btn-secondary, .ht-btn-outline, .ht-menu-trigger):hover {
-    background: var(--family-lime);
-    color: var(--family-ink);
+
+.app-hero #messagesActions button {
+    background: var(--button-fill);
+    border-color: var(--button-border);
+    color: var(--button-ink);
 }
-.family-hero.app-hero :is(.family-button-primary, .family-button.active),
-.planner-main .app-hero .btn-primary,
-.app-hero .tracking-add-btn {
-    background: var(--app-deep);
-    border-color: var(--app-deep);
-    color: #fff;
-}
-.family-hero.app-hero :is(.family-button-primary, .family-button.active):hover,
-.planner-main .app-hero .btn-primary:hover,
-.app-hero .tracking-add-btn:hover {
-    background: color-mix(in srgb, var(--app-deep) 82%, #14121c);
-    border-color: var(--app-deep);
-    color: #fff;
-}
+.app-hero #messagesActions button:is(:hover, .active) { background: var(--app-soft); }
 
 body.workspace-page:is([data-area="calendar"], [data-area="schedule"]) {
     --planner-canvas: var(--family-canvas);
@@ -153,7 +139,6 @@ body.workspace-page:is([data-area="calendar"], [data-area="schedule"]) {
     --planner-forest: var(--app-deep);
     --planner-green: var(--app-deep);
     --planner-line: var(--family-line);
-    --planner-lime: var(--family-lime);
 }
 body[data-area="holiday_traveling"] :is(.ht-page-header, .ht-trip-header).app-hero {
     padding-inline-end: max(76px, 21%);
@@ -203,7 +188,6 @@ body[data-area="tracking"] .tracking-content-header.app-hero {
 .tracking-content-header.app-hero .app-hero-scene { width: 22%; min-width: 68px; }
 .tracking-content-header.app-hero .launch-art { scale: 1; }
 body[data-area="tracking"] :is(.tracking-content, .tracking-settings) .tracking-back { color: var(--app-deep); }
-body[data-area="tracking"] .tracking-settings .settings-save-btn { background: var(--app-deep); color: #fff; }
 body[data-area="tracking"] .tracking-topbar {
     background: var(--app-hero-fill);
     --trk-text: var(--family-ink);

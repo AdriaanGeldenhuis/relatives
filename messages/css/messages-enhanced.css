@@ -121,32 +121,6 @@
     margin-top: 7px;
 }
 
-.btn-save,
-.btn-cancel,
-.btn-search {
-    padding: 6px 14px;
-    border-radius: var(--radius-full);
-    border: 1px solid var(--line-strong);
-    background: rgba(45, 81, 51, 0.07);
-    color: var(--text-0);
-    font-family: inherit;
-    font-size: 0.74rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.btn-save,
-.btn-search {
-    background: var(--brand);
-    border-color: var(--line);
-    color: var(--text-0);
-}
-
-.btn-save:hover,
-.btn-search:hover { box-shadow: 0 3px 10px rgba(48, 100, 62, 0.15); }
-.btn-cancel:hover { background: rgba(45, 81, 51, 0.14); }
-
 .edit-info {
     font-size: 0.62rem;
     color: var(--text-2);

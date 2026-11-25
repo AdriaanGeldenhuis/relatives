@@ -1,476 +1,159 @@
-/* ============================================
-   RELATIVES NOTIFICATIONS v4 - AURORA STYLE
-   Requires /shared/css/aurora.css
-   ============================================ */
+body[data-area="notifications"] { --footer-height: 56px; }
 
-/* ============================================
-   ENTRANCE
-   ============================================ */
-
-.search-filter-section { animation: rise 0.55s var(--ease-out) 0.06s both; }
-.week-stats-bar        { animation: rise 0.55s var(--ease-out) 0.10s both; }
-.notes-section         { animation: rise 0.55s var(--ease-out) 0.14s both; }
-
-/* ============================================
-   FILTER PILLS
-   ============================================ */
-
-.search-filter-section {
+.notifications-filters {
     display: flex;
-    align-items: center;
-    gap: 10px;
     flex-wrap: wrap;
-}
-
-.filter-buttons {
-    display: flex;
     gap: 6px;
-    flex-wrap: wrap;
+    margin-block: 14px;
 }
 
-.filter-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 8px 13px;
-    border-radius: var(--radius-full);
-    border: 1px solid var(--line);
-    background: var(--card);
-    color: var(--text-1);
-    font-family: inherit;
-    font-size: 0.74rem;
+.notifications-filters [aria-current="page"] {
+    --button-fill: var(--app-soft);
+    --button-border: var(--app-deep);
+    --button-ink: var(--app-deep);
+}
+
+.notifications-count, .notification-unread {
+    border-radius: 999px;
+    background: var(--app-soft);
+    color: var(--app-deep);
+    padding: 2px 7px;
+    font-size: .72rem;
     font-weight: 700;
-    cursor: pointer;
-    text-decoration: none;
-    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-.filter-btn:hover { background: var(--card-strong); color: var(--text-0); }
-
-.filter-btn.active {
-    background: linear-gradient(120deg, rgba(251, 191, 36, 0.22), rgba(251, 146, 60, 0.16));
-    border-color: rgba(251, 191, 36, 0.55);
-    color: var(--text-0);
-    box-shadow: 0 3px 12px rgba(251, 191, 36, 0.18);
+.notifications-empty, .notification-card {
+    border: 1px solid var(--family-line);
+    border-radius: var(--family-card-radius);
+    background: var(--family-paper);
+    box-shadow: var(--family-card-shadow);
 }
 
-.filter-badge {
-    min-width: 17px;
-    height: 17px;
-    padding: 0 5px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-full);
-    background: linear-gradient(135deg, #fb7185, #ef4444);
-    color: #fff;
-    font-size: 0.62rem;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-}
+.notifications-empty { padding: clamp(20px, 4vw, 40px); text-align: center; }
+.notifications-empty p { margin-block: 6px 14px; color: var(--family-muted); }
 
-/* ============================================
-   STATUS BAR
-   ============================================ */
-
-.week-stats-bar {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    flex-wrap: wrap;
-    padding: 9px 14px;
-    border-radius: var(--radius);
-    background: var(--card);
-    border: 1px solid var(--line);
-}
-
-.week-stats-title {
-    font-size: 0.68rem;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-2);
-}
-
-.week-stats-chips { display: flex; gap: 7px; flex-wrap: wrap; }
-
-.stat-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 11px;
-    border-radius: var(--radius-full);
-    font-size: 0.72rem;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--text-1);
-}
-
-.stat-chip.unread-chip {
-    color: #fde68a;
-    border-color: rgba(251, 191, 36, 0.45);
-    background: rgba(251, 191, 36, 0.1);
-}
-
-/* ============================================
-   PROGRESS STRIP
-   ============================================ */
-
-.list-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
-    padding: 12px 16px;
-    margin-bottom: 14px;
-    border-radius: var(--radius-lg);
-    background: var(--card);
-    border: 1px solid var(--line);
-}
-
-.list-progress { flex: 1; min-width: 200px; }
-
-.progress-text {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.76rem;
-    font-weight: 700;
-    color: var(--text-1);
-    margin-bottom: 7px;
-}
-
-.progress-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    border-radius: var(--radius-full);
-    background: rgba(52, 211, 153, 0.18);
-    color: var(--green);
-    font-size: 0.6rem;
-    font-weight: 900;
-}
-
-.progress-bar {
-    height: 6px;
-    border-radius: var(--radius-full);
-    background: rgba(255, 255, 255, 0.08);
-    overflow: hidden;
-}
-
-.progress-fill {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: var(--brand);
-    box-shadow: 0 0 12px rgba(244, 114, 182, 0.5);
-    transition: width 0.6s var(--ease-out);
-}
-
-.action-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
-
-/* ============================================
-   NOTIFICATION CARDS (colored, dark text)
-   ============================================ */
-
-.notes-grid {
+.notification-list { display: grid; gap: 8px; list-style: none; }
+.notification-card {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 12px;
+    padding: clamp(12px, 2vw, 18px);
 }
-
-.note-card {
-    position: relative;
-    padding: 12px 14px;
-    border-radius: 18px;
-    color: #171a2e;
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    cursor: pointer;
-    transition: transform 0.25s var(--spring), box-shadow 0.25s ease, opacity 0.3s ease;
-}
-
-.note-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 16px 38px rgba(0, 0, 0, 0.45);
-}
-
-.notification-card.read { opacity: 0.55; }
-
-.notification-card.unread {
-    outline: 2px solid rgba(255, 255, 255, 0.55);
-    outline-offset: 2px;
-}
-
-.note-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 5px;
-}
-
-.notif-type-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 10px;
-    border-radius: var(--radius-full);
-    background: rgba(10, 12, 30, 0.14);
-    font-size: 0.72rem;
-    font-weight: 800;
-}
-
-.type-label {
-    font-size: 0.6rem;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    opacity: 0.75;
-}
-
-.note-actions { display: flex; gap: 3px; }
-
-.note-action {
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
+.notification-card[data-unread] { border-inline-start: 3px solid var(--app-deep); }
+.notification-type-icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
     border-radius: 9px;
-    background: transparent;
-    font-size: 0.78rem;
+    background: var(--app-soft);
+    font-size: 1.2rem;
+}
+
+.notification-detail { overflow-wrap: anywhere; }
+.notification-detail h2 { margin-top: 2px; font: 400 1.38rem/1.15 var(--family-display); }
+.notification-message { margin-top: 4px; font-size: .86rem; white-space: pre-line; }
+.notification-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    color: var(--family-muted);
+    font-size: .75rem;
+}
+.notification-byline { margin-top: 8px; }
+.notification-byline time::before { content: '·'; margin-inline-end: 8px; }
+.notification-avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
+.notification-link { display: inline-block; margin-top: 7px; color: var(--app-deep); font-weight: 700; font-size: .82rem; }
+.notification-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.notifications-icon {
+    display: inline-grid;
+    place-items: center;
+    padding: 0;
+    font: 700 1.12rem/1 var(--family-body);
     cursor: pointer;
-    opacity: 0.5;
-    transition: opacity 0.2s ease, background 0.2s ease;
 }
+.notifications-icon:disabled { opacity: .55; cursor: not-allowed; }
 
-.note-action:hover { opacity: 1; background: rgba(10, 12, 30, 0.14); }
-
-.note-title {
-    font-family: var(--font-display);
-    font-size: 0.95rem;
-    font-weight: 700;
-    line-height: 1.3;
-    word-wrap: break-word;
-}
-
-.unread-badge {
-    display: inline-block;
-    padding: 1px 8px;
-    margin-left: 5px;
-    border-radius: var(--radius-full);
-    background: #171a2e;
-    color: #fff;
-    font-size: 0.55rem;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    vertical-align: middle;
-}
-
-.note-body {
-    font-size: 0.8rem;
-    line-height: 1.45;
-    margin-top: 4px;
-    opacity: 0.85;
-    word-wrap: break-word;
-}
-
-.notif-action-hint {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    margin-top: 7px;
-    padding: 3px 11px;
-    border-radius: var(--radius-full);
-    background: rgba(10, 12, 30, 0.12);
-    font-size: 0.66rem;
-    font-weight: 800;
-}
-
-.action-arrow { transition: transform 0.2s var(--ease-out); }
-
-.note-card:hover .action-arrow { transform: translateX(3px); }
-
-.note-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-top: 9px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(10, 12, 30, 0.14);
-    font-size: 0.68rem;
-    font-weight: 700;
-    opacity: 0.75;
-}
-
-.note-author {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-}
-
-.note-author span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.author-avatar-mini {
-    width: 20px;
-    height: 20px;
-    flex-shrink: 0;
-    border-radius: var(--radius-full);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-size: 0.55rem;
-    font-weight: 800;
-    overflow: hidden;
-}
-
-.notif-time { flex-shrink: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
-
-/* ============================================
-   EMPTY STATE
-   ============================================ */
-
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    padding: 36px 20px;
-    text-align: center;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-    color: var(--text-0);
-}
-
-.empty-icon {
-    font-size: 2.6rem;
-    filter: drop-shadow(0 6px 16px rgba(251, 191, 36, 0.3));
-}
-
-.empty-state h2 { font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; }
-.empty-state p { font-size: 0.85rem; color: var(--text-2); max-width: 320px; }
-.empty-state .btn { margin-top: 8px; }
-
-.btn-lg { padding: 11px 20px; font-size: 0.88rem; }
-
-.btn-danger {
-    background: linear-gradient(135deg, rgba(251, 113, 133, 0.85), rgba(239, 68, 68, 0.85));
-    border-color: transparent;
-    color: #fff;
-}
-
-/* ============================================
-   MODALS (icon-centered variant)
-   ============================================ */
-
-.modal .modal-content { position: relative; }
-
-.modal .modal-content > .modal-close {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 5;
-}
-
-.modal-icon {
-    font-size: 2.2rem;
-    text-align: center;
-    margin-bottom: 6px;
-}
-
-.modal-body h2 {
-    font-family: var(--font-display);
-    font-size: 1.1rem;
-    font-weight: 700;
-    text-align: center;
-    margin-bottom: 6px;
-}
-
-.modal-body > p {
-    text-align: center;
-    color: var(--text-1);
-    font-size: 0.85rem;
-    margin-bottom: 14px;
-}
-
-.loading {
-    padding: 26px 12px;
-    text-align: center;
-    color: var(--text-2);
-    font-size: 0.85rem;
-}
-
-/* Preferences content (JS-rendered) */
-#preferencesContent label,
-.pref-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 9px 12px;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--line);
-    margin-bottom: 7px;
-    font-size: 0.84rem;
-    font-weight: 600;
-    color: var(--text-1);
-}
-
-#preferencesContent input[type="checkbox"] { accent-color: #b6d986; width: 17px; height: 17px; }
-
-/* ============================================
-   TOAST
-   ============================================ */
-
-.toast {
+.notifications-dialog {
     position: fixed;
-    bottom: 88px;
+    inset: 0;
+    margin: auto;
+    width: min(460px, calc(100% - 24px));
+    overflow: auto;
+    max-height: calc(100% - 24px);
+    max-height: calc(100dvh - 24px);
+    border: 1px solid var(--family-line);
+    border-radius: var(--family-card-radius);
+    background: var(--family-paper);
+    color: var(--family-ink);
+    box-shadow: 0 20px 70px #2c210b40;
+    overscroll-behavior: contain;
+}
+.notifications-dialog::backdrop { background: #201a1199; }
+.notifications-dialog-wide { width: min(720px, calc(100% - 24px)); }
+.notifications-dialog-inner { padding: clamp(14px, 4vw, 24px); }
+.notifications-dialog header { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.notifications-dialog h2 { font: 400 clamp(1.55rem, 4vw, 2.15rem)/1.1 var(--family-display); }
+.notifications-dialog p { margin-bottom: 14px; font-size: .9rem; color: var(--family-muted); }
+
+.preferences-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+    gap: 8px;
+}
+.pref-card, .weather-schedule-section {
+    padding: 12px;
+    border: 1px solid var(--family-line);
+    border-radius: 12px;
+    background: var(--family-canvas);
+    font-size: .85rem;
+}
+.pref-header { display: flex; gap: 6px; align-items: center; margin-bottom: 5px; }
+.pref-controls, .weather-schedule-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 100px), 1fr));
+    gap: 2px 8px;
+}
+.pref-toggle { display: flex; gap: 7px; align-items: center; min-height: 34px; cursor: pointer; }
+.pref-toggle input { width: 1rem; height: 1rem; accent-color: var(--app-deep); }
+.weather-schedule-section { margin-top: 10px; }
+.weather-schedule-section h3 { margin-bottom: 6px; }
+.weather-schedule-form { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); }
+.weather-schedule-form .form-group { display: flex; align-items: center; gap: 8px; }
+.weather-schedule-form input[type="time"] {
+    min-height: 36px;
+    padding: 4px 6px;
+    border: 1px solid var(--family-line);
+    border-radius: 9px;
+    background: var(--family-paper);
+    color: var(--family-ink);
+}
+.preferences-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+.notif-toast {
+    position: fixed;
+    z-index: 9501;
     left: 50%;
-    z-index: 10001;
-    max-width: min(92vw, 420px);
-    padding: 11px 18px;
-    border-radius: var(--radius-full);
-    background: rgba(32, 60, 44, 0.95);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid var(--line-strong);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-    color: var(--text-0);
-    font-size: 0.84rem;
-    font-weight: 700;
-    opacity: 0;
-    transform: translate(-50%, 14px);
-    transition: opacity 0.3s ease, transform 0.3s var(--ease-out);
-    pointer-events: none;
+    bottom: calc(var(--footer-height) + 18px);
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100% - 32px);
+    padding: 9px 14px;
+    border-radius: 9px;
+    background: var(--family-forest);
+    color: #fff;
+    font-size: .85rem;
+    box-shadow: var(--family-card-shadow);
 }
+.notifications-dialog .notif-toast { position: sticky; left: auto; bottom: 0; transform: none; margin: 0 auto 8px; }
+.notif-toast.toast-error { background: #963c31; }
+.notifications-main :focus-visible,
+.notifications-dialog :focus-visible { outline: 2px solid var(--app-deep); outline-offset: 3px; }
 
-.toast.show { opacity: 1; transform: translate(-50%, 0); }
-.toast.toast-success { border-color: rgba(52, 211, 153, 0.5); }
-.toast.toast-error { border-color: rgba(251, 113, 133, 0.5); }
-
-/* ============================================
-   RESPONSIVE
-   ============================================ */
-
-@media (min-width: 700px) {
-    .notes-grid { grid-template-columns: repeat(2, 1fr); }
-}
-
-@media (min-width: 1080px) {
-    .notes-grid { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 555px) {
+    .notification-card { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
+    .notification-card .notification-actions { grid-column: 2; }
+    .notification-type-icon { width: 32px; height: 32px; font-size: 1rem; }
 }

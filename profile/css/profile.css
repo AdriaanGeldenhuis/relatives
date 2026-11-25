@@ -220,45 +220,6 @@ select.form-input option { background: var(--family-paper); }
    BUTTONS
    ============================================ */
 
-.btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    padding: 11px 18px;
-    border-radius: 9px;
-    min-height: 42px;
-    border: 1px solid var(--family-line);
-    background: #f3f4e9;
-    color: var(--family-ink);
-    font-family: inherit;
-    font-size: 0.84rem;
-    font-weight: 700;
-    cursor: pointer;
-    text-decoration: none;
-    transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.btn:hover { background: #f3f4e9; transform: translateY(-1px); }
-.btn:active { transform: scale(0.97); }
-
-.btn-primary {
-    background: linear-gradient(135deg, #28533a, #376344);
-    border-color: transparent;
-    color: #fff;
-    box-shadow: none;
-}
-
-.btn-primary:hover { background: #204732; }
-
-.btn-danger {
-    background: rgba(251, 113, 133, 0.12);
-    border-color: rgba(251, 113, 133, 0.45);
-    color: #8e392e;
-}
-
-.btn-danger:hover { background: rgba(251, 113, 133, 0.22); }
-
 .btn-block { width: 100%; }
 
 .member-since {
@@ -445,11 +406,6 @@ select.form-input option { background: var(--family-paper); }
     white-space: nowrap;
 }
 
-.btn-permission {
-    padding: 7px 13px;
-    font-size: 0.72rem;
-}
-
 .detail-label { font-size: 0.76rem; font-weight: 700; color: var(--family-muted); }
 .detail-value { font-size: 0.82rem; font-weight: 700; }
 
@@ -611,4 +567,3 @@ body[data-area="profile"] .profile-header {
 }
 .profile-container .toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid #3c7548; outline-offset: 2px; }
 .profile-container .form-input:disabled { color: var(--family-muted); opacity: 1; background: #eef1e5; }
-.profile-container .btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }

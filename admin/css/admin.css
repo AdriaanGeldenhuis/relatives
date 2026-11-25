@@ -45,29 +45,23 @@ body[data-area="admin"] { --footer-height: 56px; }
     padding-bottom: 12px;
     border-bottom: 1px solid var(--family-line);
 }
-.admin-nav a, .admin-button {
+.admin-nav a {
     min-height: 40px;
     display: inline-flex;
     justify-content: center;
     align-items: center;
     padding: 7px 11px;
-    border: 1px solid var(--family-line);
+    border: 1px solid transparent;
     border-radius: 9px;
-    color: var(--family-green);
+    color: var(--family-muted);
     font: 750 .82rem/1.25 var(--family-body);
     text-decoration: none;
 }
-.admin-nav a { border-color: transparent; color: var(--family-muted); }
-.admin-button { background: var(--family-paper); cursor: pointer; }
-.admin-button:hover, .admin-nav a:hover, .admin-nav a[aria-current="page"] {
+.admin-nav a:hover, .admin-nav a[aria-current="page"] {
     border-color: #d9e3cb;
     background: #e8efdc;
     color: var(--family-green);
 }
-.admin-primary { color: var(--family-paper); background: var(--family-green); border-color: var(--family-green); }
-.admin-primary:hover { color: var(--family-paper); background: #204732; border-color: #204732; }
-.admin-danger { color: #903b32; background: #fff7ef; border-color: #ead7cd; }
-.admin-danger:hover { color: #832e26; background: #fbe6dd; border-color: #e7bdb0; }
 
 .admin-banner, .admin-card, .admin-dialog {
     border: 1px solid var(--family-line);

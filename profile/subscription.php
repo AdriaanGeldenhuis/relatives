@@ -112,8 +112,8 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <style>
     .subscription-card {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
-        border: 1px solid rgba(102, 126, 234, 0.3);
+        background: var(--family-paper);
+        border: 1px solid var(--family-line);
         border-radius: 16px;
         padding: 24px;
         margin-bottom: 20px;

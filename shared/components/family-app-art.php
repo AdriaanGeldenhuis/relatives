@@ -40,7 +40,7 @@ function renderFamilyAppArt(string $appKey, bool $hero = false): void
             <?php elseif ($appKey === 'messages'): ?>
             <span class="launch-message"><span></span><span></span><span></span></span>
             <?php else: ?>
-            <span class="launch-icon"><?= match ($appKey) { 'schedule' => '⏰', 'travel' => '✈️', 'games' => '🎮' } ?></span>
+            <span class="launch-icon"><?= match ($appKey) { 'schedule' => '⏰', 'travel' => '✈️', 'games' => '🎮', 'notifications' => '🔔' } ?></span>
             <?php endif; ?>
         </span>
     <?php if ($hero): ?>

@@ -23,6 +23,11 @@ if (!$user) {
     exit;
 }
 
+if (!class_exists('Yoco')) {
+    header('Location: /profile/subscription.php', true, 303);
+    exit;
+}
+
 $yoco = new Yoco($db);
 $subscription = $yoco->getSubscription($user['family_id']);
 $isPro = $yoco->isPro($user['family_id']);
@@ -67,12 +72,7 @@ $pageJS = ['/upgrade/js/billing.js'];
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
-</div>
-
-<main class="main-content">
+<main class="main-content family-main">
     <div class="container">
         
         <!-- Header -->

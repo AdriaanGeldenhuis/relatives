@@ -117,8 +117,8 @@ function enableEditMessage(messageId) {
         <div class="message-edit-container">
             <textarea class="message-edit-input" maxlength="5000">${escapeHtml(currentText)}</textarea>
             <div class="message-edit-actions">
-                <button onclick="saveEditedMessage(${messageId})" class="btn-save">💾 Save</button>
-                <button onclick="cancelEdit(${messageId})" class="btn-cancel">✖️ Cancel</button>
+                <button onclick="saveEditedMessage(${messageId})" class="btn btn-primary btn-sm">💾 Save</button>
+                <button onclick="cancelEdit(${messageId})" class="btn btn-sm">✖️ Cancel</button>
             </div>
             <div class="edit-info">Press Ctrl+Enter to save, Esc to cancel</div>
         </div>
@@ -262,7 +262,7 @@ function openSearchDialog() {
                             </div>
                         </div>
                         
-                        <button onclick="performSearch()" class="btn-search">Search</button>
+                        <button onclick="performSearch()" class="btn btn-primary">Search</button>
                     </div>
                     
                     <div id="searchResults" class="search-results"></div>

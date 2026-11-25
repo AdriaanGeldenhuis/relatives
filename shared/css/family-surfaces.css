@@ -54,29 +54,16 @@ body.family-page {
 }
 .family-hero .family-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
 .family-hero :focus-visible { outline: 2px solid #d9f491; outline-offset: 3px; }
-.family-hero .family-button {
-    display: inline-flex;
-    min-height: 42px;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    padding: 8px 14px;
-    border: 1px solid #ffffff52;
-    border-radius: 10px;
-    background: #ffffff0c;
-    color: #fffdf0;
-    font: 700 .82rem/1.25 var(--family-body);
-    white-space: nowrap;
-    text-decoration: none;
-    cursor: pointer;
+.family-hero {
+    --button-fill: #ffffff0c;
+    --button-border: #ffffff52;
+    --button-ink: #fffdf0;
+    --control-hover: #ffffff25;
+    --control-primary: var(--family-lime);
+    --control-primary-ink: #213525;
+    --control-primary-hover: #edffb5;
+    --control-focus: #d9f491;
 }
-.family-hero .family-button:hover { background: #ffffff25; }
-.family-hero :is(.family-button-primary, .family-button.active) {
-    border-color: var(--family-lime);
-    background: var(--family-lime);
-    color: #213525;
-}
-.family-hero :is(.family-button-primary, .family-button.active):hover { background: #edffb5; }
 .family-hero .family-hero-art {
     position: absolute;
     inset: 0 0 0 auto;
@@ -110,6 +97,6 @@ body.family-page {
     .family-hero .family-hero-title { font-size: clamp(2.5rem, 12vw, 3.55rem); }
     .family-hero .family-hero-summary { max-width: 235px; margin-top: 8px; line-height: 1.4; }
     .family-hero .family-actions { margin-top: 16px; gap: 5px; }
-    .family-hero .family-button { padding-inline: 8px; font-size: .75rem; }
+    .family-hero .family-actions { --button-padding: 8px; --button-size: .76rem; }
     .family-hero .family-hero-art { right: -19px; width: 36%; opacity: .3; }
 }

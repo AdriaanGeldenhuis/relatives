@@ -226,7 +226,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         </div>
                     </div>
                 </div>
-                <button type="button" class="btn btn-permission" id="btnRequestMicrophone" onclick="requestMicrophonePermission()">
+                <button type="button" class="btn btn-sm" id="btnRequestMicrophone" onclick="requestMicrophonePermission()">
                     <span class="btn-text">Allow</span>
                 </button>
             </div>
@@ -243,7 +243,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         </div>
                     </div>
                 </div>
-                <button type="button" class="btn btn-permission" id="btnRequestNotification" onclick="requestNotificationPermission()">
+                <button type="button" class="btn btn-sm" id="btnRequestNotification" onclick="requestNotificationPermission()">
                     <span class="btn-text">Allow</span>
                 </button>
             </div>
@@ -260,7 +260,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         </div>
                     </div>
                 </div>
-                <button type="button" class="btn btn-permission" id="btnRequestLocation" onclick="requestLocationPermission()">
+                <button type="button" class="btn btn-sm" id="btnRequestLocation" onclick="requestLocationPermission()">
                     <span class="btn-text">Allow</span>
                 </button>
             </div>

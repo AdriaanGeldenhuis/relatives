@@ -42,7 +42,7 @@ body[data-area="weather"] { --footer-height: 56px; }
 .wx-search-popover p { padding: 8px 10px; color: var(--family-muted); }
 .wx-search-popover p:empty { display: none; }
 .wx-places, .wx-layout { display: flex; flex-wrap: wrap; gap: 5px; }
-.wx-button, .wx-layout button, .wx-places button {
+.wx-layout button, .wx-places button {
     min-height: 40px;
     padding: 7px 12px;
     border: 1px solid var(--family-line);
@@ -52,7 +52,7 @@ body[data-area="weather"] { --footer-height: 56px; }
     font: 700 .82rem/1.25 var(--family-body);
 }
 .wx-places button { background: transparent; border-color: transparent; }
-.wx-button:hover, .wx-layout button:hover, .wx-places button:hover,
+.wx-layout button:hover, .wx-places button:hover,
 .wx-layout button[aria-pressed="true"], .wx-places button[aria-pressed="true"] { background: var(--app-soft); border-color: var(--family-line); }
 
 .wx-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

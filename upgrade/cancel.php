@@ -16,12 +16,7 @@ $pageCSS = ['/upgrade/css/upgrade.css'];
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
-<div class="bg-animation">
-    <div class="bg-gradient"></div>
-    <canvas id="particles"></canvas>
-</div>
-
-<main class="main-content">
+<main class="main-content family-main">
     <div class="container">
         
         <div class="result-card cancel-card">
@@ -52,7 +47,5 @@ require_once __DIR__ . '/../shared/components/header.php';
         
     </div>
 </main>
-
-<script src="/home/js/home.js?v=<?php echo $cacheVersion; ?>"></script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

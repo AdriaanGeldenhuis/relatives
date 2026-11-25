@@ -346,7 +346,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <div class="panel-empty">
                     <span aria-hidden="true">🌴</span>
                     <p>Nothing scheduled — enjoy the calm.</p>
-                    <a href="/calendar/" class="pill-btn">Plan something</a>
+                    <a href="/calendar/" class="btn btn-primary">Plan something</a>
                 </div>
                 <?php endif; ?>
             </section>

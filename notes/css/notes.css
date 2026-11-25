@@ -57,29 +57,7 @@ body.workspace-page[data-area="notes"] {
 .workspace-page :is(.notes-main, .notes-dialog, .notes-gallery) :focus-visible { outline-color: #3c7548; }
 .workspace-page .notes-gallery :focus-visible { outline-color: #d9f491; }
 
-.notes-button, .notes-upload {
-    display: inline-flex;
-    min-height: 42px;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    padding: 8px 14px;
-    border: 1px solid var(--notes-border);
-    border-radius: 10px;
-    background: var(--notes-paper);
-    font-weight: 700 !important;
-    font-size: .82rem !important;
-    line-height: 1.25;
-    white-space: nowrap;
-}
-
-.notes-button:hover { background: #eff2e5; }
 .notes-button .notes-icon { width: 16px; height: 16px; }
-.notes-button.notes-button-primary { border-color: var(--family-green); background: var(--family-green); color: #fffdf5; }
-.notes-button.notes-button-primary:hover { background: color-mix(in srgb, var(--family-green) 82%, #18131c); }
-.notes-button.notes-button-danger { border-color: #99382c; background: #99382c; color: #fff; }
-.notes-button.notes-button-danger:hover { background: #7e2d23; }
-.notes-button.notes-button-small { min-height: 35px; padding: 5px 9px; font-size: .76rem !important; }
 
 .notes-toolbar {
     display: flex;

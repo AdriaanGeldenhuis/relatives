@@ -51,7 +51,6 @@
 .workspace-page[data-area="notes"] { --workspace-hero-edge: #59523b; }
 .workspace-page[data-area="shopping"] { --workspace-hero-edge: #52613b; }
 .workspace-page[data-area="schedule"] { --workspace-hero-edge: #424f40; }
-.workspace-page[data-area="notifications"] { --workspace-hero-edge: #615331; }
 .workspace-page[data-area="weather"] { --workspace-hero-edge: #2e5b54; }
 .workspace-page[data-area="games"] { --workspace-hero-edge: #4e5735; }
 

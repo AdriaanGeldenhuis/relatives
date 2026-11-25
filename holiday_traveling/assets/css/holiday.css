@@ -100,63 +100,6 @@ body[data-area="holiday_traveling"] {
 /* ============================================
    BUTTONS
    ============================================ */
-.ht-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 12px 20px;
-    border-radius: var(--ht-radius-md);
-    font-size: 14px;
-    font-weight: 600;
-    text-decoration: none;
-    border: none;
-    cursor: pointer;
-    transition: var(--ht-transition);
-    white-space: nowrap;
-}
-
-.ht-btn-primary {
-    background: var(--ht-primary);
-    color: white;
-    box-shadow: var(--ht-shadow-md);
-}
-
-.ht-btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--ht-shadow-lg);
-}
-
-.ht-btn-secondary {
-    background: var(--ht-glass-heavy);
-    color: white;
-    border: 1px solid var(--ht-glass-border);
-}
-
-.ht-btn-secondary:hover {
-    background: var(--ht-glass-medium);
-}
-
-.ht-btn-outline {
-    background: transparent;
-    color: white;
-    border: 1px solid var(--ht-glass-border);
-}
-
-.ht-btn-outline:hover {
-    background: var(--ht-glass-light);
-}
-
-.ht-btn-danger {
-    background: var(--ht-danger);
-    color: white;
-}
-
-.ht-btn-lg {
-    padding: 16px 28px;
-    font-size: 16px;
-}
-
 .ht-btn-create {
     width: 100%;
     margin-top: 8px;
@@ -1129,16 +1072,6 @@ body[data-area="holiday_traveling"] {
 .ht-trip-header-actions {
     display: flex;
     gap: 8px;
-}
-
-.ht-btn-sm {
-    padding: 8px 14px;
-    font-size: 13px;
-}
-
-.ht-btn-xs {
-    padding: 6px 10px;
-    font-size: 12px;
 }
 
 .ht-plan-version-bar {
@@ -2199,16 +2132,6 @@ body[data-area="holiday_traveling"] {
     border-top: 1px solid var(--ht-glass-border);
 }
 
-.ht-btn-danger {
-    border-color: var(--ht-danger);
-    color: var(--ht-danger);
-}
-
-.ht-btn-danger:hover {
-    background: var(--ht-danger);
-    color: #fff;
-}
-
 .ht-text-danger {
     color: var(--ht-danger) !important;
 }
@@ -2360,12 +2283,6 @@ body[data-area="holiday_traveling"] {
 .ht-trip-header .ht-badge { background: #e8ebdf; }
 .ht-trip-header-actions { flex-wrap: wrap; }
 :is(.ht-create-trip, .ht-edit-trip, .ht-share-trip) > .ht-page-header { display: block; }
-
-.ht-btn { min-height: 42px; padding: 8px 14px; border-radius: 10px; }
-.ht-btn-primary { background: var(--family-lime); color: var(--family-ink); box-shadow: none; }
-.ht-btn-primary:hover { background: #edffb5; box-shadow: var(--ht-shadow-sm); }
-.ht-btn-secondary, .ht-btn-outline { background: var(--family-paper); color: var(--family-green); }
-.ht-btn-secondary:hover, .ht-btn-outline:hover { background: var(--app-soft); }
 
 .ht-section-title, .ht-empty-title, .ht-modal-title {
     font-family: var(--family-display);

@@ -544,7 +544,7 @@
     max-width: 320px;
 }
 
-.empty-state .pill-btn { margin-top: 8px; }
+.empty-state .btn { margin-top: 8px; }
 
 /* ============================================
    MODAL EXTRAS
@@ -942,11 +942,7 @@ body.workspace-page[data-area="shopping"] {
 body[data-area="shopping"] .modal-content { background: var(--family-paper); box-shadow: 0 24px 64px #142f1d6a; }
 body[data-area="shopping"] .modal-header { background: var(--family-paper); }
 body[data-area="shopping"] .form-control { background: #fffef9; }
-body[data-area="shopping"] .btn { background: var(--family-paper); border-color: var(--family-line); color: var(--family-ink); border-radius: 9px; box-shadow: none; }
-body[data-area="shopping"] :is(.btn-primary, .btn-success) { background: var(--family-green); color: #fffdf2; border-color: var(--family-green); }
-body[data-area="shopping"] .btn-danger { background: #953b30; color: #fff; }
 .shopping-toast { background: #244a39; color: #fffdf1; box-shadow: 0 4px 12px #203a273b; }
-.shopping-content .pill-btn.primary { background: var(--family-lime); border-color: var(--family-lime); color: var(--family-ink); }
 
 @media (max-width: 555px) {
 }

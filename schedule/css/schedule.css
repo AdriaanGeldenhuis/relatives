@@ -6,7 +6,6 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
     --planner-forest: #19392c;
     --planner-green: #2d5c43;
     --planner-line: #d9dfd1;
-    --planner-lime: #def69c;
     --planner-display: Georgia, 'Times New Roman', serif;
     --footer-height: 56px;
     background: var(--planner-canvas);
@@ -53,7 +52,7 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
 .planner-hero p { color: #dce7d4; margin-top: 10px; }
 .planner-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 20px; }
 
-.planner-hero-button, .planner-control, .planner-icon-button, .planner-main .btn, dialog.planner-modal .btn {
+.planner-icon-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -71,13 +70,7 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
     text-decoration: none;
     white-space: nowrap;
 }
-.planner-control:hover, .planner-icon-button:hover, dialog.planner-modal .btn-secondary:hover { background: var(--app-soft); }
-.planner-main .btn-primary, dialog.planner-modal .btn-primary { background: var(--planner-green); border-color: var(--planner-green); color: #fffdf4; }
-.planner-main .btn-primary:hover, dialog.planner-modal .btn-primary:hover { background: #254b37; }
-.planner-hero .btn-primary { background: var(--planner-lime); color: #203828; border-color: var(--planner-lime); }
-.planner-hero .btn-primary:hover { background: #eaffad; }
-.planner-hero-button { background: #ffffff12; border-color: #ffffff61; color: inherit; }
-.planner-hero-button:hover { background: #ffffff29; }
+.planner-icon-button:hover { background: var(--app-soft); }
 .planner-tools, .planner-event-menu { position: relative; }
 .planner-tools summary, .planner-event-menu summary { list-style: none; }
 .planner-tools summary::-webkit-details-marker, .planner-event-menu summary::-webkit-details-marker { display: none; }
@@ -376,7 +369,7 @@ dialog.planner-modal .schedule-toast { position: static; transform: none; width:
     .planner-hero h1 { font-size: clamp(2.25rem, 10vw, 3.65rem); }
     .planner-hero p { max-width: 240px; font-size: .85rem; margin-top: 6px; }
     .planner-hero-actions { margin-top: 14px; gap: 4px; }
-    .planner-hero-button, .planner-hero .btn { padding-inline: 8px; }
+    .planner-hero-actions { --button-padding: 8px; }
     .planner-toolbar { gap: 5px; padding-bottom: 7px; }
     .planner-views a { padding-inline: 8px; }
     .planner-date-actions .planner-control { padding-inline: 8px; }

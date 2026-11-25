@@ -207,7 +207,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <div class="empty-icon">🛒</div>
                     <h2>Your list is empty</h2>
                     <p>Add your first item and the family sees it instantly</p>
-                    <button onclick="showAddItemModal()" class="pill-btn primary">＋ Add first item</button>
+                    <button onclick="showAddItemModal()" class="btn btn-primary">＋ Add first item</button>
                 </div>
 
                 <!-- Progress + stats strip -->

@@ -87,7 +87,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             <h1>Family schedule</h1>
             <p>See what’s coming up and make time for what matters.</p>
             <div class="planner-hero-actions">
-                <button type="button" class="btn btn-primary" onclick="showQuickAdd()"><span aria-hidden="true">＋</span> Add event</button>
+                <button type="button" class="btn btn-primary" data-schedule-add aria-haspopup="dialog" aria-controls="eventEditor"><span aria-hidden="true">＋</span> Add event</button>
                 <button type="button" class="planner-hero-button" onclick="startFocusMode()" id="scheduleFocusButton"><?= $activeFocusSession ? 'Resume focus' : 'Start focus' ?></button>
                 <details class="planner-tools">
                     <summary class="planner-hero-button">Tools</summary>

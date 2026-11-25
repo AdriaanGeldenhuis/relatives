@@ -668,33 +668,15 @@ body.tracking-page .menu-backdrop {
 
 .consent-actions { display: flex; gap: 10px; }
 
-.consent-btn {
-    flex: 1;
-    padding: 12px 18px;
-    border-radius: var(--trk-radius-sm);
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all var(--trk-transition);
-    border: none;
-    text-align: center;
+.consent-btn { flex: 1; }
+
+body.tracking-page .consent-overlay {
+    --button-fill: var(--trk-card-bg);
+    --button-ink: #fff;
+    --button-border: var(--trk-card-border);
+    --control-hover: var(--trk-glass-heavy);
+    --control-focus: var(--app-accent);
 }
-
-.consent-btn-primary {
-    background: var(--trk-gradient);
-    color: white;
-    box-shadow: 0 4px 16px rgba(73, 135, 87, 0.4);
-}
-
-.consent-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(73, 135, 87, 0.6); }
-
-.consent-btn-secondary {
-    background: var(--trk-card-bg);
-    color: var(--trk-text-muted);
-    border: 1px solid var(--trk-card-border);
-}
-
-.consent-btn-secondary:hover { background: var(--trk-glass-heavy); color: var(--trk-text); }
 
 /* ============================================
    NOTIFICATION PROMPT
@@ -1372,19 +1354,7 @@ body.tracking-page .menu-backdrop {
 .form-toggle-label { font-size: 14px; font-weight: 500; color: var(--trk-text); }
 .form-toggle-desc { font-size: 11px; color: var(--trk-text-dim); margin-top: 2px; }
 
-.settings-save-btn {
-    width: 100%; padding: 14px;
-    border: none; border-radius: var(--trk-radius-sm);
-    background: var(--trk-gradient);
-    color: white; font-size: 15px; font-weight: 700;
-    cursor: pointer;
-    transition: all var(--trk-transition);
-    box-shadow: 0 4px 16px rgba(73, 135, 87, 0.4);
-}
-
-.settings-save-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(73, 135, 87, 0.6); }
-.settings-save-btn:active { transform: translateY(0); }
-.settings-save-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.settings-save-btn { width: 100%; }
 
 .settings-readonly-notice {
     padding: 14px 18px;
@@ -1411,18 +1381,6 @@ body.tracking-page .menu-backdrop {
 .tracking-content-title { font-size: 22px; font-weight: 800; color: var(--trk-text); }
 .tracking-content-subtitle { font-size: 13px; color: var(--trk-text-muted); margin-top: 4px; }
 
-.tracking-add-btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 10px 20px; border-radius: 24px;
-    background: var(--trk-gradient); color: white;
-    font-size: 13px; font-weight: 700;
-    cursor: pointer; border: none;
-    transition: all var(--trk-transition);
-    box-shadow: 0 4px 16px rgba(73, 135, 87, 0.4);
-    text-decoration: none;
-}
-
-.tracking-add-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(73, 135, 87, 0.6); }
 .tracking-add-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.5; }
 
 .tracking-back {
@@ -1586,7 +1544,6 @@ body:has(.tracking-settings) {
 .tracking-settings .tracking-content-subtitle { color: #dae6cf; }
 .tracking-settings .tracking-back { color: #28563e; }
 .tracking-settings :is(.form-input, .form-select) { background-color: #fffef9; }
-.tracking-settings .settings-save-btn { background: #28563e; box-shadow: none; border-radius: 9px; }
 .tracking-settings :focus-visible { outline: 2px solid #3c7548; outline-offset: 2px; }
 @media (max-width: 480px) {
     .tracking-settings .settings-card { padding: 14px; }

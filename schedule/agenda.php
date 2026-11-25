@@ -98,7 +98,7 @@ $dateLabel = $viewMode === 'week'
                         <span aria-hidden="true">＋</span>
                         <h3>Nothing scheduled</h3>
                         <p>Add an event to <?= $day->format('l') ?>’s agenda.</p>
-                        <button type="button" class="btn btn-primary" onclick="showQuickAdd()">Add event</button>
+                        <button type="button" class="btn btn-primary" data-schedule-add aria-haspopup="dialog" aria-controls="eventEditor">Add event</button>
                     </div>
                 <?php else: ?>
                     <div class="planner-entries">

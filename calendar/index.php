@@ -131,7 +131,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             <h1>Family calendar</h1>
             <p>Birthdays, appointments and plans for the whole family.</p>
             <div class="planner-hero-actions">
-                <button type="button" class="btn btn-primary" data-calendar-add><span aria-hidden="true">＋</span> Add event</button>
+                <button type="button" class="btn btn-primary" data-calendar-add aria-haspopup="dialog" aria-controls="eventEditor"><span aria-hidden="true">＋</span> Add event</button>
                 <a class="planner-hero-button" id="calendarScheduleLink" href="/schedule/?date=<?= $selectedDate ?>">Open Schedule</a>
             </div>
         </div>

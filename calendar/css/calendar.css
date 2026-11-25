@@ -215,7 +215,7 @@
 }
 @media (max-width: 555px) {
     .calendar-hero { min-height: 0; }
-    .calendar-event-actions .btn { padding-inline: 7px; }
+    .calendar-event-actions { --button-padding: 8px 7px; }
 }
 
 .calendar-cell-date, .calendar-mini-event, .calendar-agenda-event { text-decoration: none; }
