@@ -45,14 +45,15 @@ internal data class FamilyWake(val id: String, val scope: String, val expiresAtM
                 WakeReceiptWorker.enqueue(context, id, state, expiry, highPriority)
                 return
             }
-            if (!prefs.claimWakeNotice(id)) return
 
             val wake = FamilyWake(id, consent.scope, expiry)
-            val started = TrackingService.canReviveFromBackground(context) &&
-                (TrackingService.isRunning || highPriority) &&
-                TrackingService.startFamilyWake(context, wake)
-            TrackingService.showFamilyRefreshNotification(context, wake, needsOpen = !started)
-            if (!started) WakeReceiptWorker.enqueue(context, id, "open_required", expiry, highPriority)
+            val started = TrackingService.appVisible ||
+                (TrackingService.canReviveFromBackground(context) && (TrackingService.isRunning || highPriority))
+            val refreshing = started && TrackingService.startFamilyWake(context, wake)
+            if (prefs.claimWakeNotice(id)) {
+                TrackingService.showFamilyRefreshNotification(context, data["requester_name"])
+            }
+            if (!refreshing) WakeReceiptWorker.enqueue(context, id, "background_blocked", expiry, highPriority)
         }
 
         suspend fun acknowledge(context: Context, cookie: String, id: String, state: String): TrackingTransport.Reply? {

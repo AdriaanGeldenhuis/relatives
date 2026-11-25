@@ -38,3 +38,25 @@ function weatherTrackedLocation(PDO $db, int $userId, int $familyId): ?array
 
     return null;
 }
+
+function weatherSavedCity(PDO $db, int $userId): ?array
+{
+    try {
+        $stmt = $db->prepare('SELECT name, lat, lon FROM weather_saved_cities WHERE user_id = ?');
+        $stmt->execute([$userId]);
+        $city = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $city ? ['name' => $city['name'], 'lat' => (float) $city['lat'], 'lon' => (float) $city['lon']] : null;
+    } catch (PDOException $error) {
+        if ($error->getCode() !== '42S02') {
+            throw $error;
+        }
+        return null;
+    }
+}
+
+function weatherLocationForUser(PDO $db, int $userId, int $familyId): array
+{
+    return weatherTrackedLocation($db, $userId, $familyId)
+        ?? weatherSavedCity($db, $userId)
+        ?? ['lat' => -26.2041, 'lon' => 28.0473, 'name' => 'Johannesburg'];
+}

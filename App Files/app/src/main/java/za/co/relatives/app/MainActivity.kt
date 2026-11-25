@@ -33,6 +33,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.collect
 import androidx.lifecycle.withResumed
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.Job
@@ -41,7 +42,6 @@ import za.co.relatives.app.data.TrackingStore
 import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.services.FcmRegistrationWorker
 import za.co.relatives.app.tracking.FamilyPoller
-import za.co.relatives.app.tracking.FamilyWake
 import za.co.relatives.app.tracking.GmsSupport
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
@@ -96,7 +96,6 @@ class MainActivity : ComponentActivity() {
     private var webLocationPermissionUntil = 0L
     private var webPageLoad = 0L
     private var webOwnsFamilyPolling = false
-    private var handledWake: String? = null
     private var visiblePolicyRefresh: Job? = null
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
@@ -126,6 +125,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lifecycleScope.launch {
+            (application as RelativesApplication).notificationEvents.collect {
+                refreshVisibleNotifications()
+            }
+        }
 
         prefs = (application as? RelativesApplication)?.preferencesManager
             ?: PreferencesManager(this)
@@ -160,11 +164,11 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleDeepLink(intent)
-        maybeRunWakeFromNotification()
     }
 
     override fun onResume() {
         super.onResume()
+        TrackingService.appVisible = true
         backCallback.isEnabled = true
         enterImmersiveMode()
         CookieManager.getInstance().flush()
@@ -184,9 +188,9 @@ class MainActivity : ComponentActivity() {
         // Poll only while the app is actually in the foreground.
         syncNativeSession(webView.url)
         familyPoller.start()
+        refreshVisibleNotifications()
         syncFcmToken()
         FcmRegistrationWorker.enqueue(this)
-        maybeRunWakeFromNotification()
         if (isTrackingMap(webView.url)) {
             refreshVisibleTrackingPolicy()
             webView.evaluateJavascript("window.dispatchEvent(new Event('relativestrackingresume'))", null)
@@ -201,20 +205,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onPostResume() {
-        super.onPostResume()
-        maybeRunWakeFromNotification()
-    }
-
-    private fun maybeRunWakeFromNotification() {
-        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
-        val wake = FamilyWake.from(intent) ?: return
-        if (handledWake == wake.id || prefs.trackingConsent()?.scope != wake.scope) return
-        handledWake = wake.id
-        TrackingService.startFamilyWake(this, wake)
-    }
-
     override fun onPause() {
+        TrackingService.appVisible = false
         super.onPause()
         // Persist cookies NOW. Chromium commits cookies to disk lazily; if the
         // process dies while we're paused, a login cookie set since the last
@@ -306,6 +298,16 @@ class MainActivity : ComponentActivity() {
     }
 
     fun requestNotificationPermission() = permissionGate.requestNotifications()
+
+    fun openNotificationSettings() {
+        startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName))
+    }
+
+    private fun refreshVisibleNotifications() {
+        if (!::webView.isInitialized || !TrackingService.appVisible || !isTrustedUrl(webView.url?.let(Uri::parse))) return
+        webView.evaluateJavascript("window.dispatchEvent(new Event('relativesnotification'))", null)
+    }
 
     fun wakeAllDevices() {
         if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {

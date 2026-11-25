@@ -12,7 +12,9 @@
     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
     # Notes serves these files after checking the requester's family.
-    RewriteRule ^saves/notes-private(?:/|$) - [F]
+    RewriteRule ^(?:saves/(?:notes-private|[0-9]+/notes)|uploads/(?:notes|voice))(?:/|$) - [F,NC]
+    RewriteRule ^(?:migrations|vendor|config|App[[:space:]]Files)(?:/|$) - [F,NC]
+    RewriteRule ^(?:uploads|saves)/.*\.(?:php[0-9]*|phtml|phar|cgi|pl|shtml)(?:[./]|$) - [F,NC]
 </IfModule>
 
 # Manifest

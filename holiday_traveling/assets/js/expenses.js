@@ -428,6 +428,11 @@
          * Render settlement content HTML
          */
         renderSettlementContent(data) {
+            if (data.currencies?.length > 1) {
+                return data.currencies.map(group =>
+                    `<section><h3>${this.escapeHtml(group.currency)}</h3>${this.renderSettlementContent(group)}</section>`
+                ).join('');
+            }
             const { currency, total, per_person, member_count, members, settlements } = data;
 
             let html = `

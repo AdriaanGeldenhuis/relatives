@@ -114,6 +114,8 @@ class TrackingService : Service() {
         var isRunning = false
             private set
 
+        @Volatile internal var appVisible = false
+
         fun start(context: Context) {
             if (!hasLocationPermission(context) || !canShowTrackingNotification(context)) return
             if (PreferencesManager(context).enableTracking()) safeStart(context, ACTION_START)
@@ -206,10 +208,9 @@ class TrackingService : Service() {
             if (isRunning) safeStart(context, ACTION_MOTION_PERMISSION)
         }
 
-        internal fun showFamilyRefreshNotification(context: Context, wake: FamilyWake? = null, needsOpen: Boolean = false) {
+        internal fun showFamilyRefreshNotification(context: Context, requester: String? = null) {
             createTrackingChannel(context)
             val open = Intent(context, MainActivity::class.java).putExtra("action_url", "/tracking/app/")
-            if (wake != null) wake.putInto(open)
             val openTracking = PendingIntent.getActivity(
                 context, 9002, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -220,7 +221,9 @@ class TrackingService : Service() {
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(context.getString(R.string.notif_title_tracking))
-                .setContentText(context.getString(if (needsOpen) R.string.tracking_notif_wake_open else R.string.tracking_notif_refresh))
+                .setContentText(requester?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                    context.getString(R.string.tracking_notif_refresh_by, it.take(80))
+                } ?: context.getString(R.string.tracking_notif_refresh))
                 .setContentIntent(openTracking)
                 .setAutoCancel(true)
                 .addAction(0, context.getString(R.string.tracking_notif_stop), stop)
@@ -749,7 +752,11 @@ class TrackingService : Service() {
                     FamilyWake.acknowledge(this@TrackingService, consent.sessionCookie, wake.id, wakeCapability(this@TrackingService))
                     return@launch
                 }
-                val acknowledgement = FamilyWake.acknowledge(this@TrackingService, consent.sessionCookie, wake.id, "received")
+                var acknowledgement = FamilyWake.acknowledge(this@TrackingService, consent.sessionCookie, wake.id, "received")
+                if ((acknowledgement == null || acknowledgement.code >= 500) && canCapture(consent)) {
+                    delay(500)
+                    acknowledgement = FamilyWake.acknowledge(this@TrackingService, consent.sessionCookie, wake.id, "received")
+                }
                 val data = acknowledgement?.data ?: return@launch
                 if (data.flag("acquire") != true || !canCapture(consent)) return@launch
                 val remaining = data.number("remaining_ms") ?: return@launch

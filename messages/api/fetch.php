@@ -1,178 +1,47 @@
 <?php
-/**
- * ============================================
- * MESSAGES API - FETCH MESSAGES
- * Retrieves messages for the family
- * Optimized for both web and native app
- * ============================================
- */
+declare(strict_types=1);
 
-require_once __DIR__ . '/../../core/session_boot.php';
+require_once __DIR__ . '/../../core/bootstrap.php';
+require_once __DIR__ . '/classes/MessageChanges.php';
 
-// Prevent output before headers
-ob_start();
-
-// Set headers
-header('Content-Type: application/json');
-header('Cache-Control: private, no-store, max-age=0');
-header('CDN-Cache-Control: no-store');
-
-// Enable error logging
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-
-// Authentication check
-if (!isset($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Not authenticated'
-    ]);
-    exit;
+header('Cache-Control: private, no-store');
+$user = (new Auth($db))->getCurrentUser();
+if (!$user) {
+    Response::error('Not authenticated', 401);
 }
-
-// Session-based throttle removed: it was fragile (crash leaves flag stuck)
-// The JS polling already prevents concurrent fetches via isLoadingMessages flag
-
+session_write_close();
+$family = (int) $user['family_id'];
+$since = filter_input(INPUT_GET, 'since', FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) ?: 0;
+$cursor = filter_input(INPUT_GET, 'cursor', FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+$focus = filter_input(INPUT_GET, 'message', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 0;
 try {
-    require_once __DIR__ . '/../../core/bootstrap.php';
-    
-    $userId = $_SESSION['user_id'];
-    
-    // Get user's family_id
-    $stmt = $db->prepare("SELECT family_id FROM users WHERE id = ? AND status = 'active'");
-    $stmt->execute([$userId]);
-    $user = $stmt->fetch();
-    
-    if (!$user) {
-        throw new Exception('User not found or inactive');
-    }
-    
-    $familyId = $user['family_id'];
-    
-    // Check if we're fetching new messages only (since parameter)
-    $since = isset($_GET['since']) ? (int)$_GET['since'] : 0;
-    
-    if ($since > 0) {
-        // Fetch only new messages since last ID
-        $stmt = $db->prepare("
-            SELECT
-                m.id,
-                m.user_id,
-                m.content,
-                m.message_type,
-                m.media_path,
-                m.reply_to_message_id,
-                m.created_at,
-                m.edited_at,
-                u.full_name,
-                u.avatar_color,
-                u.has_avatar,
-                (SELECT content FROM messages WHERE id = m.reply_to_message_id LIMIT 1) as reply_to_content
-            FROM messages m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.family_id = ?
-            AND m.id > ?
-            AND m.deleted_at IS NULL
-            ORDER BY m.created_at ASC
-            LIMIT 50
-        ");
-        $stmt->execute([$familyId, $since]);
+    $withChanges = MessageChanges::installed($db);
+    $db->beginTransaction();
+    if ($withChanges && is_int($cursor)) {
+        $data = MessageChanges::delta($db, $family, $cursor);
     } else {
-        // Fetch initial load - last 100 messages
-        $stmt = $db->prepare("
-            SELECT
-                m.id,
-                m.user_id,
-                m.content,
-                m.message_type,
-                m.media_path,
-                m.reply_to_message_id,
-                m.created_at,
-                m.edited_at,
-                u.full_name,
-                u.avatar_color,
-                u.has_avatar,
-                (SELECT content FROM messages WHERE id = m.reply_to_message_id LIMIT 1) as reply_to_content
-            FROM messages m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.family_id = ?
-            AND m.deleted_at IS NULL
-            ORDER BY m.created_at DESC
-            LIMIT 100
-        ");
-        $stmt->execute([$familyId]);
-    }
-    
-    $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Reverse order for initial load (oldest to newest)
-    if ($since === 0) {
-        $messages = array_reverse($messages);
-    }
-    
-    // Fetch reactions for each message
-    if (!empty($messages)) {
-        $messageIds = array_column($messages, 'id');
-        $placeholders = str_repeat('?,', count($messageIds) - 1) . '?';
-        
-        $reactionStmt = $db->prepare("
-            SELECT 
-                message_id,
-                user_id,
-                emoji
-            FROM message_reactions
-            WHERE message_id IN ($placeholders)
-            ORDER BY created_at ASC
-        ");
-        $reactionStmt->execute($messageIds);
-        $reactions = $reactionStmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Group reactions by message_id
-        $reactionsByMessage = [];
-        foreach ($reactions as $reaction) {
-            $reactionsByMessage[$reaction['message_id']][] = [
-                'user_id' => $reaction['user_id'],
-                'emoji' => $reaction['emoji']
-            ];
+        $revision = null;
+        if ($withChanges) {
+            $stmt = $db->prepare('SELECT revision FROM message_revisions WHERE family_id = ?');
+            $stmt->execute([$family]);
+            $revision = (string) ($stmt->fetchColumn() ?: 0);
         }
-        
-        // Add reactions to messages
-        foreach ($messages as &$message) {
-            $message['reactions'] = $reactionsByMessage[$message['id']] ?? [];
+        if ($since > 0) {
+            $messages = MessageChanges::selectRows($db, $family, 'AND m.id > ?', [$since], 'ORDER BY m.id LIMIT 50');
+        } else {
+            $messages = array_reverse(MessageChanges::selectRows($db, $family, '', [], 'ORDER BY m.id DESC LIMIT 100'));
         }
+        if ($focus && !in_array($focus, array_column($messages, 'id'))) {
+            $messages = array_merge(MessageChanges::selectRows($db, $family, 'AND m.id = ?', [$focus], ''), $messages);
+        }
+        $data = ['messages' => $messages, 'cursor' => $revision];
     }
-    
-    // Update last_seen for user
-    $updateStmt = $db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
-    $updateStmt->execute([$userId]);
-    
-    // Clear any output buffer
-    ob_end_clean();
-    
-    // Send response
-    echo json_encode([
-        'success' => true,
-        'messages' => $messages,
-        'count' => count($messages),
-        'since' => $since,
-        'timestamp' => time()
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    
-} catch (Exception $e) {
-    // Log error
-    error_log("Messages fetch error: " . $e->getMessage());
-    
-    // Clear output buffer
-    ob_end_clean();
-    
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Failed to fetch messages',
-        'error' => $e->getMessage()
-    ]);
+    $db->commit();
+    Response::json(['success' => true, 'count' => count($data['messages']), 'since' => $since, 'timestamp' => time()] + $data);
+} catch (Throwable $e) {
+    if ($db->inTransaction()) {
+        $db->rollBack();
+    }
+    error_log('Messages could not be fetched: ' . $e->getMessage());
+    Response::error('Failed to fetch messages', 500);
 }
-
-exit;

@@ -22,8 +22,10 @@ internal class TrackingBridge(private val activity: MainActivity) {
             if (!isMainFrame || !activity.isCurrentTrustedPage(view, origin)) return@addWebMessageListener
             val command = message.data ?: return@addWebMessageListener
             val path = view.url?.let { android.net.Uri.parse(it).path }
-            if (command == "notifications" && path?.startsWith("/notifications/") == true) {
+            if (path == "/profile/notifications.php" && command == "notifications") {
                 activity.requestNotificationPermission()
+            } else if (path == "/profile/notifications.php" && command == "notification_settings") {
+                activity.openNotificationSettings()
             } else if (command == "stop" && (path == "/profile/privacy.php" || path == "/legal/delete-account.php")) {
                 activity.stopTrackingService()
             } else if (command == "weather_location") {

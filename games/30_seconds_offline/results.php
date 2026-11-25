@@ -15,7 +15,7 @@ if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
 
 // Load bootstrap
 require_once __DIR__ . '/../../core/bootstrap.php';
-$cacheVersion = '1.0.0';
+$cacheVersion = '1.0.2';
 ?>
 <!DOCTYPE html>
 <html lang="en">

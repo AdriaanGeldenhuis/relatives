@@ -2,10 +2,12 @@ package za.co.relatives.app
 
 import android.app.Application
 import android.util.Log
+import kotlinx.coroutines.flow.MutableSharedFlow
 import za.co.relatives.app.utils.NotificationHelper
 import za.co.relatives.app.utils.PreferencesManager
 
 class RelativesApplication : Application() {
+    internal val notificationEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     lateinit var preferencesManager: PreferencesManager
         private set

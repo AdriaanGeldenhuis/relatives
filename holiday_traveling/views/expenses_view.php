@@ -39,15 +39,20 @@ $categories = [
     <div class="ht-expense-summary">
         <div class="ht-expense-total-card">
             <span class="ht-expense-total-label">Total Spent</span>
-            <span class="ht-expense-total-value"><?php echo ht_format_currency($grandTotal, $trip['budget_currency']); ?></span>
+            <span class="ht-expense-total-value"><?php
+                $totals = array_map(static fn(array $group): string =>
+                    htmlspecialchars(ht_format_currency($group['total_minor'] / 100, $group['currency']) . ' ' . $group['currency']),
+                    $categoryTotals);
+                echo $totals ? implode(' · ', $totals) : htmlspecialchars(ht_format_currency(0, $trip['budget_currency']));
+            ?></span>
             <span class="ht-expense-count"><?php echo count($expenses); ?> expense<?php echo count($expenses) !== 1 ? 's' : ''; ?></span>
         </div>
 
         <?php if ((float)$trip['budget_comfort'] > 0): ?>
         <div class="ht-budget-progress">
             <div class="ht-budget-bar">
-                <?php $percent = min(100, ($grandTotal / $trip['budget_comfort']) * 100); ?>
-                <div class="ht-budget-fill <?php echo $percent > 100 ? 'over-budget' : ($percent > 80 ? 'warning' : ''); ?>" style="width: <?php echo $percent; ?>%"></div>
+                <?php $percent = ($grandTotal / $trip['budget_comfort']) * 100; ?>
+                <div class="ht-budget-fill <?php echo $percent > 100 ? 'over-budget' : ($percent > 80 ? 'warning' : ''); ?>" style="width: <?php echo min(100, $percent); ?>%"></div>
             </div>
             <div class="ht-budget-labels">
                 <span><?php echo round($percent); ?>% of budget</span>
@@ -65,12 +70,14 @@ $categories = [
             By Category
         </h3>
         <div class="ht-category-grid">
-            <?php foreach ($categoryTotals as $cat => $total): ?>
+            <?php foreach ($categoryTotals as $group): ?>
+            <?php foreach ($group['categories'] as $cat => $total): ?>
             <div class="ht-category-card">
                 <span class="ht-category-icon"><?php echo $categories[$cat]['icon'] ?? '📦'; ?></span>
-                <span class="ht-category-amount"><?php echo ht_format_currency($total, $trip['budget_currency']); ?></span>
-                <span class="ht-category-label"><?php echo $categories[$cat]['label'] ?? ucfirst($cat); ?></span>
+                <span class="ht-category-amount"><?php echo htmlspecialchars(ht_format_currency($total / 100, $group['currency']) . ' ' . $group['currency']); ?></span>
+                <span class="ht-category-label"><?php echo htmlspecialchars($categories[$cat]['label'] ?? ucfirst($cat)); ?></span>
             </div>
+            <?php endforeach; ?>
             <?php endforeach; ?>
         </div>
     </div>
@@ -119,7 +126,7 @@ $categories = [
                         <?php endif; ?>
                     </span>
                 </div>
-                <span class="ht-expense-amount"><?php echo ht_format_currency($expense['amount'], $expense['currency']); ?></span>
+                <span class="ht-expense-amount"><?php echo htmlspecialchars(ht_format_currency($expense['amount'], $expense['currency'])); ?></span>
             </div>
             <?php endforeach; ?>
         </div>
@@ -164,7 +171,7 @@ $categories = [
                 <div class="ht-form-group">
                     <label class="ht-label">Amount *</label>
                     <div class="ht-input-group">
-                        <span class="ht-input-prefix"><?php echo $trip['budget_currency']; ?></span>
+                        <span class="ht-input-prefix"><?php echo htmlspecialchars($trip['budget_currency']); ?></span>
                         <input type="number" name="amount" class="ht-input" step="0.01" min="0.01" required>
                     </div>
                 </div>
@@ -204,7 +211,7 @@ $categories = [
     'use strict';
 
     const tripId = <?php echo $trip['id']; ?>;
-    const currency = '<?php echo $trip['budget_currency']; ?>';
+    const currency = <?= json_encode($trip['budget_currency'], JSON_HEX_TAG) ?>;
 
     // Initialize Expenses UI when DOM is ready
     if (document.readyState === 'loading') {

@@ -11,6 +11,7 @@ if (empty($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../core/bootstrap.php';
 require_once __DIR__ . '/location.php';
+require_once __DIR__ . '/../core/CSRF.php';
 
 $auth = new Auth($db);
 $user = $auth->getCurrentUser();
@@ -114,7 +115,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <script type="application/json" id="weatherSettings"><?= json_encode([
     'userId' => (int)$user['id'],
-    'trackedLocation' => $userLocation
+    'trackedLocation' => $userLocation,
+    'savedCity' => weatherSavedCity($db, (int) $user['id']),
+    'csrf' => CSRF::generate()
 ], JSON_HEX_TAG | JSON_THROW_ON_ERROR) ?></script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

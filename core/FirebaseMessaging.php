@@ -51,9 +51,9 @@ class FirebaseMessaging {
         return true;
     }
 
-    public function prepareSend(): bool {
+    public function prepareSend(int $timeoutMs = 5000): bool {
         $this->lastFailure = $this->configurationFailure;
-        return $this->isConfigured() && $this->getAccessToken() !== null;
+        return $this->isConfigured() && $this->getAccessToken($timeoutMs) !== null;
     }
 
     public function lastFailure(): string {
@@ -63,7 +63,7 @@ class FirebaseMessaging {
     /**
      * Get OAuth2 access token
      */
-    private function getAccessToken(): ?string {
+    private function getAccessToken(int $timeoutMs = 5000): ?string {
         // Check if cached token is still valid
         if ($this->accessToken && $this->tokenExpiry && time() < $this->tokenExpiry - 300) {
             return $this->accessToken;
@@ -107,8 +107,8 @@ class FirebaseMessaging {
             curl_setopt_array($ch, [
                 CURLOPT_POST => true,
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_CONNECTTIMEOUT => 3,
-                CURLOPT_TIMEOUT => 5,
+                CURLOPT_CONNECTTIMEOUT_MS => min(3000, $timeoutMs),
+                CURLOPT_TIMEOUT_MS => $timeoutMs,
                 CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
                 CURLOPT_POSTFIELDS => http_build_query([
                     'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
@@ -186,109 +186,134 @@ class FirebaseMessaging {
      * collapse_key keeps at most one pending copy per kind.
      */
     public function send(string $token, array $notification, array $data = [], array $androidOverrides = [], int $timeoutMs = 10000) {
-        $this->lastFailure = '';
-        // Get access token
-        $accessToken = $this->getAccessToken();
+        $job = ['token' => $token, 'notification' => $notification, 'data' => $data, 'android' => $androidOverrides];
+        $result = $this->sendBatch([$job], $timeoutMs)[0];
+        $this->lastFailure = $result['state'] === 'accepted' ? '' : $result['state'];
+        return match ($result['state']) {
+            'accepted' => true,
+            'invalid_token' => 'invalid_token',
+            default => false,
+        };
+    }
 
-        if (!$accessToken || !$this->projectId) {
-            $this->lastFailure = 'configuration';
-            // No fallback: Google removed the legacy fcm/send endpoint in
-            // June 2024, so the old "legacy server key" path can never
-            // deliver. Missing v1 credentials is a configuration error that
-            // must be fixed on the server, not silently retried.
-            error_log('FCM: Cannot send — FCM v1 credentials missing or invalid '
-                . '(service account: ' . ($this->serviceAccount ? 'present' : 'MISSING') . ', '
-                . 'project id: ' . ($this->projectId ?: 'MISSING') . '). '
-                . 'See config/firebase-setup-instructions.md');
-            return false;
+    /** Send independent FCM HTTP v1 requests within one shared time budget. */
+    public function sendBatch(array $jobs, int $timeoutMs): array {
+        if (!$jobs) {
+            return [];
+        }
+        $deadline = microtime(true) + $timeoutMs / 1000;
+        if (!$this->prepareSend(max(1, min($timeoutMs, 5000)))) {
+            $state = $this->lastFailure === 'firebase_auth_unavailable' ? 'temporary' : 'configuration';
+            return array_fill_keys(array_keys($jobs), ['state' => $state, 'retry_after' => 0]);
+        }
+        $results = array_fill_keys(array_keys($jobs), ['state' => 'temporary', 'retry_after' => 0]);
+        $remaining = (int) (($deadline - microtime(true)) * 1000);
+        if ($remaining < 1) {
+            return $results;
         }
 
+        $url = "https://fcm.googleapis.com/v1/projects/{$this->projectId}/messages:send";
+        $multi = curl_multi_init();
+        curl_multi_setopt($multi, CURLMOPT_MAX_TOTAL_CONNECTIONS, 12);
+        $requests = [];
         try {
-            // Include notification info in data payload for app to handle
-            // This ensures onMessageReceived() is always called
-            $dataPayload = array_merge($data, [
-                'title' => $notification['title'] ?? 'New Notification',
-                'body' => $notification['body'] ?? '',
-                'message' => $notification['body'] ?? '',
-                'icon' => $notification['icon'] ?? 'notification_icon',
-                'sound' => $notification['sound'] ?? 'default'
-            ]);
-
-            // Build FCM v1 message - DATA ONLY for Android to ensure onMessageReceived() is called
-            // This allows the app to handle navigation properly
-            $message = [
-                'message' => [
-                    'token' => $token,
-                    'data' => $this->stringifyData($dataPayload),
-                    'android' => array_merge([
-                        'priority' => 'high'
-                    ], $androidOverrides),
-                    'apns' => [
-                        'payload' => [
-                            'aps' => [
-                                'alert' => [
-                                    'title' => $notification['title'] ?? 'New Notification',
-                                    'body' => $notification['body'] ?? ''
-                                ],
-                                'sound' => $notification['sound'] ?? 'default',
-                                'badge' => 1
-                            ]
-                        ]
-                    ]
-                ]
-            ];
-
-            // Send to FCM v1 API
-            $url = "https://fcm.googleapis.com/v1/projects/{$this->projectId}/messages:send";
-
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER => [
-                    'Authorization: Bearer ' . $accessToken,
-                    'Content-Type: application/json'
-                ],
-                CURLOPT_POSTFIELDS => json_encode($message),
-                CURLOPT_CONNECTTIMEOUT_MS => min(3000, $timeoutMs),
-                CURLOPT_TIMEOUT_MS => $timeoutMs
-            ]);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 200) {
-                return true;
+            foreach ($jobs as $key => $job) {
+                $notice = $job['notification'] ?? [];
+                $data = array_merge($job['data'] ?? [], [
+                    'title' => $notice['title'] ?? 'Relatives',
+                    'body' => $notice['body'] ?? '',
+                    'message' => $notice['body'] ?? '',
+                    'icon' => $notice['icon'] ?? 'notification_icon',
+                    'sound' => $notice['sound'] ?? 'default',
+                ]);
+                $payload = ['message' => [
+                    'token' => $job['token'],
+                    'data' => $this->stringifyData($data),
+                    'android' => ($job['android'] ?? []) + ['priority' => 'high'],
+                    'apns' => ['payload' => ['aps' => [
+                        'alert' => ['title' => $data['title'], 'body' => $data['body']],
+                        'sound' => $data['sound'],
+                        'badge' => 1,
+                    ]]],
+                ]];
+                $retryAfter = 0;
+                $ch = curl_init($url);
+                curl_setopt_array($ch, [
+                    CURLOPT_POST => true,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_HTTPHEADER => [
+                        'Authorization: Bearer ' . $this->accessToken,
+                        'Content-Type: application/json',
+                    ],
+                    CURLOPT_POSTFIELDS => json_encode($payload, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE),
+                    CURLOPT_CONNECTTIMEOUT_MS => min(2000, $remaining),
+                    CURLOPT_TIMEOUT_MS => $remaining,
+                    CURLOPT_HEADERFUNCTION => static function ($handle, string $line) use (&$retryAfter): int {
+                        if (stripos($line, 'Retry-After:') === 0) {
+                            $retryAfter = self::retryAfter(trim(substr($line, 12)));
+                        }
+                        return strlen($line);
+                    },
+                ]);
+                $requests[spl_object_id($ch)] = ['handle' => $ch, 'key' => $key, 'retry_after' => &$retryAfter];
+                unset($retryAfter);
+                curl_multi_add_handle($multi, $ch);
             }
-
-            $responseData = json_decode(is_string($response) ? $response : '', true);
-            $errorCode = '';
-            foreach ($responseData['error']['details'] ?? [] as $detail) {
-                if (($detail['@type'] ?? '') === 'type.googleapis.com/google.firebase.fcm.v1.FcmError') {
-                    $errorCode = $detail['errorCode'] ?? '';
-                    break;
+            do {
+                $status = curl_multi_exec($multi, $running);
+                while ($completed = curl_multi_info_read($multi)) {
+                    $handle = $completed['handle'];
+                    $request = $requests[spl_object_id($handle)];
+                    $http = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+                    $body = (string) curl_multi_getcontent($handle);
+                    $results[$request['key']] = [
+                        'state' => self::resultState($http, $body),
+                        'retry_after' => $request['retry_after'],
+                    ];
+                    curl_multi_remove_handle($multi, $handle);
+                    unset($requests[spl_object_id($handle)]);
                 }
+                if ($running && $status === CURLM_OK) {
+                    if (curl_multi_select($multi, 0.1) === -1) {
+                        usleep(10000);
+                    }
+                }
+            } while ($running && $status === CURLM_OK && microtime(true) < $deadline);
+        } catch (Throwable) {
+            error_log('FCM transport error');
+        } finally {
+            foreach ($requests as $request) {
+                curl_multi_remove_handle($multi, $request['handle']);
             }
-            if ($errorCode === 'UNREGISTERED' || ($errorCode === 'INVALID_ARGUMENT'
-                && str_contains((string) ($responseData['error']['message'] ?? ''), 'not a valid FCM registration token'))) {
-                $this->lastFailure = 'invalid_token';
+            curl_multi_close($multi);
+        }
+        return $results;
+    }
+
+    public static function retryAfter(string $value): int {
+        $seconds = ctype_digit($value) ? (int) $value : (int) strtotime($value) - time();
+        return min(86400, max(0, $seconds));
+    }
+
+    private static function resultState(int $http, string $body): string {
+        if ($http === 200) {
+            return 'accepted';
+        }
+        $response = json_decode($body, true);
+        foreach ($response['error']['details'] ?? [] as $detail) {
+            if (($detail['@type'] ?? '') !== 'type.googleapis.com/google.firebase.fcm.v1.FcmError') {
+                continue;
+            }
+            if ($detail['errorCode'] === 'UNREGISTERED' || ($detail['errorCode'] === 'INVALID_ARGUMENT'
+                && str_contains((string) ($response['error']['message'] ?? ''), 'not a valid FCM registration token'))) {
                 return 'invalid_token';
             }
-
-            $this->lastFailure = match (true) {
-                in_array($httpCode, [401, 403, 404], true) => 'configuration',
-                $httpCode === 0 || $httpCode === 429 || $httpCode >= 500 => 'temporary',
-                default => 'rejected',
-            };
-            error_log("FCM v1 send failed: HTTP $httpCode ($this->lastFailure)");
-            return false;
-
-        } catch (Exception $e) {
-            $this->lastFailure = 'temporary';
-            error_log("FCM transport error");
-            return false;
         }
+        return match (true) {
+            in_array($http, [401, 403, 404], true) => 'configuration',
+            $http === 0 || $http === 429 || $http >= 500 => 'temporary',
+            default => 'rejected',
+        };
     }
 
     /**

@@ -12,6 +12,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/../core/CSRF.php';
 
 try {
     $auth = new Auth($db);
@@ -268,10 +269,11 @@ if (!$ajax) {
     </div>
 </dialog>
 
-<dialog id="preferencesModal" class="notifications-dialog notifications-dialog-wide" aria-labelledby="notificationSettingsTitle">
+<dialog id="preferencesModal" data-csrf="<?= htmlspecialchars(CSRF::generate()) ?>" class="notifications-dialog notifications-dialog-wide" aria-labelledby="notificationSettingsTitle">
     <div class="notifications-dialog-inner">
         <header>
             <h2 id="notificationSettingsTitle">Notification settings</h2>
+        <a href="/profile/notifications.php">Device notification settings</a>
             <button type="button" class="notifications-icon" aria-label="Close" data-notification-action="close">×</button>
         </header>
         <div id="preferencesContent" aria-live="polite"></div>

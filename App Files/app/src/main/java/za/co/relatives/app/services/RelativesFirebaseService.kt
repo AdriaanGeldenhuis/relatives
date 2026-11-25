@@ -112,7 +112,12 @@ class RelativesFirebaseService : FirebaseMessagingService() {
             title = title,
             body = body,
             actionUrl = actionUrl,
+            stableId = data["notification_id"]?.takeIf { it.length <= 20 && it.all(Char::isDigit) },
+            silent = data["silent"] == "1",
+            vibrate = data["vibrate"] != "0",
         )
+        data["receipt"]?.let { PushReceiptWorker.enqueue(this, it) }
+        (application as? RelativesApplication)?.notificationEvents?.tryEmit(Unit)
     }
 
     // ------------------------------------------------------------------ //

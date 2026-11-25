@@ -17,6 +17,8 @@ const MessageSystem = {
     
     // Message State
     lastMessageId: 0,
+    changeCursor: null,
+    retryDraft: null,
     replyToMessageId: null,
     contextMessageId: null,
     
@@ -186,7 +188,10 @@ async function loadInitialMessages() {
     try {
         const baseUrl = window.location.origin;
         const timestamp = Date.now();
-        const fullUrl = `${baseUrl}/messages/api/fetch.php?t=${timestamp}`;
+        const params = new URLSearchParams({ t: timestamp });
+        const focusedMessage = new URLSearchParams(location.search).get('message');
+        if (focusedMessage) params.set('message', focusedMessage);
+        const fullUrl = `${baseUrl}/messages/api/fetch.php?${params}`;
         
         console.log('🌐 Fetching:', fullUrl);
         
@@ -237,6 +242,7 @@ async function loadInitialMessages() {
         });
         
         if (data.success) {
+            MessageSystem.changeCursor = data.cursor ?? null;
             MessageSystem.loadRetryCount = 0;
             MessageSystem.initialLoadComplete = true;
             MessageSystem.isLoadingInitial = false;
@@ -255,7 +261,9 @@ async function loadInitialMessages() {
             } else {
                 displayMessages(data.messages, true);
                 MessageSystem.lastMessageId = Math.max(...data.messages.map(m => m.id));
-                console.log('✅ Last message ID:', MessageSystem.lastMessageId);
+                if (focusedMessage && /^\d+$/.test(focusedMessage)) {
+                    scrollToMessage(focusedMessage);
+                }
             }
         } else {
             throw new Error(data.message || 'UNKNOWN_ERROR');
@@ -351,58 +359,50 @@ function retryConnection() {
 // LOAD NEW MESSAGES (POLLING)
 // ============================================
 async function loadNewMessages() {
-    if (MessageSystem.isLoadingMessages || !MessageSystem.initialLoadComplete) {
-        return;
-    }
-    
+    if (document.hidden || MessageSystem.isLoadingMessages || !MessageSystem.initialLoadComplete) return;
+
     MessageSystem.isLoadingMessages = true;
-    
+    let more = false;
     try {
-        const baseUrl = window.location.origin;
-        const fullUrl = `${baseUrl}/messages/api/fetch.php?since=${MessageSystem.lastMessageId}&t=${Date.now()}`;
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        
-        const response = await fetch(fullUrl, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'Cache-Control': 'no-cache'
-            },
-            credentials: 'same-origin',
-            cache: 'no-store',
-            signal: controller.signal
+        const params = new URLSearchParams(MessageSystem.changeCursor === null
+            ? { since: MessageSystem.lastMessageId } : { cursor: MessageSystem.changeCursor });
+        const response = await fetch('/messages/api/fetch.php?' + params, {
+            credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000)
         });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        if (response.status === 401 || response.status === 403) {
+            updateConnectionStatus('error', 'Sign in to continue');
+            document.getElementById('messagesList').replaceChildren();
+            MessageSystem.initialLoadComplete = false;
+            stopPolling();
+            return;
         }
-        
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            throw new Error('Invalid response type');
-        }
-        
+        if (!response.ok) return;
         const data = await response.json();
-        
-        if (data.success && data.messages && data.messages.length > 0) {
-            console.log('📨 New messages:', data.messages.length);
-            displayMessages(data.messages, false);
-            MessageSystem.lastMessageId = Math.max(...data.messages.map(m => m.id));
-            playNotificationSound();
+        if (!data.success) return;
+        if (data.reset) {
+            MessageSystem.isLoadingMessages = false;
+            await loadInitialMessages();
+            return;
         }
-        
+
+        const container = document.getElementById('messagesList');
+        for (const id of data.removed ?? []) {
+            container.querySelector(`[data-message-id="${id}"]`)?.remove();
+        }
+        displayMessages(data.messages, false, true);
+        if (data.cursor != null) MessageSystem.changeCursor = data.cursor;
+        if (data.messages.length) {
+            MessageSystem.lastMessageId = Math.max(MessageSystem.lastMessageId, ...data.messages.map(m => m.id));
+        }
+        more = data.more === true;
     } catch (error) {
-        if (error.name !== 'AbortError') {
-            console.error('Error fetching new messages:', error.name);
+        if (error.name !== 'AbortError' && error.name !== 'TimeoutError') {
+            console.error('Error refreshing messages:', error.name);
         }
     } finally {
         MessageSystem.isLoadingMessages = false;
     }
+    if (more) setTimeout(loadNewMessages, 0);
 }
 
 // ============================================
@@ -452,7 +452,7 @@ function createDateSeparator(dateText) {
 // ============================================
 // DISPLAY MESSAGES
 // ============================================
-function displayMessages(messages, clearFirst = false) {
+function displayMessages(messages, clearFirst = false, applyEdits = false) {
     const container = document.getElementById('messagesList');
 
     if (clearFirst) {
@@ -466,7 +466,27 @@ function displayMessages(messages, clearFirst = false) {
 
     messages.forEach(msg => {
         const existing = container.querySelector(`[data-message-id="${msg.id}"]`);
-        if (existing) return;
+        if (existing) {
+            if (applyEdits && (existing.dataset.editedAt !== (msg.edited_at || '') || existing.dataset.editCount !== String(msg.edit_count ?? 0)
+                || existing.dataset.pinned !== String(Boolean(Number(msg.pinned))))) {
+                existing.replaceWith(createMessageElement(msg));
+            }
+            return;
+        }
+
+        const later = [...container.querySelectorAll(':scope > .message')].find(row => BigInt(row.dataset.messageId) > BigInt(msg.id));
+        if (later) {
+            const earlier = later.previousElementSibling;
+            const date = new Date(msg.created_at).toDateString();
+            if (later.dataset.day === date || earlier?.dataset.day === date) {
+                container.insertBefore(createMessageElement(msg), later);
+            } else {
+                const before = earlier?.classList.contains('date-separator') ? earlier : later;
+                container.insertBefore(createDateSeparator(formatDateSeparator(msg.created_at)), before);
+                container.insertBefore(createMessageElement(msg), before);
+            }
+            return;
+        }
 
         // Check if we need a date separator
         const msgDate = new Date(msg.created_at);
@@ -497,6 +517,10 @@ function createMessageElement(msg) {
     div.className = `message ${isOwn ? 'own' : ''} ${hasReactions ? 'has-reactions' : ''}`;
     div.dataset.messageId = msg.id;
     div.dataset.userId = msg.user_id;
+    div.dataset.day = new Date(msg.created_at).toDateString();
+    div.dataset.editedAt = msg.edited_at || '';
+    div.dataset.editCount = String(msg.edit_count ?? 0);
+    div.dataset.pinned = String(Boolean(Number(msg.pinned)));
 
     // Avatar with image support
     const avatarContent = msg.has_avatar
@@ -690,18 +714,27 @@ async function sendMessage() {
     if (!content && MessageSystem.mediaFiles.length === 0) return;
     
     const sendBtn = document.getElementById('sendBtn');
+    if (sendBtn.disabled) return;
     sendBtn.disabled = true;
     sendBtn.textContent = '⏳';
+    const reply = MessageSystem.replyToMessageId;
+    const media = MessageSystem.mediaFiles.slice();
+    const prior = MessageSystem.retryDraft;
+    const sameDraft = prior && prior.content === content && prior.reply === reply
+        && prior.media.length === media.length && prior.media.every((file, index) => file === media[index]);
+    const draft = sameDraft ? prior : { id: crypto.randomUUID(), content, reply, media };
+    MessageSystem.retryDraft = draft;
     
     try {
         const formData = new FormData();
-        formData.append('content', content);
+        formData.append('content', draft.content);
+        formData.append('client_message_id', draft.id);
         
-        if (MessageSystem.replyToMessageId) {
-            formData.append('reply_to_message_id', MessageSystem.replyToMessageId);
+        if (draft.reply) {
+            formData.append('reply_to_message_id', draft.reply);
         }
-        
-        MessageSystem.mediaFiles.forEach((file, i) => {
+
+        draft.media.forEach(file => {
             formData.append('media[]', file);
         });
         
@@ -710,27 +743,29 @@ async function sendMessage() {
         const response = await fetch(url, {
             method: 'POST',
             body: formData,
-            credentials: 'same-origin'
+            headers: { 'X-CSRF-Token': sendBtn.dataset.csrf },
+            credentials: 'same-origin', signal: AbortSignal.timeout(45000)
         });
         
         const data = await response.json();
         
         if (data.success) {
-            input.value = '';
-            input.style.height = 'auto';
-            cancelReply();
-            cancelMedia();
+            MessageSystem.retryDraft = null;
+            if (input.value.trim() === draft.content) {
+                input.value = '';
+                input.style.height = 'auto';
+            }
+            if (MessageSystem.replyToMessageId === draft.reply) cancelReply();
+            if (MessageSystem.mediaFiles.length === draft.media.length
+                && MessageSystem.mediaFiles.every((file, index) => file === draft.media[index])) cancelMedia();
 
             // Instantly display the sent message from server response
             if (data.sent_message) {
                 displayMessages([data.sent_message], false);
-                if (data.sent_message.id > MessageSystem.lastMessageId) {
-                    MessageSystem.lastMessageId = data.sent_message.id;
-                }
                 scrollToBottom();
             }
         } else {
-            showError(data.message || 'Failed to send message');
+            showError(data.error || data.message || 'Failed to send message');
         }
     } catch (error) {
         console.error('Error sending message:', error);
@@ -1376,6 +1411,9 @@ function setupEventListeners() {
         }
     });
     
+    window.addEventListener('online', loadNewMessages);
+    window.addEventListener('relativesnotification', loadNewMessages);
+
     // Handle page unload
     window.addEventListener('beforeunload', function() {
         stopPolling();
@@ -1388,7 +1426,7 @@ function setupEventListeners() {
 
 // Reduced polling intervals to save battery
 // Push notifications handle real-time alerts; polling is just for thread refresh
-const MESSAGE_POLL_INTERVAL = isNativeApp ? 15000 : 10000;  // 15s native, 10s web
+const MESSAGE_POLL_INTERVAL = 5000;
 const TYPING_POLL_INTERVAL = isNativeApp ? 12000 : 8000;    // 12s native, 8s web
 
 function startPolling() {

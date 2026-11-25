@@ -29,7 +29,8 @@ if (!$user) {
     exit;
 }
 
-$userLocation = weatherTrackedLocation($db, (int)$user['id'], (int)$user['family_id']);
+$userLocation = weatherTrackedLocation($db, (int)$user['id'], (int)$user['family_id'])
+    ?? weatherSavedCity($db, (int)$user['id']);
 
 $stats = [
     'shopping_items' => 0,

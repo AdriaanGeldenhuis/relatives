@@ -21,7 +21,7 @@
         setTimeout(() => status.remove(), 3500);
     }
 
-    async function loadInbox(url = location.href, { push = false, focusFilter = false, historyNavigation = false } = {}) {
+    async function loadInbox(url = location.href, { push = false, focusFilter = false, historyNavigation = false, quiet = false } = {}) {
         const target = new URL(url, location.href);
         const fragment = new URL(target);
         fragment.searchParams.set('ajax', '1');
@@ -59,7 +59,7 @@
         } catch (error) {
             if (error.name !== 'AbortError') {
                 if (push || historyNavigation) location.assign(target);
-                else showToast('Could not refresh notifications.', true);
+                else if (!quiet) showToast('Could not refresh notifications.', true);
             }
         } finally {
             if (navigation === request) {
@@ -74,7 +74,7 @@
     }
 
     async function post(url, action, values = {}) {
-        const response = await fetch(url, { method: 'POST', body: new URLSearchParams({ action, ...values }) });
+        const response = await fetch(url, { method: 'POST', headers: { 'X-CSRF-Token': preferences.dataset.csrf }, body: new URLSearchParams({ action, ...values }) });
         const result = await response.json();
         if (!response.ok || !result.success) throw new Error(result.error || 'Request failed');
     }
@@ -103,6 +103,7 @@
         const values = new Map(data.preferences.map(pref => [pref.category, pref]));
         const weather = data.weather_schedule || { enabled: 1, notification_time: '07:00:00', voice_enabled: 1, include_forecast: 1 };
         const time = String(weather.notification_time).slice(0, 5);
+        const clock = (value, fallback) => /^\d{2}:\d{2}/.test(String(value)) ? value.slice(0, 5) : fallback;
         const toggle = (name, label, checked, category = '') => `
             <label class="pref-toggle">
                 <input type="checkbox" name="${name}" ${category ? `data-category="${category}"` : ''} ${Number(checked) ? 'checked' : ''}>
@@ -116,6 +117,9 @@
                         <legend>${title}</legend>
                         <div class="pref-controls">
                             ${settings.map(([name, label]) => toggle(name, label, values.get(category)?.[name] ?? 1, category)).join('')}
+                            ${toggle('quiet_hours_enabled', 'Quiet hours', values.get(category)?.quiet_hours_enabled ?? 0, category)}
+                            <label>From <input type="time" data-category="${category}" name="quiet_hours_start" value="${clock(values.get(category)?.quiet_hours_start, '22:00')}"></label>
+                            <label>To <input type="time" data-category="${category}" name="quiet_hours_end" value="${clock(values.get(category)?.quiet_hours_end, '07:00')}"></label>
                         </div>
                     </fieldset>`).join('')}
             </div>
@@ -154,16 +158,20 @@
     preferences.addEventListener('change', async event => {
         const control = event.target;
         if (!control.matches('input[data-category]')) return;
-        const checked = control.checked;
+        const checkbox = control.type === 'checkbox';
+        const setting = checkbox ? Number(control.checked) : control.value;
+        if (!checkbox && !setting) return;
         control.disabled = true;
         try {
             await post(preferencesUrl, 'update', {
                 category: control.dataset.category,
-                settings: JSON.stringify({ [control.name]: Number(checked) })
+                settings: JSON.stringify({ [control.name]: setting })
             });
+            if (!checkbox) control.defaultValue = setting;
             showToast('Preference saved.');
         } catch {
-            control.checked = !checked;
+            if (checkbox) control.checked = !Boolean(setting);
+            else control.value = control.defaultValue;
             showToast('Could not save the preference.', true);
         } finally {
             control.disabled = false;
@@ -246,5 +254,13 @@
 
     window.addEventListener('popstate', () => loadInbox(location.href, { focusFilter: true, historyNavigation: true }));
 
-    window.TrackingBridge?.requestNotificationPermission?.();
+    function refreshIfVisible() {
+        if (!document.hidden && !navigation && !document.querySelector('.notifications-dialog[open]')) {
+            loadInbox(location.href, { quiet: true });
+        }
+    }
+    window.addEventListener('relativesnotification', refreshIfVisible);
+    window.addEventListener('online', refreshIfVisible);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    setInterval(refreshIfVisible, 5000);
 })();

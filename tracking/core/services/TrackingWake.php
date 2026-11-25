@@ -5,7 +5,7 @@ final class TrackingWake
 {
     public const WINDOW_MS = 60000;
     public const PENDING = ['queued', 'sent', 'received', 'open_required'];
-    public const DEVICE_STATES = ['received', 'permission', 'notifications', 'paused', 'open_required', 'no_fix'];
+    public const DEVICE_STATES = ['received', 'permission', 'notifications', 'paused', 'open_required', 'background_blocked', 'no_fix'];
 
     public function __construct(private PDO $db) {}
 
@@ -104,10 +104,30 @@ final class TrackingWake
         };
     }
 
+    public function pendingDispatch(SiteContext $ctx, string $id): array
+    {
+        $registry = TrackingPolicy::hasInstallationRegistry($this->db);
+        $installation = $registry ? 'ft.installation_id' : 'NULL';
+        $session = $registry ? 'AND (t.installation_id IS NULL OR (
+            ft.installation_id = t.installation_id AND EXISTS (
+                SELECT 1 FROM sessions s WHERE s.user_id = u.id AND s.session_token = ft.wake_session_hash
+                    AND s.expires_at > NOW())))' : '';
+        $stmt = $this->db->prepare("SELECT t.token_id, t.user_id, ft.token, $installation AS installation_id,
+                r.expires_ms, sender.full_name AS requester_name
+            FROM tracking_wake_requests r JOIN tracking_wake_targets t ON t.request_id = r.request_id
+            JOIN users sender ON sender.id = r.requester_id AND sender.family_id = r.family_id AND sender.status = 'active'
+            JOIN fcm_tokens ft ON ft.id = t.token_id AND ft.user_id = t.user_id AND ft.device_type = 'android'
+            JOIN users u ON u.id = t.user_id AND u.family_id = r.family_id AND u.status = 'active' AND u.location_sharing = 1
+            WHERE r.request_id = ? AND r.family_id = ? AND r.requester_id = ?
+                AND r.expires_ms > ? AND t.state IN ('queued', 'send_failed') $session");
+        $stmt->execute([$id, $ctx->familyId, $ctx->userId, Time::nowMs()]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function markSent(string $id, int $tokenId, string $state): void
     {
         $stmt = $this->db->prepare("UPDATE tracking_wake_targets SET state = ?
-            WHERE request_id = ? AND token_id = ? AND state = 'queued'");
+            WHERE request_id = ? AND token_id = ? AND state IN ('queued', 'send_failed')");
         $stmt->execute([$state, $id, $tokenId]);
     }
 

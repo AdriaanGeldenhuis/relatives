@@ -40,17 +40,9 @@ $expenses = HT_DB::fetchAll(
     [$tripId]
 );
 
-// Calculate totals by category
-$categoryTotals = [];
-$grandTotal = 0;
-foreach ($expenses as $exp) {
-    $category = $exp['category'];
-    if (!isset($categoryTotals[$category])) {
-        $categoryTotals[$category] = 0;
-    }
-    $categoryTotals[$category] += (float) $exp['amount'];
-    $grandTotal += (float) $exp['amount'];
-}
+require_once __DIR__ . '/lib/expense-totals.php';
+$categoryTotals = ht_expense_totals($expenses);
+$grandTotal = ($categoryTotals[$trip['budget_currency']]['total_minor'] ?? 0) / 100;
 
 $canEdit = HT_Auth::canEditTrip($tripId);
 

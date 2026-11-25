@@ -301,7 +301,8 @@
                 transcript: text,
                 conversation: conversation.slice(-10)
             }),
-            credentials: 'same-origin'
+            credentials: 'same-origin',
+            signal: AbortSignal.timeout(18000)
         })
         .then(function(response) { return response.json(); })
         .then(function(data) {
@@ -369,6 +370,11 @@
             return;
         }
 
+        var label = action.data.item || action.data.title || 'this note';
+        if (!window.confirm('Save ' + label + ' to your family?')) {
+            speak('Okay, I left it as it was.', setReady);
+            return;
+        }
         var actionConversation = conversation;
         isProcessing = true;
         actionFn(function(success, errorMsg) {

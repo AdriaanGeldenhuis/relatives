@@ -260,6 +260,17 @@
         if (remember) {
             preferences.recent = location;
             savePreferences();
+            fetch('/weather/api/api.php?action=save-city', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': settings.csrf },
+                body: JSON.stringify({ name: place.name, lat: place.lat, lon: place.lon })
+            }).then(response => {
+                if (!response.ok) throw new Error('City could not be saved');
+            }).catch(() => {
+                if (location.lat === place.lat && location.lon === place.lon) {
+                    locationStatus.textContent = 'City saved on this device. It could not be saved to your account.';
+                }
+            });
         }
         renderQuickPlaces();
         loadWeather();
@@ -321,7 +332,7 @@
             const failed = errors.length === 2 ? 'Weather' : errors[0].action === 'current' ? 'Current conditions' : 'The forecast';
             pageStatus.textContent = `${failed} could not be updated.${current || forecast ? ' Showing available data.' : ''} Use Refresh to try again.`;
         } else {
-            pageStatus.textContent = '';
+            pageStatus.textContent = current?.stale || forecast?.stale ? 'Showing the last available weather.' : '';
         }
         renderSky();
     }
@@ -581,6 +592,8 @@
         selectPlace(linked);
     } else if (validPlace(preferences.recent)) {
         selectPlace(preferences.recent);
+    } else if (validPlace(settings.savedCity)) {
+        selectPlace({ ...settings.savedCity, source: 'Saved city' });
     } else if (validPlace(tracked)) {
         selectPlace(tracked);
     } else {

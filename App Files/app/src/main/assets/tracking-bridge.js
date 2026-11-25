@@ -84,6 +84,7 @@
         onTrackingScreenVisible: function () { send('map_visible'); },
         onTrackingScreenHidden: function () { send('map_hidden'); },
         requestNotificationPermission: function () { send('notifications'); },
+        openNotificationSettings: function () { send('notification_settings'); },
         prepareNavigation: () => prepareLocation('navigation'),
         prepareWeatherLocation: () => prepareLocation('weather_location')
     });

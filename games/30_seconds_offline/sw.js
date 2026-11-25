@@ -3,7 +3,7 @@
  * Provides complete offline functionality for airplane mode play
  */
 
-const CACHE_VERSION = 'v1.0.1';
+const CACHE_VERSION = 'v1.0.2';
 const CACHE_NAME = `thirty-seconds-offline-${CACHE_VERSION}`;
 
 // Static assets to cache for offline use

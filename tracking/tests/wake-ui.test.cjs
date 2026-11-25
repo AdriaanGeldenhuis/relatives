@@ -5,7 +5,7 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 const page = fs.readFileSync(new URL('../app/index.php', `file://${__filename}`), 'utf8');
-const handler = page.slice(page.indexOf('    var wakeFab ='), page.indexOf('    // Consent dialog logic'));
+const handler = page.slice(page.indexOf('    var wakeFab ='), page.indexOf('    // ── TRACKING INTEGRATION'));
 
 function harness(replies) {
     let click;
@@ -65,12 +65,12 @@ test('the map refreshes when the recipient uploads a fix', async () => {
     ]);
     await ui.click();
     assert.match(ui.text[1], /Request received/);
-    assert.equal(ui.localWakes(), 1);
+    assert.equal(ui.localWakes(), 0);
     assert.equal(ui.mapReads(), 0);
     await ui.context.checkWakeStatus();
     assert.equal(ui.text[0], '1 location updated');
     assert.equal(ui.mapReads(), 1);
-    assert.equal(ui.localWakes(), 1);
+    assert.equal(ui.localWakes(), 0);
 });
 
 test('Firebase setup failures explain why Wake could not start', async () => {

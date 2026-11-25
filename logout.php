@@ -16,8 +16,18 @@ require_once __DIR__ . '/core/bootstrap.php';
 // Destroy session in database if exists
 try {
     if (isset($_SESSION['user_id']) && isset($_SESSION['session_token'])) {
+        $userId = (int) $_SESSION['user_id'];
+        $sessionHash = hash('sha256', $_SESSION['session_token']);
         $auth = new Auth($db);
         $auth->logout();
+        $installed = $db->query("SELECT 1 FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'web_push_subscriptions'")->fetchColumn();
+        if ($installed) {
+            $db->prepare('DELETE FROM web_push_subscriptions WHERE user_id = ? AND session_hash = ?')
+                ->execute([$userId, $sessionHash]);
+            $db->prepare('DELETE FROM fcm_tokens WHERE user_id = ? AND wake_session_hash = ?')
+                ->execute([$userId, $sessionHash]);
+        }
     }
 } catch (Exception $e) {
     error_log('Logout error: ' . $e->getMessage());

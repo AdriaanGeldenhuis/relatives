@@ -51,11 +51,11 @@ class GeofenceEngine
         $this->sendAlerts($familyId, $userId, $alerts);
     }
 
-    public function recordTransitions(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM): array
+    public function recordTransitions(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM, bool $recordEvents = true): array
     {
         return array_merge(
-            $this->processGeofences($familyId, $userId, $lat, $lng, $userName, $accuracyM),
-            $this->processPlaces($familyId, $userId, $lat, $lng, $userName, $accuracyM)
+            $this->processGeofences($familyId, $userId, $lat, $lng, $userName, $accuracyM, $recordEvents),
+            $this->processPlaces($familyId, $userId, $lat, $lng, $userName, $accuracyM, $recordEvents)
         );
     }
 
@@ -85,7 +85,7 @@ class GeofenceEngine
         return $distance <= max(0.0, $radius - $buffer);
     }
 
-    private function processGeofences(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM): array
+    private function processGeofences(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM, bool $recordEvents): array
     {
         $geofences = $this->geoRepo->listActive($familyId);
         if (empty($geofences)) {
@@ -108,6 +108,7 @@ class GeofenceEngine
 
             // State changed - update DB and cache
             $this->updateGeofenceState($familyId, $gfId, $userId, $isInside);
+            if (!$recordEvents) continue;
 
             $eventType = $isInside ? 'enter_geofence' : 'exit_geofence';
             $this->eventsRepo->insert($familyId, $userId, $eventType, [
@@ -127,7 +128,7 @@ class GeofenceEngine
         return $alerts;
     }
 
-    private function processPlaces(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM): array
+    private function processPlaces(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM, bool $recordEvents): array
     {
         $places = $this->placesRepo->listAll($familyId);
         if (empty($places)) {
@@ -150,6 +151,7 @@ class GeofenceEngine
             }
 
             $this->updatePlaceState($familyId, $pId, $userId, $isInside);
+            if (!$recordEvents) continue;
 
             $eventType = $isInside ? 'arrive_place' : 'leave_place';
             $this->eventsRepo->insert($familyId, $userId, $eventType, [

@@ -52,7 +52,10 @@ try {
 
     // Optional fields
     $expenseDate = $input['expense_date'] ?? date('Y-m-d');
-    $currency = $input['currency'] ?? $trip['budget_currency'];
+    $currency = strtoupper((string) ($input['currency'] ?? $trip['budget_currency']));
+    if ($currencyError = HT_Validators::currency($currency)) {
+        HT_Response::error($currencyError, 400);
+    }
     $paidBy = (int) ($input['paid_by'] ?? HT_Auth::userId());
     $splitWith = $input['split_with'] ?? null;
     $notes = trim($input['notes'] ?? '');
@@ -86,7 +89,7 @@ try {
 
     // Fetch created expense
     $expense = HT_DB::fetchOne(
-        "SELECT e.*, u.name as paid_by_name
+        "SELECT e.*, u.full_name as paid_by_name
          FROM ht_trip_expenses e
          LEFT JOIN users u ON e.paid_by = u.id
          WHERE e.id = ?",

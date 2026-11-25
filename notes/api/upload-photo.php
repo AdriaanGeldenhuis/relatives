@@ -30,7 +30,7 @@ if (!is_array($file)) {
 $created = [];
 try {
     $path = notesSavePhoto($file, (int)$user['id'], $created, forCollage: true);
-    notesRespond(['success' => true, 'url' => $path, 'filename' => basename($path)]);
+    notesRespond(['success' => true, 'url' => '/notes/api/media.php?collage=1&file=' . rawurlencode(basename($path)), 'filename' => basename($path)]);
 } catch (Throwable $error) {
     notesRemoveMedia($created);
     if ($error instanceof DomainException) {

@@ -27,12 +27,15 @@ session_write_close();
 
 $id = eventNoteId($_GET['note'] ?? null);
 $name = $_GET['file'] ?? null;
-if (!$id || !is_string($name)) {
+if (!is_string($name)) {
     http_response_code(404);
     exit;
 }
-$note = notesSelect($db, (int)$user['family_id'], $id);
+$note = $id ? notesSelect($db, (int)$user['family_id'], $id) : null;
 $paths = $note ? [...notesImagePaths($note['image_path'] ?? null), $note['audio_path'] ?? ''] : [];
+if ($id === null && isset($_GET['collage']) && preg_match('/^[a-f0-9]{12}\.webp$/D', $name)) {
+    $paths = ['/saves/' . (int) $user['id'] . '/notes/' . $name];
+}
 $path = null;
 foreach ($paths as $candidate) {
     if (notesIsPrivateMedia($candidate) && basename($candidate) === $name) {
@@ -75,7 +78,8 @@ if ($range !== null) {
 
 $types = ['webp' => 'image/webp', 'webm' => 'audio/webm', 'm4a' => 'audio/mp4', 'ogg' => 'audio/ogg'];
 $length = $end - $start + 1;
-header('Content-Type: ' . $types[pathinfo($name, PATHINFO_EXTENSION)]);
+$types += ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif', 'mp3' => 'audio/mpeg'];
+header('Content-Type: ' . ($types[strtolower(pathinfo($name, PATHINFO_EXTENSION))] ?? 'application/octet-stream'));
 header('Content-Length: ' . $length);
 if ($method === 'GET') {
     stream_copy_to_stream($file, fopen('php://output', 'wb'), $length, $start);

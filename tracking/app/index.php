@@ -48,8 +48,6 @@ $pageCSS = [
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 
-<link rel="manifest" href="/tracking/app/manifest.json">
-
 <style>
 /* Critical inline styles - must be here, not just in CSS file */
 body.tracking-page { overflow: hidden !important; padding-bottom: 0 !important; margin: 0 !important; }
@@ -111,7 +109,7 @@ requestAnimationFrame(function() {
             <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
             <span>Home</span>
         </a>
-        <button class="tracking-toolbar-btn wake-btn" id="wakeFab" title="Wake all devices">
+        <button class="tracking-toolbar-btn wake-btn" id="wakeFab" title="Refresh family locations">
             <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
             <span>Wake</span>
         </button>
@@ -212,65 +210,6 @@ requestAnimationFrame(function() {
     </div>
 </div>
 
-<!-- Consent Dialog -->
-<div class="consent-overlay" id="consentOverlay">
-    <div class="consent-card">
-        <div class="consent-header">
-            <div class="consent-icon"></div>
-            <h2 class="consent-title">Enable Location Sharing</h2>
-            <p class="consent-subtitle">Share your location with family members so everyone can stay connected and safe.</p>
-        </div>
-        <div class="consent-toggles">
-            <div class="consent-toggle-row">
-                <div>
-                    <div class="consent-toggle-label">Location Sharing</div>
-                    <div class="consent-toggle-desc">Share your real-time position with family</div>
-                </div>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="consentLocation" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
-            <div class="consent-toggle-row">
-                <div>
-                    <div class="consent-toggle-label">Background Tracking</div>
-                    <div class="consent-toggle-desc">Continue tracking when app is in background</div>
-                </div>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="consentBackground" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
-            <div class="consent-toggle-row">
-                <div>
-                    <div class="consent-toggle-label">Geofence Alerts</div>
-                    <div class="consent-toggle-desc">Notify when members enter or leave zones</div>
-                </div>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="consentGeofence" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
-        </div>
-        <div class="consent-actions">
-            <button class="consent-btn consent-btn-secondary" id="consentDecline">Not Now</button>
-            <button class="consent-btn consent-btn-primary" id="consentAccept">Enable Sharing</button>
-        </div>
-    </div>
-</div>
-
-<!-- Notification Permission Prompt -->
-<div class="notification-prompt" id="notifPrompt">
-    <div class="notification-prompt-text">
-        Enable notifications to get alerts when family members arrive or leave places.
-    </div>
-    <div class="notification-prompt-actions">
-        <button class="notification-prompt-btn notification-prompt-allow" id="notifAllow">Allow</button>
-        <button class="notification-prompt-btn notification-prompt-dismiss" id="notifDismiss">Later</button>
-    </div>
-</div>
-
-<!-- Initial Data -->
 <script>
     window.MAPBOX_TOKEN = <?php echo json_encode($mapboxToken); ?>;
     window.TrackingConfig = {
@@ -467,7 +406,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 serverClockOffset = mapPolicy.server_time_ms - Date.now();
             }
             localTrackingStatus = mapPolicy && mapPolicy.mode === 0 ? 'Family tracking is off' : '';
-            if (mapPolicy && !mapPolicy.allowed) stopBrowserTracking();
+            if (!isNativeApp) {
+                if (mapPolicy && !mapPolicy.allowed) stopBrowserTracking();
+                else resumeBrowserTracking();
+                updateBrowserShareButton();
+            }
             showMembers(data.data);
         } catch (error) {
             if (!document.hidden && error.name !== 'AbortError') {
@@ -1114,12 +1057,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var liveWake = null;
     var wakePoll = null;
     var wakePollInFlight = false;
-    var localWakeId = null;
     var wakeCooldownUntil = 0;
     var wakeStatuses = {
         queued: 'Sending request', sent: 'Waiting for phone', received: 'Request received',
         refreshed: 'Location updated', paused: 'Sharing off', permission: 'Needs location permission',
-        notifications: 'Needs notifications enabled', open_required: 'Open app to refresh',
+        notifications: 'Needs notifications enabled', open_required: 'Background refresh blocked',
+        background_blocked: 'Background refresh blocked',
         no_fix: 'Couldn’t get a fix', no_reply: 'No reply', update_timeout: 'Location update timed out',
         send_failed: 'Couldn’t send',
         unreachable: 'Phone needs to reconnect', unavailable: 'Wake service unavailable',
@@ -1183,7 +1126,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     function scheduleWakePoll() {
         clearTimeout(wakePoll);
-        if (liveWake && !document.hidden) wakePoll = setTimeout(checkWakeStatus, 5000);
+        if (liveWake && !document.hidden) wakePoll = setTimeout(checkWakeStatus, 2000);
     }
 
     async function checkWakeStatus() {
@@ -1224,6 +1167,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             return;
         }
         setWakeBusy(true);
+        displayWake('Sending Wake request…');
         try {
             attemptId = attemptId || makeWakeId();
             var reply = await wakeRequest('/wake_devices.php', {
@@ -1248,11 +1192,6 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 } else {
                     displayWake(data.devices_targeted ? 'Couldn’t send Wake' : 'No family phones ready for Wake', data.targets);
                 }
-                var admitted = data.request_id && data.remaining_ms > 0 ? data.request_id : data.sent && !data.request_id ? 'legacy' : null;
-                if (admitted && admitted !== localWakeId && nativeBridge) {
-                    localWakeId = admitted;
-                    nativeBridge.wakeAllDevices();
-                }
             } else {
                 var failureMessages = {
                     tracking_disabled: 'Family tracking is off',
@@ -1272,73 +1211,6 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             setWakeBusy(!!liveWake);
         }
     });
-
-    // Consent dialog logic (localStorage can throw in privacy modes)
-    var consentOverlay = document.getElementById('consentOverlay');
-    var hasConsent = null;
-    var browserShareLocation = true;
-    try {
-        hasConsent = localStorage.getItem('tracking_consent');
-        browserShareLocation = localStorage.getItem('tracking_browser_location') !== '0';
-    } catch (e) {}
-
-    if (!hasConsent) {
-        setTimeout(function() {
-            consentOverlay.classList.add('active');
-        }, 1500);
-    }
-
-    document.getElementById('consentAccept').addEventListener('click', function() {
-        try { localStorage.setItem('tracking_consent', '1'); } catch (e) {}
-        hasConsent = '1';
-        consentOverlay.classList.remove('active');
-        requestNotificationPermission();
-        // Honour the "Location Sharing" toggle in the dialog. In the app the
-        // OS permission flow already governs sharing, so this only gates the
-        // browser upload path.
-        if (!isNativeApp) {
-            var shareLoc = document.getElementById('consentLocation');
-            browserShareLocation = !shareLoc || shareLoc.checked;
-            try { localStorage.setItem('tracking_browser_location', browserShareLocation ? '1' : '0'); } catch (e) {}
-            if (browserShareLocation) startBrowserTracking();
-            else stopBrowserTracking();
-        }
-    });
-
-    document.getElementById('consentDecline').addEventListener('click', function() {
-        try { localStorage.setItem('tracking_consent', '0'); } catch (e) {}
-        hasConsent = '0';
-        consentOverlay.classList.remove('active');
-        // Stop the BROWSER upload if a watch was already running. In the app
-        // the OS PermissionGate governs sharing, not this in-page dialog, so
-        // don't tear down the native WebView upload path here.
-        if (!isNativeApp) stopBrowserTracking();
-    });
-
-    // Notification permission
-    function requestNotificationPermission() {
-        if ('Notification' in window && Notification.permission === 'default') {
-            setTimeout(function() {
-                document.getElementById('notifPrompt').classList.add('active');
-            }, 2000);
-        }
-    }
-
-    document.getElementById('notifAllow').addEventListener('click', function() {
-        Notification.requestPermission();
-        document.getElementById('notifPrompt').classList.remove('active');
-    });
-
-    document.getElementById('notifDismiss').addEventListener('click', function() {
-        document.getElementById('notifPrompt').classList.remove('active');
-    });
-
-    if (hasConsent === '1' && 'Notification' in window && Notification.permission === 'default') {
-        requestNotificationPermission();
-    }
-
-    // Polling starts at the bottom of this script, after the native bridge
-    // environment has been detected (see startPolling below).
 
     // ── TRACKING INTEGRATION ─────────────────────────────────────
     var nativeBridge = window.TrackingBridge;
@@ -1368,15 +1240,52 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         setOwnStatus('Update Android System WebView to enable live location sharing.');
     }
 
-    // The native service owns location sharing in the Android app.
-    // A standalone browser may share its position after the user consents.
     var lastUploadTime = 0;
     var uploadTimer = null;
     var latestPos = null;
     var browserWatchId = null;
+    var browserUpload = null;
+    var browserConsent = false;
+    var browserShareButton = null;
+    var browserConsentKey = 'relatives.shareLocation.' + window.TrackingConfig.userId;
+    if (!isNativeApp && navigator.geolocation) {
+        try {
+            browserConsent = localStorage.getItem(browserConsentKey) === '1';
+        } catch (error) {
+            // Sharing still works for this page when storage is unavailable.
+        }
+        browserShareButton = document.createElement('button');
+        browserShareButton.type = 'button';
+        browserShareButton.className = 'tracking-toolbar-btn enable-location-btn';
+        browserShareButton.title = 'Share your location with your family while this tab is visible';
+        browserShareButton.addEventListener('click', function() {
+            browserConsent = browserWatchId === null;
+            if (browserConsent) startBrowserTracking();
+            else stopBrowserTracking();
+            try {
+                localStorage.setItem(browserConsentKey, browserConsent ? '1' : '0');
+            } catch (error) {}
+            updateBrowserShareButton();
+        });
+        document.getElementById('trackingToolbar').appendChild(browserShareButton);
+        updateBrowserShareButton();
+    }
 
-    if (!isNativeApp && hasConsent === '1' && browserShareLocation) {
-        startBrowserTracking();
+    function updateBrowserShareButton() {
+        if (!browserShareButton) return;
+        browserShareButton.disabled = !mapPolicy || !mapPolicy.allowed;
+        browserShareButton.textContent = browserWatchId === null ? 'Share my location' : 'Stop sharing';
+        browserShareButton.setAttribute('aria-pressed', String(browserWatchId !== null));
+    }
+
+    async function resumeBrowserTracking() {
+        if (!browserConsent || browserWatchId !== null || !mapPolicy || !mapPolicy.allowed) return;
+        try {
+            var permission = await navigator.permissions?.query({ name: 'geolocation' });
+            if (permission?.state === 'granted' && browserConsent) startBrowserTracking();
+        } catch (error) {
+            // Browsers with no permission query can start sharing from the button.
+        }
     }
 
     function showNativeSharingButton() {
@@ -1414,7 +1323,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var mode = nextMode || nativeBridge.getTrackingMode();
         button.disabled = ['loading', 'signed_out', 'family_off', 'account_off'].includes(mode);
         var refresh = document.getElementById('refreshMyLocation');
-        if (refresh) refresh.hidden = !['enabled', 'battery_saver', 'paused'].includes(mode) || nativeBridge.hasRemoteWake();
+        if (refresh) refresh.hidden = !['enabled', 'battery_saver'].includes(mode);
         var messages = {
             no_permission: 'Location permission is needed to share',
             notifications_disabled: 'Enable tracking notifications to share',
@@ -1435,7 +1344,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // (State vars declared above the geolocation gate — see note there.)
 
     function uploadPosition(pos) {
-        if (browserWatchId === null) return;
+        if (browserWatchId === null || document.hidden) return;
         // Always upload the FRESHEST fix: during the 10s throttle window,
         // watchPosition keeps firing; the old code captured the first fix and
         // discarded every newer one, so a moving user uploaded a stale point.
@@ -1450,8 +1359,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             }
             return;
         }
+        if (browserUpload) return;
         lastUploadTime = now;
         pos = latestPos;
+        var upload = new AbortController();
+        browserUpload = upload;
 
         var payload = {
             lat: pos.coords.latitude,
@@ -1460,7 +1372,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             speed_mps: pos.coords.speed || 0,
             bearing_deg: pos.coords.heading || null,
             altitude_m: pos.coords.altitude || null,
-            recorded_at: new Date(pos.timestamp).toISOString().slice(0, 19).replace('T', ' '),
+            recorded_at_ms: pos.timestamp,
             platform: 'web',
             device_id: 'browser'
         };
@@ -1468,12 +1380,13 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload), signal: upload.signal
         }).then(function(r) {
             return r.json().then(function(data) { return { status: r.status, data: data }; });
         }).then(function(res) {
+            if (upload.signal.aborted) return;
             var data = res.data || {};
-            if (data.message === 'tracking_disabled') {
+            if (data.error === 'tracking_disabled') {
                 setOwnStatus('Family tracking is off');
                 stopBrowserTracking();
             } else if (data.success) {
@@ -1486,7 +1399,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             } else {
                 console.warn('[Tracking] Server rejected:', data.error);
             }
-        }).catch(function(e) { console.warn('[Tracking] Upload failed:', e); });
+        }).catch(function(e) {
+            if (e.name !== 'AbortError') setOwnStatus('Connection lost · sharing will resume when online');
+        }).finally(function() {
+            if (browserUpload === upload) browserUpload = null;
+        });
     }
 
     // Surface a persistent note in the topbar subtitle when the user's own
@@ -1498,16 +1415,16 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function startBrowserTracking() {
-        if (document.hidden || isNativeApp || !navigator.geolocation || browserWatchId !== null || (mapPolicy && !mapPolicy.allowed)) return;
+        if (document.hidden || isNativeApp || !mapPolicy?.allowed || !navigator.geolocation || browserWatchId !== null) return;
         browserWatchId = navigator.geolocation.watchPosition(uploadPosition, function(err) {
             console.warn('[Tracking] Geolocation error:', err.message);
             if (err.code === 1) { // PERMISSION_DENIED
-                setOwnStatus('Location blocked — your position is not shared');
+                setOwnStatus('Enable location in your browser settings to share');
                 stopBrowserTracking();
             }
             // TIMEOUT / POSITION_UNAVAILABLE: keep the watch, it may recover.
         }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
-        console.log('[Tracking] Browser geolocation started');
+        updateBrowserShareButton();
     }
 
     function stopBrowserTracking() {
@@ -1519,7 +1436,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             clearTimeout(uploadTimer);
             uploadTimer = null;
         }
+        if (browserUpload) {
+            browserUpload.abort();
+            browserUpload = null;
+        }
         latestPos = null;
+        updateBrowserShareButton();
     }
 
     // The Android app fetches family positions while the map is visible.
@@ -1610,7 +1532,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (document.visibilityState === 'visible') {
             startPolling();
             startNavigationWatch();
-            if (!isNativeApp && hasConsent === '1' && browserShareLocation) startBrowserTracking();
+            if (!isNativeApp) resumeBrowserTracking();
             if (liveWake) checkWakeStatus();
         } else {
             stopPolling();
@@ -1627,6 +1549,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (liveWake) checkWakeStatus();
     });
     window.addEventListener('pagehide', function(event) {
+        stopBrowserTracking();
         if (event.persisted) clearFamilySnapshot();
     });
     window.addEventListener('pageshow', function(event) {

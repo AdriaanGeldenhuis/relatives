@@ -24,6 +24,9 @@ object NotificationHelper {
     // ── Channel IDs ────────────────────────────────────────────────────────
 
     const val CHANNEL_ALERTS = "relatives_alerts"
+    private const val CHANNEL_SOUND = "relatives_alerts_sound"
+    private const val CHANNEL_VIBRATION = "relatives_alerts_vibration"
+    private const val CHANNEL_QUIET = "relatives_alerts_quiet"
 
     // ── Channel creation ───────────────────────────────────────────────────
 
@@ -46,6 +49,16 @@ object NotificationHelper {
         }
 
         manager.createNotificationChannel(alertsChannel)
+        manager.createNotificationChannels(listOf(
+            NotificationChannel(CHANNEL_SOUND, context.getString(R.string.channel_alerts_sound), NotificationManager.IMPORTANCE_HIGH),
+            NotificationChannel(CHANNEL_VIBRATION, context.getString(R.string.channel_alerts_vibration), NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(null, null)
+                enableVibration(true)
+            },
+            NotificationChannel(CHANNEL_QUIET, context.getString(R.string.channel_alerts_quiet), NotificationManager.IMPORTANCE_LOW).apply {
+                setSound(null, null)
+            },
+        ))
     }
 
     // ── Alert / push notification ──────────────────────────────────────────
@@ -70,7 +83,16 @@ object NotificationHelper {
         title: String,
         body: String,
         actionUrl: String? = null,
+        stableId: String? = null,
+        silent: Boolean = false,
+        vibrate: Boolean = true,
     ) {
+        val channel = when {
+            silent && vibrate -> CHANNEL_VIBRATION
+            silent -> CHANNEL_QUIET
+            !vibrate -> CHANNEL_SOUND
+            else -> CHANNEL_ALERTS
+        }
         val notificationId = nextNotificationId.incrementAndGet()
 
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -89,12 +111,13 @@ object NotificationHelper {
 
         // Status-bar icons must be flat alpha-only drawables; the adaptive
         // launcher mipmap rendered as a blank grey square on Android 8+.
-        val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS)
+        val notification = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
@@ -102,6 +125,7 @@ object NotificationHelper {
 
         val manager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(notificationId, notification)
+        if (stableId == null) manager.notify(notificationId, notification)
+        else manager.notify("relatives-$stableId", 0, notification)
     }
 }

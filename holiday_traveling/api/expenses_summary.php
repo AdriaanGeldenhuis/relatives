@@ -28,29 +28,17 @@ try {
     $trip = HT_DB::fetchOne("SELECT budget_currency FROM ht_trips WHERE id = ?", [$tripId]);
     $currency = $trip['budget_currency'] ?? 'ZAR';
 
-    // Get totals
-    $totals = HT_DB::fetchOne(
-        "SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total
-         FROM ht_trip_expenses
-         WHERE trip_id = ?",
-        [$tripId]
-    );
-
-    // Get by category
-    $byCategory = HT_DB::fetchAll(
-        "SELECT category, SUM(amount) as total, COUNT(*) as count
-         FROM ht_trip_expenses
-         WHERE trip_id = ?
-         GROUP BY category
-         ORDER BY total DESC",
-        [$tripId]
-    );
-
+    $totals = HT_DB::fetchAll("SELECT currency, COUNT(*) AS count, SUM(amount) AS total
+        FROM ht_trip_expenses WHERE trip_id = ? GROUP BY currency ORDER BY currency", [$tripId]);
+    $byCategory = HT_DB::fetchAll("SELECT currency, category, SUM(amount) AS total, COUNT(*) AS count
+        FROM ht_trip_expenses WHERE trip_id = ? GROUP BY currency, category ORDER BY currency, total DESC", [$tripId]);
+    $budgetGroup = array_values(array_filter($totals, static fn(array $group): bool => $group['currency'] === $currency))[0] ?? [];
     HT_Response::ok([
         'currency' => $currency,
-        'total' => (float) $totals['total'],
-        'count' => (int) $totals['count'],
-        'by_category' => $byCategory
+        'total' => (float) ($budgetGroup['total'] ?? 0),
+        'count' => array_sum(array_column($totals, 'count')),
+        'by_category' => $byCategory,
+        'currencies' => $totals,
     ]);
 
 } catch (Exception $e) {

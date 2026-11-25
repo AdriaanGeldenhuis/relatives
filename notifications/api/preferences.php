@@ -16,6 +16,17 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../../core/bootstrap.php';
+require_once __DIR__ . '/../../core/CSRF.php';
+
+$user = (new Auth($db))->getCurrentUser();
+if (!$user) {
+    Response::error('Unauthorized', 401);
+}
+if (($_GET['action'] ?? $_POST['action'] ?? '') !== 'get'
+    && ($_SERVER['REQUEST_METHOD'] !== 'POST' || !CSRF::validate($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
+    Response::error('Reload notification settings and try again.', 403);
+}
+session_write_close();
 
 $userId = (int)$_SESSION['user_id'];
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
@@ -67,62 +78,38 @@ try {
             
         case 'update':
             $category = $_POST['category'] ?? '';
-            $settingsJson = $_POST['settings'] ?? '{}';
-            $settings = json_decode($settingsJson, true);
-            
-            if (empty($category)) {
-                throw new Exception('Category required');
+            $settings = json_decode((string) ($_POST['settings'] ?? ''), true);
+            if (!in_array($category, ['message', 'shopping', 'calendar', 'schedule', 'tracking', 'weather', 'note', 'system'], true)
+                || !is_array($settings)) {
+                Response::error('Invalid notification preferences.');
             }
-            
-            // Check if exists
-            $stmt = $db->prepare("
-                SELECT id FROM notification_preferences 
-                WHERE user_id = ? AND category = ?
-            ");
-            $stmt->execute([$userId, $category]);
-            $exists = $stmt->fetch();
-            
-            if ($exists) {
-                // Update
-                $fields = [];
-                $values = [];
-                
-                foreach ($settings as $key => $value) {
-                    if (in_array($key, ['enabled', 'push_enabled', 'sound_enabled', 'vibrate_enabled'])) {
-                        $fields[] = "$key = ?";
-                        $values[] = (int)$value;
+            $values = [];
+            foreach (['enabled', 'push_enabled', 'sound_enabled', 'vibrate_enabled', 'quiet_hours_enabled'] as $flag) {
+                if (array_key_exists($flag, $settings)) {
+                    $values[$flag] = (int) !empty($settings[$flag]);
+                }
+            }
+            foreach (['quiet_hours_start', 'quiet_hours_end'] as $clock) {
+                if (isset($settings[$clock])) {
+                    if (!is_string($settings[$clock]) || !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $settings[$clock])) {
+                        Response::error('Enter a valid quiet-hours time.');
                     }
+                    $values[$clock] = $settings[$clock] . ':00';
                 }
-                
-                if (!empty($fields)) {
-                    $values[] = $userId;
-                    $values[] = $category;
-                    
-                    $sql = "UPDATE notification_preferences SET " . 
-                           implode(', ', $fields) . 
-                           " WHERE user_id = ? AND category = ?";
-                    
-                    $stmt = $db->prepare($sql);
-                    $stmt->execute($values);
-                }
-            } else {
-                // Insert with defaults
-                $enabled = isset($settings['enabled']) ? (int)$settings['enabled'] : 1;
-                $pushEnabled = isset($settings['push_enabled']) ? (int)$settings['push_enabled'] : 1;
-                $soundEnabled = isset($settings['sound_enabled']) ? (int)$settings['sound_enabled'] : 1;
-                $vibrateEnabled = isset($settings['vibrate_enabled']) ? (int)$settings['vibrate_enabled'] : 1;
-                
-                $stmt = $db->prepare("
-                    INSERT INTO notification_preferences 
-                    (user_id, category, enabled, push_enabled, sound_enabled, vibrate_enabled)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ");
-                $stmt->execute([$userId, $category, $enabled, $pushEnabled, $soundEnabled, $vibrateEnabled]);
             }
-            
-            echo json_encode(['success' => true]);
+            if (!$values) {
+                Response::error('Choose a preference to update.');
+            }
+            $fields = array_keys($values);
+            $columns = implode(', ', $fields);
+            $placeholders = implode(', ', array_fill(0, count($fields), '?'));
+            $updates = implode(', ', array_map(static fn(string $key): string => "$key = VALUES($key)", $fields));
+            $db->prepare("INSERT INTO notification_preferences (user_id, category, $columns)
+                VALUES (?, ?, $placeholders) ON DUPLICATE KEY UPDATE $updates")
+                ->execute([$userId, $category, ...array_values($values)]);
+            Response::success();
             break;
-            
+
         case 'update_weather_schedule':
             $enabled = isset($_POST['enabled']) ? (int)$_POST['enabled'] : 1;
             $time = $_POST['time'] ?? '07:00:00';
@@ -182,233 +169,13 @@ try {
             break;
 
         case 'test_weather':
-            // Send immediate weather notification for testing
-            require_once __DIR__ . '/../../core/NotificationManager.php';
-
-            // Get user's weather schedule settings
-            $stmt = $db->prepare("SELECT * FROM weather_notification_schedule WHERE user_id = ?");
-            $stmt->execute([$userId]);
-            $schedule = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // Get user's location - first try tracking_current (most recent)
-            $stmt = $db->prepare("
-                SELECT lat, lng
-                FROM tracking_current
-                WHERE user_id = ?
-                LIMIT 1
-            ");
-            $stmt->execute([$userId]);
-            $location = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // Fallback to tracking_locations if no current location
-            if (!$location) {
-                $stmt = $db->prepare("
-                    SELECT lat, lng
-                    FROM tracking_locations
-                    WHERE user_id = ?
-                    ORDER BY created_at DESC
-                    LIMIT 1
-                ");
-                $stmt->execute([$userId]);
-                $location = $stmt->fetch(PDO::FETCH_ASSOC);
+            require_once __DIR__ . '/../../weather/digest.php';
+            $notice = weatherDigest($db, ['user_id' => $userId, 'family_id' => (int) $user['family_id']], true);
+            $id = NotificationManager::getInstance($db)->create($notice);
+            if (!$id) {
+                Response::error('Weather notifications are disabled or temporarily unavailable.', 503);
             }
-
-            // Default to Johannesburg if no location
-            $lat = $location['lat'] ?? -26.2041;
-            $lon = $location['lng'] ?? 28.0473;
-
-            // Fetch weather data using cURL for better reliability
-            $apiKey = '563504b6b46d0e6bcf9a49e1cb6bc4f3';
-            $weatherUrl = "https://api.openweathermap.org/data/2.5/weather?lat={$lat}&lon={$lon}&appid={$apiKey}&units=metric";
-
-            $weatherResponse = false;
-            if (function_exists('curl_init')) {
-                $ch = curl_init($weatherUrl);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                $weatherResponse = curl_exec($ch);
-                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                $curlError = curl_error($ch);
-                curl_close($ch);
-
-                if ($weatherResponse === false || $httpCode !== 200) {
-                    error_log("Weather API error: HTTP $httpCode, cURL error: $curlError");
-                    $weatherResponse = false;
-                }
-            }
-
-            // Fallback to file_get_contents
-            if ($weatherResponse === false) {
-                $context = stream_context_create(['http' => ['timeout' => 10]]);
-                $weatherResponse = @file_get_contents($weatherUrl, false, $context);
-            }
-
-            if ($weatherResponse === false) {
-                throw new Exception('Failed to fetch weather data - check server connectivity');
-            }
-
-            $weatherData = json_decode($weatherResponse, true);
-            if (!isset($weatherData['main'])) {
-                throw new Exception('Invalid weather response');
-            }
-
-            // Prepare notification - GOOGLE-STYLE FORMAT
-            $temp = isset($weatherData['main']['temp']) ? round($weatherData['main']['temp']) : null;
-            $feelsLike = isset($weatherData['main']['feels_like']) ? round($weatherData['main']['feels_like']) : null;
-            $condition = $weatherData['weather'][0]['main'] ?? 'Clear';
-            $description = ucfirst($weatherData['weather'][0]['description'] ?? 'clear sky');
-            $locationName = $weatherData['name'] ?? 'Your location';
-            $windSpeed = round(($weatherData['wind']['speed'] ?? 0) * 3.6);
-
-            if ($temp === null) {
-                throw new Exception('No temperature data available');
-            }
-
-            // Get weather icon based on condition
-            $weatherIcons = [
-                'Clear' => '☀️',
-                'Clouds' => '☁️',
-                'Rain' => '🌧️',
-                'Drizzle' => '🌦️',
-                'Thunderstorm' => '⛈️',
-                'Snow' => '❄️',
-                'Mist' => '🌫️',
-                'Fog' => '🌫️',
-                'Haze' => '🌫️'
-            ];
-            $weatherIcon = $weatherIcons[$condition] ?? '🌤️';
-
-            // Get forecast for high/low temps (use cURL for reliability)
-            $forecastUrl = "https://api.openweathermap.org/data/2.5/forecast?lat={$lat}&lon={$lon}&appid={$apiKey}&units=metric&cnt=8";
-            $forecastResponse = false;
-            if (function_exists('curl_init')) {
-                $ch = curl_init($forecastUrl);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                $forecastResponse = curl_exec($ch);
-                curl_close($ch);
-            }
-            if (!$forecastResponse) {
-                $forecastResponse = @file_get_contents($forecastUrl);
-            }
-            $forecastData = $forecastResponse ? json_decode($forecastResponse, true) : null;
-
-            $maxTemp = $temp;
-            $minTemp = $temp;
-            $rainChance = 0;
-
-            if ($forecastData && isset($forecastData['list']) && !empty($forecastData['list'])) {
-                $temps = [];
-                foreach ($forecastData['list'] as $item) {
-                    if (isset($item['main']['temp_max'])) $temps[] = $item['main']['temp_max'];
-                    if (isset($item['main']['temp_min'])) $temps[] = $item['main']['temp_min'];
-                    if (isset($item['pop'])) {
-                        $rainChance = max($rainChance, round($item['pop'] * 100));
-                    }
-                }
-                if (!empty($temps)) {
-                    $maxTemp = round(max($temps));
-                    $minTemp = round(min($temps));
-                }
-            }
-
-            // ============================================
-            // BEAUTIFUL WEATHER NOTIFICATION
-            // ============================================
-
-            // Determine greeting based on time
-            $hour = (int)date('H');
-            if ($hour >= 5 && $hour < 12) {
-                $greeting = "Good morning";
-            } elseif ($hour >= 12 && $hour < 17) {
-                $greeting = "Good afternoon";
-            } elseif ($hour >= 17 && $hour < 21) {
-                $greeting = "Good evening";
-            } else {
-                $greeting = "Weather update";
-            }
-
-            // Title: Greeting + location
-            $title = "{$weatherIcon} {$greeting} · {$locationName}";
-
-            // Body: Multi-line beautiful format
-            $lines = [];
-
-            // Line 1: Current temp big and bold
-            $lines[] = "🌡️ Currently {$temp}°";
-
-            // Line 2: Condition + Feels like
-            $line2 = $description;
-            if ($feelsLike !== null && $feelsLike != $temp) {
-                $line2 .= " · Feels {$feelsLike}°";
-            }
-            $lines[] = $line2;
-
-            // Line 2: High/Low temps
-            if ($maxTemp != $minTemp) {
-                $lines[] = "📈 High {$maxTemp}° · Low {$minTemp}°";
-            }
-
-            // Line 3: Rain, Humidity, Wind
-            $humidity = $weatherData['main']['humidity'] ?? 0;
-            $statsLine = [];
-            if ($rainChance > 0) {
-                $statsLine[] = "☔ {$rainChance}%";
-            }
-            $statsLine[] = "💧 {$humidity}%";
-            $statsLine[] = "💨 {$windSpeed} km/h";
-            $lines[] = implode(" · ", $statsLine);
-
-            // Line 4: Sunrise/Sunset if available
-            if (isset($weatherData['sys']['sunrise']) && isset($weatherData['sys']['sunset'])) {
-                $sunrise = date('H:i', $weatherData['sys']['sunrise'] + ($weatherData['timezone'] ?? 7200));
-                $sunset = date('H:i', $weatherData['sys']['sunset'] + ($weatherData['timezone'] ?? 7200));
-                $lines[] = "🌅 {$sunrise} · 🌇 {$sunset}";
-            }
-
-            // Line 5: Smart tip based on conditions
-            $tip = null;
-            if ($rainChance >= 60) {
-                $tip = "☂️ Take an umbrella today!";
-            } elseif ($rainChance >= 30) {
-                $tip = "🌂 Might want an umbrella";
-            } elseif ($temp >= 30) {
-                $tip = "🥵 Stay hydrated, it's hot!";
-            } elseif ($temp <= 10) {
-                $tip = "🧥 Bundle up, it's cold!";
-            } elseif ($temp >= 20 && $temp <= 26 && $rainChance < 20) {
-                $tip = "😎 Perfect weather outside!";
-            }
-            if ($tip) {
-                $lines[] = $tip;
-            }
-
-            $message = implode("\n", $lines);
-
-            $notifManager = NotificationManager::getInstance($db);
-            $notifId = $notifManager->create([
-                'user_id' => $userId,
-                'type' => NotificationManager::TYPE_WEATHER,
-                'title' => $title,
-                'message' => $message,
-                'action_url' => '/weather/',
-                'priority' => NotificationManager::PRIORITY_NORMAL,
-                'icon' => $weatherIcon,
-                'vibrate' => 1,
-                'data' => [
-                    'test' => true,
-                    'temperature' => $temp,
-                    'condition' => $condition
-                ]
-            ]);
-
-            echo json_encode([
-                'success' => $notifId ? true : false,
-                'notification_id' => $notifId,
-                'message' => $notifId ? 'Weather notification sent!' : 'Failed to send notification'
-            ]);
+            Response::success();
             break;
 
         case 'test':

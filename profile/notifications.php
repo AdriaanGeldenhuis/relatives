@@ -16,6 +16,7 @@ if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/../core/CSRF.php';
 
 try {
     $auth = new Auth($db);
@@ -77,6 +78,9 @@ $success = '';
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
+        if (!CSRF::validate(is_string($_POST['csrf_token'] ?? null) ? $_POST['csrf_token'] : '')) {
+            throw new InvalidArgumentException('Reload notification preferences and try again.');
+        }
         $pushEnabled = isset($_POST['push_enabled']) ? 1 : 0;
         $soundEnabled = isset($_POST['sound_enabled']) ? 1 : 0;
 
@@ -169,6 +173,7 @@ try {
     error_log('Notification prefs error: ' . $e->getMessage());
 }
 
+$pushCsrf = CSRF::generate();
 $pageTitle = 'Notification Preferences';
 $pageCSS = ['/profile/css/profile.css?build=' . filemtime(__DIR__ . '/css/profile.css')];
 
@@ -197,7 +202,19 @@ require_once __DIR__ . '/../shared/components/header.php';
             <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
         <?php endif; ?>
 
+        <section class="settings-section" data-push-settings data-csrf="<?= htmlspecialchars($pushCsrf) ?>">
+            <h2 class="settings-section-title">This device</h2>
+            <p role="status"></p>
+            <div class="toggle-row">
+                <button type="button" class="btn" data-push-action="enable" disabled>Enable</button>
+                <button type="button" class="btn" data-push-action="test" disabled>Test</button>
+                <button type="button" class="btn" data-push-action="disable" disabled>Turn off</button>
+            </div>
+        </section>
+        <script defer src="/shared/js/push-settings.js?v=<?= filemtime(__DIR__ . '/../shared/js/push-settings.js') ?>"></script>
+
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($pushCsrf) ?>">
 
             <!-- General Settings -->
             <div class="settings-section">

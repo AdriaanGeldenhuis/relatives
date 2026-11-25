@@ -29,11 +29,13 @@ class NotificationTriggers {
         $stmt->execute([$senderId]);
         $sender = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        // Get family members except sender
-        $stmt = $this->db->prepare("
-            SELECT id FROM users 
-            WHERE family_id = ? AND id != ? AND status = 'active'
-        ");
+        // Existing schemas without privacy settings retain their default.
+        $hasPrivacy = (bool) $this->db->query("SELECT 1 FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_privacy_settings'")->fetchColumn();
+        $join = $hasPrivacy ? 'LEFT JOIN user_privacy_settings p ON p.user_id = u.id' : '';
+        $allowed = $hasPrivacy ? 'AND COALESCE(p.allow_messages, 1) = 1' : '';
+        $stmt = $this->db->prepare("SELECT u.id FROM users u $join
+            WHERE u.family_id = ? AND u.id <> ? AND u.status = 'active' $allowed");
         $stmt->execute([$familyId, $senderId]);
         $recipients = $stmt->fetchAll(PDO::FETCH_COLUMN);
         
@@ -300,9 +302,10 @@ class NotificationTriggers {
         ], $createdBy);
     }
     
-    public function onEventReminder(int $eventId, int $userId, string $title, int $minutesBefore) {
+    public function onEventReminder(int $eventId, int $userId, string $title, int $minutesBefore, ?string $expiresAt = null) {
         $this->notifManager->create([
             'user_id' => $userId,
+            'expires_at' => $expiresAt,
             'type' => NotificationManager::TYPE_CALENDAR,
             'title' => 'Event Reminder',
             'message' => "\"$title\" starts in $minutesBefore minutes",
@@ -361,9 +364,10 @@ class NotificationTriggers {
         ], $createdBy);
     }
     
-    public function onScheduleTaskDue(int $taskId, int $userId, string $title) {
+    public function onScheduleTaskDue(int $taskId, int $userId, string $title, ?string $expiresAt = null) {
         $this->notifManager->create([
             'user_id' => $userId,
+            'expires_at' => $expiresAt,
             'type' => NotificationManager::TYPE_SCHEDULE,
             'title' => 'Task Due Now',
             'message' => "\"$title\" is scheduled to start now",

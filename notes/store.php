@@ -48,7 +48,7 @@ function notesIsMediaPath($path): bool
 
 function notesIsPrivateMedia(string $path): bool
 {
-    return preg_match('~^/saves/notes-private/\d+/[a-f0-9]{12}\.(?:webp|webm|m4a|ogg)$~D', $path) === 1;
+    return preg_match('~^/(?:saves/(?:notes-private/\d+|\d+/notes)|uploads/(?:notes|voice))(?:/[a-zA-Z0-9_-]+)*/[a-zA-Z0-9_.-]+\.(?:webp|webm|m4a|ogg|mp3|jpe?g|png|gif)$~iD', $path) === 1;
 }
 
 function notesMediaUrl(int $noteId, string $path): string
@@ -449,6 +449,10 @@ function notesHandlePost(PDO $db, array $user, string $token): never
             $saved = notesSelect($db, $familyId, $noteId);
             $result['note'] = notesClientData($saved, eventNoteTitles($db, $familyId, [$saved]));
         }
+        if ($action === 'create_note') {
+            require_once __DIR__ . '/../core/NotificationTriggers.php';
+            (new NotificationTriggers($db))->onNoteCreated($noteId, $userId, $familyId, $title, $type);
+        }
         $db->commit();
     } catch (Throwable $e) {
         if ($db->inTransaction()) {
@@ -461,15 +465,19 @@ function notesHandlePost(PDO $db, array $user, string $token): never
         error_log('Notes request failed: ' . $e->getMessage());
         notesRespond(['success' => false, 'error' => 'Could not save this change. Try again.'], 500);
     }
-    notesRemoveMedia($removed);
-
-    if ($action === 'create_note') {
+    if ($removed) {
         try {
-            require_once __DIR__ . '/../core/NotificationManager.php';
-            require_once __DIR__ . '/../core/NotificationTriggers.php';
-            (new NotificationTriggers($db))->onNoteCreated($noteId, $userId, $familyId, $title, $type);
-        } catch (Throwable $e) {
-            error_log('Note notification error: ' . $e->getMessage());
+            $stmt = $db->prepare('SELECT image_path, audio_path FROM notes WHERE family_id = ?');
+            $stmt->execute([$familyId]);
+            $retained = [];
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $other) {
+                foreach ([...notesImagePaths($other['image_path'] ?? null), $other['audio_path'] ?? ''] as $path) {
+                    $retained[$path] = true;
+                }
+            }
+            notesRemoveMedia(array_filter($removed, static fn($path): bool => $path && !isset($retained[$path])));
+        } catch (Throwable) {
+            error_log('Could not verify remaining note attachment references.');
         }
     }
     notesRespond($result);

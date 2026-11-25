@@ -15,24 +15,65 @@ require_once __DIR__ . '/../../core/bootstrap.php';
 require_once __DIR__ . '/../../core/NotificationManager.php';
 require_once __DIR__ . '/../../core/NotificationTriggers.php';
 
+require_once __DIR__ . '/classes/MessageChanges.php';
+require_once __DIR__ . '/../../core/CSRF.php';
+
 if (file_exists(__DIR__ . '/classes/MessageLimitManager.php')) {
     require_once __DIR__ . '/classes/MessageLimitManager.php';
 }
 
+function sendMessageResult(PDO $db, int $messageId, int $familyId): void
+{
+    $message = MessageChanges::selectRows($db, $familyId, 'AND m.id = ?', [$messageId], '')[0] ?? null;
+    Response::json([
+        'success' => true, 'message_id' => $messageId, 'message' => 'Message sent successfully',
+        'message_type' => $message['message_type'] ?? null, 'media_path' => $message['media_path'] ?? null,
+        'sent_message' => $message,
+    ]);
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    Response::error('method_not_allowed', 405);
+}
+$user = (new Auth($db))->getCurrentUser();
+if (!$user) {
+    Response::error('Not authenticated', 401);
+}
+$userId = (int) $user['id'];
+$familyId = (int) $user['family_id'];
+$userName = $user['name'];
+$clientId = $_POST['client_message_id'] ?? null;
+if ($clientId !== null && (!is_string($clientId)
+    || !preg_match('/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/iD', $clientId))) {
+    Response::error('Invalid message request.', 422);
+}
+if ($clientId !== null && !CSRF::validate($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
+    Response::error('Reload chat and try again.', 403);
+}
+session_write_close();
+$filesCreated = [];
+$messageSaved = false;
+$lockName = null;
 try {
-    $userId = $_SESSION['user_id'];
-    
-    $stmt = $db->prepare("SELECT family_id, full_name FROM users WHERE id = ?");
-    $stmt->execute([$userId]);
-    $user = $stmt->fetch();
-    
-    if (!$user) {
-        throw new Exception('User not found');
+    if ($clientId !== null) {
+        if (!MessageChanges::installed($db)) {
+            Response::error('Chat is being updated. Please retry this message shortly.', 503);
+        }
+        $clientId = strtolower($clientId);
+        $lockName = 'chat:send:' . substr(hash('sha256', $userId . ':' . $clientId), 0, 50);
+        $lock = $db->prepare('SELECT GET_LOCK(?, 4)');
+        $lock->execute([$lockName]);
+        if (!(int) $lock->fetchColumn()) {
+            Response::error('This message is still being sent. Try again in a moment.', 409);
+        }
+        $find = $db->prepare('SELECT message_id FROM message_send_receipts WHERE user_id = ? AND client_id = ?');
+        $find->execute([$userId, $clientId]);
+        $repeated = $find->fetchColumn();
+        if ($repeated) {
+            $db->prepare('SELECT RELEASE_LOCK(?)')->execute([$lockName]);
+            sendMessageResult($db, (int) $repeated, $familyId);
+        }
     }
-    
-    $familyId = $user['family_id'];
-    $userName = $user['full_name'];
-    
     // ========== SUBSCRIPTION LOCK CHECK ==========
     require_once __DIR__ . '/../../core/SubscriptionManager.php';
     
@@ -64,8 +105,6 @@ try {
     
     $content = trim($_POST['content'] ?? '');
     $replyToMessageId = !empty($_POST['reply_to_message_id']) ? (int)$_POST['reply_to_message_id'] : null;
-    
-    $toFamily = isset($_POST['to_family']) && $_POST['to_family'] == '1';
     
     if (empty($content) && empty($_FILES['media'])) {
         throw new Exception('Message cannot be empty');
@@ -115,7 +154,7 @@ try {
 
         $uploadDir = __DIR__ . '/../../uploads/messages/' . date('Y/m/');
         if (!is_dir($uploadDir)) {
-            if (!mkdir($uploadDir, 0755, true)) {
+            if (!@mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
                 throw new Exception('Failed to create upload directory');
             }
         }
@@ -124,7 +163,9 @@ try {
         $firstType = null;
 
         for ($i = 0; $i < $fileCount; $i++) {
-            if ($_FILES['media']['error'][$i] !== UPLOAD_ERR_OK) continue;
+            if ($_FILES['media']['error'][$i] !== UPLOAD_ERR_OK) {
+                throw new Exception('One of the attachments could not be uploaded.');
+            }
 
             $fileSize = $_FILES['media']['size'][$i];
             $fileName = $_FILES['media']['name'][$i];
@@ -140,18 +181,15 @@ try {
                 throw new Exception('File too large (max 50MB): ' . $fileName);
             }
 
-            $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-            if (empty($extension)) {
-                $extension = $mimeToExt[$fileType] ?? 'bin';
-            }
-
-            $uniqueName = uniqid('msg_') . '_' . time() . '_' . $i . '.' . $extension;
+            $extension = $mimeToExt[$fileType];
+            $uniqueName = 'msg_' . bin2hex(random_bytes(16)) . '.' . $extension;
             $filepath = $uploadDir . $uniqueName;
 
             if (!move_uploaded_file($fileTmp, $filepath)) {
                 throw new Exception('Failed to upload: ' . $fileName);
             }
 
+            $filesCreated[] = $filepath;
             $webPath = '/uploads/messages/' . date('Y/m/') . $uniqueName;
             $uploadedPaths[] = ['path' => $webPath, 'name' => $fileName, 'type' => $fileType, 'size' => $fileSize];
 
@@ -178,6 +216,7 @@ try {
                         }
                         imagedestroy($image);
                         imagedestroy($thumb);
+                        $filesCreated[] = $thumbnailPath;
                         $mediaThumbnail = '/uploads/messages/' . date('Y/m/') . 'thumb_' . $uniqueName;
                     }
                 } catch (Exception $e) {
@@ -200,6 +239,10 @@ try {
         }
     }
     
+    if ($content === '' && $mediaPath === null) {
+        throw new Exception('Message cannot be empty');
+    }
+
     if ($replyToMessageId) {
         $stmt = $db->prepare("
             SELECT id FROM messages 
@@ -249,15 +292,10 @@ try {
             error_log('Search index error: ' . $e->getMessage());
         }
         
-        $db->commit();
-        
-    } catch (Exception $e) {
-        $db->rollBack();
-        throw $e;
-    }
-    
-    // ==================== SEND NOTIFICATIONS ====================
-    try {
+        if ($clientId !== null) {
+            $db->prepare('INSERT INTO message_send_receipts (user_id, client_id, message_id) VALUES (?, ?, ?)')
+                ->execute([$userId, $clientId, $messageId]);
+        }
         $triggers = new NotificationTriggers($db);
         
         $preview = $content;
@@ -275,12 +313,16 @@ try {
             }
         }
         
-        $triggers->onNewMessage($messageId, $userId, $familyId, $preview);
-        
-    } catch (Exception $e) {
-        error_log('Failed to send message notification: ' . $e->getMessage());
+        $triggers->onNewMessage((int) $messageId, $userId, $familyId, $preview);
+        $db->commit();
+        $messageSaved = true;
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $e;
     }
-    
+
     try {
         $stmt = $db->prepare("
             INSERT INTO audit_log (family_id, user_id, action, entity_type, entity_id, created_at)
@@ -291,44 +333,20 @@ try {
         error_log('Audit log failed: ' . $e->getMessage());
     }
     
-    // Fetch the full sent message to return to client for instant display
-    $stmt = $db->prepare("
-        SELECT
-            m.id,
-            m.user_id,
-            m.content,
-            m.message_type,
-            m.media_path,
-            m.reply_to_message_id,
-            m.created_at,
-            m.edited_at,
-            u.full_name,
-            u.avatar_color,
-            u.has_avatar,
-            (SELECT content FROM messages WHERE id = m.reply_to_message_id LIMIT 1) as reply_to_content
-        FROM messages m
-        JOIN users u ON m.user_id = u.id
-        WHERE m.id = ?
-    ");
-    $stmt->execute([$messageId]);
-    $sentMessage = $stmt->fetch(PDO::FETCH_ASSOC);
-    $sentMessage['reactions'] = [];
-
-    echo json_encode([
-        'success' => true,
-        'message_id' => $messageId,
-        'message' => 'Message sent successfully',
-        'message_type' => $messageType,
-        'media_path' => $mediaPath,
-        'sent_message' => $sentMessage
-    ]);
-    
-} catch (Exception $e) {
+    if ($lockName !== null) {
+        $db->prepare('SELECT RELEASE_LOCK(?)')->execute([$lockName]);
+    }
+    sendMessageResult($db, (int) $messageId, $familyId);
+} catch (Throwable $e) {
+    if (!$messageSaved) {
+        foreach ($filesCreated as $file) {
+            @unlink($file);
+        }
+    }
+    if ($lockName !== null) {
+        $db->prepare('SELECT RELEASE_LOCK(?)')->execute([$lockName]);
+    }
     error_log('Message send error: ' . $e->getMessage());
-    
-    http_response_code(400);
-    echo json_encode([
-        'success' => false,
-        'message' => $e->getMessage()
-    ]);
+    $message = $e instanceof PDOException || !$e instanceof Exception ? 'Could not save the message. Try again.' : $e->getMessage();
+    Response::json(['success' => false, 'message' => $message], 400);
 }

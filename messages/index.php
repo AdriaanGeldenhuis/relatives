@@ -9,12 +9,15 @@
 require_once __DIR__ . '/../core/session_boot.php';
 
 // Authentication check
+$messageLink = filter_input(INPUT_GET, 'message', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+$chatReturn = '/messages/' . ($messageLink ? '?message=' . $messageLink : '');
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
+    header('Location: /login.php?redirect=' . rawurlencode($chatReturn));
     exit;
 }
 
 require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/../core/CSRF.php';
 
 // Get current user
 try {
@@ -22,12 +25,12 @@ try {
     $user = $auth->getCurrentUser();
     
     if (!$user) {
-        header('Location: /login.php');
+        header('Location: /login.php?redirect=' . rawurlencode($chatReturn));
         exit;
     }
 } catch (Exception $e) {
     error_log("Auth error: " . $e->getMessage());
-    header('Location: /login.php');
+    header('Location: /login.php?redirect=' . rawurlencode($chatReturn));
     exit;
 }
 
@@ -35,16 +38,21 @@ try {
 $familyMembers = [];
 try {
     $stmt = $db->prepare("
-        SELECT id, full_name, avatar_color, has_avatar, last_login
-        FROM users
-        WHERE family_id = ? AND status = 'active' AND id != ?
-        ORDER BY full_name
+        SELECT u.id, u.full_name, u.avatar_color, u.has_avatar,
+            CASE WHEN COALESCE(p.show_last_seen, 1) THEN u.last_login END AS last_login,
+            COALESCE(p.show_online_status, 1) AS show_online,
+            CASE WHEN u.last_login >= NOW() - INTERVAL 5 MINUTE THEN 1 ELSE 0 END AS online_now
+        FROM users u LEFT JOIN user_privacy_settings p ON p.user_id = u.id
+        WHERE u.family_id = ? AND u.status = 'active' AND u.id != ?
+        ORDER BY u.full_name
     ");
     $stmt->execute([$user['family_id'], $user['id']]);
     $familyMembers = $stmt->fetchAll();
 } catch (Exception $e) {
     error_log("Error loading family members: " . $e->getMessage());
 }
+
+$chatCsrf = CSRF::generate();
 
 // Page configuration
 $pageTitle = 'Family Chat';
@@ -102,7 +110,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <!-- Family Members -->
                     <?php foreach ($familyMembers as $member):
                         $lastSeen = $member['last_login'] ? new DateTime($member['last_login']) : null;
-                        $isOnline = $lastSeen && (time() - $lastSeen->getTimestamp()) < 300;
+                        $isOnline = !empty($member['show_online']) && !empty($member['online_now']);
                         $memberAvatarPath = __DIR__ . "/../saves/{$member['id']}/avatar/avatar.webp";
                         $memberHasAvatar = file_exists($memberAvatarPath);
                     ?>
@@ -203,7 +211,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                                 maxlength="5000"></textarea>
                         </div>
 
-                        <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Send" aria-label="Send">
+                        <button class="send-btn" id="sendBtn" data-csrf="<?= htmlspecialchars($chatCsrf) ?>" onclick="sendMessage()" title="Send" aria-label="Send">
                             <span class="send-label" aria-hidden="true">Send</span><span aria-hidden="true">➤</span>
                         </button>
                     </div>

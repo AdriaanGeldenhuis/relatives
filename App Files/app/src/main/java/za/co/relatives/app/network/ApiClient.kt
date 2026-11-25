@@ -89,6 +89,16 @@ class ApiClient(private val context: Context) {
         executeJson(request, pinnedSessionHttp)
     }
 
+    suspend fun acknowledgePush(receipt: String, sessionCookie: String): Int {
+        val body = JsonObject().apply { addProperty("receipt", receipt) }
+        val request = Request.Builder()
+            .url("${BASE_URL}push/receipt.php")
+            .header("Cookie", "RELATIVES_SESSION=$sessionCookie")
+            .post(gson.toJson(body).toRequestBody(JSON_MEDIA))
+            .build()
+        return pinnedSessionHttp.newCall(request).readTextResponse().first
+    }
+
     // ------------------------------------------------------------------ //
     //  Internal helpers
     // ------------------------------------------------------------------ //

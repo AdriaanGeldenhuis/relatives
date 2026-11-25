@@ -6,8 +6,10 @@
 
 require_once __DIR__ . '/../core/session_boot.php';
 
+$requestedList = filter_input(INPUT_GET, 'list', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+$returnTo = is_int($requestedList) ? '/shopping/?list=' . $requestedList : '/shopping/';
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
+    header('Location: /login.php?redirect=' . rawurlencode($returnTo));
     exit;
 }
 
@@ -17,7 +19,7 @@ $auth = new Auth($db);
 $user = $auth->getCurrentUser();
 
 if (!$user) {
-    header('Location: /login.php');
+    header('Location: /login.php?redirect=' . rawurlencode($returnTo));
     exit;
 }
 
@@ -34,7 +36,7 @@ $itemManager = new ShoppingItem($db, $user['family_id'], $user['id']);
 $lists = $listManager->getLists();
 
 // Get current list
-$currentListId = $_GET['list'] ?? ($lists[0]['id'] ?? null);
+$currentListId = $requestedList ?: (int) ($lists[0]['id'] ?? 0);
 
 if (!$currentListId) {
     // Create default list
@@ -687,10 +689,10 @@ window.currentListId = <?php echo $currentListId; ?>;
 window.currentUser = <?php echo json_encode([
     'id' => $user['id'],
     'name' => $user['name']
-]); ?>;
-window.allItems = <?php echo json_encode($currentList['items']); ?>;
+], JSON_HEX_TAG); ?>;
+window.allItems = <?php echo json_encode($currentList['items'], JSON_HEX_TAG); ?>;
 window.categories = <?php echo json_encode($categories); ?>;
-window.familyMembers = <?php echo json_encode($familyMembers); ?>;
+window.familyMembers = <?php echo json_encode($familyMembers, JSON_HEX_TAG); ?>;
 </script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

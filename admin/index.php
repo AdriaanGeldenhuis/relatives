@@ -35,11 +35,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new InvalidArgumentException('That member change is unavailable.');
                 }
                 $field = $changingRole ? 'role' : 'status';
+                $db->beginTransaction();
                 $stmt = $db->prepare("UPDATE users SET $field = ?, updated_at = NOW() WHERE id = ? AND family_id = ? AND role <> 'owner'");
                 $stmt->execute([$value, $targetId, $familyId]);
                 if (!$stmt->rowCount()) {
                     throw new InvalidArgumentException('No change was made to that member.');
                 }
+                if (!$changingRole && $value === 'disabled') {
+                    $db->prepare('DELETE FROM sessions WHERE user_id = ?')->execute([$targetId]);
+                    $db->prepare('DELETE FROM fcm_tokens WHERE user_id = ?')->execute([$targetId]);
+                    $db->prepare('DELETE FROM web_push_subscriptions WHERE user_id = ?')->execute([$targetId]);
+                    $db->prepare('DELETE FROM tracking_current WHERE user_id = ? AND family_id = ?')->execute([$targetId, $familyId]);
+                }
+                $db->commit();
                 adminRedirect($returnTo, $changingRole ? 'Member role updated.' : 'Member access updated.');
             case 'update_family_name':
                 $name = is_string($_POST['name'] ?? null) ? trim($_POST['name']) : '';
@@ -84,8 +92,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new InvalidArgumentException('Unknown administration action.');
         }
     } catch (InvalidArgumentException $e) {
+        if ($db->inTransaction()) $db->rollBack();
         adminRedirect($returnTo, $e->getMessage(), false);
     } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
         error_log('Family administration: ' . $e->getMessage());
         adminRedirect($returnTo, 'The change could not be saved. Please try again.', false);
     }

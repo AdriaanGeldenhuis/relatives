@@ -195,8 +195,8 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Allow Messages</div>
-                        <div class="toggle-description">Allow family members to send you messages</div>
+                        <div class="toggle-label">Family chat alerts</div>
+                        <div class="toggle-description">Receive alerts from your family chat. Shared messages remain in the conversation.</div>
                     </div>
                     <label class="toggle-switch">
                         <input type="checkbox" name="allow_messages" <?php echo $privacySettings['allow_messages'] ? 'checked' : ''; ?>>

@@ -24,12 +24,10 @@ if (!TrackingWake::isId($clientId)) {
 
 $wake = new TrackingWake($db);
 $useLedger = TrackingPolicy::hasTable($db, 'tracking_wake_targets');
-if ($useLedger && ($existing = $wake->findRequest($ctx, $clientId)) !== null) {
-    Response::success($wake->status($ctx, $existing));
-}
+$existing = $useLedger ? $wake->findRequest($ctx, $clientId) : null;
 $devices = $wake->devices($ctx);
 $eligible = array_filter($devices, static fn(array $device): bool => TrackingWake::initialState($device) === 'queued');
-if (!$eligible) {
+if (!$eligible && !$existing) {
     Response::success([
         'devices_targeted' => 0, 'sent' => 0, 'failed' => 0,
         'targets' => array_map(static fn(array $device): array => [
@@ -42,6 +40,9 @@ if (!$eligible) {
 $confirmed = TrackingPolicy::confirmedWake($db);
 $fcm = new FirebaseMessaging();
 if (!$fcm->prepareSend()) {
+    if ($existing) {
+        Response::success($wake->status($ctx, $existing));
+    }
     Response::json([
         'success' => false,
         'error' => 'wake_service_unavailable',
@@ -54,9 +55,6 @@ if ($useLedger) {
     if (isset($request['retry_after'])) {
         header('Retry-After: ' . $request['retry_after']);
         Response::json(['success' => false, 'error' => 'rate_limited', 'retry_after' => $request['retry_after']], 429);
-    }
-    if (!$request['dispatch']) {
-        Response::success($wake->status($ctx, $request['request_id']));
     }
 } else {
     // Supports rolling deployment before applying 003.
@@ -86,49 +84,102 @@ if ($useLedger) {
     $request = ['expires_at_ms' => Time::nowMs() + TrackingWake::WINDOW_MS];
 }
 
-// Finish the bounded dispatch even if the caller navigates away after admission.
+// A repeated POST can resume a dispatch interrupted before its result was saved.
 ignore_user_abort(true);
 $dispatchStart = Time::nowMs();
-$dispatchDeadline = min($dispatchStart + 10000, $request['expires_at_ms']);
-$sent = 0;
-$failed = 0;
-foreach ($eligible as $device) {
-    $remaining = (int) ($dispatchDeadline - Time::nowMs());
-    $supportsReceipt = $confirmed && $device['installation_id'] !== null;
-    $data = ['type' => 'wake_tracking', 'recipient_user_id' => (string) $device['user_id']];
-    if ($supportsReceipt) {
-        $data += [
-            'request_id' => $request['request_id'],
-            'installation_id' => $device['installation_id'],
-            'expires_at_ms' => $request['expires_at_ms'],
-        ];
-    }
-    $result = $remaining > 0 ? $fcm->send($device['token'], [], $data, [
-        'ttl' => max(0, (int) floor(($request['expires_at_ms'] - Time::nowMs()) / 1000)) . 's',
-        'collapse_key' => 'wake_tracking',
-        'priority' => 'high',
-    ], min($remaining, 3500)) : false;
-    $state = 'send_failed';
-    if ($result === true) {
-        $sent++;
-        $state = $supportsReceipt ? 'sent' : 'legacy_sent';
-    } else {
-        $failed++;
-        if ($result === 'invalid_token') {
-            $db->prepare('DELETE FROM fcm_tokens WHERE id = ? AND BINARY token = BINARY ?')->execute([$device['token_id'], $device['token']]);
-            $state = 'unreachable';
-        } elseif ($remaining > 0 && $fcm->lastFailure() === 'configuration') {
-            $state = 'unavailable';
-        }
-    }
-    if ($useLedger) {
-        $wake->markSent($request['request_id'], (int) $device['token_id'], $state);
+$requestId = $request['request_id'] ?? null;
+$dispatchLock = $requestId === null ? null : 'tracking:wake:dispatch:' . $requestId;
+if ($dispatchLock !== null) {
+    $lock = $db->prepare('SELECT GET_LOCK(?, 0)');
+    $lock->execute([$dispatchLock]);
+    if ((int) $lock->fetchColumn() !== 1) {
+        Response::success($wake->status($ctx, $requestId));
     }
 }
+
+$sent = 0;
+$failed = 0;
+try {
+    if ($requestId !== null) {
+        $eligible = $wake->pendingDispatch($ctx, $requestId);
+    }
+    $jobs = [];
+    $targets = [];
+    foreach ($eligible as $device) {
+        $expires = (int) ($device['expires_ms'] ?? $request['expires_at_ms']);
+        if ($expires <= Time::nowMs()) {
+            continue;
+        }
+        $key = (int) $device['token_id'];
+        $receipt = $confirmed && $device['installation_id'] !== null;
+        $data = ['type' => 'wake_tracking', 'recipient_user_id' => (string) $device['user_id']];
+        if ($receipt) {
+            $data += [
+                'request_id' => $requestId,
+                'requester_name' => $device['requester_name'],
+                'installation_id' => $device['installation_id'],
+                'expires_at_ms' => $expires,
+            ];
+        }
+        $targets[$key] = ['token' => $device['token'], 'expires' => $expires, 'receipt' => $receipt];
+        $jobs[$key] = [
+            'token' => $device['token'],
+            'data' => $data,
+            'android' => ['ttl' => (int) ceil(($expires - Time::nowMs()) / 1000) . 's',
+                'collapse_key' => 'wake_tracking', 'priority' => 'high'],
+        ];
+    }
+
+    $results = $fcm->sendBatch($jobs, 2750);
+    $retry = [];
+    foreach ($results as $key => $result) {
+        if ($result['state'] === 'temporary' && $result['retry_after'] <= 1
+            && $targets[$key]['receipt'] && $targets[$key]['expires'] > Time::nowMs() + 2000) {
+            $retry[$key] = $jobs[$key];
+        }
+    }
+    if ($retry) {
+        $earliestExpiry = min(array_map(static fn(int $key): int => $targets[$key]['expires'], array_keys($retry)));
+        if ($earliestExpiry > Time::nowMs() + 1200) {
+            usleep(1000000);
+            foreach ($retry as $key => &$job) {
+                $job['android']['ttl'] = (int) ceil(max(0, $targets[$key]['expires'] - Time::nowMs()) / 1000) . 's';
+            }
+            unset($job);
+            $results = $fcm->sendBatch($retry, min(2300, max(1, $earliestExpiry - Time::nowMs()))) + $results;
+        }
+    }
+
+    foreach ($results as $key => $result) {
+        $state = match ($result['state']) {
+            'accepted' => $targets[$key]['receipt'] ? 'sent' : 'legacy_sent',
+            'invalid_token' => 'unreachable',
+            'configuration' => 'unavailable',
+            default => 'send_failed',
+        };
+        if ($state === 'unreachable') {
+            $db->prepare('DELETE FROM fcm_tokens WHERE id = ? AND BINARY token = BINARY ?')
+                ->execute([$key, $targets[$key]['token']]);
+        }
+        if ($result['state'] === 'accepted') {
+            $sent++;
+        } else {
+            $failed++;
+        }
+        if ($requestId !== null) {
+            $wake->markSent($requestId, $key, $state);
+        }
+    }
+} finally {
+    if ($dispatchLock !== null) {
+        $db->prepare('SELECT RELEASE_LOCK(?)')->execute([$dispatchLock]);
+    }
+}
+
 TrackingPolicy::metric('wake_dispatch', [
     'targets' => count($eligible), 'accepted' => $sent, 'failed' => $failed,
     'confirmed_protocol' => $confirmed, 'duration_ms' => Time::nowMs() - $dispatchStart,
 ]);
-$status = $useLedger ? $wake->status($ctx, $request['request_id']) : [];
+$status = $requestId === null ? [] : $wake->status($ctx, $requestId);
 
 Response::success($status + ['devices_targeted' => count($eligible), 'sent' => $sent, 'failed' => $failed]);

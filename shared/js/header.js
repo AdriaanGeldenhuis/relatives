@@ -47,7 +47,7 @@
         if (!bell || pending || document.hidden) return;
         pending = true;
         try {
-            const response = await fetch('/notifications/api/count.php');
+            const response = await fetch('/notifications/api/count.php', { cache: 'no-store' });
             if (response.ok) updateNotificationBadge((await response.json()).count);
         } catch {
             // Keep the last known count while offline.
@@ -65,6 +65,11 @@
         refreshNotifications();
         window.addEventListener('pageshow', refreshNotifications);
         document.addEventListener('visibilitychange', refreshNotifications);
-        if (!navigator.userAgent.includes('RelativesAndroid')) setInterval(refreshNotifications, 60000);
+        window.addEventListener('online', refreshNotifications);
+        window.addEventListener('relativesnotification', refreshNotifications);
+        navigator.serviceWorker?.addEventListener('message', event => {
+            if (event.data?.type === 'relatives-notification') window.dispatchEvent(new Event('relativesnotification'));
+        });
+        setInterval(refreshNotifications, document.getElementById('notificationsContent') ? 60000 : 5000);
     }
 })();

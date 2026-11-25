@@ -360,7 +360,7 @@
         /**
          * Share the card (using Web Share API if available)
          */
-        async share: function(title = '30 Seconds Party Results') {
+        async share(title = '30 Seconds Party Results') {
             if (navigator.share && navigator.canShare) {
                 try {
                     const blob = await this.toBlob();

@@ -5,10 +5,13 @@
  * ============================================
  */
 
+require_once __DIR__ . '/PushOutbox.php';
+
 class NotificationManager {
     private $db;
     private static $instance = null;
-    private $firebase = null;
+    private FirebaseMessaging $firebase;
+    private PushOutbox $outbox;
     
     const TYPE_MESSAGE = 'message';
     const TYPE_SHOPPING = 'shopping';
@@ -27,21 +30,10 @@ class NotificationManager {
     private function __construct($db) {
         $this->db = $db;
 
-        // Several entry points (tracking APIs, cron jobs) include this file
-        // without going through code that loads FirebaseMessaging — load it
-        // here so push sending never silently disables itself.
-        if (!class_exists('FirebaseMessaging')) {
-            $firebasePath = __DIR__ . '/FirebaseMessaging.php';
-            if (file_exists($firebasePath)) {
-                require_once $firebasePath;
-            }
-        }
-
-        if (class_exists('FirebaseMessaging')) {
-            $this->firebase = new FirebaseMessaging();
-        }
+        $this->firebase = new FirebaseMessaging();
+        $this->outbox = new PushOutbox($db);
     }
-    
+
     public static function getInstance($db) {
         if (self::$instance === null) {
             self::$instance = new self($db);
@@ -53,19 +45,23 @@ class NotificationManager {
      * Create a notification
      */
     public function create(array $data) {
+        $queued = PushOutbox::available($this->db);
+        $insideTransaction = $this->db->inTransaction();
+        $ownTransaction = $queued && !$insideTransaction;
         try {
-            // Validate
-            $required = ['user_id', 'type', 'title', 'message'];
-            foreach ($required as $field) {
-                if (empty($data[$field])) {
-                    throw new Exception("Missing required field: $field");
+            foreach (['user_id', 'type', 'title', 'message'] as $field) {
+                if (!isset($data[$field]) || $data[$field] === '') {
+                    throw new InvalidArgumentException("Missing required field: $field");
                 }
             }
-            
-            // Check if enabled
-            if (!$this->isNotificationEnabled($data['user_id'], $data['type'])) {
-                error_log("NotificationManager: Notification blocked - {$data['type']} disabled for user {$data['user_id']}");
+            $category = $data['category'] ?? $data['type'];
+            $target = $data['device_target'] ?? null;
+            if ($target === null && !$this->isNotificationEnabled((int) $data['user_id'], $category)) {
                 return false;
+            }
+            $data['action_url'] = $this->actionPath($data);
+            if ($ownTransaction) {
+                $this->db->beginTransaction();
             }
 
             // Insert notification
@@ -97,34 +93,75 @@ class NotificationManager {
             
             $notificationId = (int)$this->db->lastInsertId();
             
-            // Send push notification. Quiet hours only silence the push —
-            // the notification is still stored above so the user finds it in
-            // the app afterwards (previously the whole notification was
-            // dropped and could never be seen).
-            // Callers that deliver their own push (e.g. tracking wake, which
-            // sends a direct data-only FCM) pass send_push=false to store the
-            // in-app row without a duplicate push.
-            $priority = $data['priority'] ?? self::PRIORITY_NORMAL;
-            $quietBlocked = $priority !== self::PRIORITY_URGENT
-                && $priority !== self::PRIORITY_HIGH
-                && $this->isQuietHours($data['user_id'], $data['type']);
-
-            if (($data['send_push'] ?? true) === false) {
-                // Skip push entirely; row already stored above.
-            } elseif ($quietBlocked) {
-                $this->logDelivery($notificationId, $data['user_id'], 'push', 'failed', 'Quiet hours');
-            } elseif ($this->isPushEnabled($data['user_id'], $data['type'])) {
-                $this->sendPushNotification($notificationId, $data);
+            if (($data['send_push'] ?? true) !== false) {
+                if ($queued) {
+                    $this->outbox->enqueue($notificationId, (int) $data['user_id'], $target);
+                    $this->outbox->sendAfterResponse($notificationId);
+                } else {
+                    $this->legacyPushAfterCommit($notificationId, $data, $category, $insideTransaction);
+                }
             }
-            
+            if ($ownTransaction) {
+                $this->db->commit();
+            }
             return $notificationId;
-            
-        } catch (Exception $e) {
-            error_log('NotificationManager::create error: ' . $e->getMessage());
+        } catch (Throwable $e) {
+            if ($ownTransaction && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            if ($insideTransaction) {
+                throw $e;
+            }
+            error_log('Notification could not be saved: ' . $e->getMessage());
             return false;
         }
     }
-    
+
+    private function actionPath(array $data): string {
+        $entity = $data['data'] ?? [];
+        $id = match ($data['type']) {
+            self::TYPE_MESSAGE => (int) ($entity['message_id'] ?? 0),
+            self::TYPE_SHOPPING => (int) ($entity['list_id'] ?? 0),
+            self::TYPE_CALENDAR => (int) ($entity['event_id'] ?? 0),
+            self::TYPE_SCHEDULE => (int) ($entity['task_id'] ?? $entity['event_id'] ?? 0),
+            self::TYPE_NOTE => (int) ($entity['note_id'] ?? 0),
+            default => 0,
+        };
+        if ($id > 0) {
+            return match ($data['type']) {
+                self::TYPE_MESSAGE => '/messages/?message=' . $id,
+                self::TYPE_SHOPPING => '/shopping/?list=' . $id,
+                self::TYPE_CALENDAR => '/calendar/?event=' . $id,
+                self::TYPE_SCHEDULE => '/schedule/?event=' . $id,
+                self::TYPE_NOTE => '/notes/?note=' . $id,
+            };
+        }
+        return PushOutbox::safePath($data['action_url'] ?? null);
+    }
+
+    private function legacyPushAfterCommit(int $notificationId, array $data, string $category, bool $defer): void {
+        $priority = $data['priority'] ?? self::PRIORITY_NORMAL;
+        if ((!in_array($priority, [self::PRIORITY_HIGH, self::PRIORITY_URGENT], true)
+            && $this->isQuietHours((int) $data['user_id'], $category))
+            || !$this->isPushEnabled((int) $data['user_id'], $category)) {
+            return;
+        }
+        if (!$defer) {
+            $this->sendPushNotification($notificationId, $data);
+            return;
+        }
+        register_shutdown_function(function () use ($notificationId, $data): void {
+            if ($this->db->inTransaction()) {
+                return;
+            }
+            $stmt = $this->db->prepare('SELECT 1 FROM notifications WHERE id = ? AND user_id = ?');
+            $stmt->execute([$notificationId, $data['user_id']]);
+            if ($stmt->fetchColumn()) {
+                $this->sendPushNotification($notificationId, $data);
+            }
+        });
+    }
+
     /**
      * Send push notification via FCM
      */
@@ -150,25 +187,19 @@ class NotificationManager {
                 return;
             }
 
-            // Prepare FCM message
-            $notification = [
-                'title' => $data['title'],
-                'body' => $data['message'],
-                'icon' => $data['icon'] ?? $this->getDefaultIcon($data['type']),
-                'click_action' => $data['action_url'] ?? '/',
-                'sound' => $data['sound'] ?? 'default'
-            ];
-
-            // Defaults first, caller-provided data last: an explicit
-            // data.type (e.g. 'wake_tracking' for silent device wakes) must
-            // survive the merge — the previous order clobbered it with the
-            // generic notification type, so silent wakes never reached apps.
-            $fcmData = array_merge([
-                'notification_id' => (string)$notificationId,
+            $sender = null;
+            if (isset($data['from_user_id'])) {
+                $stmt = $this->db->prepare('SELECT full_name FROM users WHERE id = ?');
+                $stmt->execute([$data['from_user_id']]);
+                $sender = $stmt->fetchColumn() ?: null;
+            }
+            $notification = PushOutbox::alert($data['type'], $sender);
+            $fcmData = [
+                'notification_id' => (string) $notificationId,
                 'type' => $data['type'],
-                'action_url' => $data['action_url'] ?? '/'
-            ], $data['data'] ?? []);
-            $fcmData['recipient_user_id'] = (string) $data['user_id'];
+                'action_url' => $data['action_url'],
+                'recipient_user_id' => (string) $data['user_id'],
+            ];
 
             // Send to all tokens
             foreach ($tokens as $tokenData) {
@@ -355,6 +386,9 @@ class NotificationManager {
             
             return $this->createBulk($userIds, $data);
         } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                throw $e;
+            }
             error_log('createForFamily error: ' . $e->getMessage());
             return [];
         }

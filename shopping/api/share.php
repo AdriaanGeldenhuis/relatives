@@ -40,16 +40,7 @@ try {
                 throw new Exception('List not found');
             }
             
-            // Generate shareable token
-            $shareToken = bin2hex(random_bytes(16));
-            
-            $stmt = $db->prepare("
-                INSERT INTO shopping_list_shares (list_id, share_token, created_by, expires_at)
-                VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
-            ");
-            $stmt->execute([$listId, $shareToken, $user['id']]);
-            
-            $shareUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/shopping/shared.php?token=' . $shareToken;
+            $shareUrl = '/shopping/?list=' . $listId;
 
             // Notify family members
             require_once __DIR__ . '/../../core/NotificationManager.php';
@@ -59,8 +50,7 @@ try {
 
             echo json_encode([
                 'success' => true,
-                'share_url' => $shareUrl,
-                'token' => $shareToken
+                'share_url' => rtrim(APP_URL, '/') . $shareUrl
             ]);
             break;
         

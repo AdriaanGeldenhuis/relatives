@@ -234,17 +234,8 @@ function scheduleSaveEvent(
         if (!$saved) {
             throw new RuntimeException('The saved event could not be retrieved.');
         }
-        $db->commit();
-    } catch (Throwable $error) {
-        if ($db->inTransaction()) {
-            $db->rollBack();
-        }
-        throw $error;
-    }
-
-    if (!$original || ($calendar && ($original['title'] !== $saved['title']
-        || $original['starts_at'] !== $saved['starts_at'] || $original['ends_at'] !== $saved['ends_at']))) {
-        try {
+        if (!$original || ($calendar && ($original['title'] !== $saved['title']
+            || $original['starts_at'] !== $saved['starts_at'] || $original['ends_at'] !== $saved['ends_at']))) {
             require_once __DIR__ . '/../../core/NotificationTriggers.php';
             $triggers = new NotificationTriggers($db);
             if ($original) {
@@ -255,9 +246,13 @@ function scheduleSaveEvent(
                 $triggers->onScheduleTaskCreated($eventId, $userId, $familyId, $event['title'],
                     date('j M Y \a\t H:i', strtotime($event['starts_at'])));
             }
-        } catch (Throwable $error) {
-            error_log('Schedule notification failed: ' . $error->getMessage());
         }
+        $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $error;
     }
     return $saved;
 }

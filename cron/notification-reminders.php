@@ -1,154 +1,150 @@
 <?php
-/**
- * ============================================
- * CRON JOB: EVENT & SCHEDULE REMINDERS
- * Run every minute, sends reminders for upcoming events
- * ============================================
- */
-
-if (php_sapi_name() !== 'cli') {
-    die('This script can only be run from command line');
+declare(strict_types=1);
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit;
 }
-
-error_reporting(E_ALL);
-ini_set('display_errors', '1');
 
 require_once __DIR__ . '/../core/bootstrap.php';
 require_once __DIR__ . '/../core/NotificationTriggers.php';
+require_once __DIR__ . '/../core/ScheduledJobs.php';
+require_once __DIR__ . '/../core/Events/SyncEngine.php';
 
-echo "[" . date('Y-m-d H:i:s') . "] Starting reminder cron...\n";
-
-try {
-    // MySQL releases the lock when this cron process disconnects.
-    $lock = $db->query("SELECT GET_LOCK(CONCAT('relatives_reminders_', MD5(DATABASE())), 0)")->fetchColumn();
-    if ((int)$lock !== 1) {
-        echo "A reminder run is already active\n";
-        exit(0);
-    }
+exit(ScheduledJobs::run($db, 'calendar-reminders', static function () use ($db): void {
     $triggers = new NotificationTriggers($db);
-    
-    // Get events whose configured reminder time has arrived. The old query
-    // ignored reminder_minutes entirely (it matched events starting within
-    // the next 5 minutes), so a "remind me 60 minutes before" setting fired
-    // ~5 minutes before instead.
-    //
-    // Sent-state lives on the event row (events.reminder_sent_at, added by
-    // migrations/notifications-fix-v2.sql): deduping against the notifications
-    // table meant that a user deleting the reminder notification re-triggered
-    // a push on every cron run until the event started. Falls back to the
-    // notifications-table dedup until the migration has run.
-    $reminderQuery = "
-        SELECT
-            e.id,
-            e.user_id,
-            e.title,
-            e.starts_at,
-            e.reminder_minutes
-        FROM events e
+    $due = $db->query("SELECT e.id, e.user_id, e.family_id, e.title, e.starts_at, e.kind,
+            e.reminder_minutes, e.reminder_sent_at, f.timezone
+        FROM events e JOIN families f ON f.id = e.family_id
         JOIN users u ON u.id = e.user_id AND u.family_id = e.family_id AND u.status = 'active'
-        WHERE e.reminder_minutes IS NOT NULL
-          AND e.status = 'pending'
-          AND e.starts_at > NOW()
-          AND DATE_SUB(e.starts_at, INTERVAL e.reminder_minutes MINUTE) <= NOW()
-    ";
-    $hasSentColumn = true;
-    try {
-        $stmt = $db->prepare($reminderQuery . " AND e.reminder_sent_at IS NULL");
-        $stmt->execute();
-    } catch (Exception $e) {
-        $hasSentColumn = false;
-        $stmt = $db->prepare($reminderQuery . "
-          AND NOT EXISTS (
-              SELECT 1 FROM notifications n
-              WHERE n.type = 'calendar'
-                AND n.user_id = e.user_id
-                AND JSON_EXTRACT(n.data_json, '$.event_id') = e.id
-                AND n.title LIKE 'Event Reminder%'
-                AND n.created_at >= DATE_SUB(e.starts_at, INTERVAL e.reminder_minutes MINUTE)
-          )
-        ");
-        $stmt->execute();
+        WHERE e.status = 'pending' AND e.starts_at BETWEEN NOW() - INTERVAL 2 DAY AND NOW() + INTERVAL 3 DAY
+            AND (e.reminder_minutes IS NOT NULL OR e.kind IN ('study', 'work', 'todo'))");
+    $fresh = $db->prepare("SELECT starts_at, status, reminder_minutes, reminder_sent_at, user_id
+        FROM events WHERE id = ? AND family_id = ? FOR UPDATE");
+    $sent = $db->prepare('UPDATE events SET reminder_sent_at = NOW() WHERE id = ?');
+    $count = 0;
+    foreach ($due->fetchAll() as $event) {
+        $zone = ScheduledJobs::zone($event['timezone']);
+        $now = new DateTimeImmutable('now', $zone);
+        $starts = new DateTimeImmutable($event['starts_at'], $zone);
+        $remaining = $starts->getTimestamp() - $now->getTimestamp();
+        $minutes = $event['reminder_minutes'];
+        $lead = $minutes !== null && $event['reminder_sent_at'] === null && $remaining > 0 && $remaining <= 60 * (int) $minutes;
+        $task = in_array($event['kind'], ['study', 'work', 'todo'], true) && $remaining <= 0
+            && $starts->format('Y-m-d') === $now->format('Y-m-d');
+        if (!$lead && !$task) {
+            continue;
+        }
+        $type = $lead ? 'event' : 'task';
+        $key = implode('|', [$type, $event['id'], $event['user_id'], $event['starts_at'], $lead ? $minutes : 'due']);
+        $count += (int) ScheduledJobs::once($db, $key, static function () use ($event, $fresh, $sent, $db, $triggers, $lead, $remaining, $starts, $now): bool {
+            $fresh->execute([$event['id'], $event['family_id']]);
+            $state = $fresh->fetch();
+            if (!$state || $state['status'] !== 'pending' || $state['starts_at'] !== $event['starts_at']
+                || $state['reminder_minutes'] !== $event['reminder_minutes'] || $state['user_id'] !== $event['user_id']) {
+                return false;
+            }
+            if ($lead) {
+                if ($state['reminder_sent_at'] !== null) {
+                    return false;
+                }
+                $legacy = $db->prepare("SELECT is_sent, snooze_until FROM event_reminders
+                    WHERE event_id = ? AND trigger_offset = ? AND trigger_type IN ('push', 'sound')");
+                $legacy->execute([$event['id'], $event['reminder_minutes']]);
+                foreach ($legacy->fetchAll() as $old) {
+                    if ($old['snooze_until'] !== null) {
+                        // The legacy row owns a manually snoozed reminder.
+                        return false;
+                    }
+                    if ($old['is_sent']) {
+                        $sent->execute([$event['id']]);
+                        return true;
+                    }
+                }
+                $expires = $starts->setTimezone(new DateTimeZone('Africa/Johannesburg'))->format('Y-m-d H:i:s');
+                $triggers->onEventReminder((int) $event['id'], (int) $event['user_id'], $event['title'],
+                    (int) ceil($remaining / 60), $expires);
+                $sent->execute([$event['id']]);
+                $db->prepare("UPDATE event_reminders SET is_sent = 1, sent_at = NOW()
+                    WHERE event_id = ? AND trigger_offset = ? AND trigger_type IN ('push', 'sound')
+                    AND is_sent = 0 AND snooze_until IS NULL")->execute([$event['id'], $event['reminder_minutes']]);
+            } else {
+                $expires = $now->modify('tomorrow')->setTimezone(new DateTimeZone('Africa/Johannesburg'))->format('Y-m-d H:i:s');
+                $triggers->onScheduleTaskDue((int) $event['id'], (int) $event['user_id'], $event['title'], $expires);
+            }
+            return true;
+        });
     }
-    $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    echo "Found " . count($events) . " events needing reminders\n";
-    
-    foreach ($events as $event) {
-        try {
-            $secondsUntil = strtotime($event['starts_at']) - time();
-            if ($secondsUntil <= 0) {
+
+    $legacy = $db->query("SELECT r.id, r.next_trigger_at, r.trigger_type, r.trigger_offset, r.snooze_until,
+            e.id AS event_id, e.user_id, e.title, e.starts_at, e.reminder_minutes, f.timezone
+        FROM event_reminders r JOIN events e ON e.id = r.event_id
+        JOIN users u ON u.id = e.user_id AND u.family_id = e.family_id AND u.status = 'active'
+        JOIN families f ON f.id = e.family_id
+        WHERE r.is_sent = 0 AND e.status = 'pending' AND r.trigger_type IN ('push','sound')
+            AND (e.reminder_minutes IS NULL OR e.reminder_minutes <> r.trigger_offset OR r.snooze_until IS NOT NULL)
+            AND r.next_trigger_at <= NOW() + INTERVAL 1 DAY ORDER BY r.next_trigger_at, r.id");
+    foreach ($legacy->fetchAll() as $row) {
+        $zone = ScheduledJobs::zone($row['timezone']);
+        $now = new DateTimeImmutable('now', $zone);
+        $starts = new DateTimeImmutable($row['starts_at'], $zone);
+        $remaining = $starts->getTimestamp() - $now->getTimestamp();
+        if ($remaining <= 0 || new DateTimeImmutable($row['next_trigger_at'], $zone) > $now) {
+            continue;
+        }
+        $count += (int) ScheduledJobs::once($db, implode('|', ['legacy', $row['id'], $row['user_id'], $row['next_trigger_at']]),
+            static function () use ($db, $row, $triggers, $remaining, $starts): bool {
+                $locked = $db->prepare("UPDATE event_reminders r JOIN events e ON e.id = r.event_id
+                    SET r.is_sent = 1, r.sent_at = NOW()
+                    WHERE r.id = ? AND r.is_sent = 0 AND r.next_trigger_at = ? AND e.status = 'pending'
+                    AND e.starts_at = ? AND e.user_id = ?");
+                $locked->execute([$row['id'], $row['next_trigger_at'], $row['starts_at'], $row['user_id']]);
+                if ($locked->rowCount() !== 1) {
+                    return false;
+                }
+                $triggers->onEventReminder((int) $row['event_id'], (int) $row['user_id'], $row['title'],
+                    (int) ceil($remaining / 60), $starts->setTimezone(new DateTimeZone('Africa/Johannesburg'))->format('Y-m-d H:i:s'));
+                return true;
+            });
+    }
+
+    $occasions = $db->query("SELECT e.id, COALESCE(e.recurrence_parent_id, e.id) AS series_id,
+            e.title, e.kind, e.starts_at, e.family_id, f.timezone
+        FROM events e JOIN families f ON f.id = e.family_id
+        WHERE e.kind IN ('birthday', 'anniversary') AND e.status <> 'cancelled' ORDER BY e.id");
+    $members = $db->prepare("SELECT id FROM users WHERE family_id = ? AND status = 'active'");
+    $seen = [];
+    foreach ($occasions->fetchAll() as $row) {
+        $today = new DateTimeImmutable('now', ScheduledJobs::zone($row['timezone']));
+        if ((int) $today->format('G') < 6) {
+            continue;
+        }
+        foreach ([0, 1, 7] as $days) {
+            $occurrence = $today->modify("+$days days");
+            if ($occurrence->format('m-d') !== substr($row['starts_at'], 5, 5)) {
                 continue;
             }
-            $minutesUntil = (int)ceil($secondsUntil / 60);
-            
-            // Send reminder notification
-            $triggers->onEventReminder(
-                (int)$event['id'],
-                (int)$event['user_id'],
-                $event['title'],
-                $minutesUntil
-            );
-
-            if ($hasSentColumn) {
-                $upd = $db->prepare("UPDATE events SET reminder_sent_at = NOW()
-                    WHERE id = ? AND status = 'pending' AND user_id = ? AND starts_at = ? AND reminder_minutes = ?");
-                $upd->execute([$event['id'], $event['user_id'], $event['starts_at'], $event['reminder_minutes']]);
+            $key = implode('|', [$row['family_id'], $row['series_id'], $occurrence->format('Y-m-d'), $days]);
+            if (isset($seen[$key])) {
+                continue;
             }
-
-            echo "  ✅ Sent reminder for event {$event['id']}\n";
-            
-        } catch (Exception $e) {
-            echo "  ❌ Error for event {$event['id']}: " . $e->getMessage() . "\n";
-        }
-    }
-    
-    // Check for schedule tasks (from events table with kind='study'|'work'|'todo')
-    $stmt = $db->prepare("
-        SELECT 
-            e.id,
-            e.user_id,
-            e.title
-        FROM events e
-        JOIN users u ON u.id = e.user_id AND u.family_id = e.family_id AND u.status = 'active'
-        WHERE e.kind IN ('study', 'work', 'todo')
-          AND e.status = 'pending'
-          AND e.starts_at <= NOW()
-          AND e.starts_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
-          AND NOT EXISTS (
-              SELECT 1 FROM notifications n
-              WHERE n.type = 'schedule'
-                AND n.user_id = e.user_id
-                AND JSON_EXTRACT(n.data_json, '$.task_id') = e.id
-                AND n.title LIKE 'Task Due Now%'
-                AND n.created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
-          )
-    ");
-    $stmt->execute();
-    $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    if (!empty($tasks)) {
-        echo "\nFound " . count($tasks) . " tasks due now\n";
-        
-        foreach ($tasks as $task) {
-            try {
-                $triggers->onScheduleTaskDue(
-                    (int)$task['id'],
-                    (int)$task['user_id'],
-                    $task['title']
-                );
-                
-                echo "  ✅ Sent due notification for task {$task['id']}\n";
-                
-            } catch (Exception $e) {
-                echo "  ❌ Error for task {$task['id']}: " . $e->getMessage() . "\n";
+            $seen[$key] = true;
+            $members->execute([$row['family_id']]);
+            foreach ($members->fetchAll(PDO::FETCH_COLUMN) as $member) {
+                $count += (int) ScheduledJobs::once($db, "$key|$member", static function () use ($triggers, $row, $member, $days): void {
+                    if ($row['kind'] === 'birthday') {
+                        $name = trim(preg_replace("/'s Birthday$/i", '', $row['title']));
+                        $triggers->onBirthdayReminder((int) $row['id'], (int) $member, $name, $days);
+                    } else {
+                        $triggers->onAnniversaryReminder((int) $row['id'], (int) $member, $row['title'], $days);
+                    }
+                });
             }
         }
     }
-    
-    echo "\nCron job completed successfully\n";
-    
-} catch (Exception $e) {
-    echo "FATAL ERROR: " . $e->getMessage() . "\n";
-    error_log("Reminder cron fatal error: " . $e->getMessage());
-    exit(1);
-}
+
+    $sync = SyncEngine::getInstance($db)->processSyncQueue();
+    printf("Calendar reminders queued %d. Sync succeeded %d, failed %d.\n", $count, $sync['synced'], $sync['failed']);
+    if ($sync['failed'] > 0) {
+        throw new RuntimeException('Calendar sync has pending failures');
+    }
+}));
