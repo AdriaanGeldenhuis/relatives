@@ -5,9 +5,7 @@ Real-time family location tracking with geofences, alerts, and events.
 ## Features
 
 - **Live Location Tracking** - Real-time family member locations
-- **Two Tracking Modes**
-  - Mode 1: Family Live Session (battery-efficient, triggered by dashboard open)
-  - Mode 2: Motion-based (only tracks when moving)
+- **Android tracking policy** with Off, Normal and Active. Normal and Active use movement-based tracking with low-power stationary check-ins.
 - **Geofences** - Define zones with enter/exit alerts
 - **Places** - Mark important locations (home, work, school)
 - **Events Feed** - Timeline of all location events
@@ -41,7 +39,10 @@ Real-time family location tracking with geofences, alerts, and events.
 
 ### Sessions
 - `POST /api/keepalive` - Keep live session active
-- `GET /api/session_status` - Check live session state
+- `GET /api/session_status.php` - Read the Android tracking policy and legacy session state
+- `POST /api/wake_devices.php` - Request one fresh fix from eligible family installations
+- `POST /api/wake_ack.php` - Authenticate and acknowledge the receiving installation
+- `GET /api/wake_status.php?request_id=…` - Read the requester’s per-device progress
 
 ### Location
 - `POST /api/location` - Submit single location
@@ -122,131 +123,16 @@ Native apps use the same session-based authentication as the web app:
 | `platform` | string | No | "ios" or "android" |
 | `app_version` | string | No | App version string |
 
-### Mode 1: Live Session Behavior
+### Android schedule
 
-When the family is configured for Mode 1 (Live Session):
+Fetch `data.tracking_policy` from `session_status.php` on activation and reconnect. Upload acknowledgements include the same policy as `data.server_settings`. The policy provides `allowed`, `mode`, `moving_interval`, `idle_interval`, `min_accuracy_m`, and server time in milliseconds. Mode 0 suspends collection. Normal and Active use a visible location foreground service, movement and idle detection, and reduced sampling in Battery Saver.
 
-1. **Before starting high-power tracking**, call:
-   ```
-   GET /tracking/api/session_status.php
-   ```
+### Location and Wake acknowledgements
 
-   Response:
-   ```json
-   {
-       "success": true,
-       "data": {
-           "mode": 1,
-           "session": {
-               "active": true,
-               "expires_in_seconds": 280
-           },
-           "should_track": true
-       }
-   }
-   ```
+Send up to 100 fixes in `POST /tracking/api/batch.php`. Assign an installation `device_id` and a stable `client_event_id` to every queued fix. Capture time can be sent as UTC `recorded_at_ms` or in the supported `recorded_at` format. Read each result by its index and event ID. `stored` and `duplicate` acknowledge a persisted fix. `skipped` and `error` are permanent point outcomes with a reason. Retain points whose acknowledgement is missing or whose transport failed. A 401 requires sign-in. A 403 with `location_sharing_disabled` requires renewed consent. A `tracking_disabled` result suspends collection.
 
-2. **If `should_track` is `false`**:
-   - Stop high-power GPS tracking
-   - Optionally send coarse heartbeat every 5-10 minutes
-   - Check `session_status` periodically (every 1-2 minutes)
+The signed-in family viewer sends `client_request_id` and the page’s CSRF token to request Wake. The 60-second request has one target per eligible installation. After Firebase delivery, the installation calls `wake_ack.php` with `request_id`, `device_id`, and its state. A positive `acquire` and remaining time permit one fresh fix. Attach `wake_request_id` to that upload. Only a committed qualifying fix moves the request state to `refreshed`.
 
-3. **If `should_track` is `true`**:
-   - Start tracking at configured interval (`moving_interval_seconds`)
-   - Upload locations to `POST /tracking/api/location.php`
+### Verification
 
-4. **Handle `session_off` error**:
-   If location upload returns:
-   ```json
-   {
-       "success": false,
-       "error": "session_off",
-       "message": "No active tracking session"
-   }
-   ```
-   Stop tracking and wait for session to become active.
-
-### Mode 2: Motion-Based Behavior
-
-When configured for Mode 2:
-
-1. **Always** monitor device motion (accelerometer/activity recognition)
-
-2. **When moving**:
-   - Upload locations at `moving_interval_seconds` (e.g., 30s)
-   - Server determines motion state from speed/distance
-
-3. **When idle**:
-   - Upload heartbeat at `idle_interval_seconds` (e.g., 5 min)
-   - Server will not store in history, only update current
-
-4. **Motion detection**:
-   - Use iOS: `CMMotionActivityManager`
-   - Use Android: `ActivityRecognitionClient`
-   - Fallback: significant location change APIs
-
-### Batch Uploads
-
-For offline/buffered locations:
-
-```
-POST /tracking/api/batch.php
-
-{
-    "locations": [
-        { "lat": ..., "lng": ..., "recorded_at": "..." },
-        { "lat": ..., "lng": ..., "recorded_at": "..." }
-    ]
-}
-```
-
-- Maximum 100 locations per batch
-- Locations should be sorted by `recorded_at` (oldest first)
-- Server processes each and returns per-location results
-
-### Error Handling
-
-| HTTP Code | Error | Action |
-|-----------|-------|--------|
-| 401 | `not_authenticated` | Redirect to login |
-| 402 | `subscription_locked` | Show subscription prompt |
-| 403 | `location_sharing_disabled` | Show privacy settings prompt |
-| 409 | `session_off` | Stop tracking, wait for session |
-| 422 | `poor_accuracy` | Discard point, try again |
-| 429 | `rate_limited` | Wait `retry_after` seconds |
-
-### Recommended Upload Strategy
-
-```
-function uploadLocation(location):
-    // Check session first (Mode 1)
-    if (mode == 1):
-        status = GET /session_status
-        if not status.should_track:
-            return  // Don't upload
-
-    // Upload
-    result = POST /location, location
-
-    if result.error == "rate_limited":
-        sleep(result.retry_after)
-        return uploadLocation(location)
-
-    if result.error == "session_off":
-        stopTracking()
-        scheduleSessionCheck()
-        return
-
-    if result.success:
-        // Success! Check for geofence events
-        if result.geofence_events.length > 0:
-            showLocalNotification(result.geofence_events)
-```
-
-### Battery Optimization
-
-- **Mode 1**: Only track when someone is viewing the dashboard
-- **Mode 2**: Use significant location change APIs when idle
-- **iOS**: Use `allowsBackgroundLocationUpdates` sparingly
-- **Android**: Use `FusedLocationProviderClient` with appropriate priority
-- **Always**: Respect `min_accuracy_m` setting (don't upload poor fixes)
+Run `node --test tracking/tests/wake-ui.test.cjs` for map request status and cooldown handling. Run `php tracking/tests/reliability.php` with `RELATIVES_TRACKING_TEST_DSN` pointed at an empty, disposable MariaDB/MySQL database named `relatives_tracking_test`. Set `RELATIVES_TRACKING_TEST_USER` and `RELATIVES_TRACKING_TEST_PASSWORD` for that fixture database if needed. See the Android release checks for rollout switches, migration order, and physical-device acceptance.

@@ -30,6 +30,8 @@ $trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 $familyId = (int)$user['family_id'];
 $settings = $settingsRepo->get($familyId);
+$wakeCsrf = CSRF::generate();
+header('Cache-Control: private, no-store');
 
 // Load alert rules
 $alertsRepo = new AlertsRepo($db, $trackingCache);
@@ -118,6 +120,8 @@ requestAnimationFrame(function() {
             <span>Family</span>
         </button>
     </div>
+
+    <section class="tracking-wake-result" id="wakeResult" aria-live="polite" hidden></section>
 
     <!-- Navigation Header (next turn instruction) -->
     <div class="nav-header" id="navHeader">
@@ -279,6 +283,7 @@ requestAnimationFrame(function() {
         settings: <?php echo json_encode($settings); ?>,
         alertRules: <?php echo json_encode($alertRules); ?>,
         apiBase: '/tracking/api',
+        wakeCsrf: <?php echo json_encode($wakeCsrf); ?>,
         isAdmin: <?php echo json_encode(in_array($user['role'], ['owner', 'admin'])); ?>
     };
 </script>
@@ -413,15 +418,69 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (!initialFitDone && fitMapToFamily(_members)) initialFitDone = true;
     }
 
-    function fetchMembers() {
-        fetch(window.TrackingConfig.apiBase + '/current.php', { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.success && Array.isArray(data.data)) showMembers(data.data);
-            })
-            .catch(function(err) {
-                console.error('[Tracking] Fetch error:', err);
+    var mapRequest = null;
+    var mapFetchAgain = false;
+    var nativeCacheAllowed = true;
+    var mapPolicy = null;
+    var serverClockOffset = 0;
+    var localTrackingStatus = '';
+    var nativeTrackingStatus = '';
+
+    function clearFamilySnapshot() {
+        nativeCacheAllowed = false;
+        if (mapRequest) mapRequest.abort();
+        showMembers([]);
+    }
+
+    async function fetchMembers(urgent) {
+        if (document.hidden) return;
+        if (mapRequest) {
+            if (urgent) mapFetchAgain = true;
+            return;
+        }
+        var request = new AbortController();
+        mapRequest = request;
+        var requestTimeout = setTimeout(function() { request.abort(); }, 10000);
+        try {
+            var response = await fetch(window.TrackingConfig.apiBase + '/current.php', {
+                credentials: 'same-origin', cache: 'no-store', signal: request.signal
             });
+            if (response.status === 401 || response.status === 403) {
+                clearFamilySnapshot();
+                setOwnStatus('Sign in to see family locations');
+                stopBrowserTracking();
+                stopPolling();
+                return;
+            }
+            var data = await response.json();
+            if (!response.ok || !data.success || !Array.isArray(data.data)) throw new Error('snapshot_unavailable');
+            if (request.signal.aborted || document.hidden) return;
+            nativeCacheAllowed = false;
+            var previousPolicy = mapPolicy;
+            mapPolicy = data.server_settings || null;
+            if (previousPolicy && mapPolicy && nativeBridge && nativeBridge.refreshTrackingPolicy &&
+                (previousPolicy.mode !== mapPolicy.mode || previousPolicy.location_sharing !== mapPolicy.location_sharing)) {
+                nativeBridge.refreshTrackingPolicy();
+            }
+            if (nativeBridge) updateNativeSharingButton();
+            if (mapPolicy && Number.isFinite(mapPolicy.server_time_ms)) {
+                serverClockOffset = mapPolicy.server_time_ms - Date.now();
+            }
+            localTrackingStatus = mapPolicy && mapPolicy.mode === 0 ? 'Family tracking is off' : '';
+            if (mapPolicy && !mapPolicy.allowed) stopBrowserTracking();
+            showMembers(data.data);
+        } catch (error) {
+            if (!document.hidden && error.name !== 'AbortError') {
+                setOwnStatus(_members.length ? 'Connection lost · showing last known locations' : 'Waiting for a connection');
+            }
+        } finally {
+            clearTimeout(requestTimeout);
+            if (mapRequest === request) mapRequest = null;
+            if (mapFetchAgain) {
+                mapFetchAgain = false;
+                fetchMembers();
+            }
+        }
     }
 
     function fitMapToFamily(members) {
@@ -463,14 +522,16 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var withLocation = members.filter(function(m) {
             return m.has_location && m.lat !== null;
         }).length;
-        if (statusEl) statusEl.textContent = statusPrefix + withLocation + ' tracking \u00b7 ' + members.length + ' total';
+        if (statusEl) statusEl.textContent = localTrackingStatus || nativeTrackingStatus || statusPrefix + withLocation + ' sharing locations';
 
         var html = '';
         members.forEach(function(m) {
             var initial = (m.name || 'U').charAt(0).toUpperCase();
             var hasLoc = m.has_location && m.lat !== null;
             var statusClass = hasLoc ? getStatusClass(m) : 'offline';
-            var timeAgo = hasLoc ? formatTimeAgo(m.recorded_at || m.updated_at) : 'No location';
+            var timeAgo = hasLoc ? (statusClass === 'offline' ? 'Last known · ' : '') + formatTimeAgo(captureTime(m))
+                : (m.location_sharing === false ? 'Sharing off' : 'No location yet');
+            if (hasLoc && m.approximate) timeAgo += ' · Approximate';
             var speed = hasLoc ? formatSpeed(m.speed_mps) : '';
 
             html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
@@ -546,25 +607,27 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         });
     }
 
-    // Parse MySQL datetime as UTC (server stores all timestamps in UTC)
-    function parseUTC(dateStr) {
-        if (!dateStr) return 0;
-        return new Date(dateStr.replace(' ', 'T') + 'Z').getTime();
+    function captureTime(member) {
+        if (Number.isFinite(member.recorded_at_ms)) return member.recorded_at_ms;
+        if (!member.recorded_at) return 0;
+        var value = member.recorded_at.replace(' ', 'T');
+        if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) value += 'Z';
+        return Date.parse(value) || 0;
     }
 
     function getStatusClass(m) {
-        var ts = parseUTC(m.recorded_at || m.updated_at);
-        var diffMin = (Date.now() - ts) / 60000;
-        if (diffMin < 5) return 'online';
-        if (diffMin < 30) return 'idle';
+        var ageSecs = (Date.now() + serverClockOffset - captureTime(m)) / 1000;
+        var expect = mapPolicy && (m.motion_state === 'moving' ? mapPolicy.moving_interval : mapPolicy.idle_interval);
+        if (ageSecs <= Math.max(m.motion_state === 'moving' ? 60 : 180, 2 * (expect || 0))) {
+            return m.motion_state === 'idle' ? 'idle' : 'online';
+        }
         return 'offline';
     }
 
-    function formatTimeAgo(dateStr) {
-        if (!dateStr) return 'unknown';
-        var diff = (Date.now() - parseUTC(dateStr)) / 1000;
-        if (diff < 0) diff = 0;
-        if (diff < 60) return 'just now';
+    function formatTimeAgo(timestamp) {
+        if (!timestamp) return 'Time unavailable';
+        var diff = Math.max(0, (Date.now() + serverClockOffset - timestamp) / 1000);
+        if (diff < 60) return Math.floor(diff) + 's ago';
         if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
         if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
         return Math.floor(diff / 86400) + 'd ago';
@@ -588,9 +651,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     function buildPopupHTML(m) {
         var status = getStatusClass(m);
-        var statusLabel = status === 'online' ? 'Online' : status === 'idle' ? 'Idle' : 'Offline';
+        var statusLabel = status === 'offline' ? 'Last known' : (status === 'idle' ? 'Stationary' : 'Recent');
         var statusColor = status === 'online' ? '#43e97b' : status === 'idle' ? '#f9d423' : '#718096';
-        var timeAgo = formatTimeAgo(m.recorded_at || m.updated_at);
+        var timeAgo = formatTimeAgo(captureTime(m)) + (m.approximate ? ' · Approximate' : '');
         var speed = formatSpeed(m.speed_mps);
         var motionState = m.motion_state || 'unknown';
         var initial = (m.name || 'U').charAt(0).toUpperCase();
@@ -1045,68 +1108,159 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         }, 3000);
     }
 
-    // Wake FAB
     var wakeFab = document.getElementById('wakeFab');
-    var wakeLabel = wakeFab ? wakeFab.querySelector('span') : null;
-    if (wakeFab) wakeFab.addEventListener('click', function() {
-        if (wakeFab.disabled) return;
-        wakeFab.disabled = true;
-        if (wakeLabel) wakeLabel.textContent = 'Sending...';
+    var wakeLabel = wakeFab.querySelector('span');
+    var wakeResult = document.getElementById('wakeResult');
+    var liveWake = null;
+    var wakePoll = null;
+    var wakePollInFlight = false;
+    var localWakeId = null;
+    var wakeCooldownUntil = 0;
+    var wakeStatuses = {
+        queued: 'Sending request', sent: 'Waiting for phone', received: 'Request received',
+        refreshed: 'Location updated', paused: 'Sharing off', permission: 'Needs location permission',
+        notifications: 'Needs notifications enabled', open_required: 'Open app to refresh',
+        no_fix: 'Couldn’t get a fix', no_reply: 'No reply', update_timeout: 'Location update timed out',
+        send_failed: 'Couldn’t send',
+        unreachable: 'Phone needs to reconnect', unavailable: 'Wake service unavailable',
+        legacy_sent: 'Request sent · app update needed for confirmation'
+    };
 
-        function resetWakeFab() {
-            wakeFab.classList.remove('active');
-            wakeFab.disabled = false;
-            if (wakeLabel) wakeLabel.textContent = 'Wake';
+    async function wakeRequest(path, options) {
+        var controller = new AbortController();
+        var timeout = setTimeout(function() { controller.abort(); }, 15000);
+        try {
+            var response = await fetch(window.TrackingConfig.apiBase + path, Object.assign({
+                credentials: 'same-origin', cache: 'no-store', signal: controller.signal
+            }, options || {}));
+            return { response: response, body: await response.json() };
+        } finally {
+            clearTimeout(timeout);
         }
+    }
 
-        // Boost this device too: the server wake only targets the REST of
-        // the family, and in the app our own dot should refresh immediately.
-        if (typeof window.TrackingBridge !== 'undefined') {
-            try { window.TrackingBridge.wakeAllDevices(); } catch (e) {}
-        }
+    function makeWakeId() {
+        if (crypto.randomUUID) return crypto.randomUUID();
+        var bytes = crypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 15) | 64;
+        bytes[8] = (bytes[8] & 63) | 128;
+        var hex = Array.from(bytes, function(n) { return n.toString(16).padStart(2, '0'); }).join('');
+        return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+    }
 
-        fetch(window.TrackingConfig.apiBase + '/wake_devices.php', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ family_id: window.TrackingConfig.familyId })
-        })
-        .then(function(r) {
-            return r.json().catch(function() { return {}; }).then(function(body) {
-                return { status: r.status, ok: r.ok, body: body };
-            });
-        })
-        .then(function(res) {
-            var data = res.body || {};
-            if (res.status === 429) {
-                // Rate-limited (one wake per minute) — this is not a failure.
-                var wait = data.retry_after ? Math.ceil(data.retry_after) + 's' : 'a minute';
-                showToast('Devices were just woken — try again in ' + wait, 'info');
-                resetWakeFab();
-                return;
-            }
-            if (res.ok && data.success) {
-                var d = data.data || {};
-                wakeFab.classList.add('active');
-                if (wakeLabel) wakeLabel.textContent = 'Sent!';
-                if (d.devices_targeted === 0) {
-                    showToast('No family devices to wake yet — ask them to install the app and enable tracking', 'info');
-                } else if (d.sent > 0) {
-                    showToast('Wake signal sent to ' + d.sent + ' device' + (d.sent === 1 ? '' : 's'), 'success');
-                } else {
-                    showToast('Wake sent, but no device confirmed — they may be offline', 'info');
-                }
-                setTimeout(resetWakeFab, 3000);
-            } else {
-                showToast('Wake failed: ' + (data.error || ('server ' + res.status)), 'error');
-                resetWakeFab();
-            }
-        })
-        .catch(function(err) {
-            console.error('[Wake] Error:', err);
-            showToast('Wake failed: ' + err.message, 'error');
-            resetWakeFab();
+    function displayWake(message, targets) {
+        wakeResult.replaceChildren(document.createTextNode(message));
+        wakeResult.hidden = false;
+        var detailCount = 0;
+        (targets || []).forEach(function(target) {
+            var row = document.createElement('div');
+            row.textContent = target.name + ' · ' + (wakeStatuses[target.state] || 'Waiting for phone');
+            wakeResult.appendChild(row);
+            detailCount++;
         });
+        wakeResult.classList.toggle('has-targets', detailCount > 0);
+    }
+
+    function setWakeBusy(busy) {
+        wakeFab.disabled = busy;
+        wakeLabel.textContent = busy ? 'Waking…' : 'Wake';
+    }
+
+    function handleWakeStatus(status) {
+        var priorCount = liveWake ? liveWake.targets.filter(function(target) { return target.state === 'refreshed'; }).length : 0;
+        liveWake = status;
+        wakeCooldownUntil = performance.now() + status.remaining_ms;
+        var count = status.targets.filter(function(target) { return target.state === 'refreshed'; }).length;
+        var oldCount = status.targets.filter(function(target) { return target.state === 'legacy_sent'; }).length;
+        var title = count ? count + (count === 1 ? ' location updated' : ' locations updated')
+            : (!status.complete ? 'Wake requested' : (oldCount ? 'Wake request sent' : 'Wake finished'));
+        displayWake(title, status.targets);
+        if (count > priorCount) fetchMembers(true);
+        if (status.complete) liveWake = null;
+        setWakeBusy(!status.complete);
+        scheduleWakePoll();
+    }
+
+    function scheduleWakePoll() {
+        clearTimeout(wakePoll);
+        if (liveWake && !document.hidden) wakePoll = setTimeout(checkWakeStatus, 5000);
+    }
+
+    async function checkWakeStatus() {
+        if (document.hidden || !liveWake || wakePollInFlight) return;
+        wakePollInFlight = true;
+        var request = liveWake;
+        try {
+            var reply = await wakeRequest('/wake_status.php?request_id=' + encodeURIComponent(request.request_id));
+            var response = reply.response;
+            var body = reply.body;
+            if (response.ok && body.success) {
+                handleWakeStatus(body.data);
+            } else if (response.status === 401 || response.status === 403) {
+                clearFamilySnapshot();
+                liveWake = null;
+                setWakeBusy(false);
+                displayWake('Sign in to check Wake status');
+            } else {
+                throw new Error('status_unavailable');
+            }
+        } catch (error) {
+            if (performance.now() >= wakeCooldownUntil) {
+                liveWake = null;
+                setWakeBusy(false);
+                displayWake('Couldn’t verify the Wake result', request.targets);
+            }
+        } finally {
+            wakePollInFlight = false;
+            scheduleWakePoll();
+        }
+    }
+
+    var attemptId = null;
+    wakeFab.addEventListener('click', async function() {
+        if (wakeFab.disabled) return;
+        if (performance.now() < wakeCooldownUntil) {
+            showToast('Try Wake again in ' + Math.ceil((wakeCooldownUntil - performance.now()) / 1000) + 's', 'info');
+            return;
+        }
+        setWakeBusy(true);
+        try {
+            attemptId = attemptId || makeWakeId();
+            var reply = await wakeRequest('/wake_devices.php', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.TrackingConfig.wakeCsrf },
+                body: JSON.stringify({ client_request_id: attemptId })
+            });
+            var response = reply.response;
+            var body = reply.body;
+            attemptId = null;
+            if (response.status === 429) {
+                var wait = body.retry_after || 60;
+                wakeCooldownUntil = performance.now() + wait * 1000;
+                displayWake('Try Wake again in ' + wait + 's');
+            } else if (response.ok && body.success) {
+                var data = body.data || {};
+                if (data.request_id) {
+                    handleWakeStatus(data);
+                } else if (data.sent) {
+                    wakeCooldownUntil = performance.now() + 60000;
+                    displayWake('Wake requested · confirmation unavailable');
+                } else {
+                    displayWake(data.devices_targeted ? 'Couldn’t send Wake' : 'No family phones ready for Wake', data.targets);
+                }
+                var admitted = data.request_id && data.remaining_ms > 0 ? data.request_id : data.sent && !data.request_id ? 'legacy' : null;
+                if (admitted && admitted !== localWakeId && nativeBridge) {
+                    localWakeId = admitted;
+                    nativeBridge.wakeAllDevices();
+                }
+            } else {
+                displayWake(body.error === 'tracking_disabled' ? 'Family tracking is off' : 'Wake temporarily unavailable');
+            }
+        } catch (error) {
+            displayWake('Couldn’t reach the Wake service · tap Wake to retry');
+        } finally {
+            setWakeBusy(!!liveWake);
+        }
     });
 
     // Consent dialog logic (localStorage can throw in privacy modes)
@@ -1180,10 +1334,21 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var nativeBridge = window.TrackingBridge;
     var isNativeApp = !!nativeBridge || /\bRelativesAndroid\//.test(navigator.userAgent);
 
+    var webPollOwner = !nativeBridge || typeof nativeBridge.claimFamilyPolling === 'function';
     if (nativeBridge) {
+        if (webPollOwner) nativeBridge.claimFamilyPolling();
         if (!document.hidden) nativeBridge.onTrackingScreenVisible();
         showNativeSharingButton();
-        window.addEventListener('relativestrackingstate', function(event) { updateNativeSharingButton(event.detail); });
+        window.addEventListener('relativestrackingstate', function(event) {
+            updateNativeSharingButton(event.detail);
+            if (event.detail === 'signed_out') clearFamilySnapshot();
+        });
+        window.addEventListener('relativesfamilyclear', clearFamilySnapshot);
+        window.addEventListener('relativestrackingresume', function() {
+            if (webPollOwner) fetchMembers(true);
+            if (liveWake) checkWakeStatus();
+            updateNativeSharingButton();
+        });
         window.addEventListener('beforeunload', function() { nativeBridge.onTrackingScreenHidden(); });
         document.addEventListener('visibilitychange', function() {
             if (document.hidden) nativeBridge.onTrackingScreenHidden();
@@ -1212,11 +1377,24 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         button.type = 'button';
         button.className = 'tracking-toolbar-btn enable-location-btn';
         button.onclick = function() {
-            if (nativeBridge.getTrackingMode() === 'enabled') nativeBridge.stopTracking();
+            if (['enabled', 'battery_saver', 'providers_disabled'].indexOf(nativeBridge.getTrackingMode()) >= 0) nativeBridge.stopTracking();
             else nativeBridge.startTracking();
             setTimeout(updateNativeSharingButton, 1000);
         };
         toolbar.insertBefore(button, toolbar.firstChild);
+        if (typeof nativeBridge.refreshMyLocation === 'function') {
+            var refresh = document.createElement('button');
+            refresh.id = 'refreshMyLocation';
+            refresh.type = 'button';
+            refresh.className = 'tracking-toolbar-btn';
+            refresh.textContent = 'Refresh my location';
+            refresh.hidden = true;
+            refresh.onclick = function() {
+                nativeBridge.refreshMyLocation();
+                showToast('Refreshing this phone…', 'info');
+            };
+            toolbar.appendChild(refresh);
+        }
         updateNativeSharingButton();
     }
 
@@ -1224,8 +1402,23 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var button = document.getElementById('nativeLocationSharing');
         if (!button) return;
         var mode = nextMode || nativeBridge.getTrackingMode();
-        button.disabled = mode === 'loading';
-        button.textContent = mode === 'enabled' ? 'Stop sharing' : (mode === 'paused' ? 'Resume sharing' : 'Enable live location');
+        button.disabled = ['loading', 'signed_out', 'family_off', 'account_off'].includes(mode);
+        var refresh = document.getElementById('refreshMyLocation');
+        if (refresh) refresh.hidden = !['enabled', 'battery_saver', 'paused'].includes(mode) || nativeBridge.hasRemoteWake();
+        var messages = {
+            no_permission: 'Location permission is needed to share',
+            notifications_disabled: 'Enable tracking notifications to share',
+            providers_disabled: 'Turn on location on this phone',
+            family_off: 'Family tracking is off',
+            account_off: 'Enable sharing in Privacy & Security',
+            signed_out: 'Sign in to share your location',
+            battery_saver: 'Battery Saver · slower location updates'
+        };
+        nativeTrackingStatus = messages[mode] || '';
+        if (nativeTrackingStatus && !localTrackingStatus) {
+            document.getElementById('trackingStatus').textContent = nativeTrackingStatus;
+        }
+        button.textContent = ['enabled', 'battery_saver', 'providers_disabled'].indexOf(mode) >= 0 ? 'Stop sharing' : (mode === 'paused' ? 'Resume sharing' : 'Enable live location');
     }
 
     // ── BROWSER GEOLOCATION ──────────────────────────────────────
@@ -1270,7 +1463,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             return r.json().then(function(data) { return { status: r.status, data: data }; });
         }).then(function(res) {
             var data = res.data || {};
-            if (data.success) {
+            if (data.message === 'tracking_disabled') {
+                setOwnStatus('Family tracking is off');
+                stopBrowserTracking();
+            } else if (data.success) {
                 fetchMembers();
             } else if (res.status === 403) {
                 // location_sharing disabled server-side — stop trying and tell
@@ -1287,11 +1483,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // position can't be shared, so they don't believe they're on the map.
     function setOwnStatus(msg) {
         var el = document.getElementById('trackingStatus');
+        localTrackingStatus = msg;
         if (el) el.textContent = msg;
     }
 
     function startBrowserTracking() {
-        if (isNativeApp || !navigator.geolocation || browserWatchId !== null) return;
+        if (document.hidden || isNativeApp || !navigator.geolocation || browserWatchId !== null || (mapPolicy && !mapPolicy.allowed)) return;
         browserWatchId = navigator.geolocation.watchPosition(uploadPosition, function(err) {
             console.warn('[Tracking] Geolocation error:', err.message);
             if (err.code === 1) { // PERMISSION_DENIED
@@ -1319,6 +1516,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Use the web API as a fallback if the native cache stops refreshing.
     var memberPollTimer = null;
     var bridgeCacheTimer = null;
+    var legacyFallbackTimer = null;
     var lastBridgeJson = null;
     var lastFallbackAt = 0;
     var nativeActivationAt = 0;
@@ -1349,6 +1547,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function readBridgeCache() {
+        if (!nativeCacheAllowed) return;
         try {
             if (hasCacheAge && window.TrackingBridge.getFamilyCacheAgeMillis() > 45000) {
                 var now = Date.now();
@@ -1375,23 +1574,24 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     function startPolling() {
         stopPolling();
         if (document.hidden) return;
-        if (nativeBridge) {
-            nativeActivationAt = Date.now();
-            readBridgeCache();
-            bridgeCacheTimer = setInterval(readBridgeCache, 5000);
-
-            // Older builds only expose a cache snapshot, without freshness.
-            if (!hasCacheAge) {
-                fetchMembers();
-                memberPollTimer = setInterval(fetchMembers, 60000);
-            }
-        } else {
-            fetchMembers();
-            memberPollTimer = setInterval(fetchMembers, 10000);
+        if (webPollOwner || !nativeCacheAllowed) {
+            fetchMembers(true);
+            memberPollTimer = setInterval(fetchMembers, 15000);
+            return;
         }
+        nativeActivationAt = Date.now();
+        readBridgeCache();
+        bridgeCacheTimer = setInterval(readBridgeCache, 5000);
+        // Refresh consent and link state even for bridge versions with an active native cache.
+        legacyFallbackTimer = setTimeout(function() {
+            if (document.hidden || !bridgeCacheTimer) return;
+            fetchMembers();
+            memberPollTimer = setInterval(fetchMembers, 30000);
+        }, 20000);
     }
 
     function stopPolling() {
+        clearTimeout(legacyFallbackTimer);
         if (memberPollTimer) { clearInterval(memberPollTimer); memberPollTimer = null; }
         if (bridgeCacheTimer) { clearInterval(bridgeCacheTimer); bridgeCacheTimer = null; }
     }
@@ -1400,12 +1600,28 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (document.visibilityState === 'visible') {
             startPolling();
             startNavigationWatch();
+            if (!isNativeApp && hasConsent === '1' && browserShareLocation) startBrowserTracking();
+            if (liveWake) checkWakeStatus();
         } else {
             stopPolling();
+            if (mapRequest) mapRequest.abort();
+            clearTimeout(wakePoll);
+            stopBrowserTracking();
             stopNavigationWatch();
         }
     });
 
+    window.addEventListener('online', function() {
+        if (document.hidden) return;
+        fetchMembers(true);
+        if (liveWake) checkWakeStatus();
+    });
+    window.addEventListener('pagehide', function(event) {
+        if (event.persisted) clearFamilySnapshot();
+    });
+    window.addEventListener('pageshow', function(event) {
+        if (event.persisted) startPolling();
+    });
     startPolling();
 
 })();

@@ -22,13 +22,24 @@ if (empty($input)) {
 $trackingCache = new TrackingCache($cache);
 $settingsRepo = new SettingsRepo($db, $trackingCache);
 
-$saved = $settingsRepo->save($ctx->familyId, $input);
-
+if (isset($input['mode']) && !in_array((string) $input['mode'], ['0', '1', '2'], true)) {
+    Response::error('invalid_tracking_mode', 422);
+}
+$settingsRepo->get($ctx->familyId);
+$db->beginTransaction();
+try {
+    $previous = $settingsRepo->lockForTracking($ctx->familyId, true);
+    $saved = $settingsRepo->save($ctx->familyId, $input);
+    if ($saved && isset($input['mode']) && ((int) $input['mode'] === 0) !== ((int) $previous['mode'] === 0)) {
+        TrackingPolicy::setCutoff($db, 'family', $ctx->familyId);
+    }
+    $db->commit();
+} catch (Throwable $error) {
+    $db->rollBack();
+    throw $error;
+}
 if (!$saved) {
     Response::error('no_valid_settings_provided', 422);
 }
-
-// Return updated settings
-$settings = $settingsRepo->get($ctx->familyId);
-
-Response::success($settings, 'Settings saved');
+$trackingCache->deleteSettings($ctx->familyId);
+Response::success($settingsRepo->get($ctx->familyId), 'Settings saved');

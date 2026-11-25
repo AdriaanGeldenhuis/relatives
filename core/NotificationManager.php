@@ -206,8 +206,8 @@ class NotificationManager {
      */
     private function removeInvalidToken(int $tokenId, string $token) {
         try {
-            $stmt = $this->db->prepare("DELETE FROM fcm_tokens WHERE id = ?");
-            $stmt->execute([$tokenId]);
+            $stmt = $this->db->prepare("DELETE FROM fcm_tokens WHERE id = ? AND BINARY token = BINARY ?");
+            $stmt->execute([$tokenId, $token]);
             error_log("FCM: Removed invalid token ID $tokenId");
         } catch (Exception $e) {
             error_log("FCM: Failed to remove invalid token: " . $e->getMessage());

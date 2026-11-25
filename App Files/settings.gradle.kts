@@ -16,9 +16,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven {
-            url = java.net.URI.create("https://api.mapbox.com/downloads/v2/releases/maven")
-        }
     }
 }
 

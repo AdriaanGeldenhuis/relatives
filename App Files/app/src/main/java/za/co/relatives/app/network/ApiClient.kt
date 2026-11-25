@@ -74,10 +74,12 @@ class ApiClient(private val context: Context) {
      * /api/notifications/register_token.php — tokens were never registered,
      * so no pushes or tracking wakes ever reached Android devices.)
      */
-    suspend fun registerFcmToken(token: String, sessionCookie: String): JsonObject = withContext(Dispatchers.IO) {
+    suspend fun registerFcmToken(token: String, sessionCookie: String, installationId: String, capability: String): JsonObject = withContext(Dispatchers.IO) {
         val body = JsonObject().apply {
             addProperty("token", token)
             addProperty("device_type", "android")
+            addProperty("installation_id", installationId)
+            addProperty("wake_capability", capability)
         }
         val request = Request.Builder()
             .url("${BASE_URL}fcm/register.php")

@@ -47,8 +47,23 @@ class GeofenceEngine
      */
     public function process(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM = null): void
     {
-        $this->processGeofences($familyId, $userId, $lat, $lng, $userName, $accuracyM);
-        $this->processPlaces($familyId, $userId, $lat, $lng, $userName, $accuracyM);
+        $alerts = $this->recordTransitions($familyId, $userId, $lat, $lng, $userName, $accuracyM);
+        $this->sendAlerts($familyId, $userId, $alerts);
+    }
+
+    public function recordTransitions(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM): array
+    {
+        return array_merge(
+            $this->processGeofences($familyId, $userId, $lat, $lng, $userName, $accuracyM),
+            $this->processPlaces($familyId, $userId, $lat, $lng, $userName, $accuracyM)
+        );
+    }
+
+    public function sendAlerts(int $familyId, int $userId, array $alerts): void
+    {
+        foreach ($alerts as [$type, $target, $data]) {
+            $this->alertsEngine->fire($familyId, $userId, $type, $target, $data);
+        }
     }
 
     /** Buffer (m) to clear before a circular boundary transition is believed. */
@@ -70,15 +85,16 @@ class GeofenceEngine
         return $distance <= max(0.0, $radius - $buffer);
     }
 
-    private function processGeofences(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM): void
+    private function processGeofences(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM): array
     {
         $geofences = $this->geoRepo->listActive($familyId);
         if (empty($geofences)) {
-            return;
+            return [];
         }
 
         // Load current states for this user
         $states = $this->loadGeofenceStates($userId);
+        $alerts = [];
         $buffer = $this->hysteresisBuffer($accuracyM);
 
         foreach ($geofences as $gf) {
@@ -102,23 +118,24 @@ class GeofenceEngine
                 'lng' => $lng,
             ]);
 
-            $this->alertsEngine->fire($familyId, $userId, $eventType, $gfId, [
+            $alerts[] = [$eventType, $gfId, [
                 'name' => $gf['name'],
                 'user_name' => $userName,
-            ]);
+            ]];
         }
 
-        $this->cache->deleteGeofenceState($userId);
+        return $alerts;
     }
 
-    private function processPlaces(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM): void
+    private function processPlaces(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM): array
     {
         $places = $this->placesRepo->listAll($familyId);
         if (empty($places)) {
-            return;
+            return [];
         }
 
         $states = $this->loadPlaceStates($userId);
+        $alerts = [];
         $buffer = $this->hysteresisBuffer($accuracyM);
 
         foreach ($places as $place) {
@@ -143,11 +160,12 @@ class GeofenceEngine
                 'lng' => $lng,
             ]);
 
-            $this->alertsEngine->fire($familyId, $userId, $eventType, $pId, [
+            $alerts[] = [$eventType, $pId, [
                 'name' => $place['label'],
                 'user_name' => $userName,
-            ]);
+            ]];
         }
+        return $alerts;
     }
 
     private function isInsideGeofence(float $lat, float $lng, array $gf, bool $wasInside, float $buffer): bool
@@ -194,11 +212,6 @@ class GeofenceEngine
 
     private function loadGeofenceStates(int $userId): array
     {
-        $cached = $this->cache->getGeofenceState($userId);
-        if ($cached !== null) {
-            return $cached;
-        }
-
         $stmt = $this->db->prepare("
             SELECT geofence_id, is_inside
             FROM tracking_geofence_state
@@ -212,7 +225,6 @@ class GeofenceEngine
             $states[(int) $row['geofence_id']] = (bool) $row['is_inside'];
         }
 
-        $this->cache->setGeofenceState($userId, $states);
         return $states;
     }
 

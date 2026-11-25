@@ -71,7 +71,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
             <div class="form-group">
                 <label class="form-label">Mode
-                    <span class="form-label-desc">Controls how aggressively the app tracks location</span>
+                    <span class="form-label-desc">Normal and Active share while moving, including when the map is closed</span>
                 </label>
                 <select class="form-select" name="mode" id="settingMode" <?php echo $isAdmin ? '' : 'disabled'; ?>>
                     <option value="0" <?php echo $settings['mode'] == 0 ? 'selected' : ''; ?>>Off - No tracking</option>
@@ -80,6 +80,15 @@ require_once __DIR__ . '/../../shared/components/header.php';
                 </select>
             </div>
         </div>
+
+        <?php $nativePolicy = TrackingPolicy::native($settings, true); ?>
+        <?php if ($nativePolicy['allowed']): ?>
+        <p class="form-label-desc">Current Android intervals:
+            <?= $nativePolicy['moving_interval'] ?> seconds moving,
+            <?= $nativePolicy['idle_interval'] ?> seconds stationary.
+            Battery Saver can extend these intervals.
+        </p>
+        <?php endif; ?>
 
         <!-- Intervals & Thresholds -->
         <div class="settings-card">
@@ -90,8 +99,8 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Moving Interval (sec)
-                        <span class="form-label-desc">Update frequency when moving</span>
+                    <label class="form-label">Normal moving interval (sec)
+                        <span class="form-label-desc">Active uses half this interval, with a 15-second minimum</span>
                     </label>
                     <input type="number" class="form-input" name="moving_interval_seconds"
                            value="<?php echo (int)$settings['moving_interval_seconds']; ?>"
@@ -129,7 +138,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">Min Accuracy (m)
-                        <span class="form-label-desc">Reject readings less accurate than this</span>
+                        <span class="form-label-desc">Readings outside this threshold show as approximate</span>
                     </label>
                     <input type="number" class="form-input" name="min_accuracy_m"
                            value="<?php echo (int)$settings['min_accuracy_m']; ?>"

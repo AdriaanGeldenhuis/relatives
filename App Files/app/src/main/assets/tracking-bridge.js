@@ -3,7 +3,7 @@
     if (window.top !== window || !window.RelativesNative) return;
 
     const port = window.RelativesNative;
-    const snapshot = { mode: 'loading', age: Infinity, receivedAt: 0, family: '[]' };
+    const snapshot = { mode: 'loading', age: Infinity, receivedAt: 0, family: '[]', remoteWake: true };
     let lastRequest = -Infinity;
 
     function send(command) {
@@ -53,6 +53,7 @@
             snapshot.age = data.cacheAge;
             snapshot.receivedAt = performance.now();
             snapshot.family = data.family;
+            snapshot.remoteWake = data.remoteWake !== false;
             window.dispatchEvent(new CustomEvent('relativestrackingstate', { detail: snapshot.mode }));
         } else if (locationReply && data.type === locationReply.type) {
             locationReply.finish(data.allowed === true);
@@ -76,6 +77,10 @@
         startTracking: function () { send('start'); },
         stopTracking: function () { send('stop'); },
         wakeAllDevices: function () { send('refresh_device'); },
+        refreshMyLocation: function () { send('refresh_device'); },
+        hasRemoteWake: function () { return snapshot.remoteWake; },
+        claimFamilyPolling: function () { send('web_family_polling'); },
+        refreshTrackingPolicy: function () { send('refresh_tracking_policy'); },
         onTrackingScreenVisible: function () { send('map_visible'); },
         onTrackingScreenHidden: function () { send('map_hidden'); },
         requestNotificationPermission: function () { send('notifications'); },

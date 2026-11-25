@@ -5,6 +5,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import za.co.relatives.app.R
 import za.co.relatives.app.RelativesApplication
+import za.co.relatives.app.tracking.FamilyWake
 import za.co.relatives.app.tracking.TrackingService
 import za.co.relatives.app.utils.NotificationHelper
 import za.co.relatives.app.utils.PreferencesManager
@@ -59,10 +60,11 @@ class RelativesFirebaseService : FirebaseMessagingService() {
         Log.d(TAG, "Message received: type=$type")
 
         when (type) {
-            "wake_tracking" -> handleWakeTracking(
-                keepalive = data["keepalive"] == "1",
-                expedited = message.priority == RemoteMessage.PRIORITY_HIGH,
-            )
+            "wake_tracking" -> {
+                val highPriority = message.priority == RemoteMessage.PRIORITY_HIGH
+                if (data.containsKey("request_id")) FamilyWake.receive(this, data, highPriority)
+                else handleWakeTracking(data["keepalive"] == "1", highPriority)
+            }
             else -> handleVisibleNotification(type, data, message.notification)
         }
     }
@@ -78,13 +80,10 @@ class RelativesFirebaseService : FirebaseMessagingService() {
             !TrackingService.canReviveFromBackground(this)
         ) return
 
-        if (keepalive) {
-            if (!TrackingService.isRunning) TrackingService.revive(this)
-            return
-        }
+        if (keepalive) return
 
         TrackingService.showFamilyRefreshNotification(this)
-        TrackingService.requestWakeFix(this, expedited)
+        TrackingService.requestWakeFix(this, background = true, highPriority = expedited)
     }
 
     // ------------------------------------------------------------------ //

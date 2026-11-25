@@ -1592,3 +1592,21 @@ body:has(.tracking-settings) {
     .tracking-settings .settings-card { padding: 14px; }
     .tracking-settings .form-row { grid-template-columns: 1fr; gap: 8px; }
 }
+
+.tracking-wake-result {
+    position: absolute;
+    z-index: 55;
+    bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+    inset-inline-start: 14px;
+    max-width: min(28rem, calc(100vw - 28px));
+    max-height: 28vh;
+    overflow: auto;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: #172033;
+    color: #fff;
+    font-size: 0.86rem;
+    box-shadow: 0 4px 18px #0005;
+}
+.tracking-wake-result[hidden], .tracking-toolbar-btn[hidden] { display: none; }
+.tracking-wake-result > div { margin-top: 5px; color: #dce8fb; }

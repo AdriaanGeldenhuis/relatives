@@ -11,6 +11,7 @@ class FirebaseMessaging {
     private $serviceAccount;
     private $accessToken;
     private $tokenExpiry;
+    private string $lastFailure = '';
 
     public function __construct() {
         // Load service account from file
@@ -40,7 +41,15 @@ class FirebaseMessaging {
      * True when this server can actually reach FCM (credentials present).
      */
     public function isConfigured(): bool {
-        return !empty($this->serviceAccount) && !empty($this->projectId);
+        return !empty($this->serviceAccount['client_email']) && !empty($this->serviceAccount['private_key']) && !empty($this->projectId);
+    }
+
+    public function prepareSend(): bool {
+        return $this->isConfigured() && $this->getAccessToken() !== null;
+    }
+
+    public function lastFailure(): string {
+        return $this->lastFailure;
     }
 
     /**
@@ -85,6 +94,8 @@ class FirebaseMessaging {
             curl_setopt_array($ch, [
                 CURLOPT_POST => true,
                 CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CONNECTTIMEOUT => 3,
+                CURLOPT_TIMEOUT => 5,
                 CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
                 CURLOPT_POSTFIELDS => http_build_query([
                     'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
@@ -96,18 +107,21 @@ class FirebaseMessaging {
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
 
-            if ($httpCode === 200) {
+            if ($httpCode === 200 && is_string($response)) {
                 $data = json_decode($response, true);
+                if (!is_string($data['access_token'] ?? null)) {
+                    return null;
+                }
                 $this->accessToken = $data['access_token'];
                 $this->tokenExpiry = $now + ($data['expires_in'] ?? 3600);
                 return $this->accessToken;
             }
 
-            error_log("FCM: Failed to get access token. HTTP $httpCode - $response");
+            error_log("FCM: Failed to get access token. HTTP $httpCode");
             return null;
 
         } catch (Exception $e) {
-            error_log("FCM: Access token error - " . $e->getMessage());
+            error_log("FCM: Access token error");
             return null;
         }
     }
@@ -152,11 +166,13 @@ class FirebaseMessaging {
      * switched on in the morning burst-fired GPS for each overnight wake.
      * collapse_key keeps at most one pending copy per kind.
      */
-    public function send(string $token, array $notification, array $data = [], array $androidOverrides = []) {
+    public function send(string $token, array $notification, array $data = [], array $androidOverrides = [], int $timeoutMs = 10000) {
+        $this->lastFailure = '';
         // Get access token
         $accessToken = $this->getAccessToken();
 
         if (!$accessToken || !$this->projectId) {
+            $this->lastFailure = 'configuration';
             // No fallback: Google removed the legacy fcm/send endpoint in
             // June 2024, so the old "legacy server key" path can never
             // deliver. Missing v1 credentials is a configuration error that
@@ -215,7 +231,8 @@ class FirebaseMessaging {
                     'Content-Type: application/json'
                 ],
                 CURLOPT_POSTFIELDS => json_encode($message),
-                CURLOPT_TIMEOUT => 10
+                CURLOPT_CONNECTTIMEOUT_MS => min(3000, $timeoutMs),
+                CURLOPT_TIMEOUT_MS => $timeoutMs
             ]);
 
             $response = curl_exec($ch);
@@ -226,30 +243,31 @@ class FirebaseMessaging {
                 return true;
             }
 
-            $responseData = json_decode($response, true);
-            $errorCode = $responseData['error']['details'][0]['errorCode'] ?? '';
-            $errorStatus = $responseData['error']['status'] ?? '';
-
-            // Only UNREGISTERED (device uninstalled / token rotated away)
-            // means the token itself is dead and must be deleted.
-            // INVALID_ARGUMENT is deliberately NOT treated as a dead token:
-            // FCM returns it for any malformed payload too, and classifying
-            // it as invalid_token made a payload bug permanently delete every
-            // valid device token it touched. The one INVALID_ARGUMENT case
-            // that does mean a bad token has a distinctive message, matched
-            // explicitly below.
-            if ($errorCode === 'UNREGISTERED' ||
-                $errorStatus === 'NOT_FOUND' ||
-                strpos((string)$response, 'not a valid FCM registration token') !== false) {
-                error_log("FCM: Invalid token detected, marking for removal: $token");
+            $responseData = json_decode(is_string($response) ? $response : '', true);
+            $errorCode = '';
+            foreach ($responseData['error']['details'] ?? [] as $detail) {
+                if (($detail['@type'] ?? '') === 'type.googleapis.com/google.firebase.fcm.v1.FcmError') {
+                    $errorCode = $detail['errorCode'] ?? '';
+                    break;
+                }
+            }
+            if ($errorCode === 'UNREGISTERED' || ($errorCode === 'INVALID_ARGUMENT'
+                && str_contains((string) ($responseData['error']['message'] ?? ''), 'not a valid FCM registration token'))) {
+                $this->lastFailure = 'invalid_token';
                 return 'invalid_token';
             }
 
-            error_log("FCM v1 send failed: HTTP $httpCode - $response");
+            $this->lastFailure = match (true) {
+                in_array($httpCode, [401, 403, 404], true) => 'configuration',
+                $httpCode === 0 || $httpCode === 429 || $httpCode >= 500 => 'temporary',
+                default => 'rejected',
+            };
+            error_log("FCM v1 send failed: HTTP $httpCode ($this->lastFailure)");
             return false;
 
         } catch (Exception $e) {
-            error_log("FCM send error: " . $e->getMessage());
+            $this->lastFailure = 'temporary';
+            error_log("FCM transport error");
             return false;
         }
     }

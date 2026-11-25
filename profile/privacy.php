@@ -32,6 +32,8 @@ try {
 }
 
 require_once __DIR__ . '/../core/CSRF.php';
+require_once __DIR__ . '/../tracking/core/Time.php';
+require_once __DIR__ . '/../tracking/core/services/TrackingPolicy.php';
 
 $csrfToken = CSRF::generate();
 $currentTokenHash = hash('sha256', $_SESSION['session_token']);
@@ -58,6 +60,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action === 'save_privacy') {
                 $sharing = isset($_POST['location_sharing']) ? 1 : 0;
                 $db->beginTransaction();
+                $stmt = $db->prepare('SELECT location_sharing FROM users WHERE id = ? FOR UPDATE');
+                $stmt->execute([$user['id']]);
+                if ((int) $stmt->fetchColumn() !== $sharing) {
+                    TrackingPolicy::setCutoff($db, 'user', (int) $user['id']);
+                }
                 $stmt = $db->prepare('UPDATE users SET location_sharing = ? WHERE id = ?');
                 $stmt->execute([$sharing, $user['id']]);
                 $stmt = $db->prepare("
@@ -76,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     (int) isset($_POST['show_last_seen']),
                     (int) isset($_POST['allow_messages']),
                 ]);
-                if ($sharing === 0) {
+                if ($sharing === 0 && TrackingPolicy::hasTable($db, 'tracking_current')) {
                     $stmt = $db->prepare('DELETE FROM tracking_current WHERE user_id = ?');
                     $stmt->execute([$user['id']]);
                 }

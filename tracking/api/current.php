@@ -8,11 +8,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 $ctx = SiteContext::require($db);
+session_write_close();
+header('Cache-Control: private, no-store');
 
 $trackingCache = new TrackingCache($cache);
 $locationRepo = new LocationRepo($db, $trackingCache);
 
-$locations = $locationRepo->getFamilyCurrentLocations($ctx->familyId);
+$locations = $locationRepo->getFamilyCurrentLocations(
+    $ctx->familyId, TrackingPolicy::hasColumn($db, 'tracking_current', 'recorded_ms')
+);
+$policy = TrackingPolicy::native((new SettingsRepo($db, $trackingCache))->get($ctx->familyId), $ctx->locationSharing);
 
 // Format response — includes ALL family members, even those without a position yet
 $members = [];
@@ -33,7 +38,11 @@ foreach ($locations as $row) {
         'motion_state' => $row['motion_state'] ?? 'unknown',
         'recorded_at' => $row['recorded_at'],
         'updated_at' => $row['updated_at'],
+        'recorded_at_ms' => $hasLocation ? (int) ($row['recorded_ms'] ?? Time::captureMs($row['recorded_at'])) : null,
+        'received_at_ms' => $row['received_at_unix'] === null ? null : (int) $row['received_at_unix'] * 1000,
+        'location_sharing' => (bool) $row['location_sharing'],
+        'approximate' => $hasLocation && ($row['accuracy_m'] === null || (float) $row['accuracy_m'] > $policy['min_accuracy_m']),
     ];
 }
 
-Response::success($members);
+Response::json(['success' => true, 'data' => $members, 'server_settings' => $policy]);

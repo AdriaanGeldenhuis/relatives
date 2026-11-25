@@ -38,6 +38,15 @@ data class QueuedLocationEntity(
 
     val sent: Boolean = false,
 
+    @ColumnInfo(name = "priority", defaultValue = "0")
+    val priority: Int = 0,
+
+    @ColumnInfo(name = "wake_request_id")
+    val wakeRequestId: String? = null,
+
+    @ColumnInfo(name = "wake_deadline_ms")
+    val wakeDeadlineMs: Long? = null,
+
     @ColumnInfo(name = "consent_scope")
     val consentScope: String? = null,
 )

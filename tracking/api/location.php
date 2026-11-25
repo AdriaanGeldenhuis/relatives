@@ -6,183 +6,23 @@ require_once __DIR__ . '/../core/bootstrap_tracking.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('method_not_allowed', 405);
 }
-
-// Auth: require valid token/user. No session gate — uploads always accepted.
 $ctx = SiteContext::require($db);
 $ctx->requireLocationSharing();
+session_write_close();
 
 $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
-
-// Initialize services (shared for single + batch)
+$isBatch = is_array($input['locations'] ?? null);
+if ($isBatch && $input['locations'] === []) {
+    Response::error('locations array is required', 422);
+}
 $trackingCache = new TrackingCache($cache);
-$settingsRepo = new SettingsRepo($db, $trackingCache);
-$settings = $settingsRepo->get($ctx->familyId);
-
-// Mode 0 = Off: the family explicitly disabled tracking — store nothing.
-if ((int) ($settings['mode'] ?? 1) === 0) {
-    Response::success([
-        'status' => 'tracking_disabled',
-        'server_settings' => ['mode' => 0],
-    ], 'tracking_disabled');
+if (!$isBatch) {
+    $settings = (new SettingsRepo($db, $trackingCache))->get($ctx->familyId);
+    $rate = (new RateLimiter($trackingCache, (int) $settings['rate_limit_seconds']))->check($ctx->userId);
+    if (!$rate['allowed']) {
+        header('Retry-After: ' . $rate['retry_after']);
+        Response::json(['success' => false, 'error' => 'rate_limited', 'retry_after' => $rate['retry_after']], 429);
+    }
 }
-
-$locationRepo = new LocationRepo($db, $trackingCache);
-$eventsRepo = new EventsRepo($db);
-$alertsRepo = new AlertsRepo($db, $trackingCache);
-$alertsEngine = new AlertsEngine($db, $trackingCache, $alertsRepo);
-$geofenceRepo = new GeofenceRepo($db, $trackingCache);
-$placesRepo = new PlacesRepo($db, $trackingCache);
-$geofenceEngine = new GeofenceEngine($db, $trackingCache, $geofenceRepo, $placesRepo, $eventsRepo, $alertsEngine);
-
-$dedupe = new Dedupe(
-    $trackingCache,
-    (int) ($settings['dedupe_radius_m'] ?? 10),
-    (int) ($settings['dedupe_time_seconds'] ?? 60)
-);
-$motionGate = new MotionGate(
-    (float) ($settings['speed_threshold_mps'] ?? 1.0),
-    (float) ($settings['distance_threshold_m'] ?? 50)
-);
-
-$serverSettings = [
-    'mode' => (int) ($settings['mode'] ?? 2),
-    'moving_interval' => (int) ($settings['moving_interval_seconds'] ?? 30),
-    'idle_interval' => (int) ($settings['idle_interval_seconds'] ?? 300),
-    'min_accuracy_m' => (int) ($settings['min_accuracy_m'] ?? 100),
-];
-
-// -----------------------------------------------------------------------
-// Detect batch vs single payload
-// -----------------------------------------------------------------------
-$isBatch = isset($input['locations']) && is_array($input['locations']);
-
-if ($isBatch) {
-    // --- BATCH MODE ---
-    $locations = $input['locations'];
-    $maxBatch = 100;
-    if (count($locations) > $maxBatch) {
-        $locations = array_slice($locations, 0, $maxBatch);
-    }
-
-    $validator = new TrackingValidator();
-    $results = [];
-    $storedCount = 0;
-    $lastStored = null;
-
-    foreach ($locations as $i => $locInput) {
-        $loc = $validator->validateLocation($locInput);
-
-        if ($loc === null) {
-            $results[] = ['index' => $i, 'status' => 'error', 'error' => implode('; ', $validator->getErrors())];
-            $validator = new TrackingValidator();
-            continue;
-        }
-
-        // Accuracy is a quality hint, not a reason to drop a fix — a 150m
-        // dot beats no dot. Store everything except garbage cell-tower fixes.
-        if ($loc['accuracy_m'] !== null && $loc['accuracy_m'] > 2000) {
-            $results[] = ['index' => $i, 'status' => 'skipped', 'reason' => 'accuracy_too_low'];
-            continue;
-        }
-
-        // Dedupe check
-        if ($dedupe->isDuplicate($ctx->userId, $loc['lat'], $loc['lng'], $loc['recorded_at'])) {
-            $results[] = ['index' => $i, 'status' => 'skipped', 'reason' => 'deduplicated'];
-            continue;
-        }
-
-        // Determine motion state
-        $prev = $locationRepo->getCurrent($ctx->userId);
-        $motion = $motionGate->evaluate($loc, $prev);
-
-        // Upsert current location
-        $locationRepo->upsertCurrent($ctx->userId, $ctx->familyId, $loc, $motion['motion_state']);
-
-        // Store history if motion gate says to
-        if ($motion['store_history']) {
-            $locationRepo->insertHistory($ctx->familyId, $ctx->userId, $loc, $motion['motion_state']);
-        }
-
-        // Newest stored fix; geofences evaluated once after the loop so a
-        // trailing invalid/duplicate point can't skip the whole batch.
-        $lastStored = $loc;
-
-        $storedCount++;
-        $results[] = [
-            'index' => $i,
-            'status' => 'stored',
-            'motion_state' => $motion['motion_state'],
-            'stored_history' => $motion['store_history'],
-        ];
-    }
-
-    if ($lastStored !== null) {
-        $geofenceEngine->process(
-            $ctx->familyId,
-            $ctx->userId,
-            $lastStored['lat'],
-            $lastStored['lng'],
-            $ctx->name,
-            $lastStored['accuracy_m'] ?? null
-        );
-    }
-
-    Response::success([
-        'processed' => count($locations),
-        'stored' => $storedCount,
-        'results' => $results,
-        'server_settings' => $serverSettings,
-    ]);
-} else {
-    // --- SINGLE LOCATION MODE ---
-    $validator = new TrackingValidator();
-    $loc = $validator->validateLocation($input);
-
-    if ($loc === null) {
-        Response::error(implode('; ', $validator->getErrors()), 422);
-    }
-
-    // Accuracy is a quality hint, not a reason to drop a fix — a 150m dot
-    // beats no dot. Only reject garbage cell-tower fixes.
-    if ($loc['accuracy_m'] !== null && $loc['accuracy_m'] > 2000) {
-        Response::error('accuracy_too_low: ' . $loc['accuracy_m'] . 'm', 422);
-    }
-
-    // Rate limit check
-    $rateLimiter = new RateLimiter($trackingCache, (int) ($settings['rate_limit_seconds'] ?? 5));
-    $rateResult = $rateLimiter->check($ctx->userId);
-    if (!$rateResult['allowed']) {
-        Response::json([
-            'success' => false,
-            'error' => 'rate_limited',
-            'retry_after' => $rateResult['retry_after'],
-        ], 429);
-    }
-
-    // Dedupe check
-    if ($dedupe->isDuplicate($ctx->userId, $loc['lat'], $loc['lng'], $loc['recorded_at'])) {
-        Response::success(['status' => 'deduplicated'], 'Duplicate skipped');
-    }
-
-    // Determine motion state
-    $prev = $locationRepo->getCurrent($ctx->userId);
-    $motion = $motionGate->evaluate($loc, $prev);
-
-    // Upsert current location
-    $locationRepo->upsertCurrent($ctx->userId, $ctx->familyId, $loc, $motion['motion_state']);
-
-    // Store history if motion gate says to
-    if ($motion['store_history']) {
-        $locationRepo->insertHistory($ctx->familyId, $ctx->userId, $loc, $motion['motion_state']);
-    }
-
-    // Process geofences
-    $geofenceEngine->process($ctx->familyId, $ctx->userId, $loc['lat'], $loc['lng'], $ctx->name, $loc['accuracy_m'] ?? null);
-
-    Response::success([
-        'status' => 'stored',
-        'motion_state' => $motion['motion_state'],
-        'stored_history' => $motion['store_history'],
-        'server_settings' => $serverSettings,
-    ]);
-}
+$points = $isBatch ? array_values(array_slice($input['locations'], 0, 100)) : [$input];
+LocationIngest::respond((new LocationIngest($db, $trackingCache))->process($ctx, $points), !$isBatch);

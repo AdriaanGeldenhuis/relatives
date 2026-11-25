@@ -19,6 +19,6 @@ if ($type === '') {
 
 $repo = new EventsRepo($db);
 
-$events = $repo->list($ctx->familyId, $limit, $offset, $type);
+$events = $repo->list($ctx->familyId, $limit, $offset, $type, $ctx->userId);
 
 Response::success($events);

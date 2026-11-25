@@ -40,15 +40,15 @@ class EventsRepo
     /**
      * List recent events for a family
      */
-    public function list(int $familyId, int $limit = 50, int $offset = 0, ?string $eventType = null): array
+    public function list(int $familyId, int $limit = 50, int $offset = 0, ?string $eventType = null, ?int $viewerId = null): array
     {
         $sql = "
             SELECT te.*, u.full_name AS user_name, u.avatar_color
             FROM tracking_events te
             LEFT JOIN users u ON te.user_id = u.id
-            WHERE te.family_id = ?
+            WHERE te.family_id = ? AND (te.user_id IS NULL OR (u.family_id = te.family_id AND (u.location_sharing = 1 OR te.user_id = ?)))
         ";
-        $params = [$familyId];
+        $params = [$familyId, $viewerId ?? 0];
 
         if ($eventType) {
             $sql .= " AND te.event_type = ?";

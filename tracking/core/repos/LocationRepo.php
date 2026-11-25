@@ -15,63 +15,43 @@ class LocationRepo
         $this->cache = $cache;
     }
 
-    /**
-     * Upsert current location for a user
-     */
-    public function upsertCurrent(int $userId, int $familyId, array $loc, string $motionState): void
+    /** The caller serializes writers for this user and has compared capture times. */
+    public function upsertCurrent(int $userId, int $familyId, array $loc, string $motionState, bool $preciseTime): void
     {
-        // Different devices can upload concurrently, and offline batches can
-        // replay earlier fixes. Preserve the newest recorded position.
-        $existing = $this->getCurrent($userId);
-        $isNewer = $existing === null
-            || !isset($existing['recorded_at'])
-            || Time::parse($loc['recorded_at']) >= Time::parse($existing['recorded_at']);
-
-        // The IF() guards against the concurrent-writer race at the DB level
-        // too: an interleaved older write can't clobber a newer row.
+        $captureColumn = $preciseTime ? ', recorded_ms' : '';
+        $captureValue = $preciseTime ? ', ?' : '';
+        $captureUpdate = $preciseTime ? ', recorded_ms = VALUES(recorded_ms)' : '';
         $stmt = $this->db->prepare("
             INSERT INTO tracking_current
                 (user_id, family_id, lat, lng, accuracy_m, speed_mps, bearing_deg, altitude_m,
-                 motion_state, recorded_at, device_id, platform, app_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 motion_state, recorded_at, device_id, platform, app_version$captureColumn)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?$captureValue)
             ON DUPLICATE KEY UPDATE
-                lat = IF(VALUES(recorded_at) >= recorded_at, VALUES(lat), lat),
-                lng = IF(VALUES(recorded_at) >= recorded_at, VALUES(lng), lng),
-                accuracy_m = IF(VALUES(recorded_at) >= recorded_at, VALUES(accuracy_m), accuracy_m),
-                speed_mps = IF(VALUES(recorded_at) >= recorded_at, VALUES(speed_mps), speed_mps),
-                bearing_deg = IF(VALUES(recorded_at) >= recorded_at, VALUES(bearing_deg), bearing_deg),
-                altitude_m = IF(VALUES(recorded_at) >= recorded_at, VALUES(altitude_m), altitude_m),
-                motion_state = IF(VALUES(recorded_at) >= recorded_at, VALUES(motion_state), motion_state),
-                device_id = IF(VALUES(recorded_at) >= recorded_at, VALUES(device_id), device_id),
-                platform = IF(VALUES(recorded_at) >= recorded_at, VALUES(platform), platform),
-                app_version = IF(VALUES(recorded_at) >= recorded_at, VALUES(app_version), app_version),
-                recorded_at = IF(VALUES(recorded_at) >= recorded_at, VALUES(recorded_at), recorded_at)
+                family_id = VALUES(family_id), lat = VALUES(lat), lng = VALUES(lng),
+                accuracy_m = VALUES(accuracy_m), speed_mps = VALUES(speed_mps),
+                bearing_deg = VALUES(bearing_deg), altitude_m = VALUES(altitude_m),
+                motion_state = VALUES(motion_state), recorded_at = VALUES(recorded_at),
+                device_id = VALUES(device_id), platform = VALUES(platform), app_version = VALUES(app_version),
+                updated_at = CURRENT_TIMESTAMP$captureUpdate
         ");
-
-        $stmt->execute([
-            $userId, $familyId,
-            $loc['lat'], $loc['lng'],
-            $loc['accuracy_m'], $loc['speed_mps'],
-            $loc['bearing_deg'], $loc['altitude_m'],
-            $motionState, $loc['recorded_at'],
+        $params = [
+            $userId, $familyId, $loc['lat'], $loc['lng'], $loc['accuracy_m'], $loc['speed_mps'],
+            $loc['bearing_deg'], $loc['altitude_m'], $motionState, $loc['recorded_at'],
             $loc['device_id'], $loc['platform'], $loc['app_version'],
-        ]);
-
-        // Only advance the cache for a newer fix so it mirrors the DB guard.
-        if ($isNewer) {
-            $this->cache->setCurrent($userId, [
-                'lat' => $loc['lat'],
-                'lng' => $loc['lng'],
-                'accuracy_m' => $loc['accuracy_m'],
-                'speed_mps' => $loc['speed_mps'],
-                'bearing_deg' => $loc['bearing_deg'],
-                'altitude_m' => $loc['altitude_m'],
-                'motion_state' => $motionState,
-                'recorded_at' => $loc['recorded_at'],
-            ]);
+        ];
+        if ($preciseTime) {
+            $params[] = $loc['recorded_ms'];
         }
+        $stmt->execute($params);
+    }
 
-
+    public function currentForWrite(int $userId, int $familyId, bool $preciseTime): ?array
+    {
+        $captureColumn = $preciseTime ? ', recorded_ms' : '';
+        $stmt = $this->db->prepare("SELECT lat, lng, accuracy_m, motion_state, recorded_at$captureColumn
+            FROM tracking_current WHERE user_id = ? AND family_id = ? FOR UPDATE");
+        $stmt->execute([$userId, $familyId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
     /**
@@ -98,15 +78,18 @@ class LocationRepo
     /**
      * Get current locations for all family members
      */
-    public function getFamilyCurrentLocations(int $familyId): array
+    public function getFamilyCurrentLocations(int $familyId, bool $preciseTime = false): array
     {
+        $captureColumn = $preciseTime ? 'tc.recorded_ms' : 'NULL';
         $stmt = $this->db->prepare("
             SELECT u.id AS user_id, u.full_name AS name, u.avatar_color, u.has_avatar,
                    tc.lat, tc.lng, tc.accuracy_m, tc.speed_mps,
                    tc.bearing_deg, tc.altitude_m, tc.motion_state,
-                   tc.recorded_at, tc.updated_at, tc.device_id, tc.platform
+                   tc.recorded_at, tc.updated_at, tc.device_id, tc.platform,
+                   $captureColumn AS recorded_ms, UNIX_TIMESTAMP(tc.updated_at) AS received_at_unix,
+                   u.location_sharing
             FROM users u
-            LEFT JOIN tracking_current tc ON tc.user_id = u.id AND u.location_sharing = 1
+            LEFT JOIN tracking_current tc ON tc.user_id = u.id AND tc.family_id = u.family_id AND u.location_sharing = 1
             WHERE u.family_id = ? AND u.status = 'active'
             ORDER BY tc.updated_at DESC
         ");
@@ -125,7 +108,7 @@ class LocationRepo
             FROM tracking_locations t
             JOIN users u ON u.id = t.user_id AND u.family_id = t.family_id AND u.status = 'active'
             WHERE t.family_id = ? AND t.user_id = ?
-              AND (u.location_sharing = 1 OR u.id = ?)
+              AND u.family_id = t.family_id AND (u.location_sharing = 1 OR u.id = ?)
               AND t.recorded_at BETWEEN ? AND ?
             ORDER BY t.recorded_at ASC
             LIMIT ?
