@@ -267,7 +267,8 @@
             error.missing = response.status === 404;
             throw error;
         }
-        planner.broadcast(planner.noteSignal);
+        // Cross-tab refresh is optional once the server has saved the change.
+        planner?.broadcast(planner.noteSignal);
         return result;
     }
 
@@ -1137,7 +1138,7 @@
     });
     window.addEventListener('relatives:note-created', event => refreshNote(event.detail, event.detail.id));
     window.addEventListener('storage', event => {
-        if (event.key === planner.noteSignal || event.key === planner.eventSignal) refreshBoard();
+        if (event.key === planner?.noteSignal || event.key === planner?.eventSignal) refreshBoard();
     });
     window.addEventListener('relatives:event-saved', refreshBoard);
     document.addEventListener('visibilitychange', () => {
