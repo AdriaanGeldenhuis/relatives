@@ -7,7 +7,7 @@
 
 .icon-picker input { position: absolute; opacity: 0; pointer-events: none; }
 
-.icon-option {
+.icon-picker .icon-option {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -15,18 +15,17 @@
     height: 44px;
     border-radius: 13px;
     border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--family-paper);
     font-size: 1.3rem;
     cursor: pointer;
     transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s var(--spring);
 }
 
-.icon-option:hover { transform: translateY(-2px); }
+.icon-picker .icon-option:hover { background: var(--app-soft); }
 
 .icon-picker input:checked + .icon-option {
-    border-color: var(--violet);
-    background: rgba(116, 161, 102, 0.18);
-    box-shadow: 0 0 14px rgba(116, 161, 102, 0.35);
+    border-color: var(--family-green);
+    background: var(--app-soft);
 }
 
 /* Frequent items */
@@ -44,10 +43,11 @@
 .frequent-chips { display: flex; gap: 7px; flex-wrap: wrap; }
 
 .frequent-chip {
+    min-height: 44px;
     padding: 6px 12px;
     border-radius: var(--radius-full);
     border: 1px solid var(--line-strong);
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--family-paper);
     color: var(--text-1);
     font-family: inherit;
     font-size: 0.76rem;
@@ -57,71 +57,42 @@
 }
 
 .frequent-chip:hover {
-    background: rgba(116, 161, 102, 0.16);
-    border-color: rgba(116, 161, 102, 0.5);
-    color: var(--text-0);
+    background: var(--app-soft);
+    border-color: var(--family-green);
 }
 
-/* Category picker grid */
-.category-grid {
+/* Category and assignee pickers */
+:is(.category-grid, .assign-grid) {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
 }
 
-.category-option {
+:is(.category-option, .assign-option) {
     display: flex;
     align-items: center;
     gap: 9px;
+    min-height: 44px;
     padding: 10px 12px;
     border-radius: 13px;
-    border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--line-strong);
+    background: var(--family-paper);
     color: var(--text-0);
     font-family: inherit;
     font-size: 0.8rem;
     font-weight: 700;
     cursor: pointer;
     text-align: left;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s var(--ease-out);
-}
-
-.category-option:hover {
-    background: rgba(116, 161, 102, 0.14);
-    border-color: rgba(116, 161, 102, 0.5);
-    transform: translateY(-1px);
-}
-
-.cat-icon { font-size: 1.1rem; }
-
-/* Assign grid */
-.assign-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-}
-
-.assign-option {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
-    border-radius: 13px;
-    border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--text-0);
-    font-family: inherit;
-    font-size: 0.8rem;
-    font-weight: 700;
-    cursor: pointer;
-    text-align: left;
+    overflow-wrap: anywhere;
     transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-.assign-option:hover {
-    background: rgba(244, 114, 182, 0.12);
-    border-color: rgba(244, 114, 182, 0.45);
+:is(.category-option, .assign-option):hover {
+    background: var(--app-soft);
+    border-color: var(--family-green);
 }
+
+.cat-icon { font-size: 1.1rem; }
 
 /* Share modal */
 .share-link-display { display: flex; gap: 8px; margin-bottom: 14px; }
@@ -616,6 +587,15 @@
 }
 
 .shopping-dialog.modal {
+    /* Match the shared Aurora form controls to Shopping's light surfaces. */
+    --ink-1: var(--family-paper);
+    --text-0: var(--family-ink);
+    --text-1: var(--family-ink);
+    --text-2: var(--family-muted);
+    --line: var(--family-line);
+    --line-strong: color-mix(in srgb, var(--family-muted) 70%, var(--family-paper));
+    --coral: #963728;
+    --sky: var(--family-green);
     inset: 0;
     width: min(calc(100% - 24px), 480px);
     max-width: none;
@@ -626,7 +606,7 @@
     border: 1px solid var(--family-line);
     border-radius: 16px;
     background: var(--family-paper);
-    color: var(--family-green);
+    color: var(--family-ink);
     backdrop-filter: none;
     box-shadow: 0 20px 68px #1833226b;
 }
@@ -647,6 +627,21 @@
 .shopping-dialog .modal-header { background: var(--family-paper); }
 .shopping-dialog .modal-close { flex: none; min-width: 44px; min-height: 44px; }
 .shopping-dialog :is(input, textarea, select, .btn) { font-size: 1rem; }
+.shopping-dialog .form-control {
+    min-height: 44px;
+    background-color: #fff;
+}
+.shopping-dialog .form-control::placeholder { opacity: 1; }
+.shopping-dialog .form-control:focus {
+    border-color: var(--family-green);
+    background-color: #fff;
+    box-shadow: none;
+}
+.shopping-dialog select.form-control {
+    appearance: auto;
+    background-image: none;
+    padding-inline-end: 12px;
+}
 .shopping-dialog textarea { resize: vertical; }
 .shopping-dialog-notice { margin-bottom: 12px; }
 .icon-picker input:focus-visible + label { outline: 2px solid var(--family-green); }
