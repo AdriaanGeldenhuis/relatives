@@ -11,8 +11,19 @@
         '#9c27b0': 'lilac', '#2196f3': 'sky', '#00bcd4': 'aqua', '#4caf50': 'mint', '#8bc34a': 'lime'
     };
     const taskPattern = /^([ \t]*[-*][ \t]+\[)([ xX]?)(\](?:[ \t]+|$))(.*)$/u;
-    const bulletPrefix = /^([ \t]*)[-*•][ \t]+/;
+    const headingPattern = /^(#{1,6}[ \t]+)(.*)$/u;
+    const bulletPattern = /^([ \t]*[-*+•][ \t]+)(.*)$/u;
+    const numberPattern = /^([ \t]*(\d{1,9})[.)][ \t]+)(.*)$/u;
     const eventMarker = /^\[Calendar event\]\(\/calendar\/\?event=[1-9][0-9]*\)$/;
+    const blockFormats = {
+        text: { label: 'Note text', placeholder: 'Write something to remember…' },
+        heading: { label: 'Heading', placeholder: 'Section heading', prefix: '## ' },
+        subheading: { label: 'Subheading', placeholder: 'Subheading', prefix: '### ' },
+        bullet: { label: 'Bullet item', placeholder: 'Add a bullet item', prefix: '- ' },
+        number: { label: 'Numbered item', placeholder: 'Add a step', prefix: '1. ' },
+        task: { label: 'Checklist item', placeholder: 'Add a checklist item' }
+    };
+    const listFormats = new Set(['bullet', 'number', 'task']);
     const dateFormat = new Intl.DateTimeFormat('en-ZA', {
         day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Johannesburg'
     });
@@ -24,8 +35,11 @@
     const form = $('notesForm');
     const board = $('notesBoard');
     const search = $('notesSearch');
-    const bodyInput = $('notesBody');
-    const checklist = $('notesChecklist');
+    const blocks = $('notesBlocks');
+    const blockFormat = $('notesBlockFormat');
+    const blockSources = new WeakMap();
+    const moveUp = $('notesMoveUp');
+    const moveDown = $('notesMoveDown');
     const photoInput = $('notesPhotoInput');
     const saveButton = $('notesSave');
     const deleteButton = $('notesConfirmDelete');
@@ -38,6 +52,8 @@
     let layout = preference('layout') === 'list' ? 'list' : 'grid';
     let editing = null;
     let editorType = 'text';
+    let voiceBody = '';
+    let activeBlock = null;
     let initialDraft = '';
     let resolution = null;
     let previousFocus = null;
@@ -92,45 +108,68 @@
         return `<input class="notes-checkbox" type="checkbox" ${attributes}${checked ? ' checked' : ''}>`;
     }
 
-    function noteBody(note) {
+    function blockSyntax(line) {
+        if (eventMarker.test(line)) return { kind: 'event', text: line };
+        const task = taskPattern.exec(line);
+        if (task) return { kind: 'task', text: task[4], checked: /x/i.test(task[2]), task };
+        const heading = headingPattern.exec(line);
+        if (heading) return { kind: heading[1].startsWith('###') ? 'subheading' : 'heading', text: heading[2], prefix: heading[1] };
+        const bullet = bulletPattern.exec(line);
+        if (bullet) return { kind: 'bullet', text: bullet[2], prefix: bullet[1] };
+        const number = numberPattern.exec(line);
+        if (number) return { kind: 'number', text: number[3], prefix: number[1], start: Number(number[2]) };
+        return null;
+    }
+
+    function parseLine(line) {
+        if (line.startsWith('\\') && blockSyntax(line.replace(/^\\+/, ''))) {
+            return { kind: 'text', text: line.slice(1) };
+        }
+        return blockSyntax(line) || { kind: line.trim() ? 'text' : 'blank', text: line };
+    }
+
+    function noteBody(note, headingLevel = 4) {
         const parts = [];
-        let prose = [];
-        let tasks = [];
+        let previous = '';
+        let group = [];
+        let start = 1;
         let total = 0;
         let done = 0;
 
-        function flushProse() {
-            if (prose.length && prose.some(line => line.trim())) {
-                parts.push(`<div class="notes-prose">${escape(prose.join('\n'))}</div>`);
-            }
-            prose = [];
-        }
-
-        function flushTasks() {
-            if (tasks.length) parts.push(`<ul class="notes-task-list">${tasks.join('')}</ul>`);
-            tasks = [];
+        function flush() {
+            if (previous === 'text') parts.push(`<div class="notes-prose">${group.join('\n')}</div>`);
+            if (previous === 'task') parts.push(`<ul class="notes-task-list">${group.join('')}</ul>`);
+            if (previous === 'bullet') parts.push(`<ul class="notes-body-list">${group.join('')}</ul>`);
+            if (previous === 'number') parts.push(`<ol class="notes-body-list" start="${start}">${group.join('')}</ol>`);
+            group = [];
         }
 
         note.body.split('\n').forEach((line, index) => {
-            if (eventMarker.test(line)) return;
-            const match = taskPattern.exec(line);
-            if (!match) {
-                flushTasks();
-                prose.push(line);
-                return;
+            const { kind, text, checked, start: number } = parseLine(line);
+            if (!text.trim() && kind !== 'blank') return;
+            if (previous !== kind) {
+                flush();
+                previous = kind;
+                start = number ?? 1;
             }
-            if (!match[4].trim()) return;
-            flushProse();
-            const checked = /x/i.test(match[2]);
-            total++;
-            if (checked) done++;
-            tasks.push(`<li><label>${checkbox(checked, `data-line="${index}"`)}<span>${escape(match[4])}</span></label></li>`);
+            const value = escape(text);
+            if (kind === 'heading' || kind === 'subheading') {
+                const level = kind === 'subheading' ? headingLevel + 1 : headingLevel;
+                parts.push(`<h${level} class="notes-body-${kind}">${value}</h${level}>`);
+            } else if (kind === 'task') {
+                total++;
+                if (checked) done++;
+                group.push(`<li><label>${checkbox(checked, `data-line="${index}"`)}<span>${value}</span></label></li>`);
+            } else if (kind === 'bullet' || kind === 'number') {
+                group.push(`<li>${value}</li>`);
+            } else if (kind === 'text') {
+                group.push(value);
+            }
         });
-        flushProse();
-        flushTasks();
-
+        flush();
         const progress = total ? `<div class="notes-progress"><progress value="${done}" max="${total}" aria-label="Checklist progress"></progress><span>${done} / ${total} done</span></div>` : '';
-        return { content: parts.join(''), progress };
+        const content = parts.length ? `<div class="notes-rendered-body">${parts.join('')}</div>` : '';
+        return { content, progress };
     }
 
     function audioPlayer(note) {
@@ -221,7 +260,7 @@
     function renderReader(note) {
         const [glyph, kind] = noteType(note);
         const voice = note.type === 'voice';
-        const text = voice ? null : noteBody(note);
+        const text = voice ? null : noteBody(note, 3);
         const events = note.eventLinks || [];
         $('notesReaderSurface').dataset.tone = colors[note.color.toLowerCase()] || 'paper';
         $('notesReaderKind').innerHTML = `${icon(glyph)} ${kind}`;
@@ -373,16 +412,31 @@
     }
 
     function draft() {
-        const body = checklist.hidden ? bodyInput.value : [...checklist.children].flatMap(row => {
-            if (!row.matches('[data-task]')) return [row.value];
-            const text = row.querySelector('input[type="text"]').value;
-            const original = taskPattern.exec(row.dataset.task);
-            const checked = row.querySelector('.notes-checkbox').checked;
-            if (!text.trim()) return original && !original[4].trim() ? [row.dataset.task] : [];
-            const marker = original && checked === /x/i.test(original[2]) ? original[2] : checked ? 'x' : ' ';
-            const prefix = original?.[1] || '- [';
-            const suffix = original?.[3].length > 1 ? original[3] : '] ';
-            return [prefix + marker + suffix + text];
+        let previousKind = '';
+        const body = editorType === 'voice' ? voiceBody : [...blocks.children].flatMap(row => {
+            if (row.hidden) {
+                previousKind = '';
+                return [row.value];
+            }
+            const { kind, prefix, task, raw, text: original } = blockSources.get(row);
+            const text = row.querySelector('.notes-block-input').value;
+            if (!text.trim() && (raw === undefined || original.trim())) return [];
+            const separateParagraph = kind === 'text' && previousKind === 'text';
+            previousKind = kind;
+            if (!text.trim()) return [raw];
+            if (kind === 'text') {
+                // A paragraph can contain literal list or heading punctuation.
+                const lines = text.split('\n').map(line => blockSyntax(line.replace(/^\\+/, '')) ? '\\' + line : line);
+                return separateParagraph ? ['', ...lines] : lines;
+            }
+            if (kind === 'task') {
+                const checked = row.querySelector('.notes-checkbox').checked;
+                const marker = task && checked === /x/i.test(task[2]) ? task[2] : checked ? 'x' : ' ';
+                const suffix = task?.[3].length > 1 ? task[3] : '] ';
+                return [(task?.[1] || '- [') + marker + suffix + text];
+            }
+            const line = (prefix || blockFormats[kind].prefix) + text;
+            return [kind === 'bullet' && taskPattern.test(line) ? '• ' + text : line];
         }).join('\n');
         return { title: $('notesTitle').value.trim(), body, color: form.elements.color.value };
     }
@@ -403,24 +457,69 @@
         form.querySelector('.notes-colors').append(input);
     }
 
-    function addTaskRow(line = '', after = null) {
-        const match = taskPattern.exec(line);
+    function makeBlock(data) {
+        const { kind, text, checked } = data;
+        if (kind === 'blank' || kind === 'event') {
+            // Calendar markers and blank separators retain their original position in the saved body.
+            const hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.hidden = true;
+            hidden.value = text;
+            return hidden;
+        }
         const row = document.createElement('div');
-        row.className = 'notes-task-row';
-        row.dataset.task = line;
-        row.innerHTML = `${checkbox(/x/i.test(match?.[2] || ''), 'aria-label="Mark item complete"')}
-            <input class="notes-task-text" type="text" aria-label="Checklist item" placeholder="Add a checklist item" enterkeyhint="enter">
-            <button type="button" class="notes-icon-button" data-remove-item aria-label="Remove checklist item">${icon('close')}</button>`;
-        row.querySelector('.notes-task-text').value = match?.[4] || '';
-        if (after) after.after(row);
-        else checklist.append(row);
+        row.className = 'notes-block-row';
+        row.dataset.format = kind;
+        blockSources.set(row, data);
+        if (kind === 'task') {
+            row.innerHTML = checkbox(checked, 'aria-label="Mark item complete"');
+        } else if (kind === 'bullet' || kind === 'number') {
+            row.innerHTML = '<span class="notes-block-marker" aria-hidden="true"></span>';
+        }
+        const { label, placeholder } = blockFormats[kind];
+        const field = document.createElement(kind === 'text' ? 'textarea' : 'input');
+        field.className = kind === 'task' ? 'notes-block-input notes-task-text' : 'notes-block-input';
+        field.setAttribute('aria-label', label);
+        field.placeholder = placeholder;
+        field.value = text;
+        if (kind === 'text') field.rows = Math.min(5, Math.max(2, text.split('\n').length));
+        else field.enterKeyHint = 'enter';
+        row.append(field);
+        row.insertAdjacentHTML('beforeend', `<button type="button" class="notes-icon-button" data-remove-block aria-label="Remove ${label.toLowerCase()}">${icon('close')}</button>`);
         return row;
+    }
+
+    function parseBlocks(body) {
+        const entries = [];
+        for (const raw of body === '' ? [] : body.split('\n')) {
+            const entry = { ...parseLine(raw), raw };
+            const previous = entries.at(-1);
+            if (entry.kind === 'text' && previous?.kind === 'text') previous.text += '\n' + entry.text;
+            else entries.push(entry);
+        }
+        return entries;
+    }
+
+    function adjacentBlock(row, direction) {
+        const sibling = direction < 0 ? 'previousElementSibling' : 'nextElementSibling';
+        let next = row?.[sibling];
+        while (next?.hidden) next = next[sibling];
+        return next;
+    }
+
+    function selectBlock(row) {
+        activeBlock?.removeAttribute('data-active');
+        activeBlock = row;
+        activeBlock?.setAttribute('data-active', '');
+        blockFormat.value = activeBlock?.dataset.format || 'text';
+        moveUp.disabled = saveButton.disabled || !adjacentBlock(activeBlock, -1);
+        moveDown.disabled = saveButton.disabled || !adjacentBlock(activeBlock, 1);
     }
 
     function updateTaskCount() {
         let total = 0;
         let done = 0;
-        for (const row of checklist.querySelectorAll('[data-task]')) {
+        for (const row of blocks.querySelectorAll('[data-format="task"]')) {
             const text = row.querySelector('.notes-task-text').value.trim();
             const control = row.querySelector('.notes-checkbox');
             control.setAttribute('aria-label', text ? `Mark ${text} complete` : 'Mark item complete');
@@ -433,46 +532,35 @@
         if (count.textContent !== progress) count.textContent = progress;
     }
 
-    function setEditorBody(body, forceChecklist = false) {
-        const lines = body === '' ? [] : body.split('\n');
-        const visual = editorType === 'text' && (forceChecklist || lines.some(line => taskPattern.test(line)));
-        for (const id of ['notesBody', 'notesBodyLabel', 'notesInsertTasks']) $(id).hidden = visual;
-        for (const id of ['notesChecklist', 'notesChecklistLabel', 'notesChecklistCount', 'notesAddItem']) $(id).hidden = !visual;
-        bodyInput.value = body;
-        checklist.replaceChildren();
-        if (!visual) return;
-
-        let prose = [];
-        function flushProse() {
-            if (!prose.length) return;
-            const value = prose.join('\n');
-            // Keep line breaks and calendar links in their original positions.
-            const block = document.createElement(value.trim() && !eventMarker.test(value) ? 'textarea' : 'input');
-            if (block instanceof HTMLTextAreaElement) {
-                block.rows = Math.min(5, prose.length);
-                block.setAttribute('aria-label', 'Note text');
+    function updateBlockRows() {
+        let number = null;
+        for (const row of blocks.children) {
+            if (row.dataset.format === 'number') {
+                number = number === null ? (blockSources.get(row).start ?? 1) : number + 1;
+                row.querySelector('.notes-block-marker').textContent = number + '.';
             } else {
-                block.type = 'hidden';
-            }
-            block.value = value;
-            checklist.append(block);
-            prose = [];
-        }
-        for (const line of lines) {
-            if (taskPattern.test(line)) {
-                flushProse();
-                addTaskRow(line);
-            } else if (eventMarker.test(line)) {
-                flushProse();
-                prose.push(line);
-                flushProse();
-            } else {
-                prose.push(line);
+                number = null;
+                if (row.dataset.format === 'bullet') row.querySelector('.notes-block-marker').textContent = '•';
             }
         }
-        flushProse();
-        if (!checklist.querySelector('[data-task]')) addTaskRow();
         updateTaskCount();
+    }
+
+    function setEditorBody(body, firstKind = 'text') {
+        voiceBody = body;
+        blocks.replaceChildren();
+        if (editorType === 'voice') {
+            selectBlock(null);
+            return;
+        }
+        const entries = parseBlocks(body);
+        const content = document.createDocumentFragment();
+        for (const entry of entries) content.append(makeBlock(entry));
+        if (!content.querySelector('[data-format]')) content.append(makeBlock({ kind: firstKind, text: '' }));
+        blocks.append(content);
+        const first = blocks.firstElementChild;
+        selectBlock(first.hidden ? adjacentBlock(first, 1) : first);
+        updateBlockRows();
     }
 
     function draftFingerprint() {
@@ -499,7 +587,7 @@
             link.href = '/calendar/?event=' + encodeURIComponent(linkedEvent.id);
             link.textContent = linkedEvent.title;
         }
-        setEditorBody(note?.body ?? text, type === 'list');
+        setEditorBody(note?.body ?? text, type === 'list' ? 'task' : 'text');
         $('notesRecorder').hidden = !recording;
         $('notesBodyField').hidden = editorType === 'voice';
         if (photoInput) {
@@ -511,12 +599,11 @@
         initialDraft = draftFingerprint();
         editor.showModal();
         if (recording) $('notesStartRecord').focus();
-        else if (type === 'list') checklist.querySelector('.notes-task-text').focus();
-        else if (note && !checklist.hidden) $('notesEditorHeading').focus();
+        else if (type === 'list') focusBlock(activeBlock);
+        else if (note && editorType === 'text') $('notesEditorHeading').focus();
         else if (text) {
-            const field = checklist.hidden ? bodyInput : checklist.querySelector('textarea, .notes-task-text');
-            field.focus();
-            field.setSelectionRange(field.value.length, field.value.length);
+            const last = blocks.lastElementChild;
+            focusBlock(last.hidden ? adjacentBlock(last, -1) : last);
         } else {
             $('notesTitle').focus();
         }
@@ -532,6 +619,7 @@
         for (const input of form.elements) input.disabled = saving;
         saveButton.textContent = saving ? 'Saving…' : 'Save note';
         if (!saving) {
+            selectBlock(activeBlock);
             updateRecordingControls();
             if (photoInput) $('notesAddPhotos').disabled = photoPaths.length + photoFiles.length >= maxPhotos;
         }
@@ -585,7 +673,7 @@
         initialDraft = JSON.stringify([rebase.current, editing.images]);
         photoPaths = rebase.photos;
         $('notesTitle').value = rebase.fields.title;
-        setEditorBody(rebase.fields.body, !checklist.hidden);
+        setEditorBody(rebase.fields.body, activeBlock?.dataset.format);
         setEditorColor(rebase.fields.color);
         if (photoInput) renderPhotoPreviews();
     }
@@ -596,9 +684,10 @@
             if (field === 'color') return colors[value] || value;
             if (field !== 'body') return value;
             return value.split('\n').map(line => {
-                if (eventMarker.test(line)) return 'Linked calendar event';
-                const task = taskPattern.exec(line);
-                return task ? `${/x/i.test(task[2]) ? '☑' : '☐'} ${task[4]}` : line;
+                const { kind, text, prefix, checked } = parseLine(line);
+                if (kind === 'event') return 'Linked calendar event';
+                if (kind === 'task') return `${checked ? '☑' : '☐'} ${text}`;
+                return kind === 'bullet' || kind === 'number' ? prefix + text : text;
             }).join('\n');
         }
         resolution = rebase;
@@ -693,73 +782,131 @@
         }
     });
 
-    function addCheckboxes() {
-        const text = bodyInput.value;
-        const { selectionStart, selectionEnd } = bodyInput;
-        const start = selectionStart ? text.lastIndexOf('\n', selectionStart - 1) + 1 : 0;
-        const lastSelected = selectionEnd > selectionStart && text[selectionEnd - 1] === '\n' ? selectionEnd - 1 : selectionEnd;
-        const nextNewline = text.indexOf('\n', lastSelected);
-        const end = nextNewline < 0 ? text.length : nextNewline;
-        const toTask = line => taskPattern.test(line) || eventMarker.test(line)
-            ? line : '- [ ] ' + line.replace(bulletPrefix, '$1').trimStart();
-        if (selectionStart !== selectionEnd) {
-            const lines = text.slice(start, end).split('\n').map(line => line.trim() ? toTask(line) : line);
-            bodyInput.setRangeText(lines.join('\n'), start, end, 'select');
-        } else if (text.split('\n').some(line => bulletPrefix.test(line) && !taskPattern.test(line))) {
-            const lines = text.split('\n').map(line => bulletPrefix.test(line) ? toTask(line) : line);
-            bodyInput.setRangeText(lines.join('\n'), 0, text.length, 'end');
-        }
-        setEditorBody(bodyInput.value, true);
-        checklist.querySelector('.notes-task-text').focus();
+    function focusBlock(row) {
+        const field = row.querySelector('.notes-block-input');
+        field.focus();
+        field.setSelectionRange(field.value.length, field.value.length);
     }
 
-    $('notesInsertTasks').addEventListener('click', addCheckboxes);
-    function focusTask(row) {
-        (row?.querySelector('.notes-task-text') || $('notesAddItem')).focus();
+    function insertBlock(kind, after = activeBlock) {
+        const row = makeBlock({ kind, text: '' });
+        if (after) after.after(row);
+        else blocks.append(row);
+        updateBlockRows();
+        focusBlock(row);
     }
 
-    $('notesAddItem').addEventListener('click', () => {
-        const last = [...checklist.querySelectorAll('[data-task]')].at(-1);
-        focusTask(last && !last.querySelector('.notes-task-text').value.trim() ? last : addTaskRow());
+    function replaceBlock(row, entries) {
+        const replacement = entries.map(makeBlock);
+        row.replaceWith(...replacement);
+        updateBlockRows();
+        focusBlock(replacement.find(element => !element.hidden));
+    }
+
+    function moveBlock(direction) {
+        const neighbor = adjacentBlock(activeBlock, direction);
+        if (!neighbor) return;
+        const position = document.createComment('');
+        activeBlock.before(position);
+        neighbor.before(activeBlock);
+        position.replaceWith(neighbor);
+        updateBlockRows();
+        selectBlock(activeBlock);
+        if ((direction < 0 ? moveUp : moveDown).disabled) focusBlock(activeBlock);
+        else activeBlock.scrollIntoView({ block: 'nearest' });
+    }
+
+    $('notesAddBlock').addEventListener('click', () => {
+        const kind = activeBlock?.dataset.format;
+        insertBlock(listFormats.has(kind) ? kind : 'text');
     });
-    checklist.addEventListener('input', updateTaskCount);
-    checklist.addEventListener('keydown', event => {
-        if (!event.target.matches('.notes-task-text') || event.key !== 'Enter' || event.ctrlKey || event.metaKey
+    moveUp.addEventListener('click', () => moveBlock(-1));
+    moveDown.addEventListener('click', () => moveBlock(1));
+    blockFormat.addEventListener('change', () => {
+        const kind = blockFormat.value;
+        if (!activeBlock || kind === activeBlock.dataset.format) return;
+        const { value } = activeBlock.querySelector('.notes-block-input');
+        if (kind === 'text') {
+            replaceBlock(activeBlock, [{ kind, text: value }]);
+            return;
+        }
+        const [first, ...rest] = value.split('\n');
+        const additional = kind === 'heading' || kind === 'subheading'
+            ? (rest.length ? [{ kind: 'text', text: rest.join('\n') }] : [])
+            : rest.map(text => ({ kind: text.trim() ? kind : 'blank', text }));
+        replaceBlock(activeBlock, [{ kind, text: first }, ...additional]);
+    });
+
+    blocks.addEventListener('focusin', event => {
+        const row = event.target.closest('[data-format]');
+        if (row) selectBlock(row);
+    });
+    blocks.addEventListener('input', event => {
+        if (event.target.closest('[data-format="task"]')) updateTaskCount();
+    });
+    blocks.addEventListener('keydown', event => {
+        const field = event.target;
+        if (!field.matches('input.notes-block-input') || event.key !== 'Enter' || event.ctrlKey || event.metaKey
             || event.isComposing || event.keyCode === 229) return;
         event.preventDefault();
-        if (event.target.value.trim()) focusTask(addTaskRow('', event.target.closest('[data-task]')));
+        const row = field.closest('[data-format]');
+        const kind = row.dataset.format;
+        const list = listFormats.has(kind);
+        if (!field.value.trim() && list) replaceBlock(row, [{ kind: 'text', text: '' }]);
+        else insertBlock(list ? kind : 'text', row);
     });
-    checklist.addEventListener('paste', event => {
-        const input = event.target;
-        if (!input.matches('.notes-task-text')) return;
-        const lines = event.clipboardData?.getData('text').split(/\r\n|\r|\n/).filter(line => line.trim());
-        if (!lines || lines.length < 2) return;
+
+    blocks.addEventListener('paste', event => {
+        const field = event.target;
+        if (!field.matches('.notes-block-input')) return;
+        const text = event.clipboardData?.getData('text/plain').replace(/\r\n?/g, '\n');
+        if (!text?.includes('\n')) return;
+        const row = field.closest('[data-format]');
+        const kind = row.dataset.format;
+        const before = field.value.slice(0, field.selectionStart);
+        const after = field.value.slice(field.selectionEnd);
+        if (kind === 'text') {
+            const entries = parseBlocks(text);
+            if (!entries.some(entry => Object.hasOwn(blockFormats, entry.kind) && entry.kind !== 'text')) return;
+            event.preventDefault();
+            const parts = entries.map(entry => entry.kind === 'event' ? { kind: 'text', text: entry.text } : entry);
+            if (before) parts.unshift({ kind: 'text', text: before });
+            if (after) parts.push({ kind: 'text', text: after });
+            replaceBlock(row, parts);
+            return;
+        }
+        if (!listFormats.has(kind)) return;
+        const lines = text.split('\n').filter(line => line.trim());
+        if (lines.length < 2) return;
         event.preventDefault();
-        const suffix = input.value.slice(input.selectionEnd);
-        const first = lines.shift();
-        const firstTask = taskPattern.exec(first);
-        const start = input.selectionStart;
-        const end = input.selectionEnd;
-        const fullItem = start === 0 && end === input.value.length;
-        input.value = input.value.slice(0, start) + (firstTask?.[4] ?? first.replace(bulletPrefix, '$1'));
-        let row = input.closest('[data-task]');
-        if (firstTask && fullItem) row.querySelector('.notes-checkbox').checked = /x/i.test(firstTask[2]);
-        lines.forEach((line, index) => {
-            const item = taskPattern.test(line) ? line : '- [ ] ' + line.replace(bulletPrefix, '$1');
-            row = addTaskRow(item + (index === lines.length - 1 ? suffix : ''), row);
+        const items = lines.map(line => {
+            const parsed = parseLine(line);
+            return { kind, text: listFormats.has(parsed.kind) ? parsed.text : line, checked: parsed.checked };
         });
-        updateTaskCount();
-        focusTask(row);
+        const first = items.shift();
+        field.value = before + first.text;
+        if (kind === 'task' && !before && !after && first.checked !== undefined) {
+            row.querySelector('.notes-checkbox').checked = first.checked;
+        }
+        items.at(-1).text += after;
+        const added = items.map(makeBlock);
+        row.after(...added);
+        updateBlockRows();
+        focusBlock(added.at(-1));
     });
-    checklist.addEventListener('click', event => {
-        const button = event.target.closest('[data-remove-item]');
+
+    blocks.addEventListener('click', event => {
+        const button = event.target.closest('[data-remove-block]');
         if (!button) return;
-        const rows = [...checklist.querySelectorAll('[data-task]')];
-        const row = button.closest('[data-task]');
-        const index = rows.indexOf(row);
-        row.remove();
-        updateTaskCount();
-        focusTask(rows[index + 1] || rows[index - 1]);
+        const row = button.closest('[data-format]');
+        const next = adjacentBlock(row, 1) || adjacentBlock(row, -1);
+        if (next) {
+            row.remove();
+            updateBlockRows();
+            focusBlock(next);
+        } else {
+            replaceBlock(row, [{ kind: row.dataset.format, text: '' }]);
+        }
     });
 
     function clearPhotoFiles() {

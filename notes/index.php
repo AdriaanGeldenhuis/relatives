@@ -154,14 +154,25 @@ require_once __DIR__ . '/../shared/components/header.php';
             <label class="notes-field">Title <input name="title" id="notesTitle" maxlength="160" placeholder="Give it a title"></label>
             <div class="notes-field" id="notesBodyField">
                 <div class="notes-field-head">
-                    <label for="notesBody" id="notesBodyLabel">Note</label>
-                    <span id="notesChecklistLabel" hidden>Checklist</span>
-                    <output id="notesChecklistCount" class="notes-hint" hidden></output>
-                    <button type="button" class="notes-button notes-button-small" id="notesInsertTasks" title="Convert selected lines or existing bullets to checklist items"><?= notesIcon('list') ?> Add checkboxes</button>
+                    <span id="notesContentsLabel">Note contents</span>
+                    <output id="notesChecklistCount" class="notes-hint"></output>
                 </div>
-                <textarea name="body" id="notesBody" rows="8" placeholder="Write something to remember…" spellcheck="true"></textarea>
-                <div id="notesChecklist" class="notes-checklist-editor" aria-labelledby="notesChecklistLabel" role="group" hidden></div>
-                <button type="button" class="notes-button notes-add-item" id="notesAddItem" hidden><?= notesIcon('plus') ?> Add item</button>
+                <div class="notes-format-controls" role="group" aria-label="Format note contents">
+                    <select id="notesBlockFormat" aria-label="Selected block format">
+                        <option value="text">Text</option>
+                        <option value="heading">Heading</option>
+                        <option value="subheading">Subheading</option>
+                        <option value="bullet">Bulleted list</option>
+                        <option value="number">Numbered list</option>
+                        <option value="task">Checklist</option>
+                    </select>
+                    <button type="button" class="notes-button notes-button-small" id="notesAddBlock"><?= notesIcon('plus') ?> Add block</button>
+                    <div class="notes-block-move">
+                        <button type="button" class="notes-icon-button" id="notesMoveUp" aria-label="Move selected block up" title="Move selected block up">↑</button>
+                        <button type="button" class="notes-icon-button" id="notesMoveDown" aria-label="Move selected block down" title="Move selected block down">↓</button>
+                    </div>
+                </div>
+                <div id="notesBlocks" class="notes-block-editor" aria-labelledby="notesContentsLabel" role="group"></div>
             </div>
             <?php if ($imageCapacity): ?>
             <div id="notesAttachments" class="notes-field">
