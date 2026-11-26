@@ -19,6 +19,8 @@ webkit = "1.15.0"
 fragment = "1.8.9"
 gson = "2.10.1"
 workRuntimeKtx = "2.10.1"
+navigationCompose = "2.8.8"
+mapbox = "11.9.0"
 
 [libraries]
 androidx-fragment = { group = "androidx.fragment", name = "fragment", version.ref = "fragment" }
@@ -47,6 +49,8 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 billing-ktx = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billingKtx" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+mapbox-android = { group = "com.mapbox.maps", name = "android-ndk27", version.ref = "mapbox" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

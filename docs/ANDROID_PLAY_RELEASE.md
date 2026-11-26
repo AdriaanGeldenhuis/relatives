@@ -5,6 +5,7 @@ The Android project lives in `App Files`. This release uses package `za.co.relat
 ## Build and deploy
 
 - From the Android project, use Java 21 and Android SDK 36 and run `./gradlew --max-workers=1 :app:testDebugUnitTest :app:lintRelease :app:assembleDebug :app:bundleRelease`.
+- The Family Tracking map runs in the WebView. To include the native Mapbox SDK in an Android Studio build, use `MAPBOX_DOWNLOADS_TOKEN` from the environment or your user-level Gradle properties. The configured SDK version is 11.9.0 with Mapbox's 16 KB page-size support.
 - Deploy the compatible PHP changes before distributing the Android update. Follow the tracking rollout below. Apply `migrations/privacy-requests-v1.sql` before exposing the privacy controls or deletion-request form. Serve the web app over HTTPS, and verify Apache honors the access rules for the SQL dumps and native source directory.
 - Upgrading from Room schema 2 preserves the existing account-bound queue and sharing consent. An upgrade from schema 1 still requires sharing opt-in and clears fixes without a verifiable account binding.
 - Configure the production Play Publisher service account, the matching package name, and the active monthly products in Play Console and the server's plan table. Then schedule `cron/reconcile-google-play.php` for renewal and entitlement checks. It uses the existing production service account configuration. Open the guarded deletion-request queue at `/admin/account-deletion.php` and assign a privacy operator to process requests and retained data.

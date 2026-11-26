@@ -6,6 +6,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val mapboxDownloadsToken = providers.environmentVariable("MAPBOX_DOWNLOADS_TOKEN")
+    .filter { it.isNotBlank() }
+    .orElse(providers.gradleProperty("MAPBOX_DOWNLOADS_TOKEN").filter { it.isNotBlank() })
+
 android {
     namespace = "za.co.relatives.app"
     compileSdk = 36
@@ -57,6 +61,11 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.navigation.compose)
+
+    if (mapboxDownloadsToken.isPresent) {
+        implementation(libs.mapbox.android)
+    }
 
     // Location
     implementation(libs.play.services.location)
