@@ -126,7 +126,8 @@ jobs:
             "export RELATIVES_RELEASE_ROOT='${DEPLOY_PATH%/}' DEPLOY_PHP='$DEPLOY_PHP'; $preflight" \
             < maintenance/release-check.php
           mkdir "$temp/site"
-          git archive HEAD | tar -x -C "$temp/site"
+          # Keep the SSH files private and stage web files with their normal read permissions.
+          (umask 022; git archive HEAD | tar -x -C "$temp/site")
           cp -a vendor "$temp/site/vendor"
           rsync -rtz --omit-dir-times --delay-updates --protect-args \
             -e "ssh -F $temp/ssh_config" \
@@ -140,6 +141,17 @@ jobs:
             --exclude='logs/' --exclude='uploads/' --exclude='saves/' \
             --exclude='/AGENTS.md' --exclude='/REBUILD_RECIPE.md' --exclude='/test_cache.php' \
             "$temp/site/" "relatives-production:${DEPLOY_PATH%/}/"
+
+          # rsync preserves the modes of existing files. Repair the affected public assets.
+          ssh -F "$temp/ssh_config" relatives-production "sh -s -- '${DEPLOY_PATH%/}'" <<'REMOTE'
+          set -eu
+          for asset in manifest.json shared/js/planner-events.js; do
+            path="$1/$asset"
+            test -f "$path"
+            test ! -L "$path"
+            chmod a+r "$path"
+          done
+          REMOTE
 
           # Archive removed tracked files that would otherwise remain after rsync.
           android_sources='App Files/app/src/main/java/za/co/relatives/app'
@@ -166,4 +178,18 @@ jobs:
             printf 'Archived obsolete deployed file %s\n' "$2"
           fi
           REMOTE
+          done
+      - name: Check deployed Notes and manifest assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(git show -s --format=%ct HEAD)
+          for asset in manifest.json "shared/js/planner-events.js?v=$version" "notes/js/notes.js?v=$version"; do
+            source_file=${asset%%\?*}
+            if ! curl --fail --silent --show-error --compressed --max-time 20 --retry 2 \
+              "https://www.relatives.co.za/$asset" | cmp -s "$source_file" -; then
+              printf '::error::Could not verify public asset %s\n' "$source_file"
+              exit 1
+            fi
+            printf 'Verified %s\n' "$source_file"
           done
