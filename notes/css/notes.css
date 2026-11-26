@@ -54,7 +54,7 @@ body.workspace-page[data-area="notes"] {
 }
 
 .notes-main button:disabled, .notes-dialog button:disabled { cursor: default; opacity: .6; }
-.workspace-page :is(.notes-main, .notes-dialog, .notes-gallery) :focus-visible { outline-color: #3c7548; }
+.workspace-page :is(.notes-main, .notes-dialog, .notes-gallery) :focus-visible { outline-color: var(--notes-green); }
 .workspace-page .notes-gallery :focus-visible { outline-color: #d9f491; }
 
 .notes-button .notes-icon { width: 16px; height: 16px; }
@@ -227,9 +227,46 @@ body.workspace-page[data-area="notes"] {
 .notes-prose { white-space: pre-wrap; overflow-wrap: anywhere; }
 .notes-card-content .notes-prose, .notes-card-content .notes-task-list { color: #405346; font-size: .83rem; }
 .notes-task-list { list-style: none; padding: 0; margin: 0; }
-.notes-task-list label { display: flex; align-items: flex-start; gap: 8px; padding: 5px 2px; cursor: pointer; overflow-wrap: anywhere; }
-.notes-task-list input { width: 16px; height: 16px; margin-top: .16em; flex: none; accent-color: #396047; cursor: pointer; }
-.notes-task-list input:checked + span { text-decoration: line-through; color: #5b6459; }
+.notes-task-list li + li { border-top: 1px solid var(--note-edge); }
+.notes-task-list label {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-height: 38px;
+    padding: 8px 4px;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+.notes-checkbox {
+    appearance: none;
+    display: grid;
+    place-content: center;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    border: 1.5px solid var(--note-mark, var(--notes-green));
+    border-radius: 6px;
+    background: var(--notes-paper);
+    color: #fff;
+    cursor: pointer;
+}
+.notes-checkbox:checked { background: var(--note-mark, var(--notes-green)); }
+.notes-checkbox:checked::before {
+    content: '';
+    width: 9px;
+    height: 5px;
+    border: solid currentColor;
+    border-width: 0 0 2px 2px;
+    transform: translateY(-1px) rotate(-45deg);
+}
+.notes-checkbox:focus-visible { outline: 2px solid var(--notes-green); outline-offset: 2px; }
+.notes-task-list input:checked + span { text-decoration: line-through; color: var(--notes-muted); }
+
+@media (forced-colors: active) {
+    .notes-checkbox { appearance: auto; }
+    .notes-checkbox::before { content: none !important; }
+}
 
 .notes-progress { display: flex; align-items: center; gap: 9px; margin-top: 10px; color: var(--note-mark); font-size: .72rem; font-weight: 750; }
 .notes-progress span { white-space: nowrap; }
@@ -315,12 +352,18 @@ body.workspace-page[data-area="notes"] {
 
 .notes-dialog-header { top: 0; border-bottom: 1px solid var(--notes-border); }
 .notes-dialog-header h2 { font: 400 clamp(1.7rem, 4vw, 2.35rem)/1.1 var(--notes-display); letter-spacing: -.045em; overflow-wrap: anywhere; }
+#notesEditorHeading:focus { outline: none; }
 .notes-dialog-header .notes-card-kind { margin-bottom: 5px; }
 .notes-dialog-footer { bottom: 0; justify-content: flex-end; flex-wrap: wrap; border-top: 1px solid var(--notes-border); }
 .notes-dialog-body { padding: 16px clamp(12px, 3vw, 24px) 19px; }
+#notesEditor { overflow: hidden; }
+#notesForm { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: inherit; }
+#notesForm > .notes-dialog-body { overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 12px; }
+#notesForm :is(.notes-dialog-header, .notes-dialog-footer) { position: static; }
+#notesFormError { flex-basis: 100%; margin: 0; }
 .notes-dialog .notes-field { display: grid; gap: 5px; margin-bottom: 15px; font-size: .83rem; font-weight: 750; }
 .notes-field-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.notes-field input:not([type="file"]), .notes-field textarea {
+.notes-field input:is(:not([type]), [type="text"]), .notes-field textarea {
     width: 100%;
     padding: 10px;
     border: 1px solid #c8d2c1;
@@ -333,6 +376,36 @@ body.workspace-page[data-area="notes"] {
 }
 .notes-field textarea { resize: vertical; min-height: 120px; line-height: 1.5; }
 .notes-hint { color: var(--notes-muted); font-size: .74rem; font-weight: 500; }
+
+.notes-checklist-editor { display: grid; gap: 6px; }
+.notes-checklist-editor textarea { min-height: 44px; }
+.notes-task-row {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) 42px;
+    align-items: center;
+    min-height: 46px;
+    border: 1px solid var(--notes-border);
+    border-radius: 10px;
+    background: #fffefa;
+}
+.notes-task-row:focus-within { border-color: var(--notes-green); }
+.notes-task-row .notes-checkbox {
+    justify-self: center;
+    position: relative;
+}
+.notes-task-row .notes-checkbox::after { content: ''; position: absolute; inset: -10px -8px; }
+.notes-task-row .notes-checkbox:checked + input { color: var(--notes-muted); }
+.notes-field .notes-task-row .notes-task-text {
+    min-width: 0;
+    padding: 10px 3px;
+    border: 0;
+    background: transparent;
+    outline: none;
+}
+.notes-task-row .notes-icon-button { width: 42px; height: 42px; color: var(--notes-muted); }
+.notes-task-row .notes-icon-button:not(:hover) { border-color: transparent; background: transparent; }
+.notes-task-row .notes-icon-button:focus-visible { outline-offset: -4px; }
+.notes-add-item { justify-self: start; margin-top: 4px; }
 
 .notes-colors { border: 0; }
 .notes-colors legend { margin-bottom: 5px; font-weight: 750; font-size: .83rem; }
@@ -374,6 +447,28 @@ body.workspace-page[data-area="notes"] {
 .notes-gallery-photo { grid-column: 2; text-align: center; }
 .notes-gallery-photo img { display: block; max-width: 100%; max-height: 76vh; max-height: 76dvh; margin: auto; object-fit: contain; border-radius: 8px; }
 .notes-delete-dialog { width: min(100% - 28px, 435px); }
+.notes-conflict-field { min-width: 0; margin: 12px 0 0; padding: 0; border: 0; }
+.notes-conflict-field legend { margin-bottom: 4px; font-weight: 750; }
+.notes-conflict-field label {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 5px;
+    padding: 8px 10px;
+    border: 1px solid var(--notes-border);
+    border-radius: 9px;
+    cursor: pointer;
+}
+.notes-conflict-field input { flex: none; accent-color: var(--notes-green); }
+.notes-conflict-field label:has(:checked) { background: var(--app-soft); border-color: var(--notes-green); }
+.notes-conflict-preview {
+    display: block;
+    max-height: 9rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--notes-muted);
+}
 .notes-toast {
     position: fixed;
     z-index: 100020;
@@ -418,6 +513,7 @@ body.workspace-page[data-area="notes"] {
     .notes-board-tools { margin: 11px 0; }
     .notes-grid { grid-template-columns: minmax(0, 1fr); gap: 9px; }
     .notes-card-content { max-height: 152px; }
+    .notes-task-list label { min-height: 44px; }
     .notes-card .notes-icon-button { width: 41px; height: 41px; }
     .notes-color { width: 28px; }
     .notes-dialog { width: calc(100% - 16px); }

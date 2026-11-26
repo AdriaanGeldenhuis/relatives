@@ -138,7 +138,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 <dialog class="notes-dialog" id="notesEditor" aria-labelledby="notesEditorHeading">
     <form id="notesForm">
         <header class="notes-dialog-header">
-            <h2 id="notesEditorHeading">New note</h2>
+            <h2 id="notesEditorHeading" tabindex="-1">New note</h2>
             <button type="button" class="notes-icon-button" data-close aria-label="Close editor"><?= notesIcon('close') ?></button>
         </header>
         <div class="notes-dialog-body">
@@ -154,11 +154,14 @@ require_once __DIR__ . '/../shared/components/header.php';
             <label class="notes-field">Title <input name="title" id="notesTitle" maxlength="160" placeholder="Give it a title"></label>
             <div class="notes-field" id="notesBodyField">
                 <div class="notes-field-head">
-                    <label for="notesBody">Note</label>
-                    <button type="button" class="notes-button notes-button-small" id="notesInsertTasks" title="Convert selected lines or existing bullets to checkboxes"><?= notesIcon('list') ?> Add checkboxes</button>
+                    <label for="notesBody" id="notesBodyLabel">Note</label>
+                    <span id="notesChecklistLabel" hidden>Checklist</span>
+                    <output id="notesChecklistCount" class="notes-hint" hidden></output>
+                    <button type="button" class="notes-button notes-button-small" id="notesInsertTasks" title="Convert selected lines or existing bullets to checklist items"><?= notesIcon('list') ?> Add checkboxes</button>
                 </div>
                 <textarea name="body" id="notesBody" rows="8" placeholder="Write something to remember…" spellcheck="true"></textarea>
-                <p id="notesChecklistHint" class="notes-hint" hidden>Press Enter to add another item. Tick items from the board or the open note.</p>
+                <div id="notesChecklist" class="notes-checklist-editor" aria-labelledby="notesChecklistLabel" role="group" hidden></div>
+                <button type="button" class="notes-button notes-add-item" id="notesAddItem" hidden><?= notesIcon('plus') ?> Add item</button>
             </div>
             <?php if ($imageCapacity): ?>
             <div id="notesAttachments" class="notes-field">
@@ -183,13 +186,28 @@ require_once __DIR__ . '/../shared/components/header.php';
                     </label>
                 <?php endforeach; ?>
             </fieldset>
-            <p id="notesFormError" class="notes-form-error" role="alert" hidden></p>
         </div>
         <footer class="notes-dialog-footer">
+            <p id="notesFormError" class="notes-form-error" role="alert" hidden></p>
             <button type="button" class="notes-button" data-close>Cancel</button>
             <button type="submit" class="notes-button notes-button-primary" id="notesSave">Save note</button>
         </footer>
     </form>
+</dialog>
+
+<dialog class="notes-dialog notes-conflict-dialog" id="notesConflict" aria-labelledby="notesConflictHeading">
+    <header class="notes-dialog-header">
+        <h2 id="notesConflictHeading">Review shared edits</h2>
+        <button type="button" class="notes-icon-button" data-close aria-label="Back to editor"><?= notesIcon('close') ?></button>
+    </header>
+    <div class="notes-dialog-body">
+        <p>Choose which version to keep for each field you both changed.</p>
+        <div id="notesConflictFields"></div>
+    </div>
+    <footer class="notes-dialog-footer">
+        <button type="button" class="notes-button" data-close>Back to editor</button>
+        <button type="button" class="notes-button notes-button-primary" id="notesApplyResolution" disabled>Save with these choices</button>
+    </footer>
 </dialog>
 
 <dialog class="notes-dialog" id="notesReader" aria-labelledby="notesReaderHeading">

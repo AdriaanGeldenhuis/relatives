@@ -10,8 +10,7 @@
         '#ffffff': 'paper', '#ffeb3b': 'honey', '#ff9800': 'peach', '#e91e63': 'rose',
         '#9c27b0': 'lilac', '#2196f3': 'sky', '#00bcd4': 'aqua', '#4caf50': 'mint', '#8bc34a': 'lime'
     };
-    const taskPattern = /^[ \t]*[-*] \[([ xX])\][ \t]+(\S.*)$/u;
-    const taskPrefix = /^([ \t]*[-*] )\[[ xX]\](?:[ \t]+|$)/;
+    const taskPattern = /^([ \t]*[-*][ \t]+\[)([ xX]?)(\](?:[ \t]+|$))(.*)$/u;
     const bulletPrefix = /^([ \t]*)[-*•][ \t]+/;
     const eventMarker = /^\[Calendar event\]\(\/calendar\/\?event=[1-9][0-9]*\)$/;
     const dateFormat = new Intl.DateTimeFormat('en-ZA', {
@@ -21,10 +20,12 @@
     const reader = $('notesReader');
     const gallery = $('notesGallery');
     const deleteDialog = $('notesDelete');
+    const conflictDialog = $('notesConflict');
     const form = $('notesForm');
     const board = $('notesBoard');
     const search = $('notesSearch');
     const bodyInput = $('notesBody');
+    const checklist = $('notesChecklist');
     const photoInput = $('notesPhotoInput');
     const saveButton = $('notesSave');
     const deleteButton = $('notesConfirmDelete');
@@ -38,6 +39,7 @@
     let editing = null;
     let editorType = 'text';
     let initialDraft = '';
+    let resolution = null;
     let previousFocus = null;
     let readerId = null;
     let deleting = null;
@@ -76,7 +78,7 @@
 
     function noteType(note) {
         if (note.type === 'voice') return ['mic', 'Voice note'];
-        if (note.body.split('\n').some(line => taskPattern.test(line))) return ['list', 'Checklist'];
+        if (note.body.split('\n').some(line => taskPattern.exec(line)?.[4].trim())) return ['list', 'Checklist'];
         if (note.images.length) return ['photo', 'Photo note'];
         return ['note', 'Note'];
     }
@@ -84,6 +86,10 @@
     function noteTitle(note) {
         const kind = noteType(note)[1];
         return note.title || (kind === 'Note' ? 'Untitled note' : kind);
+    }
+
+    function checkbox(checked, attributes) {
+        return `<input class="notes-checkbox" type="checkbox" ${attributes}${checked ? ' checked' : ''}>`;
     }
 
     function noteBody(note) {
@@ -113,11 +119,12 @@
                 prose.push(line);
                 return;
             }
+            if (!match[4].trim()) return;
             flushProse();
-            const checked = match[1] !== ' ';
+            const checked = /x/i.test(match[2]);
             total++;
             if (checked) done++;
-            tasks.push(`<li><label><input type="checkbox" data-line="${index}" ${checked ? 'checked' : ''}><span>${escape(match[2])}</span></label></li>`);
+            tasks.push(`<li><label>${checkbox(checked, `data-line="${index}"`)}<span>${escape(match[4])}</span></label></li>`);
         });
         flushProse();
         flushTasks();
@@ -243,7 +250,9 @@
     async function request(action, data = new FormData()) {
         data.set('action', action);
         data.set('csrf_token', csrf);
-        const response = await fetch('/notes/', { method: 'POST', body: data });
+        const response = await fetch('/notes/', { method: 'POST', body: data }).catch(() => {
+            throw new Error('Notes could not reach the server. Try again when you’re connected.');
+        });
         let result;
         try {
             result = await response.json();
@@ -363,7 +372,110 @@
     }
 
     function draft() {
-        return JSON.stringify([$('notesTitle').value, bodyInput.value, form.elements.color.value, photoPaths]);
+        const body = checklist.hidden ? bodyInput.value : [...checklist.children].flatMap(row => {
+            if (!row.matches('[data-task]')) return [row.value];
+            const text = row.querySelector('input[type="text"]').value;
+            const original = taskPattern.exec(row.dataset.task);
+            const checked = row.querySelector('.notes-checkbox').checked;
+            if (!text.trim()) return original && !original[4].trim() ? [row.dataset.task] : [];
+            const marker = original && checked === /x/i.test(original[2]) ? original[2] : checked ? 'x' : ' ';
+            const prefix = original?.[1] || '- [';
+            const suffix = original?.[3].length > 1 ? original[3] : '] ';
+            return [prefix + marker + suffix + text];
+        }).join('\n');
+        return { title: $('notesTitle').value.trim(), body, color: form.elements.color.value };
+    }
+
+    function setEditorColor(color) {
+        form.querySelector('[data-custom-color]')?.remove();
+        if (colors[color]) {
+            form.elements.color.value = color;
+            return;
+        }
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'color';
+        input.value = color;
+        input.dataset.customColor = '';
+        input.hidden = true;
+        input.checked = true;
+        form.querySelector('.notes-colors').append(input);
+    }
+
+    function addTaskRow(line = '', after = null) {
+        const match = taskPattern.exec(line);
+        const row = document.createElement('div');
+        row.className = 'notes-task-row';
+        row.dataset.task = line;
+        row.innerHTML = `${checkbox(/x/i.test(match?.[2] || ''), 'aria-label="Mark item complete"')}
+            <input class="notes-task-text" type="text" aria-label="Checklist item" placeholder="Add a checklist item" enterkeyhint="enter">
+            <button type="button" class="notes-icon-button" data-remove-item aria-label="Remove checklist item">${icon('close')}</button>`;
+        row.querySelector('.notes-task-text').value = match?.[4] || '';
+        if (after) after.after(row);
+        else checklist.append(row);
+        return row;
+    }
+
+    function updateTaskCount() {
+        let total = 0;
+        let done = 0;
+        for (const row of checklist.querySelectorAll('[data-task]')) {
+            const text = row.querySelector('.notes-task-text').value.trim();
+            const control = row.querySelector('.notes-checkbox');
+            control.setAttribute('aria-label', text ? `Mark ${text} complete` : 'Mark item complete');
+            if (!text) continue;
+            total++;
+            if (control.checked) done++;
+        }
+        const count = $('notesChecklistCount');
+        const progress = total ? `${done} / ${total} done` : '';
+        if (count.textContent !== progress) count.textContent = progress;
+    }
+
+    function setEditorBody(body, forceChecklist = false) {
+        const lines = body === '' ? [] : body.split('\n');
+        const visual = editorType === 'text' && (forceChecklist || lines.some(line => taskPattern.test(line)));
+        for (const id of ['notesBody', 'notesBodyLabel', 'notesInsertTasks']) $(id).hidden = visual;
+        for (const id of ['notesChecklist', 'notesChecklistLabel', 'notesChecklistCount', 'notesAddItem']) $(id).hidden = !visual;
+        bodyInput.value = body;
+        checklist.replaceChildren();
+        if (!visual) return;
+
+        let prose = [];
+        function flushProse() {
+            if (!prose.length) return;
+            const value = prose.join('\n');
+            // Keep line breaks and calendar links in their original positions.
+            const block = document.createElement(value.trim() && !eventMarker.test(value) ? 'textarea' : 'input');
+            if (block instanceof HTMLTextAreaElement) {
+                block.rows = Math.min(5, prose.length);
+                block.setAttribute('aria-label', 'Note text');
+            } else {
+                block.type = 'hidden';
+            }
+            block.value = value;
+            checklist.append(block);
+            prose = [];
+        }
+        for (const line of lines) {
+            if (taskPattern.test(line)) {
+                flushProse();
+                addTaskRow(line);
+            } else if (eventMarker.test(line)) {
+                flushProse();
+                prose.push(line);
+                flushProse();
+            } else {
+                prose.push(line);
+            }
+        }
+        flushProse();
+        if (!checklist.querySelector('[data-task]')) addTaskRow();
+        updateTaskCount();
+    }
+
+    function draftFingerprint() {
+        return JSON.stringify([draft(), photoPaths]);
     }
 
     function openEditor(type, note = null, text = '', linkedEvent = null) {
@@ -376,7 +488,8 @@
         resetRecording();
         clearPhotoFiles();
         photoPaths = note ? [...note.images] : [];
-        $('notesEditorHeading').textContent = note ? 'Edit note' : { text: 'New note', list: 'New checklist', voice: 'Record a voice note' }[type];
+        $('notesEditorHeading').textContent = note ? (noteType(note)[0] === 'list' ? 'Edit checklist' : 'Edit note')
+            : { text: 'New note', list: 'New checklist', voice: 'Record a voice note' }[type];
         $('notesTitle').value = note?.title || linkedEvent?.title.slice(0, 160) || '';
         const eventHint = $('notesSourceEvent');
         eventHint.hidden = !linkedEvent;
@@ -385,37 +498,24 @@
             link.href = '/calendar/?event=' + encodeURIComponent(linkedEvent.id);
             link.textContent = linkedEvent.title;
         }
-        bodyInput.value = note?.body ?? (type === 'list' ? '- [ ] ' : text);
-        bodyInput.placeholder = type === 'list' ? 'Add a checklist item…' : 'Write something to remember…';
+        setEditorBody(note?.body ?? text, type === 'list');
         $('notesRecorder').hidden = !recording;
         $('notesBodyField').hidden = editorType === 'voice';
         if (photoInput) {
             $('notesAttachments').hidden = editorType === 'voice';
             renderPhotoPreviews();
         }
-        const custom = form.querySelector('[data-custom-color]');
-        custom?.remove();
-        const color = note?.color.toLowerCase() || '#ffffff';
-        if (colors[color]) {
-            form.elements.color.value = color;
-        } else {
-            const input = document.createElement('input');
-            input.type = 'radio';
-            input.name = 'color';
-            input.value = color;
-            input.dataset.customColor = '';
-            input.hidden = true;
-            input.checked = true;
-            form.querySelector('.notes-colors').append(input);
-        }
+        setEditorColor(note?.color.toLowerCase() || '#ffffff');
         setNotice($('notesFormError'), '');
-        initialDraft = draft();
-        updateChecklistHint();
+        initialDraft = draftFingerprint();
         editor.showModal();
         if (recording) $('notesStartRecord').focus();
-        else if (type === 'list' || text) {
-            bodyInput.focus();
-            bodyInput.setSelectionRange(bodyInput.value.length, bodyInput.value.length);
+        else if (type === 'list') checklist.querySelector('.notes-task-text').focus();
+        else if (note && !checklist.hidden) $('notesEditorHeading').focus();
+        else if (text) {
+            const field = checklist.hidden ? bodyInput : checklist.querySelector('textarea, .notes-task-text');
+            field.focus();
+            field.setSelectionRange(field.value.length, field.value.length);
         } else {
             $('notesTitle').focus();
         }
@@ -423,7 +523,7 @@
 
     function closeEditor() {
         if (saveButton.disabled) return;
-        const changed = draft() !== initialDraft || Boolean(photoFiles.length || recordedBlob || activeRecording?.started);
+        const changed = draftFingerprint() !== initialDraft || Boolean(photoFiles.length || recordedBlob || activeRecording?.started);
         if (!changed || window.confirm('Discard your unsaved changes?')) editor.close();
     }
 
@@ -436,10 +536,101 @@
         }
     }
 
-    form.addEventListener('submit', async event => {
-        event.preventDefault();
-        if (saveButton.disabled) return;
-        const data = new FormData(form);
+    function changedLines(base, version) {
+        let start = 0;
+        let end = base.length;
+        let versionEnd = version.length;
+        while (start < end && start < versionEnd && base[start] === version[start]) start++;
+        while (end > start && versionEnd > start && base[end - 1] === version[versionEnd - 1]) {
+            end--;
+            versionEnd--;
+        }
+        return { start, end, lines: version.slice(start, versionEnd) };
+    }
+
+    function mergeBody(base, mine, latest) {
+        const lines = base.split('\n');
+        const [first, second] = [mine, latest].map(body => changedLines(lines, body.split('\n')))
+            .sort((a, b) => a.start - b.start);
+        if (first.start === second.start || first.end > second.start) return null;
+        return [...lines.slice(0, first.start), ...first.lines, ...lines.slice(first.end, second.start),
+            ...second.lines, ...lines.slice(second.end)].join('\n');
+    }
+
+    function noteFields(note) {
+        return { title: note.title.trim(), body: note.body, color: note.color.toLowerCase() };
+    }
+
+    function compareDraft(latest, mine) {
+        const base = noteFields(editing);
+        const current = noteFields(latest);
+        const fields = { ...mine };
+        const conflicts = [];
+        for (const field of Object.keys(base)) {
+            if (mine[field] === base[field]) {
+                fields[field] = current[field];
+            } else if (current[field] !== base[field] && current[field] !== mine[field]) {
+                const merged = field === 'body' ? mergeBody(base.body, mine.body, current.body) : null;
+                if (merged === null) conflicts.push(field);
+                else fields[field] = merged;
+            }
+        }
+        const removed = editing.images.filter(path => !photoPaths.includes(path));
+        return { latest, current, fields, conflicts, photos: latest.images.filter(path => !removed.includes(path)) };
+    }
+
+    function applyRebase(rebase) {
+        editing = rebase.latest;
+        initialDraft = JSON.stringify([rebase.current, editing.images]);
+        photoPaths = rebase.photos;
+        $('notesTitle').value = rebase.fields.title;
+        setEditorBody(rebase.fields.body, !checklist.hidden);
+        setEditorColor(rebase.fields.color);
+        if (photoInput) renderPhotoPreviews();
+    }
+
+    function showConflicts(rebase) {
+        const labels = { title: 'Title', body: 'Note contents', color: 'Note color' };
+        function preview(field, value) {
+            if (field === 'color') return colors[value] || value;
+            if (field !== 'body') return value;
+            return value.split('\n').map(line => {
+                if (eventMarker.test(line)) return 'Linked calendar event';
+                const task = taskPattern.exec(line);
+                return task ? `${/x/i.test(task[2]) ? '☑' : '☐'} ${task[4]}` : line;
+            }).join('\n');
+        }
+        resolution = rebase;
+        $('notesConflictFields').innerHTML = rebase.conflicts.map(field => `<fieldset class="notes-conflict-field">
+            <legend>${labels[field]}</legend>
+            ${[['mine', 'Your draft', rebase.fields[field]], ['latest', 'Latest saved', rebase.current[field]]]
+                .map(([id, label, value]) => `<label><input type="radio" name="${field}" value="${id}">
+                    <span><strong>${label}</strong><span class="notes-conflict-preview">${escape(preview(field, value) || 'Empty')}</span></span>
+                </label>`).join('')}
+        </fieldset>`).join('');
+        $('notesApplyResolution').disabled = true;
+        conflictDialog.showModal();
+    }
+
+    $('notesConflictFields').addEventListener('change', () => {
+        $('notesApplyResolution').disabled = resolution.conflicts.some(field => !conflictDialog.querySelector(`[name="${field}"]:checked`));
+    });
+
+    $('notesApplyResolution').addEventListener('click', () => {
+        for (const field of resolution.conflicts) {
+            if (conflictDialog.querySelector(`[name="${field}"]:checked`).value === 'latest') {
+                resolution.fields[field] = resolution.current[field];
+            }
+        }
+        applyRebase(resolution);
+        setNotice($('notesFormError'), '');
+        conflictDialog.close();
+        form.requestSubmit();
+    });
+
+    function saveData(fields) {
+        const data = new FormData();
+        Object.entries(fields).forEach(([field, value]) => data.set(field, value));
         data.set('type', editorType);
         if (editing) {
             data.set('note_id', editing.id);
@@ -451,25 +642,42 @@
         data.set('photo_count', String(photoFiles.length));
         photoFiles.forEach(({ file }) => data.append('images[]', file));
         if (editorType === 'voice' && !editing) {
-            if (!recordedBlob) {
-                setNotice($('notesFormError'), 'Record a voice note first.');
-                return;
-            }
-            if (recordedBlob.size > uploadLimits.fileBytes) {
-                setNotice($('notesFormError'), `Record again to stay within the ${fileLimit(uploadLimits.fileBytes)} upload limit.`);
-                return;
-            }
+            if (!recordedBlob) throw new Error('Record a voice note first.');
+            if (recordedBlob.size > uploadLimits.fileBytes) throw new Error(`Record again to stay within the ${fileLimit(uploadLimits.fileBytes)} upload limit.`);
             const extension = recordedBlob.type.includes('mp4') ? 'm4a' : recordedBlob.type.includes('ogg') ? 'ogg' : 'webm';
             data.append('audio', recordedBlob, 'recording.' + extension);
         }
-        // An unfinished last checkbox is a prompt, not a saved item.
-        if (editorType === 'text' && bodyInput.value !== editing?.body) {
-            data.set('body', bodyInput.value.replace(/(?:^|\n)[ \t]*[-*] \[ \][ \t]*$/, ''));
-        }
+        if (photoPaths.length + photoFiles.length > maxPhotos) throw new Error(`Remove a photo before saving. A note can hold up to ${maxPhotos}.`);
+        return data;
+    }
+
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (saveButton.disabled || conflictDialog.open) return;
         setNotice($('notesFormError'), '');
         setSaving(true);
+        let fields = draft();
         try {
-            const result = await request(editing ? 'update_note' : 'create_note', data);
+            let result;
+            for (let attempt = 0; attempt < 2; attempt++) {
+                try {
+                    result = await request(editing ? 'update_note' : 'create_note', saveData(fields));
+                    break;
+                } catch (error) {
+                    if (editing) recordMutationError(error, editing.id);
+                    if (!editing || !error.note) throw error;
+                    const rebase = compareDraft(error.note, fields);
+                    if (rebase.conflicts.length) {
+                        setNotice($('notesFormError'), 'Your draft is still here. Save again to review the shared edits.');
+                        showConflicts(rebase);
+                        return;
+                    }
+                    applyRebase(rebase);
+                    fields = rebase.fields;
+                    if (attempt) throw new Error('The latest changes were merged. Review your note and save again.');
+                    setSaving(true);
+                }
+            }
             const wasEditing = Boolean(editing);
             refreshNote(result.note, result.note.id);
             editor.close();
@@ -478,16 +686,11 @@
             }
             notify(wasEditing ? 'Changes saved.' : 'Note added.');
         } catch (error) {
-            if (editing) recordMutationError(error, editing.id);
-            setNotice($('notesFormError'), error.message + (error.note ? ' Copy your changes before reopening the editor.' : ''));
+            setNotice($('notesFormError'), error.message);
         } finally {
             setSaving(false);
         }
     });
-
-    function updateChecklistHint() {
-        $('notesChecklistHint').hidden = !bodyInput.value.split('\n').some(line => taskPrefix.test(line));
-    }
 
     function addCheckboxes() {
         const text = bodyInput.value;
@@ -496,42 +699,66 @@
         const lastSelected = selectionEnd > selectionStart && text[selectionEnd - 1] === '\n' ? selectionEnd - 1 : selectionEnd;
         const nextNewline = text.indexOf('\n', lastSelected);
         const end = nextNewline < 0 ? text.length : nextNewline;
-        const toTask = line => taskPrefix.test(line) || eventMarker.test(line)
+        const toTask = line => taskPattern.test(line) || eventMarker.test(line)
             ? line : '- [ ] ' + line.replace(bulletPrefix, '$1').trimStart();
         if (selectionStart !== selectionEnd) {
             const lines = text.slice(start, end).split('\n').map(line => line.trim() ? toTask(line) : line);
             bodyInput.setRangeText(lines.join('\n'), start, end, 'select');
-        } else if (text.split('\n').some(line => bulletPrefix.test(line) && !taskPrefix.test(line))) {
+        } else if (text.split('\n').some(line => bulletPrefix.test(line) && !taskPattern.test(line))) {
             const lines = text.split('\n').map(line => bulletPrefix.test(line) ? toTask(line) : line);
             bodyInput.setRangeText(lines.join('\n'), 0, text.length, 'end');
-        } else if (text.slice(start, end).trim()) {
-            const line = text.slice(start, end);
-            if (!taskPrefix.test(line)) bodyInput.setRangeText('\n- [ ] ', end, end, 'end');
-        } else {
-            bodyInput.setRangeText('- [ ] ', start, end, 'end');
         }
-        bodyInput.focus();
-        updateChecklistHint();
+        setEditorBody(bodyInput.value, true);
+        checklist.querySelector('.notes-task-text').focus();
     }
 
     $('notesInsertTasks').addEventListener('click', addCheckboxes);
-    bodyInput.addEventListener('input', updateChecklistHint);
-    bodyInput.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey || event.isComposing
-            || bodyInput.selectionStart !== bodyInput.selectionEnd) return;
-        const position = bodyInput.selectionStart;
-        const start = position ? bodyInput.value.lastIndexOf('\n', position - 1) + 1 : 0;
-        const end = bodyInput.value.indexOf('\n', position);
-        const line = bodyInput.value.slice(start, end < 0 ? undefined : end);
-        const prefix = taskPrefix.exec(line);
-        if (!prefix || position < start + prefix[0].length) return;
+    function focusTask(row) {
+        (row?.querySelector('.notes-task-text') || $('notesAddItem')).focus();
+    }
+
+    $('notesAddItem').addEventListener('click', () => {
+        const last = [...checklist.querySelectorAll('[data-task]')].at(-1);
+        focusTask(last && !last.querySelector('.notes-task-text').value.trim() ? last : addTaskRow());
+    });
+    checklist.addEventListener('input', updateTaskCount);
+    checklist.addEventListener('keydown', event => {
+        if (!event.target.matches('.notes-task-text') || event.key !== 'Enter' || event.ctrlKey || event.metaKey
+            || event.isComposing || event.keyCode === 229) return;
         event.preventDefault();
-        if (!line.slice(prefix[0].length).trim()) {
-            bodyInput.setRangeText('', start, end < 0 ? bodyInput.value.length : end, 'end');
-        } else {
-            bodyInput.setRangeText('\n' + prefix[1] + '[ ] ', position, position, 'end');
-        }
-        updateChecklistHint();
+        if (event.target.value.trim()) focusTask(addTaskRow('', event.target.closest('[data-task]')));
+    });
+    checklist.addEventListener('paste', event => {
+        const input = event.target;
+        if (!input.matches('.notes-task-text')) return;
+        const lines = event.clipboardData?.getData('text').split(/\r\n|\r|\n/).filter(line => line.trim());
+        if (!lines || lines.length < 2) return;
+        event.preventDefault();
+        const suffix = input.value.slice(input.selectionEnd);
+        const first = lines.shift();
+        const firstTask = taskPattern.exec(first);
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const fullItem = start === 0 && end === input.value.length;
+        input.value = input.value.slice(0, start) + (firstTask?.[4] ?? first.replace(bulletPrefix, '$1'));
+        let row = input.closest('[data-task]');
+        if (firstTask && fullItem) row.querySelector('.notes-checkbox').checked = /x/i.test(firstTask[2]);
+        lines.forEach((line, index) => {
+            const item = taskPattern.test(line) ? line : '- [ ] ' + line.replace(bulletPrefix, '$1');
+            row = addTaskRow(item + (index === lines.length - 1 ? suffix : ''), row);
+        });
+        updateTaskCount();
+        focusTask(row);
+    });
+    checklist.addEventListener('click', event => {
+        const button = event.target.closest('[data-remove-item]');
+        if (!button) return;
+        const rows = [...checklist.querySelectorAll('[data-task]')];
+        const row = button.closest('[data-task]');
+        const index = rows.indexOf(row);
+        row.remove();
+        updateTaskCount();
+        focusTask(rows[index + 1] || rows[index - 1]);
     });
 
     function clearPhotoFiles() {
@@ -805,7 +1032,7 @@
             notify('Note deleted.');
         } catch (error) {
             recordMutationError(error, note.id);
-            setNotice($('notesDeleteError'), error.message);
+            setNotice($('notesDeleteError'), error.note ? 'This note changed. Close this confirmation to review the latest version.' : error.message);
         } finally {
             deleteButton.disabled = false;
         }
@@ -862,7 +1089,7 @@
         }
     });
 
-    for (const dialog of [editor, reader, gallery, deleteDialog]) {
+    for (const dialog of [editor, reader, gallery, deleteDialog, conflictDialog]) {
         const close = () => {
             if (dialog === editor) closeEditor();
             else if (dialog !== deleteDialog || !deleteButton.disabled) dialog.close();
@@ -879,6 +1106,11 @@
     editor.addEventListener('close', () => {
         resetRecording();
         clearPhotoFiles();
+    });
+    conflictDialog.addEventListener('close', () => {
+        if (conflictDialog.open) return;
+        resolution = null;
+        $('notesConflictFields').replaceChildren();
     });
     reader.addEventListener('close', () => {
         readerId = null;
@@ -908,6 +1140,9 @@
         if (event.key === planner.noteSignal || event.key === planner.eventSignal) refreshBoard();
     });
     window.addEventListener('relatives:event-saved', refreshBoard);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) refreshBoard();
+    });
     window.addEventListener('pageshow', event => {
         if (event.persisted) refreshBoard();
     });

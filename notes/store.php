@@ -397,7 +397,7 @@ function notesHandlePost(PDO $db, array $user, string $token): never
                 $audio = notesSaveAudio($_FILES['audio'], $userId, $created);
             }
             $fields = ['title' => $title, 'body' => $body, 'color' => $color, 'audio_path' => $audio];
-            if ($imageCapacity) {
+            if ($imageCapacity && (!$editing || $photos || $removed)) {
                 $fields['image_path'] = notesPackImages($paths, $imageCapacity);
             }
             if ($editing) {
@@ -436,7 +436,7 @@ function notesHandlePost(PDO $db, array $user, string $token): never
             $index = filter_var(notesPost('line'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
             $checked = notesPost('checked');
             if ($note['type'] !== 'text' || $index === false || !in_array($checked, ['0', '1'], true)
-                || !isset($lines[$index]) || !preg_match('/^([ \t]*[-*] \[)([ xX])(\][ \t]+\S.*)$/uD', $lines[$index], $task)) {
+                || !isset($lines[$index]) || !preg_match('/^([ \t]*[-*][ \t]+\[)([ xX]?)(\][ \t]+\S.*)$/uD', $lines[$index], $task)) {
                 throw new DomainException('This checklist item is no longer available.');
             }
             $lines[$index] = $task[1] . ($checked === '1' ? 'x' : ' ') . $task[3];

@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Bundle
@@ -31,6 +32,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -370,8 +372,8 @@ class MainActivity : ComponentActivity() {
     // ════════════════════════════════════════════════════════════════════
 
     private fun buildLayout() {
-        val barColor = getColor(R.color.primary_dark)
-        val barStyle = SystemBarStyle.dark(barColor)
+        val barColor = getColor(R.color.background)
+        val barStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
         // The root supplies the bar background where Android draws transparent system bars.
         root = FrameLayout(this).apply { setBackgroundColor(barColor) }
@@ -394,6 +396,46 @@ class MainActivity : ComponentActivity() {
         WindowCompat.getInsetsController(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
             show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+        }
+    }
+
+    private fun setSystemBarColor(color: Int) {
+        root.setBackgroundColor(color)
+        val darkIcons = ColorUtils.calculateLuminance(color) > 0.179
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = darkIcons
+            isAppearanceLightNavigationBars = darkIcons
+        }
+    }
+
+    private fun matchWebFooterColor(view: WebView) {
+        val page = webPageLoad
+        // Composite the footer over the page canvas, including transparent footers and CSS color-mix values.
+        val script = """
+            (() => {
+                const canvas = document.createElement('canvas');
+                canvas.width = canvas.height = 1;
+                const ctx = canvas.getContext('2d');
+                if (!ctx || !document.body) return null;
+                const footer = document.getElementById('globalFooter');
+                const layers = [];
+                for (let element = footer || document.body; element; element = element.parentElement) {
+                    layers.unshift(element);
+                }
+                ctx.fillStyle = '#f3f2e9';
+                ctx.fillRect(0, 0, 1, 1);
+                for (const element of layers) {
+                    ctx.fillStyle = getComputedStyle(element).backgroundColor;
+                    ctx.fillRect(0, 0, 1, 1);
+                }
+                const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+                return (r << 16) | (g << 8) | b;
+            })()
+        """.trimIndent()
+        view.evaluateJavascript(script) { value ->
+            if (view != webView || page != webPageLoad || offlineHome?.visibility == View.VISIBLE) return@evaluateJavascript
+            val rgb = value?.toIntOrNull()?.takeIf { it in 0..0xffffff } ?: return@evaluateJavascript
+            setSystemBarColor(rgb or Color.BLACK)
         }
     }
 
@@ -501,6 +543,7 @@ class MainActivity : ComponentActivity() {
                 if (view != webView || offlineHome?.visibility == View.VISIBLE ||
                     !isTrustedUrl(url?.let(Uri::parse))
                 ) return
+                if (url == webView.url) matchWebFooterColor(webView)
                 syncNativeSession(url)
                 CookieManager.getInstance().flush()
                 if (Uri.parse(url).path !in setOf("/", "/login.php", "/logout.php")) syncFcmToken()
@@ -641,6 +684,7 @@ class MainActivity : ComponentActivity() {
             offlineHome = view
         }
         familyPoller.setActive(false)
+        setSystemBarColor(getColor(R.color.background))
         webView.visibility = View.INVISIBLE
         fallback.visibility = View.VISIBLE
     }
