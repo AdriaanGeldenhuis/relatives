@@ -32,7 +32,9 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.collect
 import androidx.lifecycle.withResumed
@@ -227,6 +229,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) showSystemBars()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(STATE_OFFLINE_HOME, offlineHome?.visibility == View.VISIBLE)
         super.onSaveInstanceState(outState)
@@ -363,12 +370,13 @@ class MainActivity : ComponentActivity() {
     // ════════════════════════════════════════════════════════════════════
 
     private fun buildLayout() {
-        val background = getColor(R.color.background)
-        val barStyle = SystemBarStyle.light(background, getColor(R.color.primary_dark))
+        val barColor = getColor(R.color.primary_dark)
+        val barStyle = SystemBarStyle.dark(barColor)
         enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
-        root = FrameLayout(this).apply { setBackgroundColor(background) }
+        // The root supplies the bar background where Android draws transparent system bars.
+        root = FrameLayout(this).apply { setBackgroundColor(barColor) }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            val bars = insets.getInsets(
+            val bars = insets.getInsetsIgnoringVisibility(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
             )
             val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
@@ -378,7 +386,15 @@ class MainActivity : ComponentActivity() {
         }
         attachNewWebView()
         setContentView(root)
+        showSystemBars()
         ViewCompat.requestApplyInsets(root)
+    }
+
+    private fun showSystemBars() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+        }
     }
 
     private fun attachNewWebView() {
