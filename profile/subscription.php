@@ -335,6 +335,11 @@ require_once __DIR__ . '/../shared/components/header.php';
 
             <!-- Manage Subscription Links -->
             <div class="manage-links">
+                <?php if ($subStatus['status'] === 'active'): ?>
+                    <a href="/tracking/app/?setup=1" class="manage-link">
+                        <span>Set up family tracking</span>
+                    </a>
+                <?php endif; ?>
                 <?php if ($subStatus['provider'] === 'google_play'): ?>
                     <a href="https://play.google.com/store/account/subscriptions" target="_blank" class="manage-link">
                         <span class="manage-link-icon">Google Play</span>

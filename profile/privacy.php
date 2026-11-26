@@ -160,7 +160,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <span class="icon">Privacy</span>
                 </div>
 
-                <div class="toggle-row">
+                <div class="toggle-row" id="locationSharing">
                     <div class="toggle-info">
                         <div class="toggle-label">Location Sharing</div>
                         <div class="toggle-description">Allow family members to see your position and available history</div>
@@ -522,7 +522,7 @@ async function checkLocationPermission() {
 
 async function requestLocationPermission() {
     if (window.TrackingBridge || /\bRelativesAndroid\//.test(navigator.userAgent)) {
-        window.location.href = '/tracking/app/';
+        window.location.href = '/tracking/app/?setup=1';
         return;
     }
 

@@ -1,6 +1,29 @@
 'use strict';
 
 (() => {
+    const setup = document.getElementById('homeTrackingSetup');
+    const installedApp = window.TrackingBridge || /\bRelativesAndroid(?:\/|App\b)/.test(navigator.userAgent) ||
+        window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    if (!setup || !installedApp) return;
+
+    const key = `relatives.trackingSetupSeen.${setup.dataset.account}`;
+    try {
+        if (localStorage.getItem(key) === '1') return;
+    } catch (error) {
+        // The setup is still available when the app cannot persist the choice.
+    }
+
+    function dismissSetup() {
+        setup.hidden = true;
+        try { localStorage.setItem(key, '1'); } catch (error) {}
+    }
+
+    setup.querySelector('a').addEventListener('click', dismissSetup);
+    setup.querySelector('button').addEventListener('click', dismissSetup);
+    setup.hidden = false;
+})();
+
+(() => {
     const byId = id => document.getElementById(id);
     const dateFormat = new Intl.DateTimeFormat('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const shortDate = new Intl.DateTimeFormat('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' });

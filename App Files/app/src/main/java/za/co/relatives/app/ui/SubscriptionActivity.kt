@@ -43,6 +43,7 @@ import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import za.co.relatives.app.MainActivity
 import za.co.relatives.app.billing.BillingManager
 import za.co.relatives.app.network.ApiClient
 import za.co.relatives.app.ui.theme.RelativesTheme
@@ -69,6 +70,7 @@ class SubscriptionActivity : ComponentActivity() {
     private var account by mutableStateOf<BillingAccount?>(null)
     private var availabilityError by mutableStateOf<String?>(null)
     private var verifying by mutableStateOf(false)
+    private var subscriptionActive by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -98,8 +100,10 @@ class SubscriptionActivity : ComponentActivity() {
                 val status = apiClient.getSubscriptionStatus()
                 val setup = status.get("google_play")?.takeIf { it.isJsonObject }?.asJsonObject
                 val id = setup?.get("account_id")?.asString
-                val familyId = status.getAsJsonObject("status")?.get("family_id")?.asLong
+                val familyStatus = status.getAsJsonObject("status")
+                val familyId = familyStatus?.get("family_id")?.asLong
                 val products = setup?.getAsJsonArray("product_ids")?.map { it.asString }.orEmpty().toSet()
+                subscriptionActive = prefs.sessionToken == session && familyStatus?.get("status")?.asString == "active"
 
                 availabilityError = when {
                     prefs.sessionToken != session || familyId == null -> "Sign in again to view plans."
@@ -162,15 +166,21 @@ class SubscriptionActivity : ComponentActivity() {
                 val result = apiClient.verifyPurchase(activeAccount.familyId, productId, purchase.purchaseToken)
                 if (result.get("ok")?.asBoolean != true) error("Verification failed")
                 if (result.get("acknowledged")?.asBoolean == true) {
-                    Toast.makeText(this@SubscriptionActivity, "Subscription activated.", Toast.LENGTH_LONG).show()
+                    showSubscriptionActivated(activeAccount.session)
                     return@launch
                 }
                 billingManager.acknowledgeVerifiedPurchase(purchase) { acknowledged ->
-                    if (!isDestroyed) Toast.makeText(
-                        this@SubscriptionActivity,
-                        if (acknowledged) "Subscription activated." else "Subscription verified. Use Restore Purchases to complete it.",
-                        Toast.LENGTH_LONG,
-                    ).show()
+                    lifecycleScope.launch {
+                        if (acknowledged) {
+                            showSubscriptionActivated(activeAccount.session)
+                        } else if (prefs.sessionToken == activeAccount.session) {
+                            Toast.makeText(
+                                this@SubscriptionActivity,
+                                "Subscription verified. Use Restore Purchases to complete it.",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -182,6 +192,12 @@ class SubscriptionActivity : ComponentActivity() {
                 billingManager.clearPurchaseState()
             }
         }
+    }
+
+    private fun showSubscriptionActivated(session: String) {
+        if (prefs.sessionToken != session) return
+        subscriptionActive = true
+        Toast.makeText(this, "Subscription activated.", Toast.LENGTH_LONG).show()
     }
 
     // ------------------------------------------------------------------ //
@@ -215,7 +231,7 @@ class SubscriptionActivity : ComponentActivity() {
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "Choose Your Plan",
+                        text = if (subscriptionActive) "Subscription active" else "Choose Your Plan",
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
@@ -231,6 +247,19 @@ class SubscriptionActivity : ComponentActivity() {
                     )
 
                     Spacer(modifier = Modifier.height(32.dp))
+
+                    if (subscriptionActive) {
+                        Button(
+                            onClick = {
+                                startActivity(Intent(this@SubscriptionActivity, MainActivity::class.java)
+                                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                                    .putExtra("action_url", "/tracking/app/?setup=1"))
+                                finish()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Set up family tracking") }
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
 
                     if (availabilityError != null) {
                         Text(availabilityError.orEmpty(), textAlign = TextAlign.Center)
@@ -310,7 +339,7 @@ class SubscriptionActivity : ComponentActivity() {
                     ) { Text("Manage subscriptions on Google Play") }
                     OutlinedButton(
                         onClick = {
-                            startActivity(Intent(this@SubscriptionActivity, za.co.relatives.app.MainActivity::class.java)
+                            startActivity(Intent(this@SubscriptionActivity, MainActivity::class.java)
                                 .putExtra("action_url", "/legal/privacy.php"))
                         },
                         modifier = Modifier.fillMaxWidth(),

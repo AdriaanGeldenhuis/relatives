@@ -20,8 +20,8 @@ require __DIR__ . '/../shared/components/header.php';
     </header>
     <section class="family-panel">
         <h2 class="family-section-title">Location and Wake</h2>
-        <p>Open Tracking and choose Enable live location on the phone that will share. Android can refresh in the background when you grant background location and keep the tracking notification enabled.</p>
-        <p><a href="/tracking/">Open Tracking</a></p>
+        <p>Set up sharing on each phone that wants to share. The Android app asks for location and the tracking notification. Choose Allow all the time if you want the phone to respond to refresh requests while the app is closed. In a browser, keep the map visible for updates.</p>
+        <p><a href="/tracking/app/?setup=1">Set up family tracking</a></p>
         <h2 class="family-section-title">Notifications</h2>
         <p>Open notification settings to enable or test alerts on this device. On an iPhone or iPad, add Relatives to your Home Screen before enabling alerts.</p>
         <p><a href="/profile/notifications.php">Set up device notifications</a></p>

@@ -9,8 +9,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../core/session_boot.php';
 
+$setupRequested = ($_GET['setup'] ?? '') === '1';
+$mapPath = $setupRequested ? '/tracking/app/?setup=1' : '/tracking/app/';
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php?redirect=' . rawurlencode('/tracking/app/'));
+    header('Location: /login.php?redirect=' . rawurlencode($mapPath));
     exit;
 }
 
@@ -19,7 +21,7 @@ require_once __DIR__ . '/../../core/bootstrap.php';
 $auth = new Auth($db);
 $user = $auth->getCurrentUser();
 if (!$user) {
-    header('Location: /login.php?redirect=' . rawurlencode('/tracking/app/'));
+    header('Location: /login.php?redirect=' . rawurlencode($mapPath));
     exit;
 }
 
@@ -186,6 +188,18 @@ requestAnimationFrame(function() {
     </div>
 
 </div><!-- .tracking-app -->
+
+<?php if ($setupRequested): ?>
+<dialog class="tracking-setup-dialog" id="trackingSetupDialog" aria-labelledby="trackingSetupTitle">
+    <h2 id="trackingSetupTitle">Set up family tracking</h2>
+    <p id="trackingSetupDescription" aria-live="polite">Checking location sharing…</p>
+    <form class="tracking-setup-actions" method="dialog">
+        <button class="family-button family-button-primary" id="trackingSetupStart" type="button" hidden></button>
+        <a class="family-button family-button-primary" id="trackingSetupSettings" hidden></a>
+        <button class="family-button" type="submit">Close</button>
+    </form>
+</dialog>
+<?php endif; ?>
 
 <!-- Family Members Panel (outside tracking-app for correct z-index stacking) -->
 <div class="family-panel" id="familyPanel" style="display:none">
@@ -397,6 +411,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 clearFamilySnapshot();
                 setOwnStatus('Sign in to see family locations');
                 stopBrowserTracking();
+                updateTrackingSetup('signed_out');
                 stopPolling();
                 return;
             }
@@ -426,6 +441,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         } catch (error) {
             if (!document.hidden && error.name !== 'AbortError') {
                 setOwnStatus(_members.length ? 'Connection lost · showing last known locations' : 'Waiting for a connection');
+                if (!mapPolicy) updateTrackingSetup('connection_lost');
             }
         } finally {
             clearTimeout(requestTimeout);
@@ -1291,7 +1307,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // ── TRACKING INTEGRATION ─────────────────────────────────────
     var nativeBridge = window.TrackingBridge;
-    var isNativeApp = !!nativeBridge || /\bRelativesAndroid\//.test(navigator.userAgent);
+    var isNativeApp = !!nativeBridge || /\bRelativesAndroid(?:\/|App\b)/.test(navigator.userAgent);
+    var setupDialog = document.getElementById('trackingSetupDialog');
+    var activeNativeModes = ['enabled', 'battery_saver', 'approximate'];
 
     var webPollOwner = !nativeBridge || typeof nativeBridge.claimFamilyPolling === 'function';
     if (nativeBridge) {
@@ -1371,6 +1389,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         browserShareButton.disabled = !mapPolicy || !mapPolicy.allowed;
         browserShareButton.textContent = browserWatchId === null ? 'Share my location' : 'Stop sharing';
         browserShareButton.setAttribute('aria-pressed', String(browserWatchId !== null));
+        updateTrackingSetup();
     }
 
     async function resumeBrowserTracking() {
@@ -1391,7 +1410,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         button.type = 'button';
         button.className = 'tracking-toolbar-btn enable-location-btn';
         button.onclick = function() {
-            if (['enabled', 'battery_saver', 'approximate', 'providers_disabled'].indexOf(nativeBridge.getTrackingMode()) >= 0) nativeBridge.stopTracking();
+            var mode = nativeBridge.getTrackingMode();
+            if (activeNativeModes.includes(mode) || mode === 'providers_disabled') nativeBridge.stopTracking();
             else nativeBridge.startTracking();
             setTimeout(updateNativeSharingButton, 1000);
         };
@@ -1422,7 +1442,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var mode = nextMode || nativeBridge.getTrackingMode();
         button.disabled = ['loading', 'signed_out', 'family_off', 'account_off'].includes(mode);
         var refresh = document.getElementById('refreshMyLocation');
-        if (refresh) refresh.hidden = !['enabled', 'battery_saver', 'approximate'].includes(mode);
+        if (refresh) refresh.hidden = !activeNativeModes.includes(mode);
         var messages = {
             no_permission: 'Location permission is needed to share',
             notifications_disabled: 'Enable tracking notifications to share',
@@ -1437,7 +1457,76 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         if (nativeTrackingStatus && !localTrackingStatus) {
             document.getElementById('trackingStatus').textContent = nativeTrackingStatus;
         }
-        button.textContent = ['enabled', 'battery_saver', 'approximate', 'providers_disabled'].indexOf(mode) >= 0 ? 'Stop sharing' : (mode === 'paused' ? 'Resume sharing' : 'Enable live location');
+        button.textContent = activeNativeModes.includes(mode) || mode === 'providers_disabled'
+            ? 'Stop sharing' : (mode === 'paused' ? 'Resume sharing' : 'Enable live location');
+        updateTrackingSetup(mode);
+    }
+
+    function trackingSetupState(mode) {
+        if (mode === 'signed_out' || mode === 'connection_lost') return mode;
+        var familyMode = mapPolicy?.mode ?? Number(window.TrackingConfig.settings.mode);
+        if (familyMode === 0 || mode === 'family_off') return 'family_off';
+        if (mapPolicy?.allowed === false || mode === 'account_off') return 'account_off';
+        if (isNativeApp && !nativeBridge) return 'missing_bridge';
+        if (!isNativeApp && !browserShareButton) return 'unsupported';
+        if (!mapPolicy) return 'loading';
+        if (nativeBridge) {
+            if (activeNativeModes.includes(mode)) return 'sharing';
+            if (['disabled', 'paused', 'no_permission', 'notifications_disabled'].includes(mode)) return 'android';
+            return mode || 'loading';
+        }
+        return browserWatchId === null ? 'browser' : 'browser_sharing';
+    }
+
+    function updateTrackingSetup(mode) {
+        if (!setupDialog?.open) return;
+        var state = trackingSetupState(mode);
+        var descriptions = {
+            family_off: 'An owner or admin can turn on Family Tracking by setting the family mode to Normal.',
+            account_off: 'Turn on Location Sharing in Privacy & Security, then return here to finish setup.',
+            signed_out: 'Sign in to Relatives on this phone to share your location.',
+            connection_lost: 'Connect to the internet to check whether this phone can share its location.',
+            providers_disabled: 'Turn on Location in this phone’s Settings to send updates to your family.',
+            sharing: 'This phone is sharing with your family. You can stop sharing in Tracking or from your Location Tracking notification.',
+            android: 'Allow location and the Location Tracking notification when asked. Precise location improves your map pin. Choose Allow all the time to receive family refresh requests while the app is closed.',
+            browser: 'Allow location when your browser asks. Your location updates while the map is open and visible.',
+            browser_sharing: 'This browser is sharing with your family while the map is visible.',
+            missing_bridge: 'Update Android System WebView to enable live location sharing.',
+            unsupported: 'Open Family Tracking in a browser that supports location access.',
+        };
+        document.getElementById('trackingSetupDescription').textContent = descriptions[state] || 'Checking location sharing…';
+        var start = document.getElementById('trackingSetupStart');
+        start.hidden = state !== 'android' && state !== 'browser';
+        start.textContent = state === 'browser' ? 'Share my location' : (mode === 'paused' ? 'Resume sharing' : 'Enable live location');
+        var settings = document.getElementById('trackingSetupSettings');
+        settings.hidden = true;
+        if (state === 'account_off') {
+            settings.href = '/profile/privacy.php#locationSharing';
+            settings.textContent = 'Open Privacy & Security';
+            settings.hidden = false;
+        } else if (state === 'family_off' && window.TrackingConfig.isAdmin) {
+            settings.href = '/tracking/app/settings.php#settingMode';
+            settings.textContent = 'Open tracking settings';
+            settings.hidden = false;
+        }
+        return state;
+    }
+
+    if (setupDialog && typeof setupDialog.showModal === 'function') {
+        document.getElementById('trackingSetupStart').addEventListener('click', function() {
+            var state = updateTrackingSetup(nativeBridge?.getTrackingMode());
+            if (state === 'android') {
+                nativeBridge.startTracking();
+                setTimeout(updateNativeSharingButton, 1000);
+            } else if (state === 'browser' && !browserShareButton.disabled) {
+                browserShareButton.click();
+            } else {
+                return;
+            }
+            setupDialog.close();
+        });
+        setupDialog.showModal();
+        updateTrackingSetup(nativeBridge?.getTrackingMode());
     }
 
     // ── BROWSER GEOLOCATION ──────────────────────────────────────

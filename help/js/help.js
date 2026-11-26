@@ -18,12 +18,13 @@ const helpGuides = {
         summary: 'Set up live family tracking',
         keywords: 'find map gps permissions enable',
         steps: [
-            'Open Family Tracking and select Enable live location.',
-            'Allow location access when your device or browser asks.',
+            'Open setup on each phone that will share its location.',
+            'In the Android app, select Enable live location and allow location and the tracking notification. Choose Allow all the time to allow refresh requests while the app is closed.',
+            'In a browser, choose Share my location, allow location access and keep the map visible.',
             'Use Stop sharing in Family Tracking when you want to turn sharing off.'
         ],
-        href: '/tracking/app/',
-        action: 'Open Family Tracking'
+        href: '/tracking/app/?setup=1',
+        action: 'Set up family tracking'
     },
     voice: {
         icon: '🎙️',

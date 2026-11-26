@@ -63,6 +63,10 @@
     margin-inline: auto;
 }
 
+.home-tracking-setup[hidden] { display: none; }
+.home-tracking-setup p { margin: 8px 0 12px; }
+.home-tracking-setup .family-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
 .hero {
     position: relative;
     min-width: 0;

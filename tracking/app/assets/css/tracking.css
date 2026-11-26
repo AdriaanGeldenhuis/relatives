@@ -565,6 +565,26 @@ body.tracking-page .menu-backdrop {
     display: none;
 }
 
+.tracking-setup-dialog {
+    box-sizing: border-box;
+    width: min(420px, calc(100% - 24px));
+    max-width: none;
+    max-height: calc(100dvh - 24px);
+    margin: auto;
+    padding: 20px;
+    overflow-y: auto;
+    color: var(--family-ink);
+    background: var(--family-paper);
+    border: 1px solid var(--family-line);
+    border-radius: var(--family-card-radius);
+}
+
+.tracking-setup-dialog::backdrop { background: #192e247a; }
+.tracking-setup-dialog h2 { margin: 0; font-size: 1.25rem; }
+.tracking-setup-dialog p { margin: 10px 0 16px; color: var(--family-muted); }
+.tracking-setup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tracking-setup-actions [hidden] { display: none; }
+
 /* ============================================
    CONSENT DIALOG
    ============================================ */

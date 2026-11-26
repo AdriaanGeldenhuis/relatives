@@ -247,6 +247,16 @@ require_once __DIR__ . '/../shared/components/header.php';
         </div>
         <?php endif; ?>
 
+        <section class="panel home-tracking-setup" id="homeTrackingSetup"
+                 data-account="<?= (int)$user['id'] ?>" aria-labelledby="homeTrackingSetupTitle" hidden>
+            <h2 class="family-section-title" id="homeTrackingSetupTitle">Set up family tracking</h2>
+            <p>Choose whether to share this phone’s location with your family. You can stop sharing any time in Tracking.</p>
+            <div class="family-actions">
+                <a class="family-button family-button-primary" href="/tracking/app/?setup=1">Set up tracking</a>
+                <button class="family-button" type="button">Not now</button>
+            </div>
+        </section>
+
         <section class="hero family-hero sky-hero" data-time="<?= $greetingColor ?>" data-light="<?= $hour >= 6 && $hour < 18 ? 'day' : 'night' ?>">
             <?php renderWeatherSky(); ?>
             <div class="sky-layout">
