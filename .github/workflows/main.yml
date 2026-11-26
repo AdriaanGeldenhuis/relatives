@@ -64,6 +64,7 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_PHP: ${{ vars.DEPLOY_PHP }}
         run: |
           set -euo pipefail
           for name in SSH_HOST SSH_PORT SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS DEPLOY_PATH; do
@@ -85,6 +86,10 @@ jobs:
             echo '::error::DEPLOY_PATH must be an absolute path to the website directory.'
             exit 1
           fi
+          if [[ -n $DEPLOY_PHP && ! $DEPLOY_PHP =~ ^([a-zA-Z0-9][a-zA-Z0-9._-]*|/[a-zA-Z0-9._/-]+)$ ]]; then
+            echo '::error::DEPLOY_PHP must be an executable name or an absolute path.'
+            exit 1
+          fi
 
           umask 077
           temp=$(mktemp -d)
@@ -104,8 +109,22 @@ jobs:
             ConnectTimeout 15
           EOF
 
+          preflight=$(cat <<'REMOTE'
+          if [ -n "$DEPLOY_PHP" ]; then
+            exec "$DEPLOY_PHP"
+          fi
+          for php_bin in php php8.5 php85 php8.4 php84 php8.3 php83 php8.2 php82; do
+            if "$php_bin" -r 'exit(PHP_SAPI === "cli" && PHP_VERSION_ID >= 80200 ? 0 : 1);' </dev/null 2>/dev/null; then
+              exec "$php_bin"
+            fi
+          done
+          printf '%s\n' 'Deployment could not find PHP CLI 8.2 or newer. Set DEPLOY_PHP to the hosting PHP executable.' >&2
+          exit 1
+          REMOTE
+          )
           ssh -F "$temp/ssh_config" relatives-production \
-            "RELATIVES_RELEASE_ROOT='${DEPLOY_PATH%/}' php" < maintenance/release-check.php
+            "export RELATIVES_RELEASE_ROOT='${DEPLOY_PATH%/}' DEPLOY_PHP='$DEPLOY_PHP'; $preflight" \
+            < maintenance/release-check.php
           mkdir "$temp/site"
           git archive HEAD | tar -x -C "$temp/site"
           cp -a vendor "$temp/site/vendor"

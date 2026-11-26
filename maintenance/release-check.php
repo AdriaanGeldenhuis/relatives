@@ -5,21 +5,23 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
+$fail = static function (string $message): void {
+    file_put_contents('php://stderr', $message . "\n");
+    exit(1);
+};
+
 $root = $argv[1] ?? getenv('RELATIVES_RELEASE_ROOT') ?: dirname(__DIR__);
 if (PHP_VERSION_ID < 80200) {
-    fwrite(STDERR, "Release requires PHP 8.2 or newer.\n");
-    exit(1);
+    $fail("Release requires PHP 8.2 or newer. Detected " . PHP_VERSION . ".");
 }
 foreach (['pdo_mysql', 'openssl', 'curl', 'mbstring', 'fileinfo'] as $extension) {
     if (!extension_loaded($extension)) {
-        fwrite(STDERR, "Release requires PHP extension $extension.\n");
-        exit(1);
+        $fail("Release requires PHP extension $extension.");
     }
 }
 $lines = @file($root . '/.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 if ($lines === false) {
-    fwrite(STDERR, "Release configuration is missing.\n");
-    exit(1);
+    $fail("Release configuration is missing.");
 }
 $env = [];
 foreach ($lines as $line) {
@@ -30,15 +32,13 @@ foreach ($lines as $line) {
 }
 foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS', 'APP_URL', 'OPENWEATHER_API_KEY'] as $key) {
     if (empty($env[$key])) {
-        fwrite(STDERR, "Release configuration requires $key.\n");
-        exit(1);
+        $fail("Release configuration requires $key.");
     }
 }
 if (($env['WEB_PUSH_ENABLED'] ?? '0') === '1' && (
     !preg_match('/^[A-Za-z0-9_-]{87}$/D', $env['WEB_PUSH_PUBLIC_KEY'] ?? '')
     || !preg_match('/^[A-Za-z0-9_-]{43}$/D', $env['WEB_PUSH_PRIVATE_KEY'] ?? ''))) {
-    fwrite(STDERR, "Web Push is enabled and requires valid VAPID keys.\n");
-    exit(1);
+    $fail("Web Push is enabled and requires valid VAPID keys.");
 }
 try {
     $db = new PDO('mysql:host=' . $env['DB_HOST'] . ';dbname=' . $env['DB_NAME'] . ';charset=utf8mb4',
@@ -73,18 +73,15 @@ try {
     foreach ($required as $table => $columns) {
         $lookup->execute([$table]);
         if (array_diff($columns, $lookup->fetchAll(PDO::FETCH_COLUMN))) {
-            fwrite(STDERR, "Database schema migration is required for $table.\n");
-            exit(1);
+            $fail("Database schema migration is required for $table.");
         }
     }
     $triggers = (int) $db->query("SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()
         AND TRIGGER_NAME IN ('relatives_chat_insert', 'relatives_chat_update', 'relatives_chat_delete')")->fetchColumn();
     if ($triggers !== 3) {
-        fwrite(STDERR, "Install the chat revision triggers before deploying.\n");
-        exit(1);
+        $fail("Install the chat revision triggers before deploying.");
     }
 } catch (Throwable) {
-    fwrite(STDERR, "Could not verify the release database.\n");
-    exit(1);
+    $fail("Could not verify the release database.");
 }
-fwrite(STDOUT, "Release database and PHP readiness checks passed.\n");
+echo "Release database and PHP readiness checks passed.\n";
