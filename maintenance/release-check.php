@@ -94,6 +94,35 @@ try {
         }
     }
     echo "Notes photo storage column is ready.\n";
+    $trackingSql = getenv('RELATIVES_TRACKING_EVIDENCE_SQL');
+    if ($trackingSql !== false) {
+        try {
+            $migration = base64_decode($trackingSql, true);
+            if ($migration === false) {
+                $fail('Could not read the tracking evidence migration.');
+            }
+            $db->exec('SET SESSION lock_wait_timeout = 10');
+            $statement = $db->query($migration);
+            while ($statement->nextRowset()) {
+                // Drain the idempotent DDL results before checking columns.
+            }
+            $statement->closeCursor();
+        } catch (Throwable) {
+            $fail('Could not apply tracking migration 004. Check database permissions and schema locks.');
+        }
+    }
+    foreach ([
+        'tracking_current' => ['pending_fix_json', 'consent_scope'],
+        'tracking_geofence_state' => ['observed_ms', 'definition_hash'],
+        'tracking_place_state' => ['observed_ms', 'definition_hash'],
+        'tracking_geofences' => ['revision_ms'],
+    ] as $table => $columns) {
+        $lookup->execute([$table]);
+        if (array_diff($columns, $lookup->fetchAll(PDO::FETCH_COLUMN))) {
+            $fail("Apply tracking migration 004 for $table.");
+        }
+    }
+    echo "Tracking accuracy and geofence schema is ready.\n";
 } catch (Throwable) {
     $fail("Could not verify the release database.");
 }

@@ -32,6 +32,7 @@ try {
     $saved = $settingsRepo->save($ctx->familyId, $input);
     if ($saved && isset($input['mode']) && ((int) $input['mode'] === 0) !== ((int) $previous['mode'] === 0)) {
         TrackingPolicy::setCutoff($db, 'family', $ctx->familyId);
+        $db->prepare('DELETE FROM tracking_current WHERE family_id = ?')->execute([$ctx->familyId]);
     }
     $db->commit();
 } catch (Throwable $error) {

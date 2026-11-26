@@ -24,7 +24,8 @@ class ActivityTransitionsReceiver : BroadcastReceiver() {
 
         when (event.activityType) {
             DetectedActivity.STILL -> TrackingService.motionStopped(context)
-            DetectedActivity.IN_VEHICLE, DetectedActivity.ON_BICYCLE, DetectedActivity.ON_FOOT,
+            DetectedActivity.IN_VEHICLE -> TrackingService.motionStarted(context, driving = true)
+            DetectedActivity.ON_BICYCLE, DetectedActivity.ON_FOOT,
             DetectedActivity.RUNNING, DetectedActivity.WALKING -> TrackingService.motionStarted(context)
         }
     }

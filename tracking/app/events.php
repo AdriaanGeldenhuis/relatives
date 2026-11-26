@@ -30,12 +30,15 @@ $familyId = (int)$user['family_id'];
 
 // Load initial events
 $eventsRepo = new EventsRepo($db);
-$filter = isset($_GET['type']) ? trim($_GET['type']) : null;
+$filter = is_string($_GET['type'] ?? null) ? trim($_GET['type']) : null;
 $allowedTypes = ['enter_geofence', 'exit_geofence', 'arrive_place', 'leave_place'];
 if ($filter && !in_array($filter, $allowedTypes, true)) {
     $filter = null;
 }
-$events = $eventsRepo->list($familyId, 30, 0, $filter, (int) $user['id']);
+$eventId = filter_input(INPUT_GET, 'event', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+$events = $eventsRepo->list($familyId, $eventId !== null ? 1 : 30, 0, $filter, (int) $user['id'], $eventId);
+header('Cache-Control: private, no-store');
+if ($eventId !== null && !$events) http_response_code(404);
 
 $pageTitle = 'Tracking Events';
 $pageCSS = ['/tracking/app/assets/css/tracking.css?build=' . filemtime(__DIR__ . '/assets/css/tracking.css')];
@@ -48,8 +51,10 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
     <div class="tracking-content-header app-hero">
         <div>
-            <h1 class="tracking-content-title">Events</h1>
-            <p class="tracking-content-subtitle">Recent tracking activity for your family.</p>
+            <h1 class="tracking-content-title"><?= $eventId === null ? 'Events' : 'Location event' ?></h1>
+            <?php if ($eventId === null): ?>
+                <p class="tracking-content-subtitle">Recent tracking activity for your family.</p>
+            <?php endif; ?>
         </div>
         <?php renderFamilyAppArt('tracking', true); ?>
     </div>
@@ -72,8 +77,10 @@ require_once __DIR__ . '/../../shared/components/header.php';
     <?php if (empty($events)): ?>
         <div class="tracking-empty">
             <div class="tracking-empty-icon"></div>
-            <div class="tracking-empty-title">No events yet</div>
-            <div class="tracking-empty-text">Events will appear here when family members enter or leave geofences and places.</div>
+            <div class="tracking-empty-title"><?= $eventId !== null ? 'Event unavailable' : 'No events yet' ?></div>
+            <?php if ($eventId === null): ?>
+                <div class="tracking-empty-text">Events will appear here when family members enter or leave geofences and places.</div>
+            <?php endif; ?>
         </div>
     <?php else: ?>
         <div class="events-timeline" id="eventsTimeline">
@@ -104,7 +111,8 @@ require_once __DIR__ . '/../../shared/components/header.php';
                 $targetName = e($meta['geofence_name'] ?? $meta['place_name'] ?? $meta['name'] ?? 'Unknown');
                 $time = $ev['occurred_at'] ?? $ev['created_at'] ?? '';
                 // occurred_at is UTC; render it in the server's local zone.
-                $timeTs = $time ? strtotime($time . ' UTC') : false;
+                $timeTs = isset($meta['captured_at_ms']) ? intdiv((int) $meta['captured_at_ms'], 1000)
+                    : ($time ? strtotime($time . ' UTC') : false);
                 $timeFormatted = $timeTs ? date('M j, g:i A', $timeTs) : '';
                 $timeAgo = '';
                 if ($timeTs) {
@@ -137,7 +145,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
             <?php endforeach; ?>
         </div>
 
-        <!-- Load More -->
+        <?php if ($eventId === null): ?>
         <div class="events-load-more" id="loadMoreContainer">
             <button class="events-load-btn" id="loadMoreBtn">Load More</button>
         </div>
@@ -145,6 +153,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
         <div class="events-loading" id="eventsLoading">
             <div class="spinner"></div>
         </div>
+        <?php endif; ?>
     <?php endif; ?>
 
 </div>
@@ -237,7 +246,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
                     var userName = escapeHtml(meta.user_name || ev.user_name || 'Unknown');
                     var targetName = escapeHtml(meta.geofence_name || meta.place_name || meta.name || 'Unknown');
-                    var time = ev.occurred_at || ev.created_at || '';
+                    var time = meta.captured_at_ms ? new Date(Number(meta.captured_at_ms)).toISOString()
+                        : (ev.occurred_at || ev.created_at || '');
                     var timeAgo = formatTimeAgo(time);
 
                     var html = '<div class="event-item trk-slide-up">' +
@@ -272,7 +282,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         // Server timestamps are MySQL "Y-m-d H:i:s" in UTC with no zone
         // marker: bare new Date() parses them as LOCAL time (hours of skew)
         // and Safari rejects the space-separated form entirely (NaN).
-        var ts = new Date(dateStr.replace(' ', 'T') + 'Z').getTime();
+        var iso = dateStr.replace(' ', 'T');
+        if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(iso)) iso += 'Z';
+        var ts = new Date(iso).getTime();
         if (isNaN(ts)) return '';
         var diff = (Date.now() - ts) / 1000;
         if (diff < 0) diff = 0;

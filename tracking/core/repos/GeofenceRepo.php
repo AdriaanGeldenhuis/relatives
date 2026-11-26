@@ -18,16 +18,19 @@ class GeofenceRepo
     /**
      * List active geofences for a family
      */
-    public function listActive(int $familyId): array
+    public function listActive(int $familyId, bool $useCache = true): array
     {
-        $cached = $this->cache->getGeofences($familyId);
+        $cached = $useCache ? $this->cache->getGeofences($familyId) : null;
         if ($cached !== null) {
             return $cached;
         }
 
+        $timestamp = 'UNIX_TIMESTAMP(COALESCE(updated_at, created_at)) * 1000';
+        $revision = TrackingPolicy::hasColumn($this->db, 'tracking_geofences', 'revision_ms')
+            ? "COALESCE(revision_ms, $timestamp)" : $timestamp;
         $stmt = $this->db->prepare("
             SELECT id, name, type, center_lat, center_lng, radius_m, polygon_json, active,
-                   created_by_user_id, created_at
+                   created_by_user_id, created_at, $revision AS definition_ms
             FROM tracking_geofences
             WHERE family_id = ? AND active = 1
             ORDER BY name ASC
@@ -35,7 +38,7 @@ class GeofenceRepo
         $stmt->execute([$familyId]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $this->cache->setGeofences($familyId, $rows);
+        if ($useCache) $this->cache->setGeofences($familyId, $rows);
         return $rows;
     }
 
@@ -84,13 +87,15 @@ class GeofenceRepo
         // COALESCE keeps the current active flag when the caller doesn't send
         // one — the edit form omits it, so `?? 1` silently re-armed geofences
         // an admin had deactivated every time they were edited.
+        $versioned = TrackingPolicy::hasColumn($this->db, 'tracking_geofences', 'revision_ms');
+        $revision = $versioned ? ', revision_ms = GREATEST(COALESCE(revision_ms, 0) + 1, ?)' : '';
         $stmt = $this->db->prepare("
             UPDATE tracking_geofences
             SET name = ?, type = ?, center_lat = ?, center_lng = ?, radius_m = ?,
-                polygon_json = ?, active = COALESCE(?, active)
+                polygon_json = ?, active = COALESCE(?, active)$revision
             WHERE id = ? AND family_id = ?
         ");
-        $result = $stmt->execute([
+        $params = [
             $data['name'],
             $data['type'],
             $data['center_lat'],
@@ -98,12 +103,18 @@ class GeofenceRepo
             $data['radius_m'],
             $data['polygon_json'],
             $data['active'] ?? null,
-            $id,
-            $familyId,
-        ]);
+        ];
+        if ($versioned) $params[] = Time::nowMs();
+        $stmt->execute([...$params, $id, $familyId]);
+        $found = $stmt->rowCount() > 0;
+        if (!$found && !$versioned) {
+            $lookup = $this->db->prepare('SELECT 1 FROM tracking_geofences WHERE family_id = ? AND id = ?');
+            $lookup->execute([$familyId, $id]);
+            $found = (bool) $lookup->fetchColumn();
+        }
 
         $this->cache->deleteGeofences($familyId);
-        return $result;
+        return $found;
     }
 
     /**

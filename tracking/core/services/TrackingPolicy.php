@@ -23,10 +23,18 @@ final class TrackingPolicy
 
     public static function hasColumn(PDO $db, string $table, string $column): bool
     {
+        self::$tables ??= new WeakMap();
+        $known = self::$tables[$db] ?? [];
+        $key = "$table.$column";
+        if (isset($known[$key])) {
+            return $known[$key];
+        }
         $stmt = $db->prepare('SELECT 1 FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?');
         $stmt->execute([$table, $column]);
-        return (bool) $stmt->fetchColumn();
+        $known[$key] = (bool) $stmt->fetchColumn();
+        self::$tables[$db] = $known;
+        return $known[$key];
     }
 
     public static function hasInstallationRegistry(PDO $db): bool
@@ -36,9 +44,23 @@ final class TrackingPolicy
 
     public static function confirmedWake(PDO $db): bool
     {
-        return ($_ENV['TRACKING_CONFIRMED_WAKE'] ?? '0') === '1'
+        return ($_ENV['TRACKING_SILENT_WAKE'] ?? '1') === '1'
+            && self::hasTable($db, 'tracking_wake_requests')
             && self::hasTable($db, 'tracking_wake_targets')
             && self::hasInstallationRegistry($db);
+    }
+
+    public static function locationQuality(PDO $db): bool
+    {
+        return ($_ENV['TRACKING_LOCATION_QUALITY'] ?? '1') === '1'
+            && self::hasColumn($db, 'tracking_current', 'pending_fix_json')
+            && self::hasColumn($db, 'tracking_current', 'consent_scope');
+    }
+
+    public static function geofenceEvidence(PDO $db): bool
+    {
+        return self::hasColumn($db, 'tracking_geofence_state', 'observed_ms')
+            && self::hasColumn($db, 'tracking_place_state', 'observed_ms');
     }
 
     public static function native(array $settings, bool $sharing): array
@@ -54,6 +76,7 @@ final class TrackingPolicy
             'moving_interval' => $adaptive ? ($mode === 2 ? max(15, intdiv($moving + 1, 2)) : max(30, $moving)) : 30,
             'idle_interval' => $adaptive ? $idle : 600,
             'min_accuracy_m' => min(500, max(10, (int) $settings['min_accuracy_m'])),
+            'driving_accuracy' => ($_ENV['TRACKING_DRIVING_ACCURACY'] ?? '1') === '1',
             'server_time_ms' => Time::nowMs(),
         ];
     }

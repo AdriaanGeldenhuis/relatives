@@ -26,7 +26,7 @@ class TrackingValidator
 
         $recorded = $input['recorded_at_ms'] ?? $input['recorded_at'] ?? $input['timestamp'] ?? null;
         $recordedMs = $recorded === null ? Time::nowMs() : Time::captureMs($recorded);
-        if ($recordedMs === null || $recordedMs <= 0) {
+        if ($recordedMs === null || $recordedMs <= 0 || $recordedMs > Time::nowMs() + 10000) {
             $this->errors[] = 'invalid_capture_time';
             return null;
         }
@@ -46,6 +46,7 @@ class TrackingValidator
         $altitude = self::number($input['altitude_m'] ?? $input['altitude'] ?? null);
         $device = $input['device_id'] ?? $input['device_uuid'] ?? null;
         $event = $input['client_event_id'] ?? null;
+        $scope = $input['consent_scope'] ?? null;
 
         return [
             'lat' => (float) $lat,
@@ -58,6 +59,7 @@ class TrackingValidator
             'recorded_at' => Time::format(intdiv($recordedMs, 1000)),
             'device_id' => self::identifier($device),
             'client_event_id' => self::identifier($event),
+            'consent_scope' => TrackingWake::isId($scope) ? $scope : null,
             'wake_request_id' => self::identifier($input['wake_request_id'] ?? null),
             'platform' => is_string($input['platform'] ?? null) ? substr($input['platform'], 0, 20) : null,
             'app_version' => is_string($input['app_version'] ?? null) ? substr($input['app_version'], 0, 20) : null,
@@ -79,7 +81,7 @@ class TrackingValidator
      */
     public function validateGeofence(array $input): ?array
     {
-        $name = trim($input['name'] ?? '');
+        $name = is_string($input['name'] ?? null) ? trim($input['name']) : '';
         if (empty($name) || strlen($name) > 100) {
             $this->errors[] = 'name is required (max 100 chars)';
             return null;
@@ -96,8 +98,8 @@ class TrackingValidator
             $cLng = $input['center_lng'] ?? $input['lng'] ?? null;
             $radius = $input['radius_m'] ?? $input['radius'] ?? null;
 
-            if ($cLat === null || $cLng === null || $radius === null) {
-                $this->errors[] = 'circle requires center_lat, center_lng, radius_m';
+            if (self::coordinates($cLat, $cLng) === null || !is_numeric($radius) || !is_finite((float) $radius)) {
+                $this->errors[] = 'circle requires a valid centre and radius';
                 return null;
             }
 
@@ -116,8 +118,9 @@ class TrackingValidator
         if (is_string($points)) {
             $points = json_decode($points, true);
         }
-        if (!is_array($points) || count($points) < 3) {
-            $this->errors[] = 'polygon requires at least 3 points';
+        $points = self::polygon($points);
+        if ($points === null) {
+            $this->errors[] = 'polygon requires three or more distinct, valid points';
             return null;
         }
 
@@ -129,6 +132,30 @@ class TrackingValidator
             'radius_m' => null,
             'polygon_json' => json_encode($points),
         ];
+    }
+
+    private static function coordinates(mixed $lat, mixed $lng): ?array
+    {
+        if (!is_numeric($lat) || !is_numeric($lng) || !is_finite((float) $lat) || !is_finite((float) $lng)
+            || abs((float) $lat) > 90 || abs((float) $lng) > 180) {
+            return null;
+        }
+        return [(float) $lat, (float) $lng];
+    }
+
+    public static function polygon(mixed $points): ?array
+    {
+        if (!is_array($points) || count($points) < 3 || count($points) > 500) return null;
+        $vertices = [];
+        foreach ($points as $point) {
+            if (!is_array($point)) return null;
+            $vertex = self::coordinates($point['lat'] ?? $point[0] ?? null, $point['lng'] ?? $point[1] ?? null);
+            if ($vertex === null) return null;
+            if (!$vertices || end($vertices) !== $vertex) $vertices[] = $vertex;
+        }
+        if ($vertices[0] === end($vertices)) array_pop($vertices);
+        return count(array_unique(array_map(static fn(array $v): string => json_encode($v, JSON_THROW_ON_ERROR), $vertices))) >= 3
+            ? $vertices : null;
     }
 
     /**

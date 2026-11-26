@@ -18,15 +18,16 @@ class PlacesRepo
     /**
      * List all places for a family
      */
-    public function listAll(int $familyId): array
+    public function listAll(int $familyId, bool $useCache = true): array
     {
-        $cached = $this->cache->getPlaces($familyId);
+        $cached = $useCache ? $this->cache->getPlaces($familyId) : null;
         if ($cached !== null) {
             return $cached;
         }
 
         $stmt = $this->db->prepare("
-            SELECT id, label, category, lat, lng, radius_m, address, created_by_user_id, created_at
+            SELECT id, label, category, lat, lng, radius_m, address, created_by_user_id, created_at,
+                   UNIX_TIMESTAMP(created_at) * 1000 AS definition_ms
             FROM tracking_places
             WHERE family_id = ?
             ORDER BY label ASC
@@ -34,7 +35,7 @@ class PlacesRepo
         $stmt->execute([$familyId]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $this->cache->setPlaces($familyId, $rows);
+        if ($useCache) $this->cache->setPlaces($familyId, $rows);
         return $rows;
     }
 

@@ -12,11 +12,12 @@ final class LocationIngest
         $settingsRepo->get($ctx->familyId);
         $repo = new LocationRepo($db, $this->cache);
         $preciseTime = TrackingPolicy::hasColumn($db, 'tracking_current', 'recorded_ms');
+        $quality = TrackingPolicy::locationQuality($db);
         $receipts = TrackingPolicy::hasTable($db, 'tracking_fix_receipts');
         $wake = TrackingPolicy::confirmedWake($db) ? new TrackingWake($db) : null;
         $geofences = new GeofenceEngine(
-            $db, $this->cache, new GeofenceRepo($db, $this->cache), new PlacesRepo($db, $this->cache),
-            new EventsRepo($db), new AlertsEngine($db, $this->cache, new AlertsRepo($db, $this->cache))
+            $db, new GeofenceRepo($db, $this->cache), new PlacesRepo($db, $this->cache),
+            new EventsRepo($db), new AlertsEngine($db, new AlertsRepo($db, $this->cache))
         );
 
         $pending = [];
@@ -35,10 +36,13 @@ final class LocationIngest
             }
         }
         uasort($pending, static fn(array $a, array $b): int => $a['recorded_ms'] <=> $b['recorded_ms']);
-        $alerts = [];
         $stored = 0;
         $commitStart = Time::nowMs();
         $wakeFixes = 0;
+        $held = 0;
+        $wakeDevice = null;
+        $approximate = 0;
+        $oldestMs = 0;
         $db->beginTransaction();
         try {
             $settings = $settingsRepo->lockForTracking($ctx->familyId);
@@ -49,10 +53,13 @@ final class LocationIngest
             }
             $policy = TrackingPolicy::native($settings, true);
             $cutoff = TrackingPolicy::cutoff($db, $ctx->familyId, $ctx->userId);
-            $current = $repo->currentForWrite($ctx->userId, $ctx->familyId, $preciseTime);
+            $current = $repo->currentForWrite($ctx->userId, $ctx->familyId, $preciseTime, $quality);
             $motion = new MotionGate((float) $settings['speed_threshold_mps'], (float) $settings['distance_threshold_m']);
             $previous = null;
             foreach ($pending as $index => $fix) {
+                if ($fix['platform'] === 'android' && TrackingWake::isId($fix['device_id'])) {
+                    $wakeDevice = $fix['device_id'];
+                }
                 $key = $receipts && $fix['device_id'] !== null && $fix['client_event_id'] !== null
                     ? [$ctx->userId, $fix['device_id'], $fix['client_event_id']] : null;
                 $reply = $key === null ? null : $this->previousReceipt($key);
@@ -69,33 +76,50 @@ final class LocationIngest
                 } elseif ($fix['wake_request_id'] !== null && !($wake?->acceptsFix($ctx, $fix) ?? false)) {
                     $reply = ['status' => 'skipped', 'reason' => 'wake_expired_or_unavailable'];
                 } else {
-                    $currentMs = $current ? (int) ($current['recorded_ms'] ?? Time::captureMs($current['recorded_at'])) : 0;
-                    $newer = $fix['recorded_ms'] > $currentMs;
+                    $currentMs = LocationQuality::capture($current);
+                    $fixNow = Time::nowMs();
+                    $reliable = LocationQuality::reliable($fix, $policy);
+                    $approximate += (int) !$reliable;
+                    $oldestMs = max($oldestMs, $fixNow - $fix['recorded_ms']);
+                    $selection = $quality ? LocationQuality::selection($fix, $current, $policy, $fixNow)
+                        : ($fix['recorded_ms'] > $currentMs ? 'advance' : 'out_of_order');
+                    $newer = $selection === 'advance';
+                    $sameSource = !$current || LocationQuality::sameSource($current, $fix);
+                    $sameConsent = !$current || LocationQuality::sameConsent($current, $fix);
                     $baseline = $newer ? $current : $previous;
                     $evaluation = $motion->evaluate($fix, $baseline);
-                    $history = $evaluation['store_history'] && !$this->nearDuplicate($fix, $baseline ?? $current, $settings);
+                    $fix['motion_state'] = $evaluation['motion_state'];
+                    $history = $evaluation['store_history'] && !$this->nearDuplicate($fix, $baseline ?? $current, $settings)
+                        && (!$quality || ($sameSource && $sameConsent && $reliable
+                            && in_array($selection, ['advance', 'out_of_order'], true)));
                     if ($history) {
                         $repo->insertHistory($ctx->familyId, $ctx->userId, $fix, $evaluation['motion_state']);
                     }
                     if ($newer) {
-                        $repo->upsertCurrent($ctx->userId, $ctx->familyId, $fix, $evaluation['motion_state'], $preciseTime);
-                        $current = $fix;
-                        if ($fix['recorded_ms'] >= Time::nowMs() - 120000
-                            && $fix['accuracy_m'] !== null && $fix['accuracy_m'] <= $policy['min_accuracy_m']) {
-                            $alerts = array_merge($alerts, $geofences->recordTransitions(
-                                $ctx->familyId, $ctx->userId, $fix['lat'], $fix['lng'], $ctx->name, $fix['accuracy_m']
-                            ));
+                        $repo->upsertCurrent($ctx->userId, $ctx->familyId, $fix, $fix['motion_state'], $preciseTime, $quality);
+                        if ($quality && (!$sameSource || !$sameConsent)) $geofences->resetSource($ctx->familyId, $ctx->userId);
+                        if ($wake !== null && TrackingWake::isId($fix['device_id'])) {
+                            $wakeFixes += $wake->confirmObservation($ctx, $fix, $cutoff);
                         }
+                    } elseif ($selection === 'hold_coarse' || $selection === 'hold_jump') {
+                        $current['pending_fix_json'] = $repo->holdCandidate($ctx->userId, $ctx->familyId,
+                            LocationQuality::held($fix, $current, $selection, $fixNow));
+                        $held++;
                     }
-                    if ($fix['wake_request_id'] !== null) {
-                        $wake->confirmFix($ctx, $fix);
-                        $wakeFixes++;
+                    if (($newer || ($quality && $sameSource && $sameConsent && $selection === 'out_of_order'))
+                        && isset($fix['accuracy_m']) && $fix['accuracy_m'] > 0 && $fix['accuracy_m'] <= $policy['min_accuracy_m']) {
+                        $geofences->observe($ctx->familyId, $ctx->userId, $ctx->name, $fix, $cutoff, $newer);
                     }
-                    $previous = $fix;
+                    if ($newer) {
+                        $current = $fix;
+                    }
+                    if (!$quality || $sameSource) {
+                        $previous = $fix;
+                    }
                     $stored++;
                     $reply = [
                         'status' => 'stored', 'motion_state' => $evaluation['motion_state'], 'stored_history' => $history,
-                        'advanced_current' => $newer,
+                        'advanced_current' => $newer, 'selection' => $selection,
                     ];
                 }
                 if ($key !== null) {
@@ -113,24 +137,12 @@ final class LocationIngest
         }
         TrackingPolicy::metric('location_batch', [
             'duration_ms' => Time::nowMs() - $commitStart, 'processed' => count($inputs), 'stored' => $stored,
-            'wake_fixes' => $wakeFixes,
+            'wake_fixes' => $wakeFixes, 'held_fixes' => $held, 'approximate_fixes' => $approximate, 'oldest_capture_age_ms' => $oldestMs,
         ]);
-        // Schedule the existing alert delivery after the location transaction and HTTP acknowledgement.
-        if ($alerts) {
-            register_shutdown_function(static function () use ($geofences, $ctx, $alerts): void {
-                if (function_exists('fastcgi_finish_request')) {
-                    fastcgi_finish_request();
-                }
-                try {
-                    $geofences->sendAlerts($ctx->familyId, $ctx->userId, $alerts);
-                } catch (Throwable) {
-                    error_log('tracking alert delivery failed');
-                }
-            });
-        }
         return [
             'processed' => count($inputs), 'stored' => $stored,
             'results' => array_values($results), 'server_settings' => $policy,
+            'pending_wake' => $wakeDevice && !$wakeFixes ? $wake?->pending($ctx, $wakeDevice) : null,
         ];
     }
 
@@ -170,7 +182,7 @@ final class LocationIngest
             if ($result['status'] === 'error' || $result['status'] === 'skipped') {
                 Response::error($result['error'] ?? $result['reason'], 422);
             }
-            Response::success($result + ['server_settings' => $batch['server_settings']]);
+            Response::success($result + ['server_settings' => $batch['server_settings'], 'pending_wake' => $batch['pending_wake']]);
         }
         Response::success($batch);
     }

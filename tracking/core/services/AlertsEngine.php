@@ -1,149 +1,70 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Alerts engine - triggers push notifications for geofence/place events.
- * Respects cooldown periods and quiet hours.
- */
-class AlertsEngine
+require_once __DIR__ . '/../../../core/NotificationManager.php';
+
+final class AlertsEngine
 {
-    private PDO $db;
-    private TrackingCache $cache;
-    private AlertsRepo $alertsRepo;
+    private const PUSH_WINDOW_SECONDS = 180;
 
-    public function __construct(PDO $db, TrackingCache $cache, AlertsRepo $alertsRepo)
-    {
-        $this->db = $db;
-        $this->cache = $cache;
-        $this->alertsRepo = $alertsRepo;
-    }
+    public function __construct(
+        private PDO $db,
+        private AlertsRepo $rules,
+    ) {}
 
-    /**
-     * Fire an alert for a geofence/place event.
-     *
-     * @param int    $familyId  Family ID
-     * @param int    $userId    User who triggered the event
-     * @param string $eventType e.g. 'enter_geofence', 'arrive_place'
-     * @param int    $targetId  Geofence or place ID
-     * @param array  $meta      Extra data (name, user_name, etc.)
-     */
-    public function fire(int $familyId, int $userId, string $eventType, int $targetId, array $meta): void
-    {
-        $rules = $this->getRules($familyId);
-        if (!$rules || !$rules['enabled']) {
+    /** Persist the recipient's notice and push job with the original crossing. */
+    public function record(
+        int $family, int $user, string $member, string $type, string $place, int $eventId, int $capture,
+    ): void {
+        if (($_ENV['TRACKING_GEOFENCE_DELIVERY'] ?? '1') !== '1' || $capture < Time::nowMs() - 120000) {
             return;
         }
-
-        // Map event type to rule toggle
-        $ruleMap = [
+        $rule = match ($type) {
             'arrive_place' => 'arrive_place_enabled',
             'leave_place' => 'leave_place_enabled',
             'enter_geofence' => 'enter_geofence_enabled',
             'exit_geofence' => 'exit_geofence_enabled',
+        };
+        $rules = $this->rules->get($family);
+        if (!$rules || !$rules['enabled'] || !$rules[$rule]) {
+            return;
+        }
+        $stmt = $this->db->prepare('SELECT timezone FROM families WHERE id = ?');
+        $stmt->execute([$family]);
+        $timezone = $stmt->fetchColumn() ?: 'Africa/Johannesburg';
+        $data = [
+            'event_id' => $eventId, 'event_type' => $type, 'place_name' => $place,
+            'captured_at_ms' => $capture, 'tracking_family_id' => $family,
         ];
-
-        $ruleKey = $ruleMap[$eventType] ?? null;
-        if (!$ruleKey || !($rules[$ruleKey] ?? false)) {
+        $content = LocationNotice::content($data, $member, $timezone);
+        if ($content === null) {
             return;
         }
-
-        // Quiet hours check
-        if ($this->isQuietHours($rules)) {
-            return;
-        }
-
-        // Cooldown check
-        $cooldown = (int) ($rules['cooldown_seconds'] ?? 900);
-        if ($this->cache->getAlertCooldown($familyId, $eventType, $userId, $targetId)) {
-            return;
-        }
-
-        // Set cooldown
-        $this->cache->setAlertCooldown($familyId, $eventType, $userId, $targetId, $cooldown);
-
-        // Log delivery
-        $this->alertsRepo->logDelivery($familyId, $eventType, $userId, $targetId);
-
-        // Send push notification to all family members (except the triggering user)
-        $this->sendFamilyAlert($familyId, $userId, $eventType, $meta);
+        NotificationManager::getInstance($this->db)->createForFamily($family, [
+            'type' => NotificationManager::TYPE_TRACKING,
+            'from_user_id' => $user,
+            'title' => $content['title'],
+            'message' => $content['body'],
+            'action_url' => '/tracking/app/events.php?event=' . $eventId,
+            'data' => $data,
+            'send_push' => !$this->isQuiet($rules, $timezone),
+            'push_expires_unix' => intdiv($capture, 1000) + self::PUSH_WINDOW_SECONDS,
+        ], $user);
     }
 
-    private function getRules(int $familyId): ?array
+    private function isQuiet(array $rules, string $timezone): bool
     {
-        $cached = $this->cache->getAlertRules($familyId);
-        if ($cached !== null) {
-            return $cached;
-        }
-
-        $rules = $this->alertsRepo->get($familyId);
-        if ($rules) {
-            $this->cache->setAlertRules($familyId, $rules);
-        }
-        return $rules;
-    }
-
-    private function isQuietHours(array $rules): bool
-    {
-        if (empty($rules['quiet_hours_start']) || empty($rules['quiet_hours_end'])) {
+        $start = $rules['quiet_hours_start'] ?? null;
+        $end = $rules['quiet_hours_end'] ?? null;
+        if (!$start || !$end || $start === $end) {
             return false;
         }
-
-        $now = new DateTime('now', new DateTimeZone('Africa/Johannesburg'));
-        $start = DateTime::createFromFormat('H:i:s', $rules['quiet_hours_start'], new DateTimeZone('Africa/Johannesburg'));
-        $end = DateTime::createFromFormat('H:i:s', $rules['quiet_hours_end'], new DateTimeZone('Africa/Johannesburg'));
-
-        if (!$start || !$end) {
-            return false;
-        }
-
-        if ($start > $end) {
-            return $now >= $start || $now < $end;
-        }
-        return $now >= $start && $now < $end;
-    }
-
-    private function sendFamilyAlert(int $familyId, int $triggerUserId, string $eventType, array $meta): void
-    {
-        if (!class_exists('NotificationManager')) {
-            // Belt-and-braces for entry points that bypass bootstrap_tracking:
-            // load the class instead of silently dropping the alert.
-            $nmPath = __DIR__ . '/../../../core/NotificationManager.php';
-            if (file_exists($nmPath)) {
-                require_once $nmPath;
-            }
-            if (!class_exists('NotificationManager')) {
-                error_log('AlertsEngine: NotificationManager unavailable — family alert dropped');
-                return;
-            }
-        }
-
-        $userName = $meta['user_name'] ?? 'Someone';
-        $targetName = $meta['name'] ?? 'a location';
-
-        $messages = [
-            'enter_geofence' => "{$userName} entered {$targetName}",
-            'exit_geofence' => "{$userName} left {$targetName}",
-            'arrive_place' => "{$userName} arrived at {$targetName}",
-            'leave_place' => "{$userName} left {$targetName}",
-        ];
-
-        $message = $messages[$eventType] ?? "{$userName} triggered {$eventType}";
-
         try {
-            $nm = NotificationManager::getInstance($this->db);
-            $nm->createForFamily($familyId, [
-                'type' => 'tracking',
-                'priority' => 'normal',
-                'title' => 'Family Tracking',
-                'message' => $message,
-                'action_url' => '/tracking/app/',
-                'data' => [
-                    'event_type' => $eventType,
-                    'type' => 'tracking',
-                ],
-            ], $triggerUserId);
-        } catch (Exception $e) {
-            error_log('AlertsEngine notification error: ' . $e->getMessage());
+            $zone = new DateTimeZone($timezone);
+        } catch (Exception) {
+            $zone = new DateTimeZone('Africa/Johannesburg');
         }
+        $time = (new DateTimeImmutable('now', $zone))->format('H:i:s');
+        return $start < $end ? ($start <= $time && $time < $end) : ($start <= $time || $time < $end);
     }
 }

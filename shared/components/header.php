@@ -38,7 +38,9 @@ if ($hasWeatherHero) {
 $unreadNotifCount = 0;
 if (isset($db) && isset($_SESSION['user_id'])) {
     try {
-        $stmt = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+        require_once __DIR__ . '/../../core/LocationNotice.php';
+        $stmt = $db->prepare("SELECT COUNT(*) FROM notifications n WHERE user_id = ? AND is_read = 0 AND "
+            . LocationNotice::visible($db));
         $stmt->execute([$_SESSION['user_id']]);
         $unreadNotifCount = (int)$stmt->fetchColumn();
     } catch (Exception $e) {

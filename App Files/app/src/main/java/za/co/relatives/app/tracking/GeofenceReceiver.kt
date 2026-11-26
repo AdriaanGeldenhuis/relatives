@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
+import za.co.relatives.app.utils.PreferencesManager
 
 class GeofenceReceiver : BroadcastReceiver() {
 
@@ -14,8 +15,9 @@ class GeofenceReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent?) {
-        val prefs = context.getSharedPreferences("relatives_prefs", Context.MODE_PRIVATE)
-        if (!prefs.getBoolean("tracking_enabled", false) || !TrackingService.hasLocationPermission(context)) {
+        val prefs = PreferencesManager(context)
+        val consent = prefs.trackingConsent()
+        if (consent == null || !prefs.trackingPolicy().canCollect || !TrackingService.hasLocationPermission(context)) {
             Log.d(TAG, "Tracking disabled or permission missing, ignoring geofence event.")
             return
         }
@@ -29,6 +31,14 @@ class GeofenceReceiver : BroadcastReceiver() {
         if (geofencingEvent == null || geofencingEvent.hasError()) {
             val errorCode = geofencingEvent?.errorCode ?: "unknown"
             Log.e(TAG, "Geofence error: $errorCode")
+            if (intent.action == FamilyBoundaryMonitor.ACTION) TrackingService.boundaryUnavailable()
+            return
+        }
+
+        if (intent.action == FamilyBoundaryMonitor.ACTION) {
+            if (FamilyBoundaryMonitor.eligible(context) &&
+                geofencingEvent.triggeringGeofences.orEmpty().any { FamilyBoundaryMonitor.owns(consent.scope, it.requestId) }
+            ) TrackingService.boundaryTriggered(context, geofencingEvent.triggeringLocation)
             return
         }
 

@@ -42,7 +42,9 @@ Real-time family location tracking with geofences, alerts, and events.
 - `GET /api/session_status.php` - Read the Android tracking policy and legacy session state
 - `POST /api/wake_devices.php` - Request one fresh fix from eligible family installations
 - `POST /api/wake_ack.php` - Authenticate and acknowledge the receiving installation
-- `GET /api/wake_status.php?request_id=…` - Read the requester’s per-device progress
+- `GET /api/wake_pending.php?device_id=…` - Recover an active refresh for this installation
+- `GET /api/monitor_regions.php` - Read boundary geometry for a sharing phone
+- `GET /api/wake_status.php?request_id=…` - Read refresh progress for the signed-in family
 
 ### Location
 - `POST /api/location` - Submit single location
@@ -120,19 +122,22 @@ Native apps use the same session-based authentication as the web app:
 | `altitude_m` | float | No | Altitude in meters |
 | `recorded_at` | string | No | ISO 8601 timestamp (defaults to now) |
 | `device_id` | string | No | Unique device identifier |
+| `consent_scope` | UUID | No | A new ID each time this installation explicitly starts sharing |
 | `platform` | string | No | "ios" or "android" |
 | `app_version` | string | No | App version string |
 
 ### Android schedule
 
-Fetch `data.tracking_policy` from `session_status.php` on activation and reconnect. Upload acknowledgements include the same policy as `data.server_settings`. The policy provides `allowed`, `mode`, `moving_interval`, `idle_interval`, `min_accuracy_m`, and server time in milliseconds. Mode 0 suspends collection. Normal and Active use a visible location foreground service, movement and idle detection, and reduced sampling in Battery Saver.
+Fetch `data.tracking_policy` from `session_status.php` on activation and reconnect. Upload acknowledgements include the same policy as `data.server_settings`. The policy provides `allowed`, `mode`, `moving_interval`, `idle_interval`, `min_accuracy_m`, and server time in milliseconds. Mode 0 suspends collection. Normal and Active use a single quiet ongoing foreground service notification, low-power stationary tracking, and faster sampling when driving or observing a nearby boundary.
 
 ### Location and Wake acknowledgements
 
 Send up to 100 fixes in `POST /tracking/api/batch.php`. Assign an installation `device_id` and a stable `client_event_id` to every queued fix. Capture time can be sent as UTC `recorded_at_ms` or in the supported `recorded_at` format. Read each result by its index and event ID. `stored` and `duplicate` acknowledge a persisted fix. `skipped` and `error` are permanent point outcomes with a reason. Retain points whose acknowledgement is missing or whose transport failed. A 401 requires sign-in. A 403 with `location_sharing_disabled` requires renewed consent. A `tracking_disabled` result suspends collection.
 
-The signed-in family viewer sends `client_request_id` and the page’s CSRF token to request Wake. The 60-second request has one target per eligible installation. After Firebase delivery, the installation calls `wake_ack.php` with `request_id`, `device_id`, and its state. A positive `acquire` and remaining time permit one fresh fix. Attach `wake_request_id` to that upload. Only a committed qualifying fix moves the request state to `refreshed`.
+The signed-in viewer sends `client_request_id`, `mode` (`manual` or `automatic`), and the page's CSRF token. A family refresh is coalesced for up to 60 seconds. Android uploads or reconnects can pick up a pending request if the data message was delayed. The installation acknowledges with `request_id`, `device_id`, and its state. After `acquire`, attach `wake_request_id` to the fresh fix. Dispatch and receipts are internal. Only a committed observation selected as the current map position confirms a refresh.
+
+Migration 004 adds evidence timestamps and boundary versions. An upload near an uncertain edge holds the last confirmed side, and the repair job only seeds unknown state. An ordered delayed crossing may appear in Events after the push delivery window has elapsed. Confirmed live alerts persist their event and outbox entries in the location transaction.
 
 ### Verification
 
-Run `node --test tracking/tests/wake-ui.test.cjs` for map request status and cooldown handling. Run `php tracking/tests/reliability.php` with `RELATIVES_TRACKING_TEST_DSN` pointed at an empty, disposable MariaDB/MySQL database named `relatives_tracking_test`. Set `RELATIVES_TRACKING_TEST_USER` and `RELATIVES_TRACKING_TEST_PASSWORD` for that fixture database if needed. See the Android release checks for rollout switches, migration order, and physical-device acceptance.
+Run `node --test tracking/tests/wake-ui.test.cjs` for silent map refreshes and automatic Wake. Run `php tracking/tests/reliability.php` with `RELATIVES_TRACKING_TEST_DSN` pointed at an empty, disposable MariaDB/MySQL database named `relatives_tracking_test`. Set `RELATIVES_TRACKING_TEST_USER` and `RELATIVES_TRACKING_TEST_PASSWORD` for that fixture database if needed. See the Android release checks for rollout switches, migration order, and physical-device acceptance.

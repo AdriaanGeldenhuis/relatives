@@ -7,6 +7,10 @@ internal object TrackingMotion {
     const val STALE_FIX_MS = 120_000L
     const val MAX_UPLOAD_ACCURACY_M = 2_000f
 
+    fun isDriving(speedMps: Float?, speedAccuracyMps: Float?, accuracyM: Float?): Boolean =
+        speedMps != null && accuracyM != null && accuracyM in 0f..60f &&
+            speedMps - (speedAccuracyMps ?: 1f) >= 4f
+
     fun isMovement(
         distanceM: Float?,
         previousAccuracyM: Float?,

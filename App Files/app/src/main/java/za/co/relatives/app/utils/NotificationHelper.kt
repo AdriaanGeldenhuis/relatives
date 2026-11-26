@@ -1,10 +1,13 @@
 package za.co.relatives.app.utils
 
+import android.app.Notification
 import android.app.NotificationChannel
+import android.app.NotificationChannelGroup
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import java.util.concurrent.atomic.AtomicInteger
 import za.co.relatives.app.MainActivity
@@ -27,6 +30,11 @@ object NotificationHelper {
     private const val CHANNEL_SOUND = "relatives_alerts_sound"
     private const val CHANNEL_VIBRATION = "relatives_alerts_vibration"
     private const val CHANNEL_QUIET = "relatives_alerts_quiet"
+    private const val LOCATION_GROUP = "relatives_location_alerts"
+    private const val LOCATION_ALERTS = "relatives_location_normal"
+    private const val LOCATION_SOUND = "relatives_location_sound"
+    private const val LOCATION_VIBRATION = "relatives_location_vibration"
+    private const val LOCATION_QUIET = "relatives_location_quiet"
 
     // ── Channel creation ───────────────────────────────────────────────────
 
@@ -59,6 +67,40 @@ object NotificationHelper {
                 setSound(null, null)
             },
         ))
+        manager.createNotificationChannelGroup(NotificationChannelGroup(LOCATION_GROUP, "Geofence and place alerts"))
+        manager.createNotificationChannels(listOf(
+            locationChannel(LOCATION_ALERTS, "Geofence and place alerts", true, true),
+            locationChannel(LOCATION_SOUND, "Geofence alerts with sound", true, false),
+            locationChannel(LOCATION_VIBRATION, "Geofence alerts with vibration", false, true),
+            locationChannel(LOCATION_QUIET, "Silent geofence alerts", false, false),
+        ))
+    }
+
+    private fun locationChannel(id: String, name: String, sound: Boolean, vibrate: Boolean): NotificationChannel =
+        NotificationChannel(id, name, if (sound || vibrate) NotificationManager.IMPORTANCE_HIGH else NotificationManager.IMPORTANCE_LOW).apply {
+            group = LOCATION_GROUP
+            if (!sound) setSound(null, null)
+            enableVibration(vibrate)
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        }
+
+    fun clearObsoleteTrackingAlerts(context: Context) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        manager.cancel(9002)
+        manager.activeNotifications.filter { alert ->
+            alert.id != 9001 && alert.notification.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() == "Family tracking"
+        }.forEach { manager.cancel(it.tag, it.id) }
+    }
+
+    fun canShowLocationAlerts(context: Context): Boolean {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        val groupBlocked = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+            manager.getNotificationChannelGroup(LOCATION_GROUP)?.isBlocked == true
+        return manager.areNotificationsEnabled() &&
+            !groupBlocked &&
+            listOf(LOCATION_ALERTS, LOCATION_SOUND, LOCATION_VIBRATION, LOCATION_QUIET).any {
+                (manager.getNotificationChannel(it)?.importance ?: 0) > NotificationManager.IMPORTANCE_NONE
+            }
     }
 
     // ── Alert / push notification ──────────────────────────────────────────
@@ -86,8 +128,14 @@ object NotificationHelper {
         stableId: String? = null,
         silent: Boolean = false,
         vibrate: Boolean = true,
-    ) {
-        val channel = when {
+        locationAlert: Boolean = false,
+    ): Boolean {
+        val channel = if (locationAlert) when {
+            silent && vibrate -> LOCATION_VIBRATION
+            silent -> LOCATION_QUIET
+            !vibrate -> LOCATION_SOUND
+            else -> LOCATION_ALERTS
+        } else when {
             silent && vibrate -> CHANNEL_VIBRATION
             silent -> CHANNEL_QUIET
             !vibrate -> CHANNEL_SOUND
@@ -111,7 +159,7 @@ object NotificationHelper {
 
         // Status-bar icons must be flat alpha-only drawables; the adaptive
         // launcher mipmap rendered as a blank grey square on Android 8+.
-        val notification = NotificationCompat.Builder(context, channel)
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
@@ -120,12 +168,23 @@ object NotificationHelper {
             .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .build()
+            .setCategory(if (locationAlert) NotificationCompat.CATEGORY_EVENT else NotificationCompat.CATEGORY_MESSAGE)
+        if (locationAlert) {
+            builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .setPublicVersion(NotificationCompat.Builder(context, channel)
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentTitle(context.getString(R.string.channel_location_alerts))
+                    .build())
+        }
 
         val manager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (!manager.areNotificationsEnabled() ||
+            manager.getNotificationChannel(channel)?.importance == NotificationManager.IMPORTANCE_NONE
+        ) return false
+        val notification = builder.build()
         if (stableId == null) manager.notify(notificationId, notification)
         else manager.notify("relatives-$stableId", 0, notification)
+        return true
     }
 }

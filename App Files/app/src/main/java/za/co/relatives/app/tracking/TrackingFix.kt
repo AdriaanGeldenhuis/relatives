@@ -12,6 +12,9 @@ import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
 import com.google.android.gms.location.CurrentLocationRequest
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -33,6 +36,7 @@ internal object TrackingFix {
     suspend fun current(
         context: Context, highAccuracy: Boolean, platformOnly: Boolean = false,
         timeoutMs: Long = 25_000L, captureAfterMs: Long? = null, allowGps: Boolean = true,
+        targetAccuracyM: Float? = null,
     ): Location? {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         fun qualifying(location: Location?) = location?.takeIf {
@@ -41,8 +45,31 @@ internal object TrackingFix {
         return withTimeoutOrNull(timeoutMs) {
             try {
                 if (!platformOnly && GmsSupport.available(context)) {
-                    val fused = withTimeoutOrNull(if (timeoutMs > 5000) timeoutMs - 2000 else timeoutMs) {
+                    val fusedBudget = if (timeoutMs > 5000) timeoutMs - 2000 else timeoutMs
+                    var best: Location? = null
+                    val fused = withTimeoutOrNull(fusedBudget) {
                         suspendCancellableCoroutine<Location?> { continuation ->
+                            val client = LocationServices.getFusedLocationProviderClient(context)
+                            if (highAccuracy && targetAccuracyM != null) {
+                                val callback = object : LocationCallback() {
+                                    override fun onLocationResult(result: LocationResult) {
+                                        val candidate = result.locations.mapNotNull(::qualifying)
+                                            .filter(Location::hasAccuracy).minByOrNull { it.accuracy } ?: return
+                                        if (candidate.accuracy < (best?.accuracy ?: Float.MAX_VALUE)) best = candidate
+                                        if (candidate.accuracy <= targetAccuracyM && continuation.isActive) {
+                                            client.removeLocationUpdates(this)
+                                            continuation.resume(candidate)
+                                        }
+                                    }
+                                }
+                                continuation.invokeOnCancellation { client.removeLocationUpdates(callback) }
+                                val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000)
+                                    .setMaxUpdateAgeMillis(0).setDurationMillis(fusedBudget).setWaitForAccurateLocation(true).build()
+                                client.requestLocationUpdates(request, callback, Looper.getMainLooper()).addOnFailureListener {
+                                    if (continuation.isActive) continuation.resume(null)
+                                }
+                                return@suspendCancellableCoroutine
+                            }
                             val source = CancellationTokenSource()
                             continuation.invokeOnCancellation { source.cancel() }
                             val request = CurrentLocationRequest.Builder()
@@ -50,14 +77,13 @@ internal object TrackingFix {
                                 .setMaxUpdateAgeMillis(if (captureAfterMs == null) 3000 else 0)
                                 .setDurationMillis((deadline - SystemClock.elapsedRealtime()).coerceAtLeast(1))
                                 .build()
-                            LocationServices.getFusedLocationProviderClient(context)
-                                .getCurrentLocation(request, source.token)
+                            client.getCurrentLocation(request, source.token)
                                 .addOnCompleteListener { task ->
-                                    continuation.resume(if (task.isSuccessful) task.result else null)
+                                    if (continuation.isActive) continuation.resume(if (task.isSuccessful) task.result else null)
                                 }
                         }
                     }
-                    qualifying(fused)?.let { return@withTimeoutOrNull it }
+                    qualifying(fused ?: best)?.let { return@withTimeoutOrNull it }
                 }
                 val manager = context.getSystemService(LocationManager::class.java) ?: return@withTimeoutOrNull null
                 val precise = ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -78,7 +104,7 @@ internal object TrackingFix {
                             if (captureAfterMs == null) {
                                 LocationManagerCompat.getCurrentLocation(
                                     manager, provider, signal, ContextCompat.getMainExecutor(context),
-                                ) { continuation.resume(it) }
+                                ) { if (continuation.isActive) continuation.resume(it) }
                             } else {
                                 val listener = object : LocationListener {
                                     override fun onLocationChanged(location: Location) {
@@ -119,6 +145,21 @@ internal object TrackingFix {
             speedKmh = location.takeIf(Location::hasSpeed)?.speed?.times(3.6f),
             isMoving = moving,
             batteryLevel = batteryLevel,
-            timestamp = location.time,
+            timestamp = TrackingClock.capture(location),
         )
+}
+
+internal object TrackingClock {
+    private data class Anchor(val epoch: Long, val elapsed: Long)
+    @Volatile private var anchor: Anchor? = null
+
+    fun sync(epochMs: Long, elapsedMs: Long = SystemClock.elapsedRealtime()) {
+        anchor = Anchor(epochMs, elapsedMs)
+    }
+
+    fun now(): Long = anchor?.let { it.epoch + SystemClock.elapsedRealtime() - it.elapsed } ?: System.currentTimeMillis()
+
+    fun capture(location: Location): Long = anchor?.let {
+        it.epoch + TrackingFix.captureElapsedMs(location) - it.elapsed
+    } ?: location.time
 }

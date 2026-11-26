@@ -55,6 +55,8 @@
             snapshot.family = data.family;
             snapshot.remoteWake = data.remoteWake !== false;
             window.dispatchEvent(new CustomEvent('relativestrackingstate', { detail: snapshot.mode }));
+        } else if (data.type === 'tracking_health') {
+            window.dispatchEvent(new CustomEvent('relativestrackinghealth', { detail: data }));
         } else if (locationReply && data.type === locationReply.type) {
             locationReply.finish(data.allowed === true);
         }
@@ -67,7 +69,7 @@
         },
         isTrackingEnabled: function () {
             requestState();
-            return snapshot.mode === 'enabled';
+            return ['enabled', 'battery_saver', 'approximate'].includes(snapshot.mode);
         },
         getFamilyCacheAgeMillis: function () {
             requestState();
@@ -80,6 +82,7 @@
         refreshMyLocation: function () { send('refresh_device'); },
         hasRemoteWake: function () { return snapshot.remoteWake; },
         claimFamilyPolling: function () { send('web_family_polling'); },
+        requestTrackingHealth: function () { send('tracking_health'); },
         refreshTrackingPolicy: function () { send('refresh_tracking_policy'); },
         onTrackingScreenVisible: function () { send('map_visible'); },
         onTrackingScreenHidden: function () { send('map_hidden'); },

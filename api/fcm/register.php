@@ -102,7 +102,7 @@ try {
         $native = $deviceType === 'android'
             && is_string($installation)
             && preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/iD', $installation)
-            && in_array($capability, ['ready', 'paused', 'permission', 'notifications'], true)
+            && in_array($capability, ['ready', 'silent_ready', 'paused', 'permission', 'notifications'], true)
             && TrackingPolicy::hasInstallationRegistry($db);
 
         $db->beginTransaction();

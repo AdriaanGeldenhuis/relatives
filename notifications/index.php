@@ -109,7 +109,9 @@ if (!is_string($filter) || !array_key_exists($filter, $notifTypes)) {
 }
 
 // Build query based on filter
-$whereClause = "n.user_id = ?";
+require_once __DIR__ . '/../core/LocationNotice.php';
+$locationVisible = LocationNotice::visible($db);
+$whereClause = "n.user_id = ? AND $locationVisible";
 $params = [$user['id']];
 
 if ($filter === 'unread') {
@@ -140,7 +142,8 @@ try {
 
 // Get unread count
 try {
-    $stmt = $db->prepare("SELECT COUNT(CASE WHEN is_read = 0 THEN 1 END) AS unread_count, MAX(is_read) AS has_read FROM notifications WHERE user_id = ?");
+    $stmt = $db->prepare("SELECT COUNT(CASE WHEN is_read = 0 THEN 1 END) AS unread_count, MAX(is_read) AS has_read
+        FROM notifications n WHERE n.user_id = ? AND $locationVisible");
     $stmt->execute([$user['id']]);
     $counts = $stmt->fetch(PDO::FETCH_ASSOC);
     $unreadCount = (int) $counts['unread_count'];

@@ -16,30 +16,28 @@ $db = new PDO($dsn, getenv('RELATIVES_TRACKING_TEST_USER') ?: 'root', getenv('RE
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
 ]);
 $db->exec("SET time_zone = '+02:00'");
-$db->exec("CREATE TABLE families (id BIGINT UNSIGNED NOT NULL PRIMARY KEY) ENGINE=InnoDB;
-    CREATE TABLE users (id BIGINT UNSIGNED NOT NULL PRIMARY KEY, family_id BIGINT UNSIGNED NOT NULL,
-        status VARCHAR(16) NOT NULL, location_sharing INT NOT NULL, role VARCHAR(16) NOT NULL,
-        full_name VARCHAR(50) NOT NULL, avatar_color VARCHAR(20), has_avatar INT DEFAULT 0) ENGINE=InnoDB;
-    CREATE TABLE sessions (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL,
-        session_token CHAR(64) NOT NULL UNIQUE, expires_at DATETIME NOT NULL) ENGINE=InnoDB;
-    CREATE TABLE fcm_tokens (id INT AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL, token VARCHAR(255) NOT NULL,
-        device_type VARCHAR(20) NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY user_device (user_id, device_type)) ENGINE=InnoDB;
-    INSERT INTO families VALUES (1), (2);
-    INSERT INTO users VALUES (1,1,'active',1,'owner','Requester',NULL,0),
-        (2,1,'active',1,'member','Recipient',NULL,0), (3,2,'active',1,'owner','Other family',NULL,0)");
+$root = __DIR__ . '/../../';
 $db->setAttribute(PDO::ATTR_EMULATE_PREPARES, true);
-foreach (['001_tracking_tables.sql', '002_place_state.sql', '003_tracking_reliability.sql', '003_tracking_reliability.sql'] as $migration) {
-    $result = $db->query(file_get_contents(__DIR__ . '/../migrations/' . $migration));
-    while ($result->nextRowset()) {
-        // Consume each DDL result before the next migration.
-    }
+foreach (['tests/reliability-fixture.sql', 'tracking/migrations/001_tracking_tables.sql', 'tracking/migrations/002_place_state.sql',
+    'tracking/migrations/003_tracking_reliability.sql', 'tracking/migrations/003_tracking_reliability.sql',
+    'tracking/migrations/004_tracking_evidence.sql', 'tracking/migrations/004_tracking_evidence.sql',
+    'migrations/app-reliability-v1.sql'] as $migration) {
+    // The shared migration's stored trigger section requires the mysql CLI.
+    // The push tables used by this fixture precede the delimiter.
+    $sql = explode('DELIMITER $$', file_get_contents($root . $migration), 2)[0];
+    $result = $db->query($sql);
+    while ($result->nextRowset()) {}
     $result->closeCursor();
 }
-
+$db->exec("INSERT INTO families (id, name) VALUES (1, 'Fixture family'), (2, 'Other family');
+    INSERT INTO users (id, family_id, status, location_sharing, role, full_name, email, password_hash)
+        VALUES (1,1,'active',1,'owner','Requester','requester@example.invalid',''),
+               (2,1,'active',1,'member','Recipient','recipient@example.invalid',''),
+               (3,2,'active',1,'owner','Other family','other@example.invalid','')");
 $db->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-$root = __DIR__ . '/../../';
 foreach (['core/Cache.php', 'core/GeoUtils.php', 'tracking/core/SiteContext.php', 'tracking/core/Time.php',
     'tracking/core/Validator.php', 'tracking/core/services/TrackingCache.php', 'tracking/core/services/TrackingPolicy.php',
+    'tracking/core/services/LocationQuality.php',
     'tracking/core/services/TrackingWake.php', 'tracking/core/services/LocationIngest.php',
     'tracking/core/services/MotionGate.php', 'tracking/core/services/GeofenceEngine.php',
     'tracking/core/services/AlertsEngine.php', 'tracking/core/repos/AlertsRepo.php', 'tracking/core/repos/EventsRepo.php',
@@ -57,14 +55,14 @@ function check(bool $passed, string $description): void
 
 function account(PDO $db, int $id, string $token): SiteContext
 {
-    $db->prepare('INSERT INTO sessions (user_id, session_token, expires_at) VALUES (?, ?, NOW() + INTERVAL 1 DAY)')
+    $db->prepare("INSERT INTO sessions (user_id, session_token, csrf_token, expires_at, created_at) VALUES (?, ?, '', NOW() + INTERVAL 1 DAY, NOW())")
         ->execute([$id, hash('sha256', $token)]);
     $_SESSION = ['user_id' => $id, 'session_token' => $token];
     return SiteContext::fromSession($db);
 }
 
 $_ENV['TRACKING_ADAPTIVE_CADENCE'] = '1';
-$_ENV['TRACKING_CONFIRMED_WAKE'] = '1';
+$_ENV['TRACKING_SILENT_WAKE'] = '1';
 $sender = account($db, 1, 'fixture-sender');
 $recipient = account($db, 2, 'fixture-recipient');
 $other = account($db, 3, 'fixture-other');
@@ -72,7 +70,7 @@ $otherSession = account($db, 2, 'fixture-recipient-other-session');
 $deviceId = TrackingWake::newId();
 $secondDevice = TrackingWake::newId();
 $token = $db->prepare("INSERT INTO fcm_tokens (user_id, token, device_type, installation_id, wake_capability, wake_session_hash)
-    VALUES (2, ?, 'android', ?, 'ready', ?)");
+    VALUES (2, ?, 'android', ?, 'silent_ready', ?)");
 $token->execute(['token-first', $deviceId, $recipient->sessionHash()]);
 $token->execute(['token-second', $secondDevice, $otherSession->sessionHash()]);
 
@@ -85,16 +83,16 @@ check(TrackingPolicy::native(['mode' => 2] + $defaults, true)['moving_interval']
 check(Time::captureMs('2026-11-25T08:00:00.555+02:00') === Time::captureMs('2026-11-25 06:00:00.555'), 'UTC conversion');
 
 $wake = new TrackingWake($db);
-$devices = $wake->devices($sender);
+$devices = $wake->devices($sender, false, false, TrackingPolicy::native($defaults, true));
 check(count($devices) === 2, 'Two installations for one member');
-check($wake->devices($other) === [], 'Cross-family push isolation');
+check($wake->devices($other, false, false, TrackingPolicy::native($defaults, true)) === [], 'Cross-family push isolation');
 $key = TrackingWake::newId();
 $request = $wake->admit($sender, $key, $devices);
 $id = $request['request_id'];
-check($wake->admit($sender, $key, $devices) === ['request_id' => $id, 'dispatch' => false], 'Idempotent request');
-check(isset($wake->admit($sender, TrackingWake::newId(), $devices)['retry_after']), 'Family cooldown without cache');
+check($wake->admit($sender, $key, $devices) === ['request_id' => $id], 'Idempotent request');
+check($wake->admit($recipient, TrackingWake::newId(), $devices)['request_id'] === $id, 'Concurrent family viewers share a request');
 check($wake->status($other, $id) === null, 'Wake status requester isolation');
-check($wake->status($recipient, $id) === null, 'Recipient cannot read sender results');
+check($wake->status($recipient, $id) === null && $wake->status($recipient, $id, true, true) !== null, 'Shared status remains family scoped');
 
 $db->beginTransaction();
 check($wake->acknowledge($otherSession, $id, $deviceId, 'received') === null, 'Session is bound to installation');
@@ -114,8 +112,8 @@ check(in_array('refreshed', array_column($wake->status($sender, $id)['targets'],
 
 $result = $ingest->process($recipient, [['client_event_id' => 'older', 'recorded_at_ms' => $now - 60000, 'lat' => -27] + $base]);
 check(!$result['results'][0]['advanced_current'], 'Offline replay preserves the current pin');
-check((int) $db->query('SELECT COUNT(*) FROM tracking_events')->fetchColumn() === 1,
-    'Wake retry and offline replay do not duplicate a live geofence transition');
+check((int) $db->query('SELECT COUNT(*) FROM tracking_events')->fetchColumn() === 0,
+    'The first location initializes state without a false arrival');
 usleep(10000);
 $result = $ingest->process($recipient, [['client_event_id' => 'stationary', 'recorded_at_ms' => Time::nowMs()] + $base]);
 check($result['results'][0]['advanced_current'] && !$result['results'][0]['stored_history'], 'Stationary refresh advances capture time');
@@ -137,3 +135,115 @@ $db->prepare('UPDATE tracking_wake_requests SET expires_ms = ? WHERE request_id 
 check($wake->acknowledge($otherSession, $id, $secondDevice, 'received') === null, 'Expired request cannot acquire');
 check(in_array('no_reply', array_column($wake->status($sender, $id)['targets'], 'state'), true), 'Expired pending request reports no reply');
 echo "Tracking reliability integration checks passed.\n";
+
+$policy = TrackingPolicy::native($defaults, true);
+check(TrackingPolicy::locationQuality($db) && TrackingPolicy::geofenceEvidence($db), 'Additive evidence migration is available');
+$token->execute(['old-build', TrackingWake::newId(), $otherSession->sessionHash()]);
+$db->exec("UPDATE fcm_tokens SET wake_capability = 'ready' WHERE token = 'old-build'");
+check(count($wake->devices($sender, false, false, $policy)) === 2, 'Older notice-generating builds are never targeted');
+
+$now = Time::nowMs();
+$db->exec("DELETE FROM tracking_current WHERE user_id = 2");
+$db->exec("DELETE FROM tracking_sharing_cutoffs WHERE subject_type = 'user' AND subject_id = 2");
+$start = $now - 10000;
+$fix = $base + ['platform' => 'android', 'speed_mps' => 15];
+$first = ['client_event_id' => 'accurate', 'recorded_at_ms' => $start] + $fix;
+$result = $ingest->process($recipient, [$first]);
+check($result['results'][0]['advanced_current'], 'Current source accepts an accurate fix');
+$coarse = ['client_event_id' => 'coarse-jump', 'recorded_at_ms' => $start + 1000, 'lat' => -26.205, 'accuracy_m' => 700] + $fix;
+$result = $ingest->process($recipient, [$coarse]);
+check($result['results'][0]['selection'] === 'hold_coarse', 'A 700 m fix cannot replace a fresh 15 m pin');
+$selected = array_column($repo->getFamilyCurrentLocations(1, true, $policy), null, 'user_id')[2];
+check((float) $selected['lat'] === (float) $first['lat'] && (int) $selected['recorded_ms'] === $start,
+    'Map keeps the coordinate and capture time of the accurate fix');
+$underLock = $repo->currentForWrite(2, 1, true, true);
+$fallback = LocationQuality::visible($underLock, $start + 91000);
+check((float) $fallback['accuracy_m'] === 700.0 && (int) $fallback['recorded_ms'] === $coarse['recorded_at_ms'],
+    'When the reliable fix ages out, the next approximate area retains its real capture time');
+$result = $ingest->process($otherSession, [['client_event_id' => 'spare-phone', 'recorded_at_ms' => $start + 2000,
+    'device_id' => $secondDevice, 'lat' => -26.004] + $fix]);
+check($result['results'][0]['selection'] === 'secondary_device', 'A spare phone cannot steal a current member pin');
+
+$wave = $wake->admit($sender, TrackingWake::newId(), $wake->devices($sender, false, false, $policy))['request_id'];
+check($wake->pending($other, $deviceId) === null && $wake->pending($otherSession, $deviceId) === null,
+    'Active refresh lookup is installation, session and family scoped');
+check($wake->pending($recipient, $deviceId)['request_id'] === $wave, 'Active trackers can retrieve a silent refresh on reconnect');
+$db->beginTransaction();
+$wake->acknowledge($recipient, $wave, $deviceId, 'received');
+$db->commit();
+usleep(10000);
+$low = ['client_event_id' => 'coarse-wake', 'recorded_at_ms' => Time::nowMs(), 'accuracy_m' => 700, 'wake_request_id' => $wave] + $fix;
+$ingest->process($recipient, [$low]);
+check(in_array('received', array_column($wake->status($sender, $wave)['targets'], 'state'), true),
+    'Wake does not report a fix held back from the map');
+usleep(10000);
+$ingest->process($recipient, [['client_event_id' => 'visible-ordinary', 'recorded_at_ms' => Time::nowMs()] + $fix]);
+check(in_array('refreshed', array_column($wake->status($sender, $wave)['targets'], 'state'), true),
+    'A qualifying committed observation also resolves a Wake whose signal was missed');
+
+$ownDevice = TrackingWake::newId();
+$db->prepare("INSERT INTO fcm_tokens (user_id, token, device_type, installation_id, wake_capability, wake_session_hash)
+    VALUES (1, 'sender-token', 'android', ?, 'silent_ready', ?)")->execute([$ownDevice, $sender->sessionHash()]);
+check(count($wake->devices($sender, false, false, $policy)) === 3
+    && count($wake->devices($sender, false, true, $policy)) === 2, 'Manual Wake includes own phone unless already refreshing locally');
+check(!in_array(2, array_column($wake->devices($sender, true, false, $policy), 'user_id'), true),
+    'Map-open refresh does not request phones with good recent coverage');
+
+$db->exec('UPDATE tracking_alert_rules SET enabled = 1 WHERE family_id = 1');
+$geo = new GeofenceRepo($db, $cache);
+$events = new EventsRepo($db);
+$bounds = new GeofenceEngine($db, $geo, new PlacesRepo($db, $cache), $events,
+    new AlertsEngine($db, new AlertsRepo($db, $cache)));
+usleep(10000);
+$geoId = (int) $db->query("SELECT id FROM tracking_geofences WHERE name = 'Fixture circle'")->fetchColumn();
+$now = Time::nowMs();
+$crossings = [
+    [$now - 5, -26.197, 10],    // clearly outside
+    [$now - 4, -26.2017, 30],   // near the boundary, uncertainty overlaps it
+    [$now - 3, -26.2005, 8],    // clearly inside
+    [$now - 2, -26.197, 12],    // clearly outside
+    [$now - 1, -26.2005, 8],    // genuine re-entry within the old 15-minute cooldown
+];
+foreach ($crossings as [$capture, $latitude, $accuracy]) {
+    $db->beginTransaction();
+    $bounds->observe(1, 2, 'Recipient', ['lat' => $latitude, 'lng' => 28.0, 'accuracy_m' => $accuracy, 'recorded_ms' => $capture], 0);
+    $db->commit();
+}
+$rows = $events->list(1, 50, 0, null, 1);
+check(array_column(array_slice($rows, 0, 4), 'event_type') === ['enter_geofence', 'exit_geofence', 'enter_geofence', 'exit_geofence'],
+    'Genuine rapid re-entries alert once and boundary jitter creates no crossing');
+$notices = $db->query("SELECT * FROM notifications WHERE type = 'tracking' ORDER BY id DESC")->fetchAll();
+check(count($notices) === 4 && str_contains($notices[0]['message'], 'Recipient entered Fixture circle at ')
+    && $notices[0]['action_url'] === '/tracking/app/events.php?event=' . $rows[0]['id'],
+    'Geofence inbox preserves the member, direction, place, time and specific event');
+check((int) $db->query('SELECT COUNT(*) FROM push_deliveries')->fetchColumn() === 4, 'One durable push per actual crossing');
+$data = json_decode($notices[0]['data_json'], true, 512, JSON_THROW_ON_ERROR);
+check(LocationNotice::content($data, 'Recipient', 'Africa/Johannesburg')['body'] === $notices[0]['message'],
+    'The queued push formatter preserves the geofence copy');
+check(LocationNotice::content(['event_type' => 'wake_tracking'] + $data, 'Recipient', null) === null,
+    'Routine refresh can never become a geofence push');
+check(count($events->list(1, 1, 0, null, 1, (int) $rows[0]['id'])) === 1
+    && $events->list(2, 1, 0, null, 3, (int) $rows[0]['id']) === [], 'Specific notification event is confined to its family');
+
+$before = count($rows);
+$db->beginTransaction();
+$bounds->observe(1, 2, 'Recipient', ['lat' => -26.197, 'lng' => 28.0, 'accuracy_m' => 10, 'recorded_ms' => $now - 2], 0);
+$bounds->observe(1, 2, 'Recipient', ['lat' => -26.197, 'lng' => 28.0, 'accuracy_m' => 10, 'recorded_ms' => $now], 0, baselineOnly: true);
+$db->commit();
+check(count($events->list(1, 50, 0, null, 1)) === $before
+    && (int) $db->query("SELECT is_inside FROM tracking_geofence_state WHERE geofence_id = $geoId AND user_id = 2")->fetchColumn() === 1,
+    'An old replay and the repair job cannot overwrite a confirmed state');
+
+$circle = ['type' => 'circle', 'center_lat' => -26.2, 'center_lng' => 28.0, 'radius_m' => 50];
+$distance = GeofenceEngine::signedDistance(-26.20009, 28.0, $circle);
+check($distance > 10 && $distance < 80, 'The same near-centre point can confirm the small fence only with adequate accuracy');
+$polygon = ['type' => 'polygon', 'polygon_json' => [[0, 179.999], [0.001, 179.999], [0.001, -179.999], [0, -179.999]]];
+check(GeofenceEngine::signedDistance(0.0005, -180.0, $polygon) > 45
+    && GeofenceEngine::signedDistance(0.0011, 180.0, $polygon) < -8, 'Polygon evidence measures distance on both sides across the date line');
+
+$db->exec('UPDATE users SET location_sharing = 0 WHERE id = 2');
+check(NotificationManager::getInstance($db)->getUnreadCount(1, 'tracking') === 0, 'A revoked subject disappears from the inbox badge');
+(new PushOutbox($db))->dispatch(1500);
+check((int) $db->query("SELECT COUNT(*) FROM push_deliveries WHERE state = 'skipped' AND reason = 'location_unavailable'")->fetchColumn() === 4,
+    'The outbox suppresses queued crossing details after sharing is revoked');
+echo "Location quality, silent Wake and geofence delivery checks passed.\n";

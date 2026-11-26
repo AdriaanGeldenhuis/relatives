@@ -39,8 +39,14 @@ internal class TrackingTransport(context: Context) {
         return Reply(code, json)
     }
 
-    suspend fun policy(cookie: String): Reply? = try {
-        call("session_status.php", cookie)
+    suspend fun policy(cookie: String): Reply? = read("session_status.php", cookie)
+
+    suspend fun monitorRegions(cookie: String): Reply? = read("monitor_regions.php", cookie)
+
+    suspend fun pendingWake(cookie: String, deviceId: String): Reply? = read("wake_pending.php?device_id=$deviceId", cookie)
+
+    private suspend fun read(path: String, cookie: String): Reply? = try {
+        call(path, cookie)
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (_: Exception) {

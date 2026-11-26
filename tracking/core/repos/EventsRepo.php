@@ -16,7 +16,7 @@ class EventsRepo
     /**
      * Insert a tracking event
      */
-    public function insert(int $familyId, ?int $userId, string $eventType, array $meta = []): int
+    public function insert(int $familyId, ?int $userId, string $eventType, array $meta = [], ?int $captureMs = null): int
     {
         // occurred_at stored as UTC (Time::now), matching recorded_at and
         // geofence-state timestamps. NOW() wrote SAST wall-clock (+02:00),
@@ -30,8 +30,8 @@ class EventsRepo
             $familyId,
             $userId,
             $eventType,
-            !empty($meta) ? json_encode($meta) : null,
-            Time::now(),
+            $meta ? json_encode($meta, JSON_THROW_ON_ERROR) : null,
+            $captureMs === null ? Time::now() : Time::format(intdiv($captureMs, 1000)),
         ]);
 
         return (int) $this->db->lastInsertId();
@@ -40,13 +40,16 @@ class EventsRepo
     /**
      * List recent events for a family
      */
-    public function list(int $familyId, int $limit = 50, int $offset = 0, ?string $eventType = null, ?int $viewerId = null): array
+    public function list(
+        int $familyId, int $limit = 50, int $offset = 0, ?string $eventType = null, ?int $viewerId = null, ?int $eventId = null,
+    ): array
     {
         $sql = "
             SELECT te.*, u.full_name AS user_name, u.avatar_color
             FROM tracking_events te
             LEFT JOIN users u ON te.user_id = u.id
-            WHERE te.family_id = ? AND (te.user_id IS NULL OR (u.family_id = te.family_id AND (u.location_sharing = 1 OR te.user_id = ?)))
+            WHERE te.family_id = ? AND (te.user_id IS NULL OR (u.family_id = te.family_id AND u.status = 'active'
+                AND (u.location_sharing = 1 OR te.user_id = ?)))
         ";
         $params = [$familyId, $viewerId ?? 0];
 
@@ -54,8 +57,12 @@ class EventsRepo
             $sql .= " AND te.event_type = ?";
             $params[] = $eventType;
         }
+        if ($eventId !== null) {
+            $sql .= ' AND te.id = ? AND te.user_id IS NOT NULL';
+            $params[] = $eventId;
+        }
 
-        $sql .= " ORDER BY te.occurred_at DESC LIMIT ? OFFSET ?";
+        $sql .= " ORDER BY te.occurred_at DESC, te.id DESC LIMIT ? OFFSET ?";
         $params[] = $limit;
         $params[] = $offset;
 

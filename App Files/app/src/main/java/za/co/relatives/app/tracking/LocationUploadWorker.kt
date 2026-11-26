@@ -44,7 +44,7 @@ class LocationUploadWorker(context: Context, params: WorkerParameters) : Corouti
         val prefs = PreferencesManager(applicationContext)
         val consent = prefs.trackingConsent() ?: return Result.success()
         val store = TrackingStore(applicationContext)
-        store.expireOlderThan(System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000)
+        store.expireOlderThan(TrackingClock.now() - 7L * 24 * 60 * 60 * 1000)
         repeat(3) {
             when (LocationUploader.send(applicationContext, consent)) {
                 UploadResult.EMPTY, UploadResult.BLOCKED -> return Result.success()
@@ -71,7 +71,7 @@ internal object LocationUploader {
             ) return@withLock UploadResult.BLOCKED
 
             val store = TrackingStore(context)
-            store.expireWake(System.currentTimeMillis())
+            store.expireWake(TrackingClock.now())
             val fixes = if (urgentId == null) store.getUnsentLocations(consent.scope)
                 else listOfNotNull(store.getUnsentLocation(consent.scope, urgentId))
             if (fixes.isEmpty()) return@withLock UploadResult.EMPTY
@@ -98,6 +98,8 @@ internal object LocationUploader {
                     reply.success -> {
                         val settings = reply.data?.getAsJsonObject("server_settings")
                         if (settings != null) TrackingService.applyServerPolicy(context, consent.sessionCookie, settings)
+                        FamilyWake.pending(context, consent, reply.data?.get("pending_wake")
+                            ?.takeIf { it.isJsonObject }?.asJsonObject)
                         val results = reply.data?.getAsJsonArray("results")
                         val acknowledged = UploadReceipts.acknowledged(fixes.map { it.clientEventId }, results)
                         for ((id, status) in acknowledged) {
@@ -138,6 +140,7 @@ internal object LocationUploader {
                 "recorded_at" to utc.format(Date(fix.timestamp)),
                 "recorded_at_ms" to fix.timestamp,
                 "wake_request_id" to fix.wakeRequestId,
+                "consent_scope" to fix.consentScope,
                 "device_id" to deviceId,
                 "platform" to "android",
                 "app_version" to BuildConfig.VERSION_NAME,

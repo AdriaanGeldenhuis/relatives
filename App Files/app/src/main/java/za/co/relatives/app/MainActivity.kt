@@ -296,6 +296,7 @@ class MainActivity : ComponentActivity() {
         TrackingService.isTrackingEnabled(this) -> when {
             !TrackingService.providersEnabled(this) -> "providers_disabled"
             !TrackingService.isRunning -> "paused"
+            !TrackingService.hasPreciseLocation(this) -> "approximate"
             TrackingService.batterySaver(this) -> "battery_saver"
             else -> "enabled"
         }

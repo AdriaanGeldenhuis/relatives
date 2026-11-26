@@ -2,14 +2,12 @@ package za.co.relatives.app.tracking
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.SystemClock
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -33,27 +31,28 @@ internal data class FamilyWake(val id: String, val scope: String, val expiresAtM
             return FamilyWake(id, scope, intent.getLongExtra(EXPIRES, 0))
         }
 
-        fun receive(context: Context, data: Map<String, String>, highPriority: Boolean) {
+        fun receive(context: Context, data: Map<String, String>) {
             val prefs = PreferencesManager(context)
             val id = data["request_id"]?.takeIf(idPattern::matches) ?: return
             if (data["installation_id"] != prefs.deviceUuid) return
             val expiry = data["expires_at_ms"]?.toLongOrNull() ?: return
             val consent = prefs.trackingConsent()
             val capability = TrackingService.wakeCapability(context)
-            if (consent == null || capability != "ready") {
+            if (consent == null || capability != "silent_ready") {
                 val state = if (consent == null) "paused" else capability
-                WakeReceiptWorker.enqueue(context, id, state, expiry, highPriority)
+                WakeReceiptWorker.enqueue(context, id, state, expiry)
                 return
             }
-
-            val wake = FamilyWake(id, consent.scope, expiry)
-            val started = TrackingService.appVisible ||
-                (TrackingService.canReviveFromBackground(context) && (TrackingService.isRunning || highPriority))
-            val refreshing = started && TrackingService.startFamilyWake(context, wake)
-            if (prefs.claimWakeNotice(id)) {
-                TrackingService.showFamilyRefreshNotification(context, data["requester_name"])
+            if (!TrackingService.startFamilyWake(context, FamilyWake(id, consent.scope, expiry))) {
+                WakeReceiptWorker.enqueue(context, id, "open_required", expiry)
             }
-            if (!refreshing) WakeReceiptWorker.enqueue(context, id, "background_blocked", expiry, highPriority)
+        }
+
+        fun pending(context: Context, consent: PreferencesManager.TrackingConsent, data: JsonObject?) {
+            if (data == null) return
+            val id = data.text("request_id")?.takeIf(idPattern::matches) ?: return
+            val expiry = data.number("expires_at_ms") ?: return
+            TrackingService.startFamilyWake(context, FamilyWake(id, consent.scope, expiry))
         }
 
         suspend fun acknowledge(context: Context, cookie: String, id: String, state: String): TrackingTransport.Reply? {
@@ -79,16 +78,13 @@ internal data class FamilyWake(val id: String, val scope: String, val expiresAtM
 
 class WakeReceiptWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     companion object {
-        internal fun enqueue(context: Context, id: String, state: String, expiresAtMs: Long, expedited: Boolean) {
+        internal fun enqueue(context: Context, id: String, state: String, expiresAtMs: Long) {
             val prefs = PreferencesManager(context)
             val binding = prefs.sessionBinding() ?: return
             val builder = OneTimeWorkRequestBuilder<WakeReceiptWorker>()
                 .setInputData(workDataOf("id" to id, "state" to state, "expires" to expiresAtMs, "binding" to binding))
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
-            if (expedited && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            }
             WorkManager.getInstance(context).enqueueUniqueWork("wake_receipt_$id", ExistingWorkPolicy.KEEP, builder.build())
         }
     }
@@ -101,7 +97,7 @@ class WakeReceiptWorker(context: Context, params: WorkerParameters) : CoroutineW
         if (prefs.sessionBinding() != inputData.getString("binding")) return Result.success()
         val reply = FamilyWake.acknowledge(applicationContext, cookie, id, state)
         if ((reply == null || reply.code >= 500) && runAttemptCount < 2 &&
-            System.currentTimeMillis() < inputData.getLong("expires", 0L)
+            TrackingClock.now() < inputData.getLong("expires", 0L)
         ) return Result.retry()
         return Result.success()
     }

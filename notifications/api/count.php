@@ -33,15 +33,17 @@ if (!isset($db)) {
 
 try {
     $userId = (int)$_SESSION['user_id'];
+    require_once __DIR__ . '/../../core/LocationNotice.php';
+    $locationVisible = LocationNotice::visible($db);
     
     // ==========================================
     // GET UNREAD COUNT
     // ==========================================
     $stmt = $db->prepare("
         SELECT COUNT(*) as count 
-        FROM notifications 
+        FROM notifications n
         WHERE user_id = ? 
-          AND is_read = 0
+          AND is_read = 0 AND $locationVisible
     ");
     $stmt->execute([$userId]);
     $count = (int)$stmt->fetchColumn();
@@ -67,7 +69,7 @@ try {
             FROM notifications n
             LEFT JOIN users u ON n.from_user_id = u.id
             WHERE n.user_id = ? 
-              AND n.is_read = 0
+              AND n.is_read = 0 AND $locationVisible
             ORDER BY n.created_at DESC
             LIMIT 1
         ");

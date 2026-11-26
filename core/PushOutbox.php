@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/FirebaseMessaging.php';
 require_once __DIR__ . '/WebPushTransport.php';
+require_once __DIR__ . '/LocationNotice.php';
 
 final class PushOutbox
 {
@@ -33,11 +34,12 @@ final class PushOutbox
         return ['title' => trim($sender ?? '') ?: 'Relatives', 'body' => $category];
     }
 
-    public function enqueue(int $notification, int $user, ?array $target = null): void
+    public function enqueue(int $notification, int $user, ?array $target = null, ?int $expiresUnix = null): void
     {
         $insert = $this->db->prepare("INSERT INTO push_deliveries
             (notification_id, user_id, channel, device_id, receipt, expires_at)
-            SELECT id, user_id, ?, ?, ?, LEAST(COALESCE(expires_at, NOW() + INTERVAL 1 DAY), NOW() + INTERVAL 1 DAY)
+            SELECT id, user_id, ?, ?, ?, LEAST(COALESCE(expires_at, NOW() + INTERVAL 1 DAY),
+                COALESCE(FROM_UNIXTIME(?), NOW() + INTERVAL 1 DAY), NOW() + INTERVAL 1 DAY)
             FROM notifications WHERE id = ? AND user_id = ?");
         $channels = ['fcm' => "SELECT t.id FROM fcm_tokens t WHERE t.user_id = ?
             AND (t.installation_id IS NULL OR EXISTS (SELECT 1 FROM sessions s
@@ -54,7 +56,7 @@ final class PushOutbox
             $stmt = $this->db->prepare($sql . ($target !== null ? ' AND t.id = ?' : ''));
             $stmt->execute($target === null ? [$user] : [$user, $target['id']]);
             foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
-                $insert->execute([$channel, $id, bin2hex(random_bytes(16)), $notification, $user]);
+                $insert->execute([$channel, $id, bin2hex(random_bytes(16)), $expiresUnix, $notification, $user]);
             }
         }
     }
@@ -85,7 +87,9 @@ final class PushOutbox
         $deadline = microtime(true) + $timeoutMs / 1000;
         $lease = bin2hex(random_bytes(16));
         $scope = $only ? ' AND d.notification_id IN (' . implode(',', array_fill(0, count($only), '?')) . ')' : '';
+        $locationVisible = LocationNotice::visible($this->db);
         $select = $this->db->prepare("SELECT d.*, n.type, n.category, n.action_url, n.priority, n.data_json,
+                UNIX_TIMESTAMP(d.expires_at) AS expires_unix, $locationVisible AS location_visible,
                 sender.full_name AS sender_name, u.status AS user_status, f.timezone,
                 p.enabled, p.push_enabled, p.sound_enabled, p.vibrate_enabled,
                 p.quiet_hours_enabled, p.quiet_hours_start, p.quiet_hours_end, privacy.allow_messages
@@ -109,7 +113,7 @@ final class PushOutbox
             }
             $job['lease_id'] = $lease;
             $data = json_decode($job['data_json'] ?? '', true) ?: [];
-            $ttl = strtotime($job['expires_at']) - time();
+            $ttl = (int) $job['expires_unix'] - time();
             if ($ttl <= 0 || $job['type'] === null || $job['user_status'] !== 'active'
                 || (empty($data['device_test']) && !self::allowed($job))) {
                 $this->finish($job, 'skipped', $ttl <= 0 ? 'expired' : 'disabled');
@@ -121,7 +125,15 @@ final class PushOutbox
                 continue;
             }
 
-            $payload = self::alert($job['type'], $job['sender_name']) + [
+            $location = $job['type'] === 'tracking';
+            $content = $location
+                ? LocationNotice::content($data, $job['sender_name'], $job['timezone'])
+                : self::alert($job['type'], $job['sender_name']);
+            if ($content === null || ($location && !(bool) $job['location_visible'])) {
+                $this->finish($job, 'skipped', 'location_unavailable');
+                continue;
+            }
+            $payload = $content + [
                 'type' => $job['type'],
                 'notification_id' => (string) $job['notification_id'],
                 'recipient_user_id' => (string) $job['user_id'],
@@ -130,6 +142,9 @@ final class PushOutbox
                 'silent' => $job['sound_enabled'] === '0' || $job['sound_enabled'] === 0 ? '1' : '0',
                 'vibrate' => $job['vibrate_enabled'] === '0' || $job['vibrate_enabled'] === 0 ? '0' : '1',
             ];
+            if ($location) {
+                $payload['location_alert'] = '1';
+            }
             if ($job['channel'] === 'fcm') {
                 $fcm[$job['id']] = ['job' => $job, 'device' => $device, 'payload' => $payload, 'ttl' => $ttl];
             } else {
@@ -225,7 +240,7 @@ final class PushOutbox
         }
         if (in_array($state, ['temporary', 'configuration', 'budget'], true) && (int) $job['attempts'] < 8) {
             $delay = $state === 'budget' ? 0 : max((int) $result['retry_after'], min(3600, 30 * (2 ** (int) $job['attempts'])));
-            if (time() + $delay < strtotime($job['expires_at'])) {
+            if (time() + $delay < (int) $job['expires_unix']) {
                 $stmt = $this->db->prepare("UPDATE push_deliveries SET next_at = NOW() + INTERVAL ? SECOND,
                     attempts = attempts + ?, reason = ?, lease_id = NULL, lease_until = NULL WHERE id = ? AND lease_id = ?");
                 $stmt->execute([$delay, $state === 'budget' ? 0 : 1, $state, $job['id'], $job['lease_id']]);
@@ -246,9 +261,12 @@ final class PushOutbox
 
     public function receipt(string $receipt, int $user, string $session): bool
     {
+        $locationVisible = LocationNotice::visible($this->db);
         $stmt = $this->db->prepare("UPDATE push_deliveries d SET state = 'delivered', delivered_at = COALESCE(delivered_at, NOW()),
                 accepted_at = COALESCE(accepted_at, NOW()), lease_id = NULL, lease_until = NULL
             WHERE d.receipt = ? AND d.user_id = ? AND d.expires_at > NOW()
+            AND EXISTS (SELECT 1 FROM notifications n
+                WHERE n.id = d.notification_id AND n.user_id = d.user_id AND $locationVisible)
             AND d.state IN ('pending', 'accepted', 'delivered') AND (
                 (d.channel = 'fcm' AND EXISTS (SELECT 1 FROM fcm_tokens t
                     WHERE t.id = d.device_id AND t.user_id = d.user_id AND t.wake_session_hash = ?))

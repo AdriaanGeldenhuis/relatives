@@ -95,9 +95,9 @@ class NotificationManager {
             
             if (($data['send_push'] ?? true) !== false) {
                 if ($queued) {
-                    $this->outbox->enqueue($notificationId, (int) $data['user_id'], $target);
+                    $this->outbox->enqueue($notificationId, (int) $data['user_id'], $target, $data['push_expires_unix'] ?? null);
                     $this->outbox->sendAfterResponse($notificationId);
-                } else {
+                } elseif ($data['type'] !== self::TYPE_TRACKING) {
                     $this->legacyPushAfterCommit($notificationId, $data, $category, $insideTransaction);
                 }
             }
@@ -467,7 +467,7 @@ class NotificationManager {
      */
     public function getUnreadCount(int $userId, ?string $type = null): int {
         try {
-            $sql = "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0";
+            $sql = "SELECT COUNT(*) FROM notifications n WHERE user_id = ? AND is_read = 0 AND " . LocationNotice::visible($this->db);
             $params = [$userId];
             
             if ($type) {

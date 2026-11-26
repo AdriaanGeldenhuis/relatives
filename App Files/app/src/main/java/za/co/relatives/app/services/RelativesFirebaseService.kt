@@ -6,7 +6,6 @@ import com.google.firebase.messaging.RemoteMessage
 import za.co.relatives.app.R
 import za.co.relatives.app.RelativesApplication
 import za.co.relatives.app.tracking.FamilyWake
-import za.co.relatives.app.tracking.TrackingService
 import za.co.relatives.app.utils.NotificationHelper
 import za.co.relatives.app.utils.PreferencesManager
 
@@ -19,7 +18,7 @@ import za.co.relatives.app.utils.PreferencesManager
  * Supported notification types:
  * - `message`, `shopping`, `calendar`, `schedule`, `tracking`, `weather`,
  *   `note`, `system` -- displayed as a visible notification with optional deep link.
- * - `wake_tracking` -- shows a family refresh notice and requests one fix if sharing is active.
+ * - `wake_tracking` -- requests one fix if sharing is active.
  */
 class RelativesFirebaseService : FirebaseMessagingService() {
 
@@ -60,30 +59,9 @@ class RelativesFirebaseService : FirebaseMessagingService() {
         Log.d(TAG, "Message received: type=$type")
 
         when (type) {
-            "wake_tracking" -> {
-                val highPriority = message.priority == RemoteMessage.PRIORITY_HIGH
-                if (data.containsKey("request_id")) FamilyWake.receive(this, data, highPriority)
-                else handleWakeTracking(data["keepalive"] == "1", highPriority)
-            }
+            "wake_tracking" -> FamilyWake.receive(this, data)
             else -> handleVisibleNotification(type, data, message.notification)
         }
-    }
-
-    // ------------------------------------------------------------------ //
-    //  Wake tracking (silent)
-    // ------------------------------------------------------------------ //
-
-    private fun handleWakeTracking(keepalive: Boolean, expedited: Boolean) {
-        if (!TrackingService.isTrackingEnabled(this) ||
-            !TrackingService.hasLocationPermission(this) ||
-            !TrackingService.canShowTrackingNotification(this) ||
-            !TrackingService.canReviveFromBackground(this)
-        ) return
-
-        if (keepalive) return
-
-        TrackingService.showFamilyRefreshNotification(this)
-        TrackingService.requestWakeFix(this, background = true, highPriority = expedited)
     }
 
     // ------------------------------------------------------------------ //
@@ -105,9 +83,11 @@ class RelativesFirebaseService : FirebaseMessagingService() {
             ?: remoteNotification?.body
             ?: ""
         val actionUrl = data["action_url"]
+        val locationAlert = type == "tracking" && data["location_alert"] == "1"
+        if (type == "tracking" && !locationAlert) return
 
         // Use the centralised alert notification helper
-        NotificationHelper.showAlertNotification(
+        val posted = NotificationHelper.showAlertNotification(
             context = this,
             title = title,
             body = body,
@@ -115,8 +95,9 @@ class RelativesFirebaseService : FirebaseMessagingService() {
             stableId = data["notification_id"]?.takeIf { it.length <= 20 && it.all(Char::isDigit) },
             silent = data["silent"] == "1",
             vibrate = data["vibrate"] != "0",
+            locationAlert = locationAlert,
         )
-        data["receipt"]?.let { PushReceiptWorker.enqueue(this, it) }
+        if (posted) data["receipt"]?.let { PushReceiptWorker.enqueue(this, it) }
         (application as? RelativesApplication)?.notificationEvents?.tryEmit(Unit)
     }
 

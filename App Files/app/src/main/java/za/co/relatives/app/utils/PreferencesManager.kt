@@ -33,11 +33,8 @@ class PreferencesManager(context: Context) {
         private const val KEY_PUSH_RECIPIENT = "push_recipient"
         private const val KEY_TRACKING_POLICY = "tracking_policy"
         private const val KEY_POLICY_COOKIE = "tracking_policy_cookie"
-        private const val KEY_LAST_WAKE = "last_wake_request"
-        private const val KEY_WAKE_NOTICE = "last_wake_notice"
         private const val KEY_FCM_REGISTRATION = "fcm_registration"
         private const val KEY_FCM_REGISTERED_AT = "fcm_registered_at"
-        private val wakeLock = Any()
         private const val KEY_PUSH_COOKIE_HASH = "push_cookie_hash"
 
     }
@@ -98,19 +95,6 @@ class PreferencesManager(context: Context) {
         val json = values[KEY_TRACKING_POLICY] as? String ?: return TrackingPolicy()
         return runCatching { TrackingPolicy.from(com.google.gson.JsonParser.parseString(json).asJsonObject) }
             .getOrDefault(TrackingPolicy())
-    }
-
-    internal fun claimWake(scope: String, id: String): Boolean = synchronized(wakeLock) {
-        if (trackingConsent()?.scope != scope) return@synchronized false
-        val key = "$scope:$id"
-        if (prefs.getString(KEY_LAST_WAKE, null) == key) return@synchronized false
-        prefs.edit().putString(KEY_LAST_WAKE, key).commit()
-    }
-
-    internal fun claimWakeNotice(id: String): Boolean = synchronized(wakeLock) {
-        if (prefs.getString(KEY_WAKE_NOTICE, null) == id) return@synchronized false
-        prefs.edit().putString(KEY_WAKE_NOTICE, id).apply()
-        true
     }
 
     internal fun sessionBinding(): String? = sessionToken?.let(::fingerprint)
@@ -186,8 +170,6 @@ class PreferencesManager(context: Context) {
             .remove(KEY_POLICY_COOKIE)
             .remove(KEY_FCM_REGISTRATION)
             .remove(KEY_FCM_REGISTERED_AT)
-            .remove(KEY_LAST_WAKE)
-            .remove(KEY_WAKE_NOTICE)
             .apply()
     }
 }

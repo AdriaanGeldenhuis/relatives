@@ -8,6 +8,7 @@ internal data class TrackingPolicy(
     val movingSeconds: Int = 30,
     val idleSeconds: Int = 600,
     val targetAccuracyM: Int = 100,
+    val drivingAccuracy: Boolean = false,
 ) {
     val canCollect: Boolean get() = mode != 0 && accountAllowsSharing
 
@@ -17,6 +18,8 @@ internal data class TrackingPolicy(
         return 1000L * maxOf(base, floor)
     }
 
+    fun drivingIntervalMs(lowPower: Boolean): Long = if (lowPower) 15_000 else 8_000
+
     companion object {
         fun from(json: JsonObject): TrackingPolicy = TrackingPolicy(
             mode = json.number("mode")?.toInt()?.coerceIn(0, 2) ?: 1,
@@ -24,6 +27,7 @@ internal data class TrackingPolicy(
             movingSeconds = json.number("moving_interval")?.toInt()?.coerceIn(15, 600) ?: 30,
             idleSeconds = json.number("idle_interval")?.toInt()?.coerceIn(300, 3600) ?: 600,
             targetAccuracyM = json.number("min_accuracy_m")?.toInt()?.coerceIn(10, 500) ?: 100,
+            drivingAccuracy = json.flag("driving_accuracy") == true,
         )
     }
 }

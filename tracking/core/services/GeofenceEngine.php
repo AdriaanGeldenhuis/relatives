@@ -1,288 +1,174 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Geofence processing engine
- * Checks location against all active geofences and places,
- * detects enter/exit transitions, fires events and alerts.
- */
-class GeofenceEngine
+final class GeofenceEngine
 {
-    private PDO $db;
-    private TrackingCache $cache;
-    private GeofenceRepo $geoRepo;
-    private PlacesRepo $placesRepo;
-    private EventsRepo $eventsRepo;
-    private AlertsEngine $alertsEngine;
+    private const LIVE_MS = 120000;
+    private const MAX_REPLAY_MS = 86400000;
+    private array $definitions = [];
 
     public function __construct(
-        PDO $db,
-        TrackingCache $cache,
-        GeofenceRepo $geoRepo,
-        PlacesRepo $placesRepo,
-        EventsRepo $eventsRepo,
-        AlertsEngine $alertsEngine
-    ) {
-        $this->db = $db;
-        $this->cache = $cache;
-        $this->geoRepo = $geoRepo;
-        $this->placesRepo = $placesRepo;
-        $this->eventsRepo = $eventsRepo;
-        $this->alertsEngine = $alertsEngine;
-    }
+        private PDO $db,
+        private GeofenceRepo $geofences,
+        private PlacesRepo $places,
+        private EventsRepo $events,
+        private AlertsEngine $alerts,
+    ) {}
 
-    /**
-     * Hysteresis buffer (metres) applied to circular boundaries so GPS jitter
-     * near the edge does not flap enter/exit. Widened by the fix's own
-     * accuracy: a 150m-accurate urban fix needs to clear the boundary by 150m
-     * before we believe the transition.
-     */
-    private const MIN_HYSTERESIS_M = 30.0;
-
-    /**
-     * Process a new location against all geofences and places for the user's family.
-     *
-     * @param float|null $accuracyM Horizontal accuracy of this fix, used to
-     *   widen the boundary hysteresis. Null = treat as a perfect fix.
-     */
-    public function process(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM = null): void
+    public function resetSource(int $family, int $user): void
     {
-        $alerts = $this->recordTransitions($familyId, $userId, $lat, $lng, $userName, $accuracyM);
-        $this->sendAlerts($familyId, $userId, $alerts);
-    }
-
-    public function recordTransitions(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM, bool $recordEvents = true): array
-    {
-        return array_merge(
-            $this->processGeofences($familyId, $userId, $lat, $lng, $userName, $accuracyM, $recordEvents),
-            $this->processPlaces($familyId, $userId, $lat, $lng, $userName, $accuracyM, $recordEvents)
-        );
-    }
-
-    public function sendAlerts(int $familyId, int $userId, array $alerts): void
-    {
-        foreach ($alerts as [$type, $target, $data]) {
-            $this->alertsEngine->fire($familyId, $userId, $type, $target, $data);
+        foreach (['tracking_geofence_state', 'tracking_place_state'] as $table) {
+            $this->db->prepare("DELETE FROM $table WHERE family_id = ? AND user_id = ?")->execute([$family, $user]);
         }
     }
 
-    /** Buffer (m) to clear before a circular boundary transition is believed. */
-    private function hysteresisBuffer(?float $accuracyM): float
-    {
-        return max(self::MIN_HYSTERESIS_M, $accuracyM ?? 0.0);
-    }
-
     /**
-     * Decide inside/outside for a circular boundary WITH hysteresis: to enter,
-     * the fix must be inside by the buffer; to leave, outside by the buffer;
-     * within the buffer band the previous state is held.
+     * Called under the same family and member locks as location ingestion.
+     * The repair job can initialize unknown states. Established state is
+     * advanced exclusively by observed samples in the ingest path.
      */
-    private function resolveCircularState(float $distance, float $radius, bool $wasInside, float $buffer): bool
-    {
-        if ($wasInside) {
-            return $distance <= ($radius + $buffer);
+    public function observe(
+        int $family, int $user, string $name, array $fix, int $cutoff,
+        bool $advancing = true, bool $baselineOnly = false,
+    ): void {
+        $capture = LocationQuality::capture($fix);
+        $age = Time::nowMs() - $capture;
+        $evidence = TrackingPolicy::geofenceEvidence($this->db);
+        $accuracy = (float) ($fix['accuracy_m'] ?? 0);
+        if ($capture < $cutoff || $age > self::MAX_REPLAY_MS || $accuracy <= 0
+            || (!$evidence && (!$advancing || $age > self::LIVE_MS))) {
+            return;
         }
-        return $distance <= max(0.0, $radius - $buffer);
+        $this->definitions[$family] ??= [
+            $this->geofences->listActive($family, false),
+            $this->places->listAll($family, false),
+        ];
+        [$fences, $places] = $this->definitions[$family];
+        $this->evaluate($family, $user, $name, $fix, $accuracy, $capture, $cutoff, $fences, true, $evidence, $baselineOnly, $advancing);
+        $this->evaluate($family, $user, $name, $fix, $accuracy, $capture, $cutoff, $places, false, $evidence, $baselineOnly, $advancing);
     }
 
-    private function processGeofences(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM, bool $recordEvents): array
-    {
-        $geofences = $this->geoRepo->listActive($familyId);
-        if (empty($geofences)) {
-            return [];
+    private function evaluate(
+        int $family, int $user, string $name, array $fix, float $accuracy, int $capture, int $cutoff,
+        array $boundaries, bool $geofence, bool $evidence, bool $baselineOnly, bool $advancing,
+    ): void {
+        if (!$boundaries) {
+            return;
         }
+        $table = $geofence ? 'tracking_geofence_state' : 'tracking_place_state';
+        $key = $geofence ? 'geofence_id' : 'place_id';
+        $extra = $evidence ? ', definition_hash, observed_ms' : ', UNIX_TIMESTAMP(updated_at) * 1000 AS observed_ms';
+        $stmt = $this->db->prepare("SELECT $key, is_inside$extra FROM $table WHERE family_id = ? AND user_id = ?");
+        $stmt->execute([$family, $user]);
+        $states = array_column($stmt->fetchAll(PDO::FETCH_ASSOC), null, $key);
+        $margin = max(8.0, $accuracy);
 
-        // Load current states for this user
-        $states = $this->loadGeofenceStates($userId);
-        $alerts = [];
-        $buffer = $this->hysteresisBuffer($accuracyM);
-
-        foreach ($geofences as $gf) {
-            $gfId = (int) $gf['id'];
-            $wasInside = (bool) ($states[$gfId] ?? false);
-            $isInside = $this->isInsideGeofence($lat, $lng, $gf, $wasInside, $buffer);
-
-            if ($isInside === $wasInside) {
+        foreach ($boundaries as $boundary) {
+            $id = (int) $boundary['id'];
+            $revision = (int) ($boundary['definition_ms'] ?? 0);
+            $state = $states[$id] ?? null;
+            $hash = hash('sha256', json_encode([
+                $revision, $boundary['type'] ?? 'circle', $boundary['center_lat'] ?? $boundary['lat'] ?? null,
+                $boundary['center_lng'] ?? $boundary['lng'] ?? null, $boundary['radius_m'], $boundary['polygon_json'] ?? null,
+            ], JSON_THROW_ON_ERROR));
+            $known = $state !== null && (int) $state['observed_ms'] >= max($cutoff, $revision)
+                && (!$evidence || $hash === $state['definition_hash']);
+            if ($capture < $revision || (!$known && !$advancing)
+                || ($known && ($baselineOnly || ($evidence && $capture <= $state['observed_ms'])))) {
                 continue;
             }
 
-            // State changed - update DB and cache
-            $this->updateGeofenceState($familyId, $gfId, $userId, $isInside);
-            if (!$recordEvents) continue;
-
-            $eventType = $isInside ? 'enter_geofence' : 'exit_geofence';
-            $this->eventsRepo->insert($familyId, $userId, $eventType, [
-                'geofence_id' => $gfId,
-                'geofence_name' => $gf['name'],
-                'user_name' => $userName,
-                'lat' => $lat,
-                'lng' => $lng,
-            ]);
-
-            $alerts[] = [$eventType, $gfId, [
-                'name' => $gf['name'],
-                'user_name' => $userName,
-            ]];
-        }
-
-        return $alerts;
-    }
-
-    private function processPlaces(int $familyId, int $userId, float $lat, float $lng, string $userName, ?float $accuracyM, bool $recordEvents): array
-    {
-        $places = $this->placesRepo->listAll($familyId);
-        if (empty($places)) {
-            return [];
-        }
-
-        $states = $this->loadPlaceStates($userId);
-        $alerts = [];
-        $buffer = $this->hysteresisBuffer($accuracyM);
-
-        foreach ($places as $place) {
-            $pId = (int) $place['id'];
-            $wasInside = (bool) ($states[$pId] ?? false);
-            $radius = (float) ($place['radius_m'] ?? 100);
-            $distance = geo_haversineDistance((float) $place['lat'], (float) $place['lng'], $lat, $lng);
-            $isInside = $this->resolveCircularState($distance, $radius, $wasInside, $buffer);
-
-            if ($isInside === $wasInside) {
+            $distance = self::signedDistance((float) $fix['lat'], (float) $fix['lng'], $boundary);
+            if ($distance === null || abs($distance) <= $margin) {
+                if ($known && $evidence) {
+                    // Retain the confirmed side and advance the observation watermark.
+                    $this->save($table, $key, $family, $id, $user, (bool) $state['is_inside'], $capture, $hash, false, true);
+                }
                 continue;
             }
 
-            $this->updatePlaceState($familyId, $pId, $userId, $isInside);
-            if (!$recordEvents) continue;
+            $inside = $distance > 0;
+            $crossed = $known && !$baselineOnly && $inside !== (bool) $state['is_inside'];
+            $this->save($table, $key, $family, $id, $user, $inside, $capture, $hash, $crossed, $evidence);
+            if (!$crossed) {
+                continue;
+            }
 
-            $eventType = $isInside ? 'arrive_place' : 'leave_place';
-            $this->eventsRepo->insert($familyId, $userId, $eventType, [
-                'place_id' => $pId,
-                'place_name' => $place['label'],
-                'user_name' => $userName,
-                'lat' => $lat,
-                'lng' => $lng,
+            $type = $geofence ? ($inside ? 'enter_geofence' : 'exit_geofence') : ($inside ? 'arrive_place' : 'leave_place');
+            $label = $geofence ? $boundary['name'] : $boundary['label'];
+            $eventId = $this->events->insert($family, $user, $type, [
+                $key => $id,
+                ($geofence ? 'geofence_name' : 'place_name') => $label,
+                'user_name' => $name, 'captured_at_ms' => $capture,
+            ], $capture);
+            $this->alerts->record($family, $user, $name, $type, $label, $eventId, $capture);
+            TrackingPolicy::metric('boundary_crossing', [
+                'type' => $type, 'capture_to_commit_ms' => max(0, Time::nowMs() - $capture),
             ]);
-
-            $alerts[] = [$eventType, $pId, [
-                'name' => $place['label'],
-                'user_name' => $userName,
-            ]];
         }
-        return $alerts;
     }
 
-    private function isInsideGeofence(float $lat, float $lng, array $gf, bool $wasInside, float $buffer): bool
-    {
-        if ($gf['type'] === 'circle') {
-            $distance = geo_haversineDistance(
-                (float) $gf['center_lat'],
-                (float) $gf['center_lng'],
-                $lat,
-                $lng
-            );
-            return $this->resolveCircularState($distance, (float) $gf['radius_m'], $wasInside, $buffer);
-        }
+    private function save(
+        string $table, string $key, int $family, int $id, int $user, bool $inside,
+        int $capture, string $hash, bool $crossed, bool $evidence,
+    ): void {
+        $columns = $evidence ? ', observed_ms, definition_hash' : '';
+        $values = $evidence ? ', ?, ?' : '';
+        $update = $evidence ? ', observed_ms = VALUES(observed_ms), definition_hash = VALUES(definition_hash)' : '';
+        $stmt = $this->db->prepare("
+            INSERT INTO $table (family_id, $key, user_id, is_inside, last_entered_at, last_exited_at$columns)
+            VALUES (?, ?, ?, ?, FROM_UNIXTIME(?), FROM_UNIXTIME(?)$values)
+            ON DUPLICATE KEY UPDATE is_inside = VALUES(is_inside),
+                last_entered_at = COALESCE(VALUES(last_entered_at), last_entered_at),
+                last_exited_at = COALESCE(VALUES(last_exited_at), last_exited_at)$update
+        ");
+        $seconds = intdiv($capture, 1000);
+        $params = [$family, $id, $user, (int) $inside, $crossed && $inside ? $seconds : null,
+            $crossed && !$inside ? $seconds : null];
+        $stmt->execute($evidence ? [...$params, $capture, $hash] : $params);
+    }
 
-        if ($gf['type'] === 'polygon' && !empty($gf['polygon_json'])) {
-            $polygon = is_string($gf['polygon_json'])
-                ? json_decode($gf['polygon_json'], true)
-                : $gf['polygon_json'];
-            if (is_array($polygon) && count($polygon) >= 3) {
-                return geo_isPointInPolygon($lat, $lng, $this->normalizePolygon($polygon));
+    /** Distance to the boundary in metres, positive inside. */
+    public static function signedDistance(float $lat, float $lng, array $boundary): ?float
+    {
+        if (($boundary['type'] ?? 'circle') === 'circle') {
+            $centerLat = $boundary['center_lat'] ?? $boundary['lat'] ?? null;
+            $centerLng = $boundary['center_lng'] ?? $boundary['lng'] ?? null;
+            if (!isset($centerLat, $centerLng, $boundary['radius_m'])) {
+                return null;
             }
+            return (float) $boundary['radius_m']
+                - geo_haversineDistance($lat, $lng, (float) $centerLat, (float) $centerLng);
+        }
+        $raw = $boundary['polygon_json'] ?? null;
+        $points = TrackingValidator::polygon(is_string($raw) ? json_decode($raw, true) : $raw);
+        if ($points === null) {
+            return null;
         }
 
-        return false;
-    }
-
-    /**
-     * The frontend stores polygon vertices as [lat, lng] numeric pairs, but
-     * geo_isPointInPolygon reads ['lat']/['lng'] keys — so every polygon
-     * geofence silently never matched. Accept both shapes.
-     */
-    private function normalizePolygon(array $polygon): array
-    {
-        $out = [];
-        foreach ($polygon as $p) {
-            if (isset($p['lat'], $p['lng'])) {
-                $out[] = ['lat' => (float) $p['lat'], 'lng' => (float) $p['lng']];
-            } elseif (isset($p[0], $p[1])) {
-                $out[] = ['lat' => (float) $p[0], 'lng' => (float) $p[1]];
+        $inside = false;
+        $closest = INF;
+        $scale = cos(deg2rad($lat)) * 111195;
+        // Unwrap vertices together so a polygon crossing the date line stays small.
+        $reference = $points[0][1];
+        $relative = static fn(float $value, float $origin): float => fmod($value - $origin + 540.0, 360.0) - 180.0;
+        $origin = $relative($lng, $reference);
+        $project = static fn(array $point): array => [
+            ($relative($point[1], $reference) - $origin) * $scale, ($point[0] - $lat) * 111195,
+        ];
+        [$ax, $ay] = $project($points[count($points) - 1]);
+        foreach ($points as $point) {
+            [$bx, $by] = $project($point);
+            $dx = $bx - $ax;
+            $dy = $by - $ay;
+            $length = $dx * $dx + $dy * $dy;
+            $fraction = $length > 0 ? max(0, min(1, -($ax * $dx + $ay * $dy) / $length)) : 0;
+            $closest = min($closest, hypot($ax + $fraction * $dx, $ay + $fraction * $dy));
+            if (($ay > 0) !== ($by > 0) && $ax - $ay * $dx / $dy > 0) {
+                $inside = !$inside;
             }
+            [$ax, $ay] = [$bx, $by];
         }
-        return $out;
-    }
-
-    private function loadGeofenceStates(int $userId): array
-    {
-        $stmt = $this->db->prepare("
-            SELECT geofence_id, is_inside
-            FROM tracking_geofence_state
-            WHERE user_id = ?
-        ");
-        $stmt->execute([$userId]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $states = [];
-        foreach ($rows as $row) {
-            $states[(int) $row['geofence_id']] = (bool) $row['is_inside'];
-        }
-
-        return $states;
-    }
-
-    private function updateGeofenceState(int $familyId, int $gfId, int $userId, bool $isInside): void
-    {
-        $now = gmdate('Y-m-d H:i:s');
-        $enterCol = $isInside ? $now : null;
-        $exitCol = $isInside ? null : $now;
-
-        $stmt = $this->db->prepare("
-            INSERT INTO tracking_geofence_state (family_id, geofence_id, user_id, is_inside, last_entered_at, last_exited_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                is_inside = VALUES(is_inside),
-                last_entered_at = IF(VALUES(is_inside) = 1, VALUES(last_entered_at), last_entered_at),
-                last_exited_at = IF(VALUES(is_inside) = 0, VALUES(last_exited_at), last_exited_at)
-        ");
-        $stmt->execute([$familyId, $gfId, $userId, (int) $isInside, $enterCol, $exitCol]);
-    }
-
-    private function loadPlaceStates(int $userId): array
-    {
-        // Persistent per-user place state (tracking_place_state). The old
-        // implementation inferred state from tracking_events in the last 24h,
-        // so anyone who stayed at a place longer than a day re-fired
-        // "arrived" every 24h and never fired "left".
-        $stmt = $this->db->prepare("
-            SELECT place_id, is_inside
-            FROM tracking_place_state
-            WHERE user_id = ?
-        ");
-        $stmt->execute([$userId]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $states = [];
-        foreach ($rows as $row) {
-            $states[(int) $row['place_id']] = (bool) $row['is_inside'];
-        }
-
-        return $states;
-    }
-
-    private function updatePlaceState(int $familyId, int $placeId, int $userId, bool $isInside): void
-    {
-        $now = gmdate('Y-m-d H:i:s');
-        $enterCol = $isInside ? $now : null;
-        $exitCol = $isInside ? null : $now;
-
-        $stmt = $this->db->prepare("
-            INSERT INTO tracking_place_state (family_id, place_id, user_id, is_inside, last_entered_at, last_exited_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                is_inside = VALUES(is_inside),
-                last_entered_at = IF(VALUES(is_inside) = 1, VALUES(last_entered_at), last_entered_at),
-                last_exited_at = IF(VALUES(is_inside) = 0, VALUES(last_exited_at), last_exited_at)
-        ");
-        $stmt->execute([$familyId, $placeId, $userId, (int) $isInside, $enterCol, $exitCol]);
+        return $inside ? $closest : -$closest;
     }
 }

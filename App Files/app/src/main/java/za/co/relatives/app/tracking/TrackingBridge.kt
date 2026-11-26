@@ -6,6 +6,7 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import org.json.JSONObject
 import za.co.relatives.app.MainActivity
+import za.co.relatives.app.utils.NotificationHelper
 
 /** Accept commands only from the trusted top-level document displaying the relevant feature. */
 internal class TrackingBridge(private val activity: MainActivity) {
@@ -30,6 +31,11 @@ internal class TrackingBridge(private val activity: MainActivity) {
                 activity.stopTrackingService()
             } else if (command == "weather_location") {
                 sendReply(reply, JSONObject().put("type", command).put("allowed", activity.prepareWeatherLocation()))
+            } else if (path == "/tracking/app/settings.php" && command == "tracking_health") {
+                sendReply(reply, JSONObject().put("type", command)
+                    .put("location", activity.getTrackingMode())
+                    .put("background", FamilyBoundaryMonitor.eligible(activity))
+                    .put("geofenceAlerts", NotificationHelper.canShowLocationAlerts(activity)))
             } else if (activity.isTrackingMap(view.url)) {
                 handleTrackingCommand(command, reply)
             }

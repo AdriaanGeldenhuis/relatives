@@ -85,8 +85,9 @@ require_once __DIR__ . '/../../shared/components/header.php';
         </div>
 
         <div class="form-group" id="radiusGroup">
-            <label class="form-label">Radius (meters)</label>
-            <input type="number" class="form-input" id="gfRadius" value="200" min="50" max="50000" step="50">
+            <label class="form-label" for="gfRadius">Radius (meters)</label>
+            <input type="number" class="form-input" id="gfRadius" value="200" min="50" max="50000" step="50" aria-describedby="gfRadiusHelp">
+            <p class="form-label-desc" id="gfRadiusHelp">Use 100–150 m or larger for more reliable Android background alerts. Small zones need a precise fix near the boundary.</p>
         </div>
 
         <div class="form-group">

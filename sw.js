@@ -29,6 +29,7 @@ self.addEventListener('push', event => {
         } catch {
             // The browser can still surface an account-neutral alert while the site reconnects.
         }
+        if (!verified && payload.location_alert === '1') return;
         await self.registration.showNotification(verified ? payload.title : 'Relatives', {
             body: verified ? payload.body : 'Open Relatives to see your updates',
             icon: '/icon-192.png',

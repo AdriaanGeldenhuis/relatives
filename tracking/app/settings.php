@@ -60,6 +60,44 @@ require_once __DIR__ . '/../../shared/components/header.php';
     </div>
     <?php endif; ?>
 
+    <section class="settings-card" id="trackingDeviceHealth" hidden>
+        <h2 class="settings-card-title">This phone</h2>
+        <dl>
+            <dt>Location sharing</dt><dd id="trackingHealthLocation"></dd>
+            <dt>Background geofence detection</dt><dd id="trackingHealthBackground"></dd>
+            <dt>Phone geofence alerts</dt><dd id="trackingHealthAlerts"></dd>
+        </dl>
+        <a href="/profile/notifications.php">Notification preferences</a>
+    </section>
+    <script>
+    window.addEventListener('relativestrackinghealth', function(event) {
+        var status = event.detail;
+        var locationLabels = {
+            enabled: 'Active with Precise location',
+            battery_saver: 'Active with Battery Saver',
+            approximate: 'Active with Approximate location',
+            providers_disabled: 'Location is turned off on this phone',
+            no_permission: 'Location permission is required',
+            notifications_disabled: 'The sharing indicator is blocked',
+            family_off: 'Family tracking is off',
+            account_off: 'Sharing is off in Privacy & Security',
+            paused: 'Paused',
+            disabled: 'Off',
+            signed_out: 'Sign in to share',
+        };
+        document.getElementById('trackingHealthLocation').textContent = locationLabels[status.location] || 'Checking';
+        document.getElementById('trackingHealthBackground').textContent = status.background
+            ? 'Android background detection available' : 'Requires Precise location, Allow all the time, and Google Play services';
+        document.getElementById('trackingHealthAlerts').textContent = status.geofenceAlerts ? 'Available' : 'Blocked in Android settings';
+        document.getElementById('trackingDeviceHealth').hidden = false;
+    });
+    function refreshTrackingHealth() {
+        if (!document.hidden) window.TrackingBridge?.requestTrackingHealth?.();
+    }
+    refreshTrackingHealth();
+    document.addEventListener('visibilitychange', refreshTrackingHealth);
+    </script>
+
     <form id="settingsForm" autocomplete="off">
 
         <!-- Tracking Mode -->
@@ -83,10 +121,10 @@ require_once __DIR__ . '/../../shared/components/header.php';
 
         <?php $nativePolicy = TrackingPolicy::native($settings, true); ?>
         <?php if ($nativePolicy['allowed']): ?>
-        <p class="form-label-desc">Current Android intervals:
+        <p class="form-label-desc">Base Android intervals:
             <?= $nativePolicy['moving_interval'] ?> seconds moving,
             <?= $nativePolicy['idle_interval'] ?> seconds stationary.
-            Battery Saver can extend these intervals.
+            Confirmed driving and geofence checks can sample faster. Battery Saver can extend the intervals.
         </p>
         <?php endif; ?>
 
@@ -309,19 +347,10 @@ require_once __DIR__ . '/../../shared/components/header.php';
                 </label>
             </div>
 
-            <div class="form-group" style="margin-top:16px">
-                <label class="form-label">Alert Cooldown (seconds)
-                    <span class="form-label-desc">Minimum time between repeated alerts for the same rule</span>
-                </label>
-                <input type="number" class="form-input" name="cooldown_seconds"
-                       value="<?php echo (int)$alertRules['cooldown_seconds']; ?>"
-                       min="0" max="86400" <?php echo $isAdmin ? '' : 'readonly'; ?>>
-            </div>
-
             <div class="form-row" style="margin-top:16px">
                 <div class="form-group">
                     <label class="form-label">Quiet Hours Start
-                        <span class="form-label-desc">No alerts after this time</span>
+                        <span class="form-label-desc">Pause phone alerts from this time</span>
                     </label>
                     <input type="time" class="form-input" name="quiet_hours_start"
                            value="<?php echo e($alertRules['quiet_hours_start'] ?? ''); ?>"
@@ -329,7 +358,7 @@ require_once __DIR__ . '/../../shared/components/header.php';
                 </div>
                 <div class="form-group">
                     <label class="form-label">Quiet Hours End
-                        <span class="form-label-desc">Resume alerts after this time</span>
+                        <span class="form-label-desc">Resume phone alerts at this time</span>
                     </label>
                     <input type="time" class="form-input" name="quiet_hours_end"
                            value="<?php echo e($alertRules['quiet_hours_end'] ?? ''); ?>"
@@ -418,10 +447,6 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             leave_place_enabled: form.querySelector('[name="leave_place_enabled"]').checked ? 1 : 0,
             enter_geofence_enabled: form.querySelector('[name="enter_geofence_enabled"]').checked ? 1 : 0,
             exit_geofence_enabled: form.querySelector('[name="exit_geofence_enabled"]').checked ? 1 : 0,
-            cooldown_seconds: (function() {
-                var c = parseInt(form.querySelector('[name="cooldown_seconds"]').value, 10);
-                return Number.isFinite(c) && c >= 0 ? c : 900; // 0 is valid (no cooldown)
-            })(),
             quiet_hours_start: form.querySelector('[name="quiet_hours_start"]').value || null,
             quiet_hours_end: form.querySelector('[name="quiet_hours_end"]').value || null
         };

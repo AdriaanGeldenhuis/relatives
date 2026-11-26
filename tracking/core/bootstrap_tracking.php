@@ -49,5 +49,6 @@ require_once $reposDir . '/PlacesRepo.php';
 require_once $reposDir . '/AlertsRepo.php';
 
 require_once $servicesDir . '/TrackingPolicy.php';
+require_once $servicesDir . '/LocationQuality.php';
 require_once $servicesDir . '/TrackingWake.php';
 require_once $servicesDir . '/LocationIngest.php';

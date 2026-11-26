@@ -16,6 +16,9 @@ sql() {
     docker exec -i -e MYSQL_PWD=release-fixture "$db_container" mariadb -uroot relatives_release_ci "$@"
 }
 sql < tests/reliability-fixture.sql
+for migration in 001_tracking_tables 002_place_state 003_tracking_reliability 004_tracking_evidence; do
+    sql < "tracking/migrations/$migration.sql"
+done
 sql < migrations/app-reliability-v1.sql
 sql < migrations/app-reliability-v1.sql
 fixture_hash=$(php -r 'echo password_hash("local-fixture-only", PASSWORD_BCRYPT);')
@@ -114,3 +117,41 @@ php -r '
 ' "$smoke_root/note-edit.json" "$body"
 [[ $(curl -sS -b "$smoke_root/sender.cookie" -o /dev/null -w '%{http_code}' "$base$image") == 404 ]]
 printf 'Notes photo save, family access and removal checks passed.\n'
+
+# Track the same phone through an authenticated Wake, a poor fix and a crossing.
+# The fixture has no Firebase credentials, so the active service's authenticated
+# pending-request endpoint is the delivery fallback exercised here.
+phone=5b092341-4e7f-4ced-b750-0c385aca6321
+sql -e "UPDATE fcm_tokens SET installation_id='$phone', wake_capability='silent_ready',
+    wake_session_hash=(SELECT session_token FROM sessions WHERE user_id=2 ORDER BY id DESC LIMIT 1)
+    WHERE user_id=2"
+sql -e "INSERT INTO tracking_geofences (family_id,name,center_lat,center_lng,radius_m)
+    VALUES (1,'Fixture Home',-26.2006,28.0,50);
+    INSERT INTO tracking_alert_rules (family_id) VALUES (1);"
+
+track() {
+    local recorded_ms
+    recorded_ms=$(php -r 'echo (int) floor(microtime(true) * 1000);')
+    curl -fsS -b "$smoke_root/recipient.cookie" -H 'Content-Type: application/json'         --data "{\"lat\":$1,\"lng\":28.0,\"accuracy_m\":$2,\"recorded_at_ms\":$recorded_ms,\"platform\":\"android\",\"device_id\":\"$phone\",\"client_event_id\":\"$3\"}"         "$base/tracking/api/location.php"
+}
+track -26.2000 10 initial | php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["data"]["advanced_current"] ? 0 : 1);'
+curl -fsS -b "$smoke_root/sender.cookie" -H "X-CSRF-Token: $csrf" -H 'Content-Type: application/json'     --data '{"mode":"manual","client_request_id":"ee545bd0-4425-437f-a14d-ffa485b0aca5"}'     "$base/tracking/api/wake_devices.php" >"$smoke_root/wake.json"
+wave=$(php -r '$r=json_decode(file_get_contents($argv[1]), true); echo $r["data"]["request_id"] ?? "";' "$smoke_root/wake.json")
+[[ $wave =~ ^[a-f0-9-]{36}$ ]]
+curl -fsS -b "$smoke_root/recipient.cookie" "$base/tracking/api/wake_pending.php?device_id=$phone" |
+    php -r '$r=json_decode(stream_get_contents(STDIN), true); exit(($r["data"]["request_id"] ?? null) === $argv[1] ? 0 : 1);' "$wave"
+[[ $(curl -sS -b "$smoke_root/other.cookie" -o /dev/null -w '%{http_code}' "$base/tracking/api/wake_status.php?request_id=$wave") == 404 ]]
+
+track -26.2050 700 coarse | php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["data"]["selection"] === "hold_coarse" ? 0 : 1);'
+curl -fsS -b "$smoke_root/sender.cookie" "$base/tracking/api/current.php" |
+    php -r '$r=json_decode(stream_get_contents(STDIN), true); foreach ($r["data"] as $m) if ($m["user_id"]===2) exit(abs($m["lat"] + 26.2) < 0.00001 && $m["accuracy_m"]===10 ? 0 : 1); exit(1);'
+track -26.2006 10 entered | php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["data"]["advanced_current"] ? 0 : 1);'
+curl -fsS -b "$smoke_root/sender.cookie" "$base/tracking/api/wake_status.php?request_id=$wave" |
+    php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["data"]["targets"][0]["state"] === "refreshed" ? 0 : 1);'
+[[ $(sql -Nse "SELECT COUNT(*) FROM notifications WHERE type='tracking' AND message LIKE 'Fixture recipient entered Fixture Home at %'") == 1 ]]
+event=$(sql -Nse "SELECT id FROM tracking_events WHERE event_type='enter_geofence'")
+[[ $event =~ ^[0-9]+$ ]]
+curl -fsS -b "$smoke_root/sender.cookie" "$base/tracking/app/events.php?event=$event" >"$smoke_root/location-event.html"
+grep -q 'Fixture Home' "$smoke_root/location-event.html"
+[[ $(curl -sS -b "$smoke_root/other.cookie" -o /dev/null -w '%{http_code}' "$base/tracking/app/events.php?event=$event") == 404 ]]
+printf 'Authenticated silent Wake, pin quality and named geofence event checks passed.\n'

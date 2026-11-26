@@ -4,7 +4,8 @@ declare(strict_types=1);
 final class TrackingWake
 {
     public const WINDOW_MS = 60000;
-    public const PENDING = ['queued', 'sent', 'received', 'open_required'];
+    public const SILENT_READY = 'silent_ready';
+    public const PENDING = ['queued', 'sent', 'received', 'open_required', 'send_failed'];
     public const DEVICE_STATES = ['received', 'permission', 'notifications', 'paused', 'open_required', 'background_blocked', 'no_fix'];
 
     public function __construct(private PDO $db) {}
@@ -21,26 +22,44 @@ final class TrackingWake
             . '-' . dechex(8 | (hexdec($hex[16]) & 3)) . substr($hex, 17, 3) . '-' . substr($hex, 20);
     }
 
-    public function devices(SiteContext $ctx): array
+    public function devices(SiteContext $ctx, bool $automatic, bool $refreshingLocal, array $policy): array
     {
-        $registry = TrackingPolicy::hasInstallationRegistry($this->db);
-        $fields = $registry ? 'ft.installation_id, ft.wake_capability' : 'NULL AS installation_id, NULL AS wake_capability';
-        $binding = $registry ? 'AND (ft.installation_id IS NULL OR EXISTS (
-            SELECT 1 FROM sessions s WHERE s.user_id = u.id AND s.session_token = ft.wake_session_hash AND s.expires_at > NOW()
-        ))' : '';
         $stmt = $this->db->prepare("
-            SELECT ft.id AS token_id, ft.token, u.id AS user_id, u.full_name, $fields
+            SELECT ft.id AS token_id, ft.token, u.id AS user_id, ft.installation_id, ft.wake_capability
             FROM users u JOIN fcm_tokens ft ON ft.user_id = u.id AND ft.device_type = 'android'
-            WHERE u.family_id = ? AND u.status = 'active' AND u.location_sharing = 1 AND u.id <> ?
-            $binding ORDER BY ft.updated_at DESC, ft.id DESC
+            WHERE u.family_id = ? AND u.status = 'active' AND u.location_sharing = 1
+            AND ft.installation_id IS NOT NULL AND ft.wake_capability = ?
+            AND NOT (u.id = ? AND ft.wake_session_hash = ? AND ? = 1)
+            AND EXISTS (SELECT 1 FROM sessions s
+                WHERE s.user_id = u.id AND s.session_token = ft.wake_session_hash AND s.expires_at > NOW())
+            ORDER BY ft.updated_at DESC, ft.id DESC
         ");
-        $stmt->execute([$ctx->familyId, $ctx->userId]);
+        $stmt->execute([$ctx->familyId, self::SILENT_READY, $ctx->userId, $ctx->sessionHash(), (int) $refreshingLocal]);
+        $stale = [];
+        if ($automatic) {
+            $now = Time::nowMs();
+            $repo = new LocationRepo($this->db, new TrackingCache(Cache::getInstance()));
+            $current = $repo->getFamilyCurrentLocations($ctx->familyId, true, $policy);
+            foreach ($current as $member) {
+                $capture = (int) ($member['recorded_ms'] ?? Time::captureMs($member['recorded_at'] ?? ''));
+                $stale[$member['user_id']] = $now - $capture > self::freshnessWindowMs($member['motion_state'], $policy)
+                    || $member['accuracy_m'] === null || (float) $member['accuracy_m'] > $policy['min_accuracy_m'];
+            }
+        }
         $devices = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $device) {
+            if ($automatic && !($stale[$device['user_id']] ?? false)) {
+                continue;
+            }
             $key = hash('sha256', $device['token']);
             $devices[$key] ??= $device;
         }
         return array_values($devices);
+    }
+
+    public static function freshnessWindowMs(?string $motion, array $policy): int
+    {
+        return 1000 * ($motion === 'moving' ? min(45, max(15, $policy['moving_interval'])) : 90);
     }
 
     public function findRequest(SiteContext $ctx, string $clientId): ?string
@@ -51,7 +70,7 @@ final class TrackingWake
         return $stmt->fetchColumn() ?: null;
     }
 
-    /** Serialize admissions for this family. An HTTP retry sees the original request. */
+    /** Join the current family refresh and add any members it did not already target. */
     public function admit(SiteContext $ctx, string $clientId, array $devices): array
     {
         $reservation = 'tracking:wake:' . $ctx->familyId;
@@ -63,29 +82,30 @@ final class TrackingWake
         try {
             $existing = $this->findRequest($ctx, $clientId);
             if ($existing !== null) {
-                return ['request_id' => $existing, 'dispatch' => false];
+                return ['request_id' => $existing];
             }
-            $stmt = $this->db->prepare('SELECT expires_ms FROM tracking_wake_requests
-                WHERE family_id = ? ORDER BY created_ms DESC LIMIT 1');
+            $stmt = $this->db->prepare("SELECT r.request_id, r.expires_ms FROM tracking_wake_requests r
+                JOIN users u ON u.id = r.requester_id AND u.family_id = r.family_id AND u.status = 'active'
+                WHERE r.family_id = ? ORDER BY r.created_ms DESC LIMIT 1");
             $stmt->execute([$ctx->familyId]);
             $now = Time::nowMs();
-            $latest = (int) $stmt->fetchColumn();
-            if ($latest > $now) {
-                return ['retry_after' => (int) ceil(($latest - $now) / 1000)];
-            }
-            $id = self::newId();
-            $expires = $now + self::WINDOW_MS;
+            $active = $stmt->fetch(PDO::FETCH_ASSOC);
+            $joined = $active && (int) $active['expires_ms'] > $now;
+            $id = $joined ? $active['request_id'] : self::newId();
             $this->db->beginTransaction();
-            $stmt = $this->db->prepare('INSERT INTO tracking_wake_requests
-                (request_id, family_id, requester_id, client_request_id, created_ms, expires_ms) VALUES (?, ?, ?, ?, ?, ?)');
-            $stmt->execute([$id, $ctx->familyId, $ctx->userId, $clientId, $now, $expires]);
+            if (!$joined) {
+                $stmt = $this->db->prepare('INSERT INTO tracking_wake_requests
+                    (request_id, family_id, requester_id, client_request_id, created_ms, expires_ms) VALUES (?, ?, ?, ?, ?, ?)');
+                $stmt->execute([$id, $ctx->familyId, $ctx->userId, $clientId, $now, $now + self::WINDOW_MS]);
+            }
             $stmt = $this->db->prepare('INSERT INTO tracking_wake_targets
-                (request_id, token_id, user_id, installation_id, state) VALUES (?, ?, ?, ?, ?)');
+                (request_id, token_id, user_id, installation_id, state) VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE token_id = VALUES(token_id)');
             foreach ($devices as $device) {
                 $stmt->execute([$id, $device['token_id'], $device['user_id'], $device['installation_id'], self::initialState($device)]);
             }
             $this->db->commit();
-            return ['request_id' => $id, 'expires_at_ms' => $expires, 'dispatch' => true];
+            return ['request_id' => $id];
         } finally {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
@@ -106,21 +126,16 @@ final class TrackingWake
 
     public function pendingDispatch(SiteContext $ctx, string $id): array
     {
-        $registry = TrackingPolicy::hasInstallationRegistry($this->db);
-        $installation = $registry ? 'ft.installation_id' : 'NULL';
-        $session = $registry ? 'AND (t.installation_id IS NULL OR (
-            ft.installation_id = t.installation_id AND EXISTS (
-                SELECT 1 FROM sessions s WHERE s.user_id = u.id AND s.session_token = ft.wake_session_hash
-                    AND s.expires_at > NOW())))' : '';
-        $stmt = $this->db->prepare("SELECT t.token_id, t.user_id, ft.token, $installation AS installation_id,
-                r.expires_ms, sender.full_name AS requester_name
+        $stmt = $this->db->prepare("SELECT t.token_id, t.user_id, ft.token, t.installation_id, r.expires_ms
             FROM tracking_wake_requests r JOIN tracking_wake_targets t ON t.request_id = r.request_id
             JOIN users sender ON sender.id = r.requester_id AND sender.family_id = r.family_id AND sender.status = 'active'
-            JOIN fcm_tokens ft ON ft.id = t.token_id AND ft.user_id = t.user_id AND ft.device_type = 'android'
+            JOIN fcm_tokens ft ON ft.id = t.token_id AND ft.user_id = t.user_id AND ft.installation_id = t.installation_id
             JOIN users u ON u.id = t.user_id AND u.family_id = r.family_id AND u.status = 'active' AND u.location_sharing = 1
-            WHERE r.request_id = ? AND r.family_id = ? AND r.requester_id = ?
-                AND r.expires_ms > ? AND t.state IN ('queued', 'send_failed') $session");
-        $stmt->execute([$id, $ctx->familyId, $ctx->userId, Time::nowMs()]);
+            WHERE r.request_id = ? AND r.family_id = ? AND r.expires_ms > ? AND t.state = 'queued'
+                AND ft.device_type = 'android' AND ft.wake_capability = ?
+                AND EXISTS (SELECT 1 FROM sessions s WHERE s.user_id = u.id
+                    AND s.session_token = ft.wake_session_hash AND s.expires_at > NOW())");
+        $stmt->execute([$id, $ctx->familyId, Time::nowMs(), self::SILENT_READY]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -131,11 +146,11 @@ final class TrackingWake
         $stmt->execute([$state, $id, $tokenId]);
     }
 
-    public function status(SiteContext $ctx, string $id, bool $familyAllows = true): ?array
+    public function status(SiteContext $ctx, string $id, bool $familyAllows = true, bool $shared = false): ?array
     {
         $stmt = $this->db->prepare('SELECT expires_ms, created_ms FROM tracking_wake_requests
-            WHERE request_id = ? AND family_id = ? AND requester_id = ?');
-        $stmt->execute([$id, $ctx->familyId, $ctx->userId]);
+            WHERE request_id = ? AND family_id = ?' . ($shared ? '' : ' AND requester_id = ?'));
+        $stmt->execute($shared ? [$id, $ctx->familyId] : [$id, $ctx->familyId, $ctx->userId]);
         $request = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$request) {
             return null;
@@ -158,7 +173,7 @@ final class TrackingWake
                 && in_array($row['current_capability'], ['paused', 'permission', 'notifications'], true)) {
                 $state = $row['current_capability'];
             }
-            if ($expired && in_array($state, ['queued', 'sent', 'received'], true)) {
+            if ($expired && in_array($state, self::PENDING, true)) {
                 $state = $state === 'received' ? 'update_timeout' : 'no_reply';
             }
             if (!$expired && in_array($state, self::PENDING, true)) {
@@ -181,6 +196,24 @@ final class TrackingWake
         ];
     }
 
+    /** Active trackers can pick up a request on reconnect or their next normal upload. */
+    public function pending(SiteContext $ctx, string $installation): ?array
+    {
+        $stmt = $this->db->prepare("SELECT t.request_id, r.expires_ms AS expires_at_ms
+            FROM tracking_wake_targets t JOIN tracking_wake_requests r ON r.request_id = t.request_id
+            JOIN fcm_tokens f ON f.id = t.token_id AND f.user_id = t.user_id AND f.installation_id = t.installation_id
+            JOIN users u ON u.id = t.user_id AND u.family_id = r.family_id AND u.status = 'active' AND u.location_sharing = 1
+            JOIN users sender ON sender.id = r.requester_id AND sender.family_id = r.family_id AND sender.status = 'active'
+            WHERE t.user_id = ? AND t.installation_id = ? AND r.family_id = ? AND r.expires_ms > ?
+                AND r.created_ms >= ? AND f.wake_session_hash = ? AND f.wake_capability = ?
+                AND t.state IN ('queued', 'sent', 'send_failed', 'open_required', 'received')
+            ORDER BY r.created_ms DESC LIMIT 1");
+        $stmt->execute([$ctx->userId, $installation, $ctx->familyId, Time::nowMs(),
+            TrackingPolicy::cutoff($this->db, $ctx->familyId, $ctx->userId), $ctx->sessionHash(), self::SILENT_READY]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     /** Receipts are bound to the target installation and its authenticated account. */
     public function acknowledge(SiteContext $ctx, string $id, string $device, string $state): ?array
     {
@@ -188,7 +221,7 @@ final class TrackingWake
         if (!$row || (int) $row['expires_ms'] <= Time::nowMs()) {
             return null;
         }
-        $pending = in_array($row['state'], [...self::PENDING, 'send_failed'], true);
+        $pending = in_array($row['state'], self::PENDING, true);
         if ($pending && !($row['state'] === 'received' && $state === 'open_required')) {
             $stmt = $this->db->prepare('UPDATE tracking_wake_targets SET state = ? WHERE request_id = ? AND token_id = ?');
             $stmt->execute([$state, $id, $row['token_id']]);
@@ -213,23 +246,31 @@ final class TrackingWake
             && Time::nowMs() < (int) $row['expires_ms'];
     }
 
-    public function confirmFix(SiteContext $ctx, array $fix): void
+    public function confirmObservation(SiteContext $ctx, array $fix, int $cutoff): int
     {
-        $stmt = $this->db->prepare("UPDATE tracking_wake_targets
-            SET state = 'refreshed', recorded_ms = ?
-            WHERE request_id = ? AND user_id = ? AND installation_id = ? AND state = 'received'");
-        $stmt->execute([$fix['recorded_ms'], $fix['wake_request_id'], $ctx->userId, $fix['device_id']]);
+        $stmt = $this->db->prepare("UPDATE tracking_wake_targets t
+            JOIN tracking_wake_requests r ON t.request_id = r.request_id
+            JOIN fcm_tokens f ON f.id = t.token_id AND f.user_id = t.user_id AND f.installation_id = t.installation_id
+            SET t.state = 'refreshed', t.recorded_ms = ?
+            WHERE r.family_id = ? AND t.user_id = ? AND t.installation_id = ? AND f.wake_session_hash = ?
+            AND r.expires_ms > ? AND r.created_ms BETWEEN ? AND ?
+            AND t.state IN ('queued', 'sent', 'received', 'open_required', 'send_failed')");
+        $stmt->execute([$fix['recorded_ms'], $ctx->familyId, $ctx->userId, $fix['device_id'],
+            $ctx->sessionHash(), Time::nowMs(), $cutoff, $fix['recorded_ms']]);
+        return $stmt->rowCount();
     }
 
     private function target(SiteContext $ctx, string $id, string $device): ?array
     {
-        $stmt = $this->db->prepare('SELECT t.token_id, t.state, r.created_ms, r.expires_ms
+        $stmt = $this->db->prepare("SELECT t.token_id, t.state, r.created_ms, r.expires_ms
             FROM tracking_wake_targets t JOIN tracking_wake_requests r ON r.request_id = t.request_id
-            WHERE t.request_id = ? AND t.user_id = ? AND t.installation_id = ? AND r.family_id = ?
+            JOIN users sender ON sender.id = r.requester_id AND sender.family_id = r.family_id AND sender.status = 'active'
+            WHERE t.request_id = ? AND t.user_id = ? AND t.installation_id = ? AND r.family_id = ? AND r.created_ms >= ?
                 AND EXISTS (SELECT 1 FROM fcm_tokens f WHERE f.installation_id = t.installation_id
                     AND f.user_id = t.user_id AND f.device_type = ? AND f.wake_session_hash = ?)
-            LIMIT 1 FOR UPDATE');
-        $stmt->execute([$id, $ctx->userId, $device, $ctx->familyId, 'android', $ctx->sessionHash()]);
+            LIMIT 1 FOR UPDATE");
+        $stmt->execute([$id, $ctx->userId, $device, $ctx->familyId,
+            TrackingPolicy::cutoff($this->db, $ctx->familyId, $ctx->userId), 'android', $ctx->sessionHash()]);
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 }

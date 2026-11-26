@@ -109,7 +109,7 @@ requestAnimationFrame(function() {
             <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
             <span>Home</span>
         </a>
-        <button class="tracking-toolbar-btn wake-btn" id="wakeFab" title="Refresh family locations">
+        <button type="button" class="tracking-toolbar-btn wake-btn" id="wakeFab" title="Refresh family locations">
             <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
             <span>Wake</span>
         </button>
@@ -118,8 +118,6 @@ requestAnimationFrame(function() {
             <span>Family</span>
         </button>
     </div>
-
-    <section class="tracking-wake-result" id="wakeResult" aria-live="polite" hidden></section>
 
     <!-- Navigation Header (next turn instruction) -->
     <div class="nav-header" id="navHeader">
@@ -297,7 +295,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
         map.on('load', function() {
             map.resize();
+            updateAccuracyAreas(_members);
         });
+        map.on('zoomend', function() { updateMarkers(_members); });
 
         // Force resize after layout settles
         setTimeout(function() { if (map) map.resize(); }, 100);
@@ -339,6 +339,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             markers = {};
             Object.keys(oldMarkers).forEach(function(uid) { oldMarkers[uid].remove(); });
             updateMarkers(_members);
+            updateAccuracyAreas(_members);
             // Re-draw route if active
             if (_routeBounds && _navRoute && _navRoute.geometry) {
                 drawRouteOnMap(_navRoute.geometry);
@@ -348,12 +349,14 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     // Markers storage
     var markers = {};
+    var memberMarkers = {};
     var initialFitDone = false;
 
     function showMembers(members) {
         _members = members;
         renderMembers(_members);
         updateMarkers(_members);
+        updateAccuracyAreas(_members);
         if (!initialFitDone && fitMapToFamily(_members)) initialFitDone = true;
     }
 
@@ -361,13 +364,19 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var mapFetchAgain = false;
     var nativeCacheAllowed = true;
     var mapPolicy = null;
-    var serverClockOffset = 0;
+    var serverTimeAnchor = null;
+    function serverNow() {
+        return serverTimeAnchor ? serverTimeAnchor.time + performance.now() - serverTimeAnchor.elapsed : Date.now();
+    }
     var localTrackingStatus = '';
     var nativeTrackingStatus = '';
 
     function clearFamilySnapshot() {
         nativeCacheAllowed = false;
         if (mapRequest) mapRequest.abort();
+        wakeRound = null;
+        clearTimeout(wakeTimer);
+        wakeFab.removeAttribute('aria-busy');
         showMembers([]);
     }
 
@@ -403,7 +412,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             }
             if (nativeBridge) updateNativeSharingButton();
             if (mapPolicy && Number.isFinite(mapPolicy.server_time_ms)) {
-                serverClockOffset = mapPolicy.server_time_ms - Date.now();
+                serverTimeAnchor = { time: mapPolicy.server_time_ms, elapsed: performance.now() };
             }
             localTrackingStatus = mapPolicy && mapPolicy.mode === 0 ? 'Family tracking is off' : '';
             if (!isNativeApp) {
@@ -412,6 +421,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 updateBrowserShareButton();
             }
             showMembers(data.data);
+            scheduleMemberPoll();
+            automaticallyRefreshFamily();
         } catch (error) {
             if (!document.hidden && error.name !== 'AbortError') {
                 setOwnStatus(_members.length ? 'Connection lost · showing last known locations' : 'Waiting for a connection');
@@ -472,9 +483,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             var initial = (m.name || 'U').charAt(0).toUpperCase();
             var hasLoc = m.has_location && m.lat !== null;
             var statusClass = hasLoc ? getStatusClass(m) : 'offline';
-            var timeAgo = hasLoc ? (statusClass === 'offline' ? 'Last known · ' : '') + formatTimeAgo(captureTime(m))
+            var timeAgo = hasLoc ? liveAgeMarkup(m)
                 : (m.location_sharing === false ? 'Sharing off' : 'No location yet');
-            if (hasLoc && m.approximate) timeAgo += ' · Approximate';
             var speed = hasLoc ? formatSpeed(m.speed_mps) : '';
 
             html += '<div class="member-item" data-user-id="' + m.user_id + '"' + (hasLoc ? ' onclick="flyToMember(' + m.user_id + ')"' : '') + '>';
@@ -513,40 +523,97 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     function updateMarkers(members) {
         if (!map) return;
-        var activeIds = {};
-        members.forEach(function(m) {
-            // Skip members without a location
-            if (!m.has_location || m.lat === null || m.lng === null) return;
-
-            activeIds[m.user_id] = true;
-            var lngLat = [parseFloat(m.lng), parseFloat(m.lat)];
-            if (markers[m.user_id]) {
-                animateMarker(markers[m.user_id], lngLat);
-                var popup = markers[m.user_id].getPopup();
-                if (popup) popup.setHTML(buildPopupHTML(m));
-            } else {
-                var el = document.createElement('div');
-                el.className = 'map-marker';
-                var initial = (m.name || 'U').charAt(0).toUpperCase();
-                if (m.has_avatar) {
-                    el.innerHTML = '<div class="map-marker-inner map-marker-avatar" style="background:' + safeColor(m.avatar_color) + '">' +
-                        '<img src="/saves/' + m.user_id + '/avatar/avatar.webp?v=' + (window.avatarVersion || 0) + '" alt="" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + initial + '\'">' +
-                        '</div>';
-                } else {
-                    el.innerHTML = '<div class="map-marker-inner" style="background:' + safeColor(m.avatar_color) + '">' + initial + '</div>';
-                }
-                markers[m.user_id] = new mapboxgl.Marker({ element: el, anchor: 'top-left' })
-                    .setLngLat(lngLat)
-                    .setPopup(new mapboxgl.Popup({ offset: 25, maxWidth: '260px' }).setHTML(buildPopupHTML(m)))
-                    .addTo(map);
-            }
+        var groups = [];
+        memberMarkers = {};
+        members.filter(function(member) {
+            return member.has_location && member.lat !== null && member.lng !== null;
+        }).sort(function(a, b) { return a.user_id - b.user_id; }).forEach(function(member) {
+            var coordinates = [Number(member.lng), Number(member.lat)];
+            var pixel = map.project(coordinates);
+            var group = groups.find(function(candidate) { return pixel.dist(candidate.pixel) < 30; });
+            if (group) group.members.push(member);
+            else groups.push({ coordinates: coordinates, pixel: pixel, members: [member] });
         });
 
-        Object.keys(markers).forEach(function(uid) {
-            if (!activeIds[uid]) {
-                markers[uid].remove();
-                delete markers[uid];
+        var active = new Set();
+        groups.forEach(function(group) {
+            var first = group.members[0];
+            var key = group.members.map(function(member) { return member.user_id; }).join('-');
+            active.add(key);
+            group.members.forEach(function(member) { memberMarkers[member.user_id] = key; });
+            var popupHTML = group.members.length === 1 ? buildPopupHTML(first)
+                : '<ul class="tracking-marker-members">' + group.members.map(function(member) {
+                    return '<li><strong>' + escapeHtml(member.name || 'Member') + '</strong><br>' + liveAgeMarkup(member) + '</li>';
+                }).join('') + '</ul>';
+            if (markers[key]) {
+                animateMarker(markers[key], group.coordinates);
+                markers[key].getPopup().setHTML(popupHTML);
+                return;
             }
+
+            var element = document.createElement('button');
+            element.type = 'button';
+            element.className = 'map-marker';
+            element.setAttribute('aria-label', group.members.map(function(member) { return member.name; }).join(', '));
+            var inner = document.createElement('span');
+            inner.className = 'map-marker-inner';
+            inner.style.background = safeColor(first.avatar_color);
+            inner.textContent = group.members.length > 1 ? group.members.length : (first.name || 'U').charAt(0);
+            if (group.members.length === 1 && first.has_avatar) {
+                var avatar = document.createElement('img');
+                avatar.alt = '';
+                avatar.src = '/saves/' + first.user_id + '/avatar/avatar.webp?v=' + (window.avatarVersion || 0);
+                avatar.addEventListener('load', function() {
+                    inner.classList.add('map-marker-avatar');
+                    inner.replaceChildren(avatar);
+                }, { once: true });
+            }
+            element.appendChild(inner);
+            markers[key] = new mapboxgl.Marker({ element: element, anchor: 'center' })
+                .setLngLat(group.coordinates)
+                .setPopup(new mapboxgl.Popup({ offset: 24, maxWidth: '260px' }).setHTML(popupHTML))
+                .addTo(map);
+        });
+        Object.keys(markers).forEach(function(key) {
+            if (active.has(key)) return;
+            cancelAnimationFrame(markers[key].animationFrame);
+            markers[key].remove();
+            delete markers[key];
+        });
+    }
+
+    function updateAccuracyAreas(members) {
+        if (!map || !map.isStyleLoaded()) return;
+        var features = members.filter(function(member) {
+            return member.has_location && member.approximate && Number(member.accuracy_m) > 0;
+        }).map(function(member) {
+            var lng = Number(member.lng);
+            var lat = Number(member.lat);
+            var radius = Number(member.accuracy_m) / 111195;
+            var longitudeScale = Math.max(0.01, Math.cos(lat * Math.PI / 180));
+            var ring = Array.from({ length: 40 }, function(_, index) {
+                var angle = index * 2 * Math.PI / 40;
+                return [lng + radius * Math.cos(angle) / longitudeScale, lat + radius * Math.sin(angle)];
+            });
+            ring.push(ring[0]);
+            return {
+                type: 'Feature',
+                properties: { color: safeColor(member.avatar_color) },
+                geometry: { type: 'Polygon', coordinates: [ring] }
+            };
+        });
+        var data = { type: 'FeatureCollection', features: features };
+        var existing = map.getSource('tracking-accuracy');
+        if (existing) {
+            existing.setData(data);
+            return;
+        }
+        map.addSource('tracking-accuracy', { type: 'geojson', data: data });
+        map.addLayer({
+            id: 'tracking-accuracy',
+            type: 'fill',
+            source: 'tracking-accuracy',
+            paint: { 'fill-color': ['get', 'color'], 'fill-outline-color': ['get', 'color'], 'fill-opacity': 0.2 }
         });
     }
 
@@ -559,7 +626,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function getStatusClass(m) {
-        var ageSecs = (Date.now() + serverClockOffset - captureTime(m)) / 1000;
+        var ageSecs = (serverNow() - captureTime(m)) / 1000;
         var expect = mapPolicy && (m.motion_state === 'moving' ? mapPolicy.moving_interval : mapPolicy.idle_interval);
         if (ageSecs <= Math.max(m.motion_state === 'moving' ? 60 : 180, 2 * (expect || 0))) {
             return m.motion_state === 'idle' ? 'idle' : 'online';
@@ -569,14 +636,37 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     function formatTimeAgo(timestamp) {
         if (!timestamp) return 'Time unavailable';
-        var diff = Math.max(0, (Date.now() + serverClockOffset - timestamp) / 1000);
+        var diff = Math.max(0, (serverNow() - timestamp) / 1000);
         if (diff < 60) return Math.floor(diff) + 's ago';
         if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
         if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
         return Math.floor(diff / 86400) + 'd ago';
     }
 
+    function liveAgeMarkup(member) {
+        return '<span data-location-age="' + member.user_id + '">' + memberAgeText(member) + '</span>';
+    }
+
+    function memberAgeText(member) {
+        return (getStatusClass(member) === 'offline' ? 'Last known · ' : '') + formatTimeAgo(captureTime(member))
+            + (member.approximate ? ' · Approximate' : '');
+    }
+
+    function updateLocationAges() {
+        document.querySelectorAll('[data-location-age]').forEach(function(element) {
+            var member = _members.find(function(item) { return String(item.user_id) === element.dataset.locationAge; });
+            if (!member) return;
+            var label = memberAgeText(member);
+            if (element.textContent !== label) element.textContent = label;
+            var dot = element.closest('.member-item')?.querySelector('.member-status-dot');
+            if (dot) dot.className = 'member-status-dot ' + getStatusClass(member);
+        });
+    }
+
     function animateMarker(marker, targetLngLat) {
+        if (marker.animationTarget?.[0] === targetLngLat[0] && marker.animationTarget?.[1] === targetLngLat[1]) return;
+        cancelAnimationFrame(marker.animationFrame);
+        marker.animationTarget = targetLngLat;
         var start = marker.getLngLat();
         var startLng = start.lng, startLat = start.lat;
         var endLng = targetLngLat[0], endLat = targetLngLat[1];
@@ -587,16 +677,15 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             var t = Math.min((now - startTime) / duration, 1);
             t = t * (2 - t); // ease-out
             marker.setLngLat([startLng + (endLng - startLng) * t, startLat + (endLat - startLat) * t]);
-            if (t < 1) requestAnimationFrame(step);
+            if (t < 1) marker.animationFrame = requestAnimationFrame(step);
         }
-        requestAnimationFrame(step);
+        marker.animationFrame = requestAnimationFrame(step);
     }
 
     function buildPopupHTML(m) {
         var status = getStatusClass(m);
-        var statusLabel = status === 'offline' ? 'Last known' : (status === 'idle' ? 'Stationary' : 'Recent');
         var statusColor = status === 'online' ? '#43e97b' : status === 'idle' ? '#f9d423' : '#718096';
-        var timeAgo = formatTimeAgo(captureTime(m)) + (m.approximate ? ' · Approximate' : '');
+        var timeAgo = liveAgeMarkup(m);
         var speed = formatSpeed(m.speed_mps);
         var motionState = m.motion_state || 'unknown';
         var initial = (m.name || 'U').charAt(0).toUpperCase();
@@ -615,7 +704,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         s += '</div>';
         s += '<div style="flex:1;min-width:0">';
         s += '<div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(m.name || 'Unknown') + '</div>';
-        s += '<div style="display:flex;align-items:center;gap:5px;font-size:11px;opacity:0.7;margin-top:1px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + statusColor + ';flex-shrink:0"></span>' + statusLabel + ' &middot; ' + timeAgo + '</div>';
+        s += '<div style="display:flex;align-items:center;gap:5px;font-size:11px;opacity:0.7;margin-top:1px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + statusColor + ';flex-shrink:0"></span>' + timeAgo + '</div>';
         s += '</div></div>';
 
         // Info rows
@@ -695,9 +784,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 el.classList.toggle('active', el.dataset.userId == userId);
             });
 
-            if (markers[userId]) {
-                markers[userId].togglePopup();
-            }
+            var marker = markers[memberMarkers[userId]];
+            if (marker) marker.togglePopup();
         }
     };
 
@@ -1052,35 +1140,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     var wakeFab = document.getElementById('wakeFab');
-    var wakeLabel = wakeFab.querySelector('span');
-    var wakeResult = document.getElementById('wakeResult');
-    var liveWake = null;
-    var wakePoll = null;
-    var wakePollInFlight = false;
-    var wakeCooldownUntil = 0;
-    var wakeStatuses = {
-        queued: 'Sending request', sent: 'Waiting for phone', received: 'Request received',
-        refreshed: 'Location updated', paused: 'Sharing off', permission: 'Needs location permission',
-        notifications: 'Needs notifications enabled', open_required: 'Background refresh blocked',
-        background_blocked: 'Background refresh blocked',
-        no_fix: 'Couldn’t get a fix', no_reply: 'No reply', update_timeout: 'Location update timed out',
-        send_failed: 'Couldn’t send',
-        unreachable: 'Phone needs to reconnect', unavailable: 'Wake service unavailable',
-        legacy_sent: 'Request sent · app update needed for confirmation'
-    };
-
-    async function wakeRequest(path, options) {
-        var controller = new AbortController();
-        var timeout = setTimeout(function() { controller.abort(); }, 15000);
-        try {
-            var response = await fetch(window.TrackingConfig.apiBase + path, Object.assign({
-                credentials: 'same-origin', cache: 'no-store', signal: controller.signal
-            }, options || {}));
-            return { response: response, body: await response.json() };
-        } finally {
-            clearTimeout(timeout);
-        }
-    }
+    var wakeRound = null;
+    var wakeTimer = null;
+    var automaticWakePending = false;
+    var nextAutomaticWake = 0;
 
     function makeWakeId() {
         if (crypto.randomUUID) return crypto.randomUUID();
@@ -1091,126 +1154,140 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
     }
 
-    function displayWake(message, targets) {
-        wakeResult.replaceChildren(document.createTextNode(message));
-        wakeResult.hidden = false;
-        var detailCount = 0;
-        (targets || []).forEach(function(target) {
-            var row = document.createElement('div');
-            row.textContent = target.name + ' · ' + (wakeStatuses[target.state] || 'Waiting for phone');
-            wakeResult.appendChild(row);
-            detailCount++;
-        });
-        wakeResult.classList.toggle('has-targets', detailCount > 0);
+    async function wakeRequest(path, options) {
+        var controller = new AbortController();
+        var timeout = setTimeout(function() { controller.abort(); }, 8000);
+        try {
+            var response = await fetch(window.TrackingConfig.apiBase + path, Object.assign({
+                credentials: 'same-origin', cache: 'no-store', signal: controller.signal
+            }, options));
+            if (response.status === 401 || response.status === 403) clearFamilySnapshot();
+            if (!response.ok) return null;
+            var reply = await response.json();
+            return reply.success ? reply.data : null;
+        } catch (error) {
+            return null;
+        } finally {
+            clearTimeout(timeout);
+        }
     }
 
-    function setWakeBusy(busy) {
-        wakeFab.disabled = busy;
-        wakeLabel.textContent = busy ? 'Waking…' : 'Wake';
+    function ownMember() {
+        return _members.find(function(member) { return member.user_id === window.TrackingConfig.userId; });
     }
 
-    function handleWakeStatus(status) {
-        var priorCount = liveWake ? liveWake.targets.filter(function(target) { return target.state === 'refreshed'; }).length : 0;
-        liveWake = status;
-        wakeCooldownUntil = performance.now() + status.remaining_ms;
-        var count = status.targets.filter(function(target) { return target.state === 'refreshed'; }).length;
-        var oldCount = status.targets.filter(function(target) { return target.state === 'legacy_sent'; }).length;
-        var title = count ? count + (count === 1 ? ' location updated' : ' locations updated')
-            : (!status.complete ? 'Wake requested' : (oldCount ? 'Wake request sent' : 'Wake finished'));
-        displayWake(title, status.targets);
-        if (count > priorCount) fetchMembers(true);
-        if (status.complete) liveWake = null;
-        setWakeBusy(!status.complete);
-        scheduleWakePoll();
+    function refreshOwnPhone() {
+        if (nativeBridge && ['enabled', 'battery_saver', 'approximate'].includes(nativeBridge.getTrackingMode())) {
+            var refresh = nativeBridge.refreshMyLocation || nativeBridge.wakeAllDevices;
+            if (refresh) {
+                refresh.call(nativeBridge);
+                return true;
+            }
+        }
+        if (isNativeApp || browserWatchId === null || !browserConsent) return false;
+        var watch = browserWatchId;
+        navigator.geolocation.getCurrentPosition(function(position) {
+            if (browserWatchId !== watch || !browserConsent || !mapPolicy?.allowed) return;
+            if (!latestPos || position.timestamp >= latestPos.timestamp) {
+                lastUploadTime = 0;
+                uploadPosition(position);
+            }
+        }, function() {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+        return true;
     }
 
-    function scheduleWakePoll() {
-        clearTimeout(wakePoll);
-        if (liveWake && !document.hidden) wakePoll = setTimeout(checkWakeStatus, 2000);
+    function setWakeStatus(round, status) {
+        if (wakeRound !== round || !status?.request_id) return;
+        round.requestId = status.request_id;
+        round.remoteDone = status.complete;
+        round.remoteUntil = performance.now() + status.remaining_ms;
+        var confirmed = JSON.stringify((status.targets || []).filter(function(target) {
+            return target.state === 'refreshed';
+        }).map(function(target) { return [target.user_id, target.recorded_at_ms]; }));
+        if (confirmed !== round.confirmed) {
+            round.confirmed = confirmed;
+            if (confirmed !== '[]') fetchMembers(true);
+        }
+    }
+
+    function scheduleWakeCheck() {
+        clearTimeout(wakeTimer);
+        if (!wakeRound || document.hidden) return;
+        wakeTimer = setTimeout(checkWakeStatus, 2000);
     }
 
     async function checkWakeStatus() {
-        if (document.hidden || !liveWake || wakePollInFlight) return;
-        wakePollInFlight = true;
-        var request = liveWake;
-        try {
-            var reply = await wakeRequest('/wake_status.php?request_id=' + encodeURIComponent(request.request_id));
-            var response = reply.response;
-            var body = reply.body;
-            if (response.ok && body.success) {
-                handleWakeStatus(body.data);
-            } else if (response.status === 401 || response.status === 403) {
-                clearFamilySnapshot();
-                liveWake = null;
-                setWakeBusy(false);
-                displayWake('Sign in to check Wake status');
-            } else {
-                throw new Error('status_unavailable');
-            }
-        } catch (error) {
-            if (performance.now() >= wakeCooldownUntil) {
-                liveWake = null;
-                setWakeBusy(false);
-                displayWake('Couldn’t verify the Wake result', request.targets);
-            }
-        } finally {
-            wakePollInFlight = false;
-            scheduleWakePoll();
+        var round = wakeRound;
+        if (!round || round.checking || document.hidden) return;
+        round.checking = true;
+        var now = performance.now();
+        var own = ownMember();
+        if (round.localUntil > now && (!own || captureTime(own) < round.localAfter)) fetchMembers(true);
+        else round.localUntil = 0;
+        if (round.requestId && !round.remoteDone && now < round.remoteUntil) {
+            var status = await wakeRequest('/wake_status.php?request_id=' + encodeURIComponent(round.requestId));
+            setWakeStatus(round, status);
+        }
+        if (wakeRound !== round) return;
+        round.checking = false;
+        if (!round.posting && !round.localUntil && (round.remoteDone || performance.now() >= round.remoteUntil)) {
+            wakeRound = null;
+            wakeFab.removeAttribute('aria-busy');
+        } else {
+            scheduleWakeCheck();
         }
     }
 
-    var attemptId = null;
-    wakeFab.addEventListener('click', async function() {
-        if (wakeFab.disabled) return;
-        if (performance.now() < wakeCooldownUntil) {
-            showToast('Try Wake again in ' + Math.ceil((wakeCooldownUntil - performance.now()) / 1000) + 's', 'info');
+    async function refreshFamily(mode) {
+        if (document.hidden || (mapPolicy && mapPolicy.mode === 0)) return;
+        var manual = mode === 'manual';
+        if (wakeRound?.posting) {
+            if (manual && !wakeRound.manual) wakeRound.upgrade = true;
             return;
         }
-        setWakeBusy(true);
-        displayWake('Sending Wake request…');
-        try {
-            attemptId = attemptId || makeWakeId();
-            var reply = await wakeRequest('/wake_devices.php', {
-                method: 'POST', credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.TrackingConfig.wakeCsrf },
-                body: JSON.stringify({ client_request_id: attemptId })
-            });
-            var response = reply.response;
-            var body = reply.body;
-            attemptId = null;
-            if (response.status === 429) {
-                var wait = body.retry_after || 60;
-                wakeCooldownUntil = performance.now() + wait * 1000;
-                displayWake('Try Wake again in ' + wait + 's');
-            } else if (response.ok && body.success) {
-                var data = body.data || {};
-                if (data.request_id) {
-                    handleWakeStatus(data);
-                } else if (data.sent) {
-                    wakeCooldownUntil = performance.now() + 60000;
-                    displayWake('Wake requested · confirmation unavailable');
-                } else {
-                    displayWake(data.devices_targeted ? 'Couldn’t send Wake' : 'No family phones ready for Wake', data.targets);
-                }
-            } else {
-                var failureMessages = {
-                    tracking_disabled: 'Family tracking is off',
-                    wake_setup_required: 'Wake needs a server database update',
-                    firebase_key_missing: 'Wake needs a Firebase key on the server',
-                    firebase_key_unreadable: 'The server cannot read its Firebase key',
-                    firebase_key_invalid: 'The server Firebase key is invalid',
-                    firebase_php_extension_missing: 'Wake needs PHP cURL and OpenSSL on the server',
-                    firebase_auth_rejected: 'Google rejected the server Firebase credentials',
-                    firebase_auth_unavailable: 'The server could not reach Firebase authentication'
-                };
-                displayWake(failureMessages[body.reason] || failureMessages[body.error] || 'Wake temporarily unavailable');
-            }
-        } catch (error) {
-            displayWake('Couldn’t reach the Wake service · tap Wake to retry');
-        } finally {
-            setWakeBusy(!!liveWake);
+        if (wakeRound && (!manual || wakeRound.manual)) return;
+
+        var round = wakeRound || { localUntil: 0, localAfter: 0, remoteUntil: 0, confirmed: '[]' };
+        wakeRound = round;
+        round.manual = manual;
+        round.posting = true;
+        var own = ownMember();
+        var now = serverNow();
+        var staleAfter = own?.motion_state === 'moving'
+            ? 1000 * Math.min(45, Math.max(15, mapPolicy?.moving_interval || 30)) : 90000;
+        if (!round.localUntil && (manual || !own?.has_location || own.approximate || now - captureTime(own) > staleAfter)
+            && refreshOwnPhone()) {
+            round.localAfter = now;
+            round.localUntil = performance.now() + 28000;
         }
-    });
+        if (manual || round.localUntil) wakeFab.setAttribute('aria-busy', 'true');
+        var status = await wakeRequest('/wake_devices.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.TrackingConfig.wakeCsrf },
+            body: JSON.stringify({ client_request_id: makeWakeId(), mode: mode,
+                refreshing_local: !!round.localUntil && !!nativeBridge })
+        });
+        if (wakeRound !== round) return;
+        round.posting = false;
+        setWakeStatus(round, status);
+        if (round.upgrade) {
+            round.upgrade = false;
+            return refreshFamily('manual');
+        }
+        if (!round.remoteDone && round.requestId) wakeFab.setAttribute('aria-busy', 'true');
+        fetchMembers(true);
+        await checkWakeStatus();
+    }
+
+    function automaticallyRefreshFamily() {
+        if (!automaticWakePending) return;
+        automaticWakePending = false;
+        if (performance.now() < nextAutomaticWake) return;
+        nextAutomaticWake = performance.now() + 60000;
+        refreshFamily('automatic');
+    }
+
+    wakeFab.addEventListener('click', function() { refreshFamily('manual'); });
 
     // ── TRACKING INTEGRATION ─────────────────────────────────────
     var nativeBridge = window.TrackingBridge;
@@ -1228,7 +1305,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         window.addEventListener('relativesfamilyclear', clearFamilySnapshot);
         window.addEventListener('relativestrackingresume', function() {
             if (webPollOwner) fetchMembers(true);
-            if (liveWake) checkWakeStatus();
+            if (wakeRound) checkWakeStatus();
             updateNativeSharingButton();
         });
         window.addEventListener('beforeunload', function() { nativeBridge.onTrackingScreenHidden(); });
@@ -1248,9 +1325,20 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     var browserConsent = false;
     var browserShareButton = null;
     var browserConsentKey = 'relatives.shareLocation.' + window.TrackingConfig.userId;
+    var browserDeviceId = 'browser';
+    var browserShareScope = null;
+    if (!isNativeApp && window.crypto?.getRandomValues) {
+        browserDeviceId = 'web-' + makeWakeId();
+        try {
+            var storedDeviceId = localStorage.getItem('relatives.locationDevice');
+            if (/^web-[a-f0-9-]{36}$/.test(storedDeviceId || '')) browserDeviceId = storedDeviceId;
+            else localStorage.setItem('relatives.locationDevice', browserDeviceId);
+        } catch (error) {}
+    }
     if (!isNativeApp && navigator.geolocation) {
         try {
             browserConsent = localStorage.getItem(browserConsentKey) === '1';
+            browserShareScope = localStorage.getItem(browserConsentKey + '.scope');
         } catch (error) {
             // Sharing still works for this page when storage is unavailable.
         }
@@ -1260,10 +1348,17 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         browserShareButton.title = 'Share your location with your family while this tab is visible';
         browserShareButton.addEventListener('click', function() {
             browserConsent = browserWatchId === null;
-            if (browserConsent) startBrowserTracking();
-            else stopBrowserTracking();
+            if (browserConsent) {
+                browserShareScope = makeWakeId();
+                startBrowserTracking();
+            } else {
+                browserShareScope = null;
+                stopBrowserTracking();
+            }
             try {
                 localStorage.setItem(browserConsentKey, browserConsent ? '1' : '0');
+                if (browserShareScope) localStorage.setItem(browserConsentKey + '.scope', browserShareScope);
+                else localStorage.removeItem(browserConsentKey + '.scope');
             } catch (error) {}
             updateBrowserShareButton();
         });
@@ -1296,7 +1391,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         button.type = 'button';
         button.className = 'tracking-toolbar-btn enable-location-btn';
         button.onclick = function() {
-            if (['enabled', 'battery_saver', 'providers_disabled'].indexOf(nativeBridge.getTrackingMode()) >= 0) nativeBridge.stopTracking();
+            if (['enabled', 'battery_saver', 'approximate', 'providers_disabled'].indexOf(nativeBridge.getTrackingMode()) >= 0) nativeBridge.stopTracking();
             else nativeBridge.startTracking();
             setTimeout(updateNativeSharingButton, 1000);
         };
@@ -1309,8 +1404,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             refresh.textContent = 'Refresh my location';
             refresh.hidden = true;
             refresh.onclick = function() {
-                nativeBridge.refreshMyLocation();
-                showToast('Refreshing this phone…', 'info');
+                if (refreshOwnPhone()) {
+                    wakeRound = wakeRound || { remoteUntil: 0, confirmed: '[]' };
+                    wakeRound.localAfter = serverNow();
+                    wakeRound.localUntil = performance.now() + 28000;
+                    scheduleWakeCheck();
+                }
             };
             toolbar.appendChild(refresh);
         }
@@ -1323,7 +1422,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var mode = nextMode || nativeBridge.getTrackingMode();
         button.disabled = ['loading', 'signed_out', 'family_off', 'account_off'].includes(mode);
         var refresh = document.getElementById('refreshMyLocation');
-        if (refresh) refresh.hidden = !['enabled', 'battery_saver'].includes(mode);
+        if (refresh) refresh.hidden = !['enabled', 'battery_saver', 'approximate'].includes(mode);
         var messages = {
             no_permission: 'Location permission is needed to share',
             notifications_disabled: 'Enable tracking notifications to share',
@@ -1331,13 +1430,14 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             family_off: 'Family tracking is off',
             account_off: 'Enable sharing in Privacy & Security',
             signed_out: 'Sign in to share your location',
+            approximate: 'Approximate location · enable Precise location for accurate sharing',
             battery_saver: 'Battery Saver · slower location updates'
         };
         nativeTrackingStatus = messages[mode] || '';
         if (nativeTrackingStatus && !localTrackingStatus) {
             document.getElementById('trackingStatus').textContent = nativeTrackingStatus;
         }
-        button.textContent = ['enabled', 'battery_saver', 'providers_disabled'].indexOf(mode) >= 0 ? 'Stop sharing' : (mode === 'paused' ? 'Resume sharing' : 'Enable live location');
+        button.textContent = ['enabled', 'battery_saver', 'approximate', 'providers_disabled'].indexOf(mode) >= 0 ? 'Stop sharing' : (mode === 'paused' ? 'Resume sharing' : 'Enable live location');
     }
 
     // ── BROWSER GEOLOCATION ──────────────────────────────────────
@@ -1348,7 +1448,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         // Always upload the FRESHEST fix: during the 10s throttle window,
         // watchPosition keeps firing; the old code captured the first fix and
         // discarded every newer one, so a moving user uploaded a stale point.
-        if (pos) latestPos = pos;
+        if (pos && (!latestPos || pos.timestamp >= latestPos.timestamp)) latestPos = pos;
+        if (!latestPos) return;
         var now = Date.now();
         if (now - lastUploadTime < 10000) {
             if (uploadTimer === null) {
@@ -1374,7 +1475,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             altitude_m: pos.coords.altitude || null,
             recorded_at_ms: pos.timestamp,
             platform: 'web',
-            device_id: 'browser'
+            device_id: browserDeviceId,
+            consent_scope: browserShareScope
         };
         fetch(window.TrackingConfig.apiBase + '/location.php', {
             method: 'POST',
@@ -1448,7 +1550,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     // Use the web API as a fallback if the native cache stops refreshing.
     var memberPollTimer = null;
     var bridgeCacheTimer = null;
-    var legacyFallbackTimer = null;
+    var ageTimer = null;
     var lastBridgeJson = null;
     var lastFallbackAt = 0;
     var nativeActivationAt = 0;
@@ -1506,25 +1608,33 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     function startPolling() {
         stopPolling();
         if (document.hidden) return;
-        if (webPollOwner || !nativeCacheAllowed) {
-            fetchMembers(true);
-            memberPollTimer = setInterval(fetchMembers, 15000);
-            return;
+        automaticWakePending = true;
+        if (!webPollOwner && nativeCacheAllowed) {
+            nativeActivationAt = Date.now();
+            readBridgeCache();
+            bridgeCacheTimer = setInterval(readBridgeCache, 5000);
         }
-        nativeActivationAt = Date.now();
-        readBridgeCache();
-        bridgeCacheTimer = setInterval(readBridgeCache, 5000);
-        // Refresh consent and link state even for bridge versions with an active native cache.
-        legacyFallbackTimer = setTimeout(function() {
-            if (document.hidden || !bridgeCacheTimer) return;
-            fetchMembers();
-            memberPollTimer = setInterval(fetchMembers, 30000);
-        }, 20000);
+        fetchMembers(true);
+        scheduleMemberPoll();
+        ageTimer = setInterval(updateLocationAges, 1000);
+    }
+
+    function scheduleMemberPoll() {
+        clearTimeout(memberPollTimer);
+        if (document.hidden) return;
+        var recentMovement = _members.some(function(member) {
+            return member.has_location && member.motion_state === 'moving' && serverNow() - captureTime(member) < 45000;
+        });
+        memberPollTimer = setTimeout(async function() {
+            await fetchMembers();
+            if (!memberPollTimer || document.hidden) return;
+            scheduleMemberPoll();
+        }, recentMovement ? 5000 : 15000);
     }
 
     function stopPolling() {
-        clearTimeout(legacyFallbackTimer);
-        if (memberPollTimer) { clearInterval(memberPollTimer); memberPollTimer = null; }
+        clearInterval(ageTimer);
+        if (memberPollTimer) { clearTimeout(memberPollTimer); memberPollTimer = null; }
         if (bridgeCacheTimer) { clearInterval(bridgeCacheTimer); bridgeCacheTimer = null; }
     }
 
@@ -1533,11 +1643,11 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             startPolling();
             startNavigationWatch();
             if (!isNativeApp) resumeBrowserTracking();
-            if (liveWake) checkWakeStatus();
+            if (wakeRound) checkWakeStatus();
         } else {
             stopPolling();
             if (mapRequest) mapRequest.abort();
-            clearTimeout(wakePoll);
+            clearTimeout(wakeTimer);
             stopBrowserTracking();
             stopNavigationWatch();
         }
@@ -1546,7 +1656,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     window.addEventListener('online', function() {
         if (document.hidden) return;
         fetchMembers(true);
-        if (liveWake) checkWakeStatus();
+        if (wakeRound) checkWakeStatus();
     });
     window.addEventListener('pagehide', function(event) {
         stopBrowserTracking();

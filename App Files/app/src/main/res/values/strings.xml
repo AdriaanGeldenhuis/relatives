@@ -30,11 +30,9 @@
 
     <!-- Tracking notification -->
     <string name="tracking_notif_idle">Sharing your location with family</string>
-    <string name="tracking_notif_moving">Sharing your movement with family</string>
     <string name="tracking_notif_stop">Stop sharing</string>
 
-    <string name="tracking_notif_refresh_by">%1$s requested a location refresh.</string>
-    <string name="tracking_notif_refresh">A family member requested a location refresh.</string>
+    <string name="channel_location_alerts">Location alert</string>
 
     <!-- Notification channels -->
     <string name="channel_tracking_name">Location Tracking</string>

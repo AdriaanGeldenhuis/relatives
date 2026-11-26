@@ -22,4 +22,12 @@ class TrackingMotionTest {
         assertFalse(TrackingMotion.isMovement(null, null, 150f, 8f, 0.2f))
         assertFalse(TrackingMotion.isMovement(null, null, 20f, 3f, null))
     }
+
+    @Test
+    fun drivingCadenceRequiresConfidentVehicleSpeed() {
+        assertTrue(TrackingMotion.isDriving(14f, 0.5f, 15f))
+        assertFalse(TrackingMotion.isDriving(14f, 0.5f, 700f))
+        assertFalse(TrackingMotion.isDriving(6f, 4f, 15f))
+        assertFalse(TrackingMotion.isDriving(2f, 0.4f, 15f))
+    }
 }

@@ -12,9 +12,9 @@ exit(ScheduledJobs::run($db, 'geofence-state-repair', static function () use ($d
     $trackingCache = new TrackingCache($cache);
     $settings = new SettingsRepo($db, $trackingCache);
     $locations = new LocationRepo($db, $trackingCache);
-    $engine = new GeofenceEngine($db, $trackingCache, new GeofenceRepo($db, $trackingCache),
+    $engine = new GeofenceEngine($db, new GeofenceRepo($db, $trackingCache),
         new PlacesRepo($db, $trackingCache), new EventsRepo($db),
-        new AlertsEngine($db, $trackingCache, new AlertsRepo($db, $trackingCache)));
+        new AlertsEngine($db, new AlertsRepo($db, $trackingCache)));
     $families = $db->query('SELECT family_id FROM tracking_geofences WHERE active = 1 UNION SELECT family_id FROM tracking_places')
         ->fetchAll(PDO::FETCH_COLUMN);
     $sharing = $db->prepare("SELECT 1 FROM users WHERE id = ? AND family_id = ?
@@ -28,14 +28,15 @@ exit(ScheduledJobs::run($db, 'geofence-state-repair', static function () use ($d
                 foreach ($locations->getFamilyCurrentLocations($family, true) as $member) {
                     if (!$member['location_sharing']) continue;
                     $capture = (int) ($member['recorded_ms'] ?? Time::captureMs($member['recorded_at'] ?? ''));
-                    if ($member['lat'] === null || $capture < Time::nowMs() - 3600000) {
+                    if ($member['lat'] === null || $capture < Time::nowMs() - 120000) {
                         $stale++;
                         continue;
                     }
                     $sharing->execute([$member['user_id'], $family]);
                     if (!$sharing->fetchColumn()) continue;
-                    $engine->recordTransitions($family, (int) $member['user_id'], (float) $member['lat'], (float) $member['lng'],
-                        $member['name'], isset($member['accuracy_m']) ? (float) $member['accuracy_m'] : null, false);
+                    $user = (int) $member['user_id'];
+                    $cutoff = TrackingPolicy::cutoff($db, $family, $user);
+                    $engine->observe($family, $user, $member['name'], $member, $cutoff, baselineOnly: true);
                     $evaluated++;
                 }
             }

@@ -22,6 +22,7 @@ class RelativesApplication : Application() {
         preferencesManager = PreferencesManager(this)
         try {
             NotificationHelper.createChannels(this)
+            NotificationHelper.clearObsoleteTrackingAlerts(this)
         } catch (e: Exception) {
             Log.e("RelativesApp", "Notification channels init failed", e)
         }
