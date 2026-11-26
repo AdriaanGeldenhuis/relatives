@@ -179,8 +179,11 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <div class="notes-field-head"><span>Photos</span><span class="notes-hint" id="notesPhotoCount"></span></div>
                 <div id="notesPhotoPreviews" class="notes-photo-previews"></div>
                 <button type="button" id="notesAddPhotos" class="notes-upload"><?= notesIcon('photo') ?> Add or drop photos</button>
-                <input type="file" id="notesPhotoInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
+                <input type="file" id="notesPhotoInput" accept="image/*,.heic,.heif" multiple hidden>
+                <p id="notesPhotoStatus" class="notes-hint" role="status" hidden></p>
             </div>
+            <?php else: ?>
+            <p id="notesAttachments" class="notes-hint">Photo attachments are unavailable on this installation.</p>
             <?php endif; ?>
             <fieldset class="notes-colors">
                 <legend>Note color</legend>

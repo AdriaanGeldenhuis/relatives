@@ -8,6 +8,12 @@ const NOTES_DEFAULT_COLOR = '#ffffff';
 const NOTES_MAX_PHOTOS = 7;
 const NOTES_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
+function notesCanConvertHeif(): bool
+{
+    static $available;
+    return $available ??= class_exists('Imagick') && Imagick::queryFormats('HEI*') && Imagick::queryFormats('WEBP');
+}
+
 function notesUploadLimits(): array
 {
     $bytes = static function (string $setting): int {
@@ -24,6 +30,7 @@ function notesUploadLimits(): array
         'fileBytes' => min(NOTES_MAX_UPLOAD_BYTES, $total, $maxFile > 0 ? $maxFile : NOTES_MAX_UPLOAD_BYTES),
         'totalBytes' => $total,
         'files' => min(NOTES_MAX_PHOTOS, (int)ini_get('max_file_uploads')),
+        'heif' => notesCanConvertHeif(),
     ];
 }
 
@@ -223,7 +230,10 @@ function notesSavePhoto(array $file, int $userId, array &$created, bool $forColl
     $mime = notesUploadMime($file);
     $source = $file['tmp_name'];
     $directory = $forCollage ? '/saves/' . $userId . '/notes' : '/saves/notes-private/' . $userId;
-    if ($forCollage && in_array($mime, ['image/heic', 'image/heif'], true) && class_exists('Imagick')) {
+    if (in_array($mime, ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'], true)) {
+        if (!notesCanConvertHeif()) {
+            throw new DomainException('This photo uses HEIC. Choose a JPEG or PNG copy.');
+        }
         $image = new Imagick();
         try {
             $image->pingImage($source);
@@ -240,20 +250,33 @@ function notesSavePhoto(array $file, int $userId, array &$created, bool $forColl
                 throw new RuntimeException('Unable to save note photo.');
             }
             return $path;
+        } catch (ImagickException) {
+            throw new DomainException('This HEIC photo could not be read. Try a JPEG or PNG copy.');
         } finally {
             $image->clear();
         }
     }
 
-    $decoder = [
-        'image/jpeg' => 'imagecreatefromjpeg',
-        'image/png' => 'imagecreatefrompng',
-        'image/gif' => 'imagecreatefromgif',
-        'image/webp' => 'imagecreatefromwebp'
-    ][$mime] ?? null;
-    $dimensions = $decoder ? @getimagesize($source) : false;
+    $formats = [
+        'image/jpeg' => ['jpg', 'imagecreatefromjpeg'],
+        'image/png' => ['png', 'imagecreatefrompng'],
+        'image/gif' => ['gif', 'imagecreatefromgif'],
+        'image/webp' => ['webp', 'imagecreatefromwebp'],
+    ];
+    $format = $formats[$mime] ?? null;
+    $dimensions = $format ? @getimagesize($source) : false;
     if (!$dimensions || $dimensions[0] * $dimensions[1] > 24000000) {
         throw new DomainException('Use a JPG, PNG, GIF or WebP image of up to 24 megapixels.');
+    }
+    [$extension, $decoder] = $format;
+    if (!$forCollage && (!function_exists($decoder) || !function_exists('imagewebp'))) {
+        // The private media endpoint can serve the validated raster on hosts without GD.
+        $path = notesMediaPath($directory, $extension);
+        if (!move_uploaded_file($source, __DIR__ . '/..' . $path)) {
+            throw new RuntimeException('Unable to save note photo.');
+        }
+        $created[] = $path;
+        return $path;
     }
     $image = @$decoder($source);
     if (!$image) {
@@ -467,7 +490,8 @@ function notesHandlePost(PDO $db, array $user, string $token): never
     }
     if ($removed) {
         try {
-            $stmt = $db->prepare('SELECT image_path, audio_path FROM notes WHERE family_id = ?');
+            $column = notesImageCapacity($db) ? 'image_path' : 'NULL AS image_path';
+            $stmt = $db->prepare("SELECT $column, audio_path FROM notes WHERE family_id = ?");
             $stmt->execute([$familyId]);
             $retained = [];
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $other) {

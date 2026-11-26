@@ -81,6 +81,19 @@ try {
     if ($triggers !== 3) {
         $fail("Install the chat revision triggers before deploying.");
     }
+    $lookup->execute(['notes']);
+    $noteColumns = $lookup->fetchAll(PDO::FETCH_COLUMN);
+    if (!$noteColumns) {
+        $fail("The Notes table is missing.");
+    }
+    if (!in_array('image_path', $noteColumns, true)) {
+        try {
+            $db->exec('ALTER TABLE notes ADD COLUMN image_path TEXT NULL');
+        } catch (PDOException) {
+            $fail("Could not add the Notes photo column. Apply the Notes image path migration.");
+        }
+    }
+    echo "Notes photo storage column is ready.\n";
 } catch (Throwable) {
     $fail("Could not verify the release database.");
 }

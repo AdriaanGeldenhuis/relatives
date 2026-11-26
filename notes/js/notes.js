@@ -590,10 +590,8 @@
         setEditorBody(note?.body ?? text, type === 'list' ? 'task' : 'text');
         $('notesRecorder').hidden = !recording;
         $('notesBodyField').hidden = editorType === 'voice';
-        if (photoInput) {
-            $('notesAttachments').hidden = editorType === 'voice';
-            renderPhotoPreviews();
-        }
+        $('notesAttachments').hidden = editorType === 'voice';
+        if (photoInput) renderPhotoPreviews();
         setEditorColor(note?.color.toLowerCase() || '#ffffff');
         setNotice($('notesFormError'), '');
         initialDraft = draftFingerprint();
@@ -910,65 +908,145 @@
     });
 
     function clearPhotoFiles() {
-        photoFiles.forEach(({ url }) => URL.revokeObjectURL(url));
+        photoFiles.forEach(({ url }) => { if (url) URL.revokeObjectURL(url); });
         photoFiles = [];
     }
 
     function renderPhotoPreviews() {
-        const paths = [...photoPaths, ...photoFiles.map(({ url }) => url)];
-        $('notesPhotoCount').textContent = `${paths.length} / ${maxPhotos}`;
-        $('notesAddPhotos').disabled = paths.length >= maxPhotos;
-        $('notesPhotoPreviews').innerHTML = paths.map((path, index) => `<div class="notes-photo-preview">
-            <img alt="" src="${escape(path)}"><span class="notes-photo-missing" hidden>${icon('photo')}</span>
+        const photos = [...photoPaths.map(url => ({ url })), ...photoFiles];
+        $('notesPhotoCount').textContent = `${photos.length} / ${maxPhotos}`;
+        $('notesAddPhotos').disabled = saveButton.disabled || photos.length >= maxPhotos;
+        $('notesPhotoPreviews').innerHTML = photos.map(({ url }, index) => `<div class="notes-photo-preview">
+            ${url ? `<img alt="" src="${escape(url)}"><span class="notes-photo-missing" hidden>${icon('photo')}</span>`
+                : `<span class="notes-photo-missing" aria-label="Preview after saving" title="Preview after saving">${icon('photo')}</span>`}
             <button type="button" data-remove-photo="${index}" class="notes-icon-button" aria-label="Remove photo ${index + 1}">${icon('close')}</button>
         </div>`).join('');
     }
 
-    function addPhotos(files) {
+    async function resizePhoto(image, name, limit, preferred) {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) return null;
+        let mime = 'image/webp';
+        let best = null;
+        const encode = () => new Promise(resolve => canvas.toBlob(resolve, mime, .84));
+        for (let edge = 2400; edge >= 500; edge = Math.floor(edge * .7)) {
+            const scale = Math.min(1, edge / Math.max(image.naturalWidth, image.naturalHeight));
+            canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+            if (mime === 'image/jpeg') {
+                context.fillStyle = '#fff';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+            let blob = await encode();
+            if (!blob || blob.type !== mime) {
+                mime = 'image/jpeg';
+                context.globalCompositeOperation = 'destination-over';
+                context.fillStyle = '#fff';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                blob = await encode();
+            }
+            if (blob?.type === mime && blob.size <= limit) {
+                if (!best || blob.size < best.size) best = blob;
+                if (blob.size <= preferred) break;
+            }
+        }
+        if (!best) return null;
+        const extension = best.type === 'image/webp' ? '.webp' : '.jpg';
+        return new File([best], name.replace(/\.[^.]+$/, '') + extension, { type: best.type });
+    }
+
+    async function preparePhoto(file, limit, preferred) {
+        const heif = /^image\/hei[cf](?:-sequence)?$/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+        if (!file.size || /^image\/svg/i.test(file.type) || /\.svgz?$/i.test(file.name)) {
+            throw new Error('Choose a JPG, PNG, GIF, WebP or camera photo.');
+        }
+        const source = URL.createObjectURL(file);
+        try {
+            const image = new Image();
+            image.src = source;
+            try {
+                await image.decode();
+            } catch {
+                if (heif && uploadLimits.heif && file.size <= limit) return { file, url: null };
+                throw new Error(heif ? 'This HEIC photo could not be prepared. Choose a JPEG copy.'
+                    : 'This photo could not be opened. Choose another image.');
+            }
+            const budget = Math.min(limit, preferred);
+            const standard = /^image\/(?:jpeg|png|gif|webp)$/i.test(file.type);
+            const original = standard && file.size <= budget && Math.max(image.naturalWidth, image.naturalHeight) <= 2400;
+            const prepared = original ? file : await resizePhoto(image, file.name, limit, budget);
+            if (!prepared) throw new Error(`This photo could not fit the ${fileLimit(limit)} upload limit.`);
+            return { file: prepared, url: URL.createObjectURL(prepared) };
+        } finally {
+            URL.revokeObjectURL(source);
+        }
+    }
+
+    async function addPhotos(files) {
+        if (saveButton.disabled || !files.length) return;
+        saveButton.disabled = true;
+        $('notesAddPhotos').disabled = true;
+        setNotice($('notesPhotoStatus'), files.length === 1 ? 'Preparing photo…' : 'Preparing photos…');
+        setNotice($('notesFormError'), '');
         const messages = new Set();
         let total = photoFiles.reduce((sum, { file }) => sum + file.size, 0);
-        for (const file of files) {
-            if (photoPaths.length + photoFiles.length >= maxPhotos) {
-                messages.add(`You can attach up to ${maxPhotos} photos.`);
-                break;
+        const batchSize = Math.min(maxPhotos, uploadLimits.files);
+        const preferred = Math.floor(uploadLimits.totalBytes / Math.max(1, batchSize));
+        try {
+            for (const file of files) {
+                if (photoPaths.length + photoFiles.length >= maxPhotos) {
+                    messages.add(`You can attach up to ${maxPhotos} photos.`);
+                    break;
+                }
+                if (photoFiles.length >= batchSize) {
+                    messages.add(batchSize ? `You can upload ${batchSize} photos at a time.` : 'Photo uploads are disabled on this server.');
+                    break;
+                }
+                const limit = Math.min(uploadLimits.fileBytes, uploadLimits.totalBytes - total);
+                if (limit <= 0) {
+                    messages.add('Save these photos before adding more.');
+                    break;
+                }
+                try {
+                    const photo = await preparePhoto(file, limit, preferred);
+                    photoFiles.push(photo);
+                    total += photo.file.size;
+                } catch (error) {
+                    messages.add(error instanceof DOMException ? 'This photo could not be prepared. Try another image.' : error.message);
+                }
             }
-            if (photoFiles.length >= uploadLimits.files) {
-                messages.add(`You can upload ${uploadLimits.files} photos at a time.`);
-                break;
-            }
-            if (!/^image\/(?:jpeg|png|gif|webp)$/.test(file.type) || !file.size || file.size > uploadLimits.fileBytes) {
-                messages.add(`Choose JPG, PNG, GIF or WebP photos up to ${fileLimit(uploadLimits.fileBytes)} each.`);
-                continue;
-            }
-            if (total + file.size > uploadLimits.totalBytes) {
-                messages.add(`Keep this upload within ${fileLimit(uploadLimits.totalBytes)} or save the photos in batches.`);
-                continue;
-            }
-            total += file.size;
-            photoFiles.push({ file, url: URL.createObjectURL(file) });
+        } finally {
+            saveButton.disabled = false;
+            setNotice($('notesPhotoStatus'), '');
+            renderPhotoPreviews();
+            setNotice($('notesFormError'), [...messages].join(' '));
         }
-        renderPhotoPreviews();
-        setNotice($('notesFormError'), [...messages].join(' '));
     }
 
     if (photoInput) {
         const dropZone = $('notesAddPhotos');
         dropZone.addEventListener('click', () => photoInput.click());
         photoInput.addEventListener('change', () => {
-            addPhotos(photoInput.files);
+            const files = Array.from(photoInput.files);
             photoInput.value = '';
+            addPhotos(files);
         });
         dropZone.addEventListener('dragover', event => event.preventDefault());
         dropZone.addEventListener('drop', event => {
             event.preventDefault();
-            if (!saveButton.disabled) addPhotos(event.dataTransfer.files);
+            addPhotos(Array.from(event.dataTransfer.files));
         });
         $('notesPhotoPreviews').addEventListener('click', event => {
             const button = event.target.closest('[data-remove-photo]');
             if (!button || saveButton.disabled) return;
             const index = Number(button.dataset.removePhoto);
             if (index < photoPaths.length) photoPaths.splice(index, 1);
-            else URL.revokeObjectURL(photoFiles.splice(index - photoPaths.length, 1)[0].url);
+            else {
+                const [{ url }] = photoFiles.splice(index - photoPaths.length, 1);
+                if (url) URL.revokeObjectURL(url);
+            }
             renderPhotoPreviews();
             ($('notesPhotoPreviews').querySelector(`[data-remove-photo="${index}"]`) || dropZone).focus();
         });

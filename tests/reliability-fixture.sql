@@ -26,6 +26,12 @@ CREATE TABLE messages (
 CREATE TABLE message_reactions (
     message_id BIGINT UNSIGNED NOT NULL, user_id BIGINT UNSIGNED NOT NULL, emoji VARCHAR(40), created_at DATETIME
 ) ENGINE=InnoDB;
+CREATE TABLE notes (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, family_id BIGINT UNSIGNED NOT NULL, user_id BIGINT UNSIGNED,
+    type ENUM('text','voice') NOT NULL DEFAULT 'text', title VARCHAR(160), body TEXT, audio_path VARCHAR(255),
+    image_path VARCHAR(255), color CHAR(7) DEFAULT '#ffffff', pinned TINYINT DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME
+) ENGINE=InnoDB;
 CREATE TABLE notifications (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL, from_user_id BIGINT UNSIGNED, type VARCHAR(30),
     priority VARCHAR(16), category VARCHAR(30), title VARCHAR(255), message TEXT, icon VARCHAR(64), sound VARCHAR(64),

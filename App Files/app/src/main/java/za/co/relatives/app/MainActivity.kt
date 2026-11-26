@@ -2,6 +2,7 @@ package za.co.relatives.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -246,6 +247,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         familyPoller.stop()
+        finishFileSelection(null)
         if (::permissionGate.isInitialized) {
             permissionGate.dismissDialogs()
         }
@@ -600,14 +602,23 @@ class MainActivity : ComponentActivity() {
                 callback: ValueCallback<Array<Uri>>?,
                 params: FileChooserParams?,
             ): Boolean {
-                fileUploadCallback?.onReceiveValue(null)
+                if (callback == null) return false
+                finishFileSelection(null)
                 fileUploadCallback = callback
                 val chooserIntent = params?.createIntent()
                     ?: Intent(Intent.ACTION_GET_CONTENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
                         type = "*/*"
                     }
-                fileChooserLauncher.launch(chooserIntent)
+                if (params?.mode == FileChooserParams.MODE_OPEN_MULTIPLE) {
+                    chooserIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                }
+                try {
+                    fileChooserLauncher.launch(chooserIntent)
+                } catch (error: ActivityNotFoundException) {
+                    Log.w(TAG, "No file chooser is available", error)
+                    finishFileSelection(null)
+                }
                 return true
             }
 
@@ -762,14 +773,24 @@ class MainActivity : ComponentActivity() {
         fileChooserLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
         ) { result ->
-            val uris = if (result.resultCode == RESULT_OK && result.data != null) {
-                WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data!!)
+            val data = result.data
+            val uris = if (result.resultCode == RESULT_OK && data != null) {
+                val photos = data.clipData?.let { clip ->
+                    (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }.distinct()
+                }.orEmpty()
+                if (photos.isNotEmpty()) photos.toTypedArray()
+                else WebChromeClient.FileChooserParams.parseResult(result.resultCode, data)
             } else {
                 null
             }
-            fileUploadCallback?.onReceiveValue(uris)
-            fileUploadCallback = null
+            finishFileSelection(uris)
         }
+    }
+
+    private fun finishFileSelection(uris: Array<Uri>?) {
+        val callback = fileUploadCallback
+        fileUploadCallback = null
+        callback?.onReceiveValue(uris)
     }
 
     private fun handleMicrophonePermission() {

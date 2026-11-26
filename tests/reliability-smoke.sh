@@ -85,3 +85,32 @@ php "$smoke_root/cron/notification-reminders.php"
 [[ $(sql -Nse 'SELECT COUNT(*) FROM scheduled_deliveries') == 1 ]]
 [[ $(sql -Nse "SELECT COUNT(*) FROM notifications WHERE user_id=2 AND type='calendar'") == 1 ]]
 printf 'Authenticated chat, push queue and reminder checks passed.\n'
+
+# Use the legacy attachment column width to exercise the seven-photo save and reopen flow.
+base64 -d >"$smoke_root/fixture.png" <<'PNG'
+iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGN0YShnYGBgYmBgYGBgAAAIuwC/5jqQFAAAAABJRU5ErkJggg==
+PNG
+photo_fields=()
+for photo in {1..7}; do
+    photo_fields+=(-F "images[]=@$smoke_root/fixture.png;type=image/png")
+done
+body=$'## Materials\n- Paint\n- [ ] Measure the fence\n1. Order supplies'
+curl -fsS -b "$smoke_root/sender.cookie" -F "csrf_token=$csrf" -F action=create_note \
+    -F 'title=Fixture photo note' -F "body=$body" -F photo_count=7 "${photo_fields[@]}" "$base/notes/" >"$smoke_root/note.json"
+read -r note_id version image < <(php -r '
+    $note = json_decode(file_get_contents($argv[1]), true)["note"] ?? null;
+    if (!$note || count($note["images"]) !== 7) exit(1);
+    echo "$note[id] $note[version] {$note["images"][0]}\n";
+' "$smoke_root/note.json")
+[[ $(curl -fsS -b "$smoke_root/recipient.cookie" -o /dev/null -w '%{http_code}' "$base$image") == 200 ]]
+[[ $(curl -sS -b "$smoke_root/other.cookie" -o /dev/null -w '%{http_code}' "$base$image") == 404 ]]
+curl -fsS -b "$smoke_root/sender.cookie" --data-urlencode "csrf_token=$csrf" \
+    --data-urlencode action=update_note --data-urlencode "note_id=$note_id" --data-urlencode "version=$version" \
+    --data-urlencode 'title=Fixture photo note edited' --data-urlencode "body=$body" \
+    --data-urlencode "remove_images[]=$image" "$base/notes/" >"$smoke_root/note-edit.json"
+php -r '
+    $note = json_decode(file_get_contents($argv[1]), true)["note"] ?? null;
+    exit($note && count($note["images"]) === 6 && $note["body"] === $argv[2] ? 0 : 1);
+' "$smoke_root/note-edit.json" "$body"
+[[ $(curl -sS -b "$smoke_root/sender.cookie" -o /dev/null -w '%{http_code}' "$base$image") == 404 ]]
+printf 'Notes photo save, family access and removal checks passed.\n'
