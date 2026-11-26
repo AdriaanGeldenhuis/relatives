@@ -18,7 +18,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // Get user
-$stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
+$stmt = $db->prepare("SELECT * FROM users WHERE id = ? AND status = 'active'");
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -43,6 +43,7 @@ if ($subscriptionManager->isFamilyLocked($user['family_id'])) {
     exit;
 }
 // ========== END SUBSCRIPTION LOCK ==========
+session_write_close();
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -52,7 +53,7 @@ try {
     $action = $_POST['action'] ?? null;
     $itemIds = json_decode($_POST['item_ids'] ?? '[]', true);
     
-    if (empty($itemIds)) {
+    if (!is_array($itemIds) || !$itemIds) {
         throw new Exception('No items selected');
     }
     
@@ -101,26 +102,10 @@ try {
         
         // BULK MARK BOUGHT
         case 'mark_bought':
-            // Move to history
-            $stmt = $db->prepare("
-                INSERT INTO shopping_history 
-                (family_id, list_id, item_name, qty, price, category, store, bought_by)
-                SELECT ?, si.list_id, si.name, si.qty, si.price, si.category, si.store, ?
-                FROM shopping_items si
-                WHERE si.id IN ($placeholders)
-            ");
-            $params = array_merge([$user['family_id'], $user['id']], $itemIds);
-            $stmt->execute($params);
-            
-            // Update status
-            $stmt = $db->prepare("
-                UPDATE shopping_items 
-                SET status = 'bought', bought_at = NOW()
-                WHERE id IN ($placeholders)
-            ");
-            $stmt->execute($itemIds);
-            $count = $stmt->rowCount();
-            
+            require_once __DIR__ . '/../classes/ShoppingItem.php';
+            $itemManager = new ShoppingItem($db, $user['family_id'], $user['id']);
+            $count = $itemManager->markBought($itemIds);
+
             echo json_encode([
                 'success' => true,
                 'count' => $count,
@@ -154,20 +139,18 @@ try {
         
         // BULK ASSIGN
         case 'assign':
-            $assignTo = (int)($_POST['assign_to'] ?? 0);
-            
-            if (!$assignTo) {
-                throw new Exception('User ID required');
+            if (!isset($_POST['assign_to'])) {
+                throw new Exception('Choose a family member or No one');
             }
-            
-            // Verify user is in family
-            $stmt = $db->prepare("SELECT id FROM users WHERE id = ? AND family_id = ?");
-            $stmt->execute([$assignTo, $user['family_id']]);
-            
-            if (!$stmt->fetch()) {
-                throw new Exception('User not in family');
+            $assignTo = $_POST['assign_to'] === '' ? null : (int)$_POST['assign_to'];
+            if ($assignTo !== null) {
+                $stmt = $db->prepare("SELECT id FROM users WHERE id = ? AND family_id = ? AND status = 'active'");
+                $stmt->execute([$assignTo, $user['family_id']]);
+                if (!$stmt->fetch()) {
+                    throw new Exception('User not in family');
+                }
             }
-            
+
             $stmt = $db->prepare("
                 UPDATE shopping_items 
                 SET assigned_to = ?

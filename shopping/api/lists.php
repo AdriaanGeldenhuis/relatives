@@ -51,6 +51,7 @@ if ($subscriptionManager->isFamilyLocked($user['family_id'])) {
     exit;
 }
 // ========== END SUBSCRIPTION LOCK ==========
+session_write_close();
 
 // Load classes
 require_once __DIR__ . '/../classes/ShoppingList.php';
@@ -72,6 +73,17 @@ try {
             ]);
             break;
         
+        case 'board':
+            $lists = $listManager->getLists();
+            $listId = (int)($_GET['list_id'] ?? 0);
+            $list = $listId ? $listManager->getList($listId) : null;
+            echo json_encode([
+                'success' => true,
+                'lists' => $lists,
+                'items' => $list['items'] ?? null
+            ], JSON_INVALID_UTF8_SUBSTITUTE);
+            break;
+
         // GET SINGLE LIST
         case 'get':
             $listId = (int)($_GET['list_id'] ?? 0);
@@ -101,8 +113,8 @@ try {
             $name = trim($_POST['name'] ?? '');
             $icon = $_POST['icon'] ?? '🛒';
             
-            if (empty($name)) {
-                throw new Exception('List name required');
+            if ($name === '' || mb_strlen($name, 'UTF-8') > 120) {
+                throw new Exception('Enter a list name of up to 120 characters');
             }
             
             $listId = $listManager->createList($name, $icon);
@@ -128,11 +140,13 @@ try {
                 throw new Exception('List ID required');
             }
             
-            if (empty($name)) {
-                throw new Exception('List name required');
+            if ($name === '' || mb_strlen($name, 'UTF-8') > 120) {
+                throw new Exception('Enter a list name of up to 120 characters');
             }
             
-            $listManager->updateList($listId, $name, $icon);
+            if (!$listManager->updateList($listId, $name, $icon)) {
+                throw new Exception('List not found');
+            }
             
             echo json_encode([
                 'success' => true,

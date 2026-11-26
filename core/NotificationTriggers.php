@@ -87,7 +87,7 @@ class NotificationTriggers {
     
     // ==================== SHOPPING ====================
     
-    public function onShoppingItemAdded(int $itemId, int $addedBy, int $familyId, string $itemName, int $listId) {
+    public function onShoppingItemAdded(int $itemId, int $addedBy, int $familyId, string $itemName, int $listId, int $count = 1) {
         $stmt = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
         $stmt->execute([$addedBy]);
         $adder = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -96,11 +96,12 @@ class NotificationTriggers {
         $stmt->execute([$listId]);
         $list = $stmt->fetch(PDO::FETCH_ASSOC);
         
+        $description = $count === 1 ? '"' . $itemName . '"' : "$count items";
         $this->notifManager->createForFamily($familyId, [
             'from_user_id' => $addedBy,
             'type' => NotificationManager::TYPE_SHOPPING,
             'title' => 'Shopping List Updated',
-            'message' => ($adder['full_name'] ?? 'Someone') . " added \"$itemName\" to " . ($list['name'] ?? 'shopping list'),
+            'message' => ($adder['full_name'] ?? 'Someone') . " added $description to " . ($list['name'] ?? 'shopping list'),
             'action_url' => '/shopping/?list=' . $listId,
             'priority' => NotificationManager::PRIORITY_LOW,
             'icon' => '🛒',

@@ -74,7 +74,7 @@ class ShoppingList {
                     WHEN 'household' THEN 9
                     WHEN 'other' THEN 10
                 END,
-                si.created_at DESC
+                si.created_at DESC, si.id DESC
         ");
         $stmt->execute([$listId]);
         $list['items'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -103,56 +103,70 @@ class ShoppingList {
             SET name = ?, icon = ?, updated_at = NOW()
             WHERE id = ? AND family_id = ?
         ");
-        return $stmt->execute([$name, $icon, $listId, $this->familyId]);
+        $stmt->execute([$name, $icon, $listId, $this->familyId]);
+        if ($stmt->rowCount()) {
+            return true;
+        }
+        $stmt = $this->db->prepare("SELECT id FROM shopping_lists WHERE id = ? AND family_id = ?");
+        $stmt->execute([$listId, $this->familyId]);
+        return (bool)$stmt->fetchColumn();
     }
     
     /**
      * Delete list
      */
     public function deleteList($listId) {
-        // Check if only list
-        $stmt = $this->db->prepare("
-            SELECT COUNT(*) FROM shopping_lists WHERE family_id = ?
-        ");
-        $stmt->execute([$this->familyId]);
-        
-        if ($stmt->fetchColumn() <= 1) {
-            throw new Exception('Cannot delete the only list');
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("SELECT id FROM families WHERE id = ? FOR UPDATE");
+            $stmt->execute([$this->familyId]);
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM shopping_lists WHERE family_id = ?");
+            $stmt->execute([$this->familyId]);
+            if ($stmt->fetchColumn() <= 1) {
+                throw new Exception('Cannot delete the only list');
+            }
+
+            $stmt = $this->db->prepare("DELETE FROM shopping_lists WHERE id = ? AND family_id = ?");
+            $stmt->execute([$listId, $this->familyId]);
+            if (!$stmt->rowCount()) {
+                throw new Exception('List not found');
+            }
+            $this->db->commit();
+            return true;
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
         }
-        
-        // Delete items first
-        $stmt = $this->db->prepare("DELETE FROM shopping_items WHERE list_id = ?");
-        $stmt->execute([$listId]);
-        
-        // Delete list
-        $stmt = $this->db->prepare("
-            DELETE FROM shopping_lists 
-            WHERE id = ? AND family_id = ?
-        ");
-        return $stmt->execute([$listId, $this->familyId]);
     }
-    
+
     /**
      * Get or create default list
      */
     public function getDefaultList() {
-        $stmt = $this->db->prepare("
-            SELECT * FROM shopping_lists 
-            WHERE family_id = ? 
-            ORDER BY id ASC LIMIT 1
-        ");
-        $stmt->execute([$this->familyId]);
-        $list = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$list) {
-            $listId = $this->createList('Main List', '🛒');
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("SELECT id FROM families WHERE id = ? FOR UPDATE");
+            $stmt->execute([$this->familyId]);
+            $stmt = $this->db->prepare("SELECT * FROM shopping_lists WHERE family_id = ? ORDER BY id LIMIT 1");
             $stmt->execute([$this->familyId]);
             $list = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$list) {
+                $this->createList('Main List', '🛒');
+                $stmt->execute([$this->familyId]);
+                $list = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
+            $this->db->commit();
+            return $list;
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
         }
-        
-        return $list;
     }
-    
+
     /**
      * Get shopping analytics
      */

@@ -56,18 +56,16 @@ if ($subscriptionManager->isFamilyLocked($user['family_id'])) {
     exit;
 }
 // ========== END SUBSCRIPTION LOCK ==========
+session_write_close();
 
 require_once __DIR__ . '/../classes/ShoppingItem.php';
 $itemManager = new ShoppingItem($db, $user['family_id'], $user['id']);
 $triggers = new NotificationTriggers($db);
 
 function validateItemName($name) {
-    $name = trim($name);
-    if (empty($name)) {
+    $name = shoppingText($name, 'Item name', 160);
+    if ($name === '') {
         throw new Exception('Item name cannot be empty');
-    }
-    if (strlen($name) > 160) {
-        throw new Exception('Item name too long (max 160 characters)');
     }
     return $name;
 }
@@ -108,6 +106,46 @@ function validateCategory($category) {
     return $category;
 }
 
+function shoppingText($value, $label, $limit) {
+    if (!is_string($value) || mb_strlen($value, 'UTF-8') > $limit) {
+        throw new Exception("$label must be at most $limit characters");
+    }
+    return trim($value);
+}
+
+function shoppingItemFields(array $input) {
+    $data = [];
+    if (isset($input['name'])) {
+        $data['name'] = validateItemName($input['name']);
+    }
+    foreach (['qty' => ['Quantity', 40], 'store' => ['Store name', 100]] as $field => [$label, $limit]) {
+        if (isset($input[$field])) {
+            $value = shoppingText($input[$field], $label, $limit);
+            $data[$field] = $value === '' ? null : $value;
+        }
+    }
+    if (isset($input['price'])) {
+        $data['price'] = validateNumeric($input['price'], 'Price', 0, 999999.99);
+    }
+    if (isset($input['category'])) {
+        $data['category'] = validateCategory($input['category']);
+    }
+    return $data;
+}
+
+function shoppingAssignee($db, $familyId, $value) {
+    if ($value === '' || $value === null) {
+        return null;
+    }
+    $stmt = $db->prepare("SELECT id FROM users WHERE id = ? AND family_id = ? AND status = 'active'");
+    $stmt->execute([(int)$value, $familyId]);
+    $id = $stmt->fetchColumn();
+    if (!$id) {
+        throw new Exception('Assigned user not found in family');
+    }
+    return (int)$id;
+}
+
 try {
     $action = $_POST['action'] ?? $_GET['action'] ?? null;
     
@@ -118,88 +156,57 @@ try {
     switch ($action) {
         
         case 'add':
+        case 'add_many':
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
                 throw new Exception('POST method required');
             }
-            
+
             $listId = (int)($_POST['list_id'] ?? 0);
-            
             if (!$listId) {
                 throw new Exception('List ID required');
             }
-            
-            $stmt = $db->prepare("SELECT id FROM shopping_lists WHERE id = ? AND family_id = ?");
-            $stmt->execute([$listId, $user['family_id']]);
-            
-            if (!$stmt->fetch()) {
-                throw new Exception('List not found or access denied');
+
+            $rows = $action === 'add_many' ? json_decode($_POST['items'] ?? '', true) : [$_POST];
+            if (!is_array($rows) || !array_is_list($rows) || count($rows) < 1 || count($rows) > 50) {
+                throw new Exception('Add between 1 and 50 items at a time');
             }
-            
-            $data = [
-                'name' => validateItemName($_POST['name'] ?? '')
-            ];
-            
-            if (!empty($_POST['qty'])) {
-                $qty = trim($_POST['qty']);
-                if (strlen($qty) > 40) {
-                    throw new Exception('Quantity text too long (max 40 characters)');
-                }
-                $data['qty'] = $qty;
-            }
-            
-            if (!empty($_POST['price'])) {
-                $price = validateNumeric($_POST['price'], 'Price', 0, 999999.99);
-                if ($price !== null) {
-                    $data['price'] = $price;
-                    $data['currency'] = $_POST['currency'] ?? 'ZAR';
-                }
-            }
-            
-            if (!empty($_POST['category'])) {
-                $data['category'] = validateCategory($_POST['category']);
-            }
-            
-            if (!empty($_POST['store'])) {
-                $store = trim($_POST['store']);
-                if (strlen($store) > 100) {
-                    throw new Exception('Store name too long (max 100 characters)');
-                }
-                $data['store'] = $store;
-            }
-            
-            if (!empty($_POST['assigned_to'])) {
-                $assignedTo = (int)$_POST['assigned_to'];
-                
-                $stmt = $db->prepare("SELECT id FROM users WHERE id = ? AND family_id = ? AND status = 'active'");
-                $stmt->execute([$assignedTo, $user['family_id']]);
-                
-                if ($stmt->fetch()) {
-                    $data['assigned_to'] = $assignedTo;
+
+            $items = [];
+            foreach ($rows as $index => $row) {
+                try {
+                    if (!is_array($row)) {
+                        throw new Exception('Item name is required');
+                    }
+                    $row['name'] ??= '';
+                    $data = shoppingItemFields($row);
+                    if ($action === 'add') {
+                        $data['currency'] = $_POST['currency'] ?? 'ZAR';
+                        $data['assigned_to'] = shoppingAssignee($db, $user['family_id'], $_POST['assigned_to'] ?? null);
+                    }
+                    $items[] = $data;
+                } catch (Exception $e) {
+                    if ($action === 'add_many') {
+                        throw new Exception('Item ' . ($index + 1) . ' — ' . $e->getMessage());
+                    }
+                    throw $e;
                 }
             }
-            
-            $itemId = $itemManager->addItem($listId, $data);
-            
-            // ========== SEND NOTIFICATION ==========
+
+            $ids = $itemManager->addItems($listId, $items);
             try {
-                $triggers->onShoppingItemAdded(
-                    $itemId,
-                    $user['id'],
-                    $user['family_id'],
-                    $data['name'],
-                    $listId
-                );
-            } catch (Exception $e) {
+                $triggers->onShoppingItemAdded((int)$ids[0], (int)$user['id'], (int)$user['family_id'], $items[0]['name'], $listId, count($ids));
+            } catch (Throwable $e) {
                 error_log('Shopping notification error: ' . $e->getMessage());
             }
-            
+
             echo json_encode([
                 'success' => true,
-                'item_id' => $itemId,
-                'message' => 'Item added successfully'
+                'item_id' => $ids[0],
+                'item_ids' => $ids,
+                'message' => $action === 'add' ? 'Item added successfully' : 'Items added successfully'
             ]);
             break;
-        
+
         case 'toggle':
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
                 throw new Exception('POST method required');
@@ -211,7 +218,11 @@ try {
                 throw new Exception('Item ID required');
             }
             
-            $newStatus = $itemManager->toggleItem($itemId);
+            $status = $_POST['status'] ?? null;
+            if ($status !== null && !in_array($status, ['pending', 'bought'], true)) {
+                throw new Exception('Invalid item status');
+            }
+            $newStatus = $itemManager->toggleItem($itemId, $status);
             
             echo json_encode([
                 'success' => true,
@@ -231,71 +242,24 @@ try {
                 throw new Exception('Item ID required');
             }
             
-            $data = [];
-            
-            if (isset($_POST['name'])) {
-                $data['name'] = validateItemName($_POST['name']);
-            }
-            
-            if (isset($_POST['qty'])) {
-                $qty = trim($_POST['qty']);
-                $data['qty'] = !empty($qty) ? substr($qty, 0, 40) : null;
-            }
-            
-            if (isset($_POST['price'])) {
-                $data['price'] = validateNumeric($_POST['price'], 'Price', 0, 999999.99);
-            }
-            
-            if (isset($_POST['category'])) {
-                $data['category'] = validateCategory($_POST['category']);
-            }
-            
-            if (isset($_POST['store'])) {
-                $store = trim($_POST['store']);
-                $data['store'] = !empty($store) ? substr($store, 0, 100) : null;
-            }
-            
+            $data = shoppingItemFields($_POST);
             if (isset($_POST['assigned_to'])) {
-                $assignedTo = !empty($_POST['assigned_to']) ? (int)$_POST['assigned_to'] : null;
-                
-                if ($assignedTo) {
-                    $stmt = $db->prepare("SELECT id FROM users WHERE id = ? AND family_id = ? AND status = 'active'");
-                    $stmt->execute([$assignedTo, $user['family_id']]);
-                    
-                    if (!$stmt->fetch()) {
-                        throw new Exception('Assigned user not found in family');
-                    }
-                    
-                    // ========== SEND ASSIGNMENT NOTIFICATION ==========
-                    if ($assignedTo !== $user['id']) {
-                        try {
-                            $stmt = $db->prepare("SELECT name FROM shopping_items WHERE id = ?");
-                            $stmt->execute([$itemId]);
-                            $itemName = $stmt->fetchColumn();
-                            
-                            if ($itemName) {
-                                $triggers->onShoppingItemAssigned(
-                                    $itemId,
-                                    $assignedTo,
-                                    $user['id'],
-                                    $itemName
-                                );
-                            }
-                        } catch (Exception $e) {
-                            error_log('Assignment notification error: ' . $e->getMessage());
-                        }
-                    }
-                }
-                
-                $data['assigned_to'] = $assignedTo;
+                $data['assigned_to'] = shoppingAssignee($db, $user['family_id'], $_POST['assigned_to']);
             }
-            
-            if (empty($data)) {
+            if (!$data) {
                 throw new Exception('No fields to update');
             }
-            
-            $itemManager->updateItem($itemId, $data);
-            
+
+            $previous = $itemManager->updateItem($itemId, $data);
+            $assignee = $data['assigned_to'] ?? null;
+            if ($assignee && $assignee !== (int)$previous['assigned_to']) {
+                try {
+                    $triggers->onShoppingItemAssigned($itemId, $assignee, (int)$user['id'], $data['name'] ?? $previous['name']);
+                } catch (Throwable $e) {
+                    error_log('Assignment notification error: ' . $e->getMessage());
+                }
+            }
+
             echo json_encode([
                 'success' => true,
                 'message' => 'Item updated successfully'
