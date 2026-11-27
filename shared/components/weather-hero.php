@@ -1,55 +1,34 @@
 <?php
+declare(strict_types=1);
 
-function renderWeatherSky(): void
+require_once __DIR__ . '/welcome-sky.php';
+
+function renderWeatherHero(): void
 {
     ?>
-    <div class="sky-scene" aria-hidden="true">
-        <span class="sky-stars"></span>
-        <span class="sky-orbit"></span>
-        <span class="sky-disc"></span>
-        <span class="sky-clouds"></span>
-        <span class="sky-precipitation">
-            <?php for ($drop = 0; $drop < 22; $drop++): ?>
-            <span style="--drop: <?= $drop ?>"></span>
-            <?php endfor; ?>
-        </span>
-    </div>
-    <?php
-}
-
-function renderWeatherHeroPanel(): void
-{
-    ?>
-    <section class="sky-panel" aria-label="Weather snapshot" data-weather-panel>
-        <div class="sky-readout" data-sky-readout hidden>
-            <div class="sky-place">
-                <span class="sky-label">Local time</span>
-                <strong data-sky-period hidden></strong>
-                <small data-sky-date hidden></small>
+    <section class="wx-hero welcome-hero" id="weatherHero" aria-labelledby="weatherHeroTitle">
+        <?php renderWelcomeLandscape(); ?>
+        <div class="wx-hero-content" data-weather-panel>
+            <div class="wx-hero-top">
+                <div class="wx-hero-place">
+                    <h2 id="weatherHeroTitle">Current weather</h2>
+                    <span id="weatherHeroLocationSource" hidden></span>
+                </div>
+                <div class="wx-hero-clock" data-sky-readout hidden>
+                    <time data-sky-clock data-sky-time hidden></time>
+                    <span data-sky-date hidden></span>
+                </div>
             </div>
-            <div class="sky-clock" data-sky-clock hidden>
-                <time data-sky-time></time>
+            <div class="wx-hero-bottom">
+                <div class="wx-hero-reading">
+                    <span class="wx-hero-temperature" data-sky-temp hidden></span>
+                    <div>
+                        <strong data-sky-condition>Loading current weather…</strong>
+                        <p data-sky-feels hidden></p>
+                    </div>
+                </div>
+                <p class="wx-observation" id="weatherHeroSummary" hidden></p>
             </div>
-        </div>
-        <div class="sky-switch" role="group" aria-label="Weather snapshot" hidden>
-            <button type="button" data-sky-view="now" aria-pressed="true">Now</button>
-            <button type="button" data-sky-view="daylight" aria-pressed="false">Daylight</button>
-        </div>
-        <div class="sky-view sky-now" data-sky-content="now">
-            <span class="sky-temp" data-sky-temp hidden></span>
-            <div class="sky-condition">
-                <strong data-sky-condition role="status">Choose a place to see current conditions</strong>
-                <p data-sky-feels hidden></p>
-                <p data-sky-wind hidden></p>
-            </div>
-            <span class="sky-condition-icon" data-sky-icon aria-hidden="true" hidden></span>
-        </div>
-        <div class="sky-view sky-daylight" data-sky-content="daylight" hidden>
-            <dl>
-                <div><dt>Sunrise</dt><dd><time data-sky-sunrise></time></dd></div>
-                <div><dt>Sunset</dt><dd><time data-sky-sunset></time></dd></div>
-            </dl>
-            <p data-sky-sun-note></p>
         </div>
     </section>
     <?php

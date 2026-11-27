@@ -58,6 +58,7 @@
     const settings = JSON.parse(byId('weatherSettings').textContent);
     const preferenceKey = `relatives.weather.${settings.userId}`;
     const dayFormat = new Intl.DateTimeFormat('en-ZA', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const weekday = new Intl.DateTimeFormat('en-ZA', { weekday: 'short', timeZone: 'UTC' });
     const shortDate = new Intl.DateTimeFormat('en-ZA', { day: 'numeric', month: 'short', timeZone: 'UTC' });
     const timeFormat = new Intl.DateTimeFormat('en-ZA', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' });
     const searchInput = byId('locationSearch');
@@ -74,6 +75,20 @@
     const shareDialog = byId('shareModal');
     const heroTitle = byId('weatherHeroTitle');
     const heroSummary = byId('weatherHeroSummary');
+    const heroLocationSource = byId('weatherHeroLocationSource');
+    const daylightCard = byId('weatherDaylight');
+    const chartCard = byId('hourlySection');
+    const forecastCanvas = byId('forecastGraph');
+    const forecastTrack = byId('forecastTrack');
+    const forecastSlots = byId('forecastSlots');
+    const forecastReading = byId('forecastReading');
+    const rainButton = byId('showRainForecast');
+    const chartModes = app.querySelectorAll('[data-metric]');
+    const chartMetrics = {
+        temperature: { name: 'Temperature', color: '#ab5427', fill: '#ebb78948', format: temperature },
+        precipitation: { name: 'Precipitation chance', color: '#24617f', fill: '#8fb9c9', format: value => measure(value, '%') },
+        wind_speed: { name: 'Wind speed', color: '#466c68', fill: '#9dbbbd50', format: value => measure(value, ' km/h') }
+    };
     const weather = window.RelativesWeather;
 
     let preferences = {};
@@ -85,12 +100,18 @@
     let current = null;
     let forecast = null;
     let weatherRequest;
+    let lastWeatherAttempt = 0;
     let locating = 0;
     let searchRequest;
     let searchTimer;
     let results = [];
     let activeResult = -1;
-    const sky = weather.mountHero(app.querySelector('.sky-hero'), { formatTemperature: temperature });
+    let saveCityRequest = Promise.resolve();
+    let forecastMetric = 'temperature';
+    let displayedHours = [];
+    let selectedTime = null;
+    let rainTime = null;
+    const sky = weather.mountHero(byId('weatherHero'), { formatTemperature: temperature, onDaylight: renderDaylight });
 
     function savePreferences() {
         try {
@@ -137,12 +158,16 @@
         return formatter.format(new Date(`${date}T00:00:00Z`));
     }
 
-    function dayName(day) {
-        const localNow = Date.now() + (forecast.timezone || 0) * 1000;
-        const today = new Date(localNow).toISOString().slice(0, 10);
-        if (day.date === today) return 'Today';
-        const tomorrow = new Date(localNow + 86400000).toISOString().slice(0, 10);
-        return day.date === tomorrow ? 'Tomorrow' : day.day_name;
+    function localDate(timestamp, offset) {
+        return new Date(timestamp + offset * 1000).toISOString().slice(0, 10);
+    }
+
+    function dayName(date) {
+        const now = Date.now();
+        const offset = forecast?.timezone ?? 0;
+        if (date === localDate(now, offset)) return 'Today';
+        if (date === localDate(now + 86400000, offset)) return 'Tomorrow';
+        return calendarDate(date, weekday);
     }
 
     function weatherIcon({ icon, condition }) {
@@ -227,21 +252,45 @@
     }
 
     function renderQuickPlaces() {
-        const popular = places.slice(0, 4);
-        const recent = validPlace(preferences.recent) ? preferences.recent : null;
-        const choices = recent ? [recent, ...popular.filter(place => !placeMatches(place, recent))] : popular;
+        const recent = Array.isArray(preferences.places) ? preferences.places.filter(validPlace) : [];
+        const choices = [];
+        for (const place of [location, preferences.recent, ...recent, ...places.slice(0, 4)]) {
+            if (validPlace(place) && !choices.some(other => placeMatches(other, place))) choices.push(place);
+        }
         const focused = quickPlaces.contains(document.activeElement) ? document.activeElement.textContent : '';
-        quickPlaces.innerHTML = '';
-        for (const place of choices.slice(0, 5)) {
+        quickPlaces.replaceChildren();
+        for (const place of choices.slice(0, 6)) {
             const button = document.createElement('button');
             button.type = 'button';
-            button.textContent = place.name;
+            button.textContent = placeMatches(place, location) ? locationName() : place.name;
             if (place.state || place.country) button.title = [place.state, place.country].filter(Boolean).join(', ');
             button.setAttribute('aria-pressed', String(placeMatches(place, location)));
-            button.addEventListener('click', () => selectPlace(place, true));
+            button.addEventListener('click', () => {
+                if (!placeMatches(place, location)) selectPlace(place, true);
+            });
             quickPlaces.append(button);
-            if (focused === place.name) button.focus();
+            if (focused === button.textContent) button.focus();
         }
+        quickPlaces.hidden = false;
+    }
+
+    function rememberPlace(place) {
+        preferences.recent = place;
+        const recent = Array.isArray(preferences.places) ? preferences.places.filter(validPlace) : [];
+        preferences.places = [place, ...recent.filter(other => !placeMatches(other, place))].slice(0, 5);
+        savePreferences();
+        saveCityRequest = saveCityRequest.then(async () => {
+            const response = await fetch('/weather/api/api.php?action=save-city', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': settings.csrf },
+                body: JSON.stringify({ name: place.name, lat: place.lat, lon: place.lon })
+            });
+            if (!response.ok) throw new Error('City could not be saved.');
+        }).catch(() => {
+            if (preferences.recent === place && placeMatches(location, place)) {
+                locationStatus.textContent = 'City saved on this device. It could not be saved to your account.';
+            }
+        });
     }
 
     function selectPlace(place, remember = false) {
@@ -253,25 +302,12 @@
         if (!location || place.lat !== location.lat || place.lon !== location.lon) {
             current = null;
             forecast = null;
+            selectedTime = null;
             if (dayDialog.open) dayDialog.close();
             if (shareDialog.open) shareDialog.close();
         }
         location = { ...place };
-        if (remember) {
-            preferences.recent = location;
-            savePreferences();
-            fetch('/weather/api/api.php?action=save-city', {
-                method: 'POST', credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': settings.csrf },
-                body: JSON.stringify({ name: place.name, lat: place.lat, lon: place.lon })
-            }).then(response => {
-                if (!response.ok) throw new Error('City could not be saved');
-            }).catch(() => {
-                if (location.lat === place.lat && location.lon === place.lon) {
-                    locationStatus.textContent = 'City saved on this device. It could not be saved to your account.';
-                }
-            });
-        }
+        if (remember) rememberPlace(location);
         renderQuickPlaces();
         loadWeather();
     }
@@ -283,7 +319,7 @@
         if (!quietly) locationStatus.textContent = 'Finding your location…';
         try {
             const coordinates = await weather.getDeviceLocation();
-            if (attempt === locating) selectPlace({ ...coordinates, name: 'My location', useProviderName: true });
+            if (attempt === locating) selectPlace({ ...coordinates, name: 'My location', source: 'Device location', useProviderName: true });
         } catch (error) {
             if (attempt === locating && !quietly) locationStatus.textContent = `${error.message} You can also search for a city.`;
         } finally {
@@ -295,6 +331,7 @@
         weatherRequest?.abort();
         const controller = new AbortController();
         weatherRequest = controller;
+        lastWeatherAttempt = Date.now();
         const params = { lat: location.lat, lon: location.lon };
         refreshButton.disabled = true;
         if (!quiet) pageStatus.textContent = `Loading weather for ${location.name}…`;
@@ -308,7 +345,11 @@
                 apply(data);
                 renderWeather();
             } catch (error) {
-                if (!controller.signal.aborted) errors.push({ action, status: error.status });
+                if (!controller.signal.aborted) {
+                    errors.push({ action, status: error.status });
+                    if (action === 'current' && current) current = { ...current, stale: true };
+                    if (action === 'forecast' && forecast) forecast = { ...forecast, stale: true };
+                }
             }
         };
         await Promise.all([
@@ -334,7 +375,9 @@
         } else {
             pageStatus.textContent = current?.stale || forecast?.stale ? 'Showing the last available weather.' : '';
         }
-        renderSky();
+        renderWeather();
+        const selectedPlace = quickPlaces.querySelector('[aria-pressed="true"]');
+        if (selectedPlace) selectedPlace.textContent = locationName();
     }
 
     function locationName() {
@@ -354,114 +397,308 @@
     }
 
     function renderSky() {
-        const offset = current?.timezone ?? forecast?.timezone;
-        const timestamp = current?.dt ?? forecast?.fetched_at;
-        const detail = timestamp ? `${current?.dt ? 'Observed' : 'Forecast retrieved'} at ${localTime(timestamp, offset)} local time.`
-            : refreshButton.disabled ? 'Loading the local forecast…' : 'Refresh or choose another city.';
-        heroTitle.textContent = locationName() || 'Weather';
-        heroSummary.textContent = location ? [location.source, detail].filter(Boolean).join(' · ')
-            : 'Search for a city or use your location to see its weather.';
+        const title = locationName() || 'Current weather';
+        const offset = current?.timezone ?? forecast?.timezone ?? location?.offset;
+        const observed = current?.dt;
+        heroTitle.textContent = title;
+        heroLocationSource.textContent = location?.source ?? '';
+        heroLocationSource.hidden = !location?.source;
+        heroSummary.textContent = observed
+            ? `${current.stale ? 'Last observation' : 'Observed'} at ${localTime(observed, offset)} local time` : '';
+        heroSummary.hidden = !observed;
         refreshButton.hidden = !location;
         sky.update({
             current,
             offset,
-            message: location && (refreshButton.disabled ? 'Loading current weather…' : 'Current weather is unavailable')
+            message: refreshButton.disabled ? 'Loading current weather…' : 'Current weather is unavailable'
         });
+    }
+
+    function renderDaylight(daylight) {
+        daylightCard.hidden = !daylight;
+        if (!daylight) return;
+        const { sunrise, sunset, now, offset } = daylight;
+        for (const [id, timestamp] of [['daylightSunrise', sunrise], ['daylightSunset', sunset]]) {
+            const time = byId(id);
+            const label = localTime(timestamp / 1000, offset);
+            time.dateTime = label;
+            if (time.textContent !== label) time.textContent = label;
+        }
+        const progress = Math.max(0, Math.min(1, (now - sunrise) / (sunset - sunrise)));
+        daylightCard.style.setProperty('--wx-sun-progress', `${progress * 100}%`);
+        let message = 'The sun has set for today.';
+        if (now < sunset) {
+            const beforeSunrise = now < sunrise;
+            const remaining = Math.ceil(((beforeSunrise ? sunrise : sunset) - now) / 60000);
+            const hours = Math.floor(remaining / 60);
+            const minutes = remaining % 60;
+            const duration = [hours && `${hours}h`, minutes && `${minutes}m`].filter(Boolean).join(' ');
+            message = `${beforeSunrise ? 'Sunrise' : 'Sunset'} in ${duration}`;
+        }
+        byId('daylightNote').textContent = message;
+    }
+
+    function renderCurrent() {
+        byId('currentWeather').hidden = !current;
+        if (!current) return;
+        const compass = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+        const direction = Number.isFinite(current.wind_direction)
+            ? compass[Math.round(current.wind_direction / 22.5 + 16) % 16] : '';
+        const wind = measure(current.wind_speed, ' km/h');
+        const values = [
+            ['Humidity', measure(current.humidity, '%')],
+            ['Wind', wind === '—' ? wind : [wind, direction].filter(Boolean).join(' ')],
+            ['Gusts', measure(current.wind_gust, ' km/h')],
+            ['Visibility', measure(current.visibility, ' km')],
+            ['Pressure', measure(current.pressure, ' hPa')],
+            ['Cloud cover', measure(current.clouds, '%')]
+        ];
+        if (Number.isFinite(current.rain_mm)) values.push(['Rain in the last hour', measure(current.rain_mm, ' mm')]);
+        byId('currentMetrics').innerHTML = metrics(values);
+    }
+
+    function renderRainOutlook(hours) {
+        const card = byId('weatherPlan');
+        card.hidden = !hours.length;
+        rainTime = null;
+        if (!hours.length) return;
+
+        const snow = hours.some(hour => hour.condition === 'Snow' || hour.snow_mm > 0);
+        const kind = snow ? 'Precipitation' : 'Rain';
+        byId('rainHeading').textContent = `${kind} outlook`;
+        byId('precipitationMetric').textContent = snow ? 'Precip.' : 'Rain';
+
+        const known = hours.filter(hour => Number.isFinite(hour.precipitation));
+        const peak = known.reduce((highest, hour) => hour.precipitation > highest.precipitation ? hour : highest, known[0]);
+        const firstWet = hours.find(hour => ['Rain', 'Drizzle', 'Thunderstorm', 'Snow'].includes(hour.condition) || hour.precipitation >= 50);
+        const firstStorm = hours.find(hour => hour.condition === 'Thunderstorm');
+        const slot = firstWet ?? peak;
+        const time = hour => `${dayName(hour.date)} ${hour.time}`;
+        let reading = `${kind} chance unavailable`;
+        let note = 'Check the forecast intervals for conditions.';
+        if (firstWet) {
+            reading = `${kind} possible · ${time(firstWet)}`;
+            note = Number.isFinite(firstWet.precipitation)
+                ? `${firstWet.precipitation}% chance at that time` : firstWet.description;
+        } else if (peak) {
+            reading = `Up to ${peak.precipitation}% ${kind.toLowerCase()} chance`;
+            note = peak.precipitation > 0 ? `Highest around ${time(peak)}` : 'Over the next 24 hours';
+        }
+        if (firstStorm) note = `${note} · Thunderstorms possible ${time(firstStorm)}`;
+        byId('rainReading').textContent = reading;
+        byId('rainNote').textContent = note;
+        rainTime = (Number.isFinite(slot?.precipitation) ? slot : peak)?.timestamp ?? null;
+        rainButton.hidden = rainTime === null;
+    }
+
+    function drawForecast() {
+        if (!displayedHours.length) return;
+        const { width, height } = forecastCanvas.getBoundingClientRect();
+        const context = forecastCanvas.getContext('2d');
+        if (!width || !height || !context) return;
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        forecastCanvas.width = Math.round(width * pixelRatio);
+        forecastCanvas.height = Math.round(height * pixelRatio);
+        context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+        const metric = chartMetrics[forecastMetric];
+        const values = displayedHours.map(hour => hour[forecastMetric]);
+        const known = values.filter(Number.isFinite);
+        if (!known.length) return;
+        const isRain = forecastMetric === 'precipitation';
+        const min = forecastMetric === 'temperature' ? Math.min(...known) - 2 : 0;
+        const max = isRain ? 100 : Math.max(min + 5, Math.max(...known) + 2);
+        const graphTop = 11;
+        const bottom = height - 8;
+        const column = width / values.length;
+        const points = values.map((value, index) => Number.isFinite(value) ? {
+            x: (index + .5) * column,
+            y: bottom - Math.max(0, Math.min(1, (value - min) / (max - min))) * (bottom - graphTop),
+            selected: displayedHours[index].timestamp === selectedTime
+        } : null);
+
+        context.strokeStyle = '#d8ddd9';
+        context.setLineDash([3, 4]);
+        for (const ratio of [0, .33, .66, 1]) {
+            const y = bottom - ratio * (bottom - graphTop);
+            context.beginPath();
+            context.moveTo(column * .25, y);
+            context.lineTo(width - column * .25, y);
+            context.stroke();
+        }
+        context.setLineDash([]);
+
+        if (isRain) {
+            const barWidth = Math.min(27, column * .45);
+            for (const point of points.filter(Boolean)) {
+                context.fillStyle = point.selected ? metric.color : metric.fill;
+                context.fillRect(point.x - barWidth / 2, point.y, barWidth, Math.max(1, bottom - point.y));
+            }
+            return;
+        }
+
+        const runs = [[]];
+        for (const point of points) {
+            if (point) runs.at(-1).push(point);
+            else if (runs.at(-1).length) runs.push([]);
+        }
+        for (const run of runs.filter(points => points.length)) {
+            context.beginPath();
+            run.forEach(({ x, y }, index) => index ? context.lineTo(x, y) : context.moveTo(x, y));
+            context.strokeStyle = metric.color;
+            context.lineWidth = 2.5;
+            context.lineJoin = 'round';
+            context.stroke();
+            context.lineTo(run.at(-1).x, bottom);
+            context.lineTo(run[0].x, bottom);
+            context.closePath();
+            context.fillStyle = metric.fill;
+            context.fill();
+        }
+        for (const point of points.filter(Boolean)) {
+            context.beginPath();
+            context.arc(point.x, point.y, point.selected ? 5 : 3.4, 0, Math.PI * 2);
+            context.fillStyle = metric.color;
+            context.fill();
+        }
+    }
+
+    function paintForecastSelection() {
+        const selected = displayedHours.find(hour => hour.timestamp === selectedTime);
+        if (!selected) return;
+        for (const button of forecastSlots.children) {
+            button.setAttribute('aria-pressed', String(Number(button.dataset.time) === selectedTime));
+        }
+        const metric = chartMetrics[forecastMetric];
+        const chance = Number.isFinite(selected.precipitation)
+            ? `${selected.precipitation}% precipitation chance` : 'Precipitation chance unavailable';
+        const details = {
+            temperature: chance,
+            precipitation: temperature(selected.temperature),
+            wind_speed: Number.isFinite(selected.wind_gust) ? `Gusts up to ${selected.wind_gust} km/h` : chance
+        };
+        const time = `${dayName(selected.date)} · ${selected.time}`;
+        const availability = forecastCanvas.hidden ? `${metric.name} unavailable` : details[forecastMetric];
+        const description = [selected.description, availability].filter(Boolean).join(' · ');
+        const markup = `<time datetime="${new Date(selected.timestamp * 1000).toISOString()}">${escapeHTML(time)}</time>
+            <strong>${metric.format(selected[forecastMetric])}</strong><span>${escapeHTML(description)}</span>`;
+        if (forecastReading.dataset.markup !== markup) {
+            forecastReading.innerHTML = markup;
+            forecastReading.dataset.markup = markup;
+        }
+        drawForecast();
+    }
+
+    function renderForecastChart(hours) {
+        chartCard.hidden = !hours.length;
+        displayedHours = hours;
+        if (!hours.length) return;
+        if (!hours.some(hour => hour.timestamp === selectedTime)) selectedTime = hours[0].timestamp;
+        const focusTime = Number(document.activeElement?.closest('#forecastSlots button')?.dataset.time);
+        const metric = chartMetrics[forecastMetric];
+        forecastCanvas.hidden = !hours.some(hour => Number.isFinite(hour[forecastMetric]));
+        forecastTrack.style.setProperty('--wx-slots', hours.length);
+        for (const button of chartModes) button.setAttribute('aria-pressed', String(forecastMetric === button.dataset.metric));
+        forecastSlots.innerHTML = hours.map(hour => {
+            const time = `${dayName(hour.date)} ${hour.time}`;
+            const value = metric.format(hour[forecastMetric]);
+            const label = `${time}, ${metric.name} ${value === '—' ? 'unavailable' : value}`;
+            return `<button type="button" data-time="${hour.timestamp}" aria-label="${escapeHTML(label)}">
+                <span>${escapeHTML(calendarDate(hour.date, weekday))}</span>
+                <strong>${escapeHTML(hour.time)}</strong>
+                <span>${value}</span>
+            </button>`;
+        }).join('');
+        paintForecastSelection();
+        if (focusTime) forecastSlots.querySelector(`[data-time="${focusTime}"]`)?.focus({ preventScroll: true });
+    }
+
+    function forecastDays() {
+        if (!forecast) return [];
+        const now = Date.now();
+        const today = localDate(now, forecast.timezone ?? 0);
+        const future = forecast.forecast.filter(day => day.date > today);
+        const todayForecast = forecast.forecast.find(day => day.date === today);
+        const remaining = forecast.hourly.filter(hour => hour.date === today && hour.timestamp * 1000 >= now);
+        if (!todayForecast || !remaining.length) return future;
+
+        const lows = remaining.map(hour => hour.temp_min ?? hour.temperature).filter(Number.isFinite);
+        const highs = remaining.map(hour => hour.temp_max ?? hour.temperature).filter(Number.isFinite);
+        const chances = remaining.map(hour => hour.precipitation).filter(Number.isFinite);
+        return [{
+            ...todayForecast,
+            temp_min: lows.length ? Math.min(...lows) : null,
+            temp_max: highs.length ? Math.max(...highs) : null,
+            precipitation: chances.length ? Math.max(...chances) : null
+        }, ...future];
+    }
+
+    function renderDaily() {
+        const days = forecastDays();
+        byId('dailySection').hidden = !days.length;
+        if (!days.length) return;
+
+        const low = Math.min(...days.map(day => day.temp_min).filter(Number.isFinite));
+        const high = Math.max(...days.map(day => day.temp_max).filter(Number.isFinite));
+        const scale = Math.max(1, high - low);
+        const list = byId('weeklyForecast');
+        const focusDate = document.activeElement?.closest('#weeklyForecast [data-date]')?.dataset.date;
+        list.innerHTML = days.map(day => {
+            const lowLabel = temperature(day.temp_min);
+            const highLabel = temperature(day.temp_max);
+            const bar = Number.isFinite(low) && Number.isFinite(high) && Number.isFinite(day.temp_min) && Number.isFinite(day.temp_max)
+                ? `<i style="--wx-range-start:${(day.temp_min - low) / scale * 100}%;--wx-range-length:${(day.temp_max - day.temp_min) / scale * 100}%"></i>` : '';
+            const probability = Number.isFinite(day.precipitation) ? `${day.precipitation}% precip.` : 'Chance unavailable';
+            const name = dayName(day.date);
+            const dateLabel = name === 'Today' ? 'Rest of day' : calendarDate(day.date, shortDate);
+            return `<button type="button" class="wx-day" data-date="${escapeHTML(day.date)}" aria-haspopup="dialog">
+                <span class="wx-day-name"><strong>${escapeHTML(name)}</strong><span class="wx-day-date">${dateLabel}</span></span>
+                <span class="wx-day-conditions"><span class="wx-day-icon" aria-hidden="true">${weatherIcon(day)}</span>${escapeHTML(day.description)}</span>
+                <span class="wx-day-chance">${probability}</span>
+                <span class="wx-day-range" role="img" aria-label="Forecast low ${lowLabel}, high ${highLabel}">
+                    <span>${lowLabel}</span><span class="wx-range-track">${bar}</span><span>${highLabel}</span>
+                </span>
+                <span class="wx-day-arrow" aria-hidden="true">›</span>
+            </button>`;
+        }).join('');
+        if (focusDate) Array.from(list.children).find(button => button.dataset.date === focusDate)?.focus({ preventScroll: true });
     }
 
     function renderWeather() {
         const hours = upcomingHours();
         renderSky();
         byId('weatherShare').hidden = !current && !forecast;
-        byId('weatherOverview').hidden = !current && !forecast;
         byId('weatherSource').hidden = !current && !forecast;
         renderCurrent();
-        renderPlan(hours);
-        byId('hourlySection').hidden = !hours.length;
-        byId('hourlyForecast').innerHTML = hours.map(hour => renderHour(hour)).join('');
-        byId('dailySection').hidden = !forecast?.forecast.length;
-        byId('weeklyForecast').innerHTML = (forecast?.forecast ?? []).map(day => `
-            <button type="button" class="wx-day" data-date="${escapeHTML(day.date)}" aria-haspopup="dialog">
-                <span><strong>${escapeHTML(dayName(day))}</strong><span class="wx-day-date">${calendarDate(day.date, shortDate)}</span></span>
-                <span class="wx-day-icon" aria-hidden="true">${weatherIcon(day)}</span>
-                <span class="wx-day-temps">${temperature(day.temp_max)} / ${temperature(day.temp_min)}</span>
-                <small>${escapeHTML(day.description)} · ${measure(day.precipitation, '%')} peak rain</small>
-            </button>`).join('');
+        renderRainOutlook(hours);
+        renderForecastChart(hours);
+        renderDaily();
     }
 
-    function renderCurrent() {
-        const element = byId('currentWeather');
-        if (!current) {
-            element.innerHTML = '<h3>Right now</h3><p>Current conditions are unavailable.</p>';
-            return;
-        }
-        const wind = measure(current.wind_speed, ' km/h');
-        element.innerHTML = `
-            <h3>Right now</h3>
-            <div class="wx-now">
-                <span class="wx-now-icon" aria-hidden="true">${weatherIcon(current)}</span>
-                <span class="wx-now-temp">${temperature(current.temperature)}</span>
-                <span class="wx-now-condition"><strong>${escapeHTML(current.description)}</strong><small>Feels like ${temperature(current.feels_like)}</small></span>
-            </div>
-            ${metrics([
-                ['Humidity', measure(current.humidity, '%')], ['Wind', wind],
-                ['Visibility', measure(current.visibility, ' km')], ['Pressure', measure(current.pressure, ' hPa')],
-                ['Sunrise', localTime(current.sunrise, current.timezone)], ['Sunset', localTime(current.sunset, current.timezone)]
-            ])}`;
-    }
-
-    function renderPlan(hours) {
-        const element = byId('weatherPlan');
-        if (!hours.length) {
-            element.innerHTML = '<h3>Plan your day</h3><p>The next 24 hours are unavailable.</p>';
-            return;
-        }
-        const temps = hours.map(hour => hour.temperature).filter(Number.isFinite);
-        const rain = hours.reduce((peak, hour) => (hour.precipitation ?? -1) > (peak?.precipitation ?? -1) ? hour : peak, null);
-        const peakWind = Math.max(...hours.map(hour => hour.wind_gust ?? hour.wind_speed).filter(Number.isFinite));
-        let note = 'Check the forecast below for the conditions at your planned time.';
-        if (hours.some(hour => hour.condition === 'Thunderstorm')) {
-            note = 'Thunderstorms are possible in the next 24 hours. Check the forecast before heading out.';
-        } else if (rain?.precipitation >= 60) {
-            note = `Rain is most likely around ${escapeHTML(rain.time)} on ${escapeHTML(rain.day)}. Pack a rain jacket if you’ll be out then.`;
-        } else if (peakWind >= 40) {
-            note = 'Wind could pick up. Check the forecast before outdoor plans.';
-        } else if (Math.max(...temps) >= 32) {
-            note = 'A hot stretch is forecast. Take water if you’re heading out.';
-        }
-        element.innerHTML = `
-            <h3>Plan your day</h3><p>Next 24 hours</p>
-            ${metrics([
-                ['High / low', `${temperature(Math.max(...temps))} / ${temperature(Math.min(...temps))}`],
-                ['Peak rain chance', measure(rain?.precipitation, '%')], ['Peak wind or gust', measure(peakWind, ' km/h')]
-            ])}
-            <p class="wx-plan-note">${note}</p>`;
-    }
-
-    function renderHour(hour, detailed = false) {
+    function renderHour(hour) {
         return `<article class="wx-hour">
-            <span class="wx-hour-time">${escapeHTML(hour.day)} · ${escapeHTML(hour.time)}</span>
+            <span class="wx-hour-time">${escapeHTML(hour.time)}</span>
             <span class="wx-hour-icon" aria-hidden="true">${weatherIcon(hour)}</span>
             <strong>${temperature(hour.temperature)}</strong>
-            <small>${escapeHTML(hour.description)} · ${measure(hour.precipitation, '%')} rain</small>
-            ${detailed ? metrics([
+            <small>${escapeHTML(hour.description)} · ${measure(hour.precipitation, '%')} precipitation chance</small>
+            ${metrics([
                 ['Feels like', temperature(hour.feels_like)], ['Humidity', measure(hour.humidity, '%')],
                 ['Wind', measure(hour.wind_speed, ' km/h')], ['Gusts', measure(hour.wind_gust, ' km/h')],
                 ['Rain', measure(hour.rain_mm, ' mm')], ['Snow', measure(hour.snow_mm, ' mm')],
                 ['Cloud cover', measure(hour.clouds, '%')], ['Visibility', measure(hour.visibility, ' km')],
                 ['Pressure', measure(hour.pressure, ' hPa')], ['Dew point', temperature(hour.dew_point)]
-            ]) : ''}
+            ])}
         </article>`;
     }
 
     function openDay(date) {
-        const day = forecast?.forecast.find(item => item.date === date);
+        const day = forecastDays().find(item => item.date === date);
         if (!day) return;
         byId('weatherDayTitle').textContent = calendarDate(date);
-        const hours = forecast.hourly.filter(hour => hour.date === date);
+        const hours = forecast.hourly.filter(hour => hour.date === date && hour.timestamp * 1000 >= Date.now());
         byId('dayDetailContent').innerHTML = `
-            <p>${escapeHTML(day.description)} · High ${temperature(day.temp_max)} · Low ${temperature(day.temp_min)} · Peak rain chance ${measure(day.precipitation, '%')}</p>
-            <div class="wx-detail-grid">${hours.map(hour => renderHour(hour, true)).join('')}</div>`;
+            <p>${escapeHTML(day.description)} · High ${temperature(day.temp_max)} · Low ${temperature(day.temp_min)} · Peak precipitation chance ${measure(day.precipitation, '%')}</p>
+            <div class="wx-detail-grid">${hours.map(hour => renderHour(hour)).join('')}</div>`;
         dayDialog.showModal();
     }
 
@@ -480,8 +717,8 @@
                 `Humidity ${measure(current.humidity, '%')} · Wind ${measure(current.wind_speed, ' km/h')}`);
         }
         if (forecast) {
-            lines.push('', 'Daily forecast', ...forecast.forecast.map(day =>
-                `${calendarDate(day.date)} · ${temperature(day.temp_max)} / ${temperature(day.temp_min)} · ${day.description} · Peak rain chance ${measure(day.precipitation, '%')}`));
+            lines.push('', 'Daily forecast', ...forecastDays().map(day =>
+                `${calendarDate(day.date)} · ${temperature(day.temp_max)} / ${temperature(day.temp_min)} · ${day.description} · Peak precipitation chance ${measure(day.precipitation, '%')}`));
         }
         lines.push('', 'Weather data from OpenWeather.');
         return lines;
@@ -509,11 +746,11 @@
         const name = locationName();
         const unit = preferences.fahrenheit ? 'F' : 'C';
         const rows = [
-            ['Date', 'Location', `Temp (°${unit})`, 'Description', 'Humidity (%)', 'Wind (km/h)', `High (°${unit})`, `Low (°${unit})`, 'Peak rain chance (%)']
+            ['Date', 'Location', `Temp (°${unit})`, 'Description', 'Humidity (%)', 'Wind (km/h)', `High (°${unit})`, `Low (°${unit})`, 'Peak precipitation chance (%)']
         ];
         if (current) rows.push(['Current', name, tempNumber(current.temperature), current.description, current.humidity, current.wind_speed]);
         if (forecast) {
-            rows.push(...forecast.forecast.map(day => [day.date, name, '', day.description, day.humidity, day.wind_speed,
+            rows.push(...forecastDays().map(day => [day.date, name, '', day.description, day.humidity, day.wind_speed,
                 tempNumber(day.temp_max), tempNumber(day.temp_min), day.precipitation]));
         }
         const csv = rows.map(row => Array.from({ length: rows[0].length }, (_, index) => {
@@ -553,6 +790,7 @@
             const delta = event.key === 'ArrowDown' ? 1 : -1;
             const index = activeResult < 0 ? (delta > 0 ? 0 : results.length - 1) : (activeResult + delta + results.length) % results.length;
             highlightResult(index);
+            searchResults.children[index].scrollIntoView({ block: 'nearest' });
         } else if (event.key === 'Enter' && !searchPopover.hidden && results.length) {
             event.preventDefault();
             chooseResult(Math.max(activeResult, 0));
@@ -567,6 +805,42 @@
         savePreferences();
         renderWeather();
     });
+    for (const button of chartModes) {
+        button.addEventListener('click', () => {
+            forecastMetric = button.dataset.metric;
+            renderForecastChart(displayedHours);
+        });
+    }
+    forecastSlots.addEventListener('click', event => {
+        const button = event.target.closest('button[data-time]');
+        if (!button) return;
+        selectedTime = Number(button.dataset.time);
+        paintForecastSelection();
+    });
+    forecastSlots.addEventListener('keydown', event => {
+        const button = event.target.closest('button[data-time]');
+        if (!button || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        const neighbors = {
+            ArrowLeft: button.previousElementSibling,
+            ArrowRight: button.nextElementSibling,
+            Home: forecastSlots.firstElementChild,
+            End: forecastSlots.lastElementChild
+        };
+        event.preventDefault();
+        const next = neighbors[event.key];
+        if (!next) return;
+        selectedTime = Number(next.dataset.time);
+        paintForecastSelection();
+        next.focus();
+    });
+    rainButton.addEventListener('click', () => {
+        if (rainTime === null) return;
+        selectedTime = rainTime;
+        forecastMetric = 'precipitation';
+        renderForecastChart(displayedHours);
+        forecastSlots.querySelector(`[data-time="${selectedTime}"]`)?.focus();
+    });
+    new ResizeObserver(drawForecast).observe(forecastCanvas);
     byId('weatherShare').addEventListener('click', () => shareDialog.showModal());
     byId('weeklyForecast').addEventListener('click', event => {
         const button = event.target.closest('[data-date]');
@@ -578,7 +852,7 @@
     }));
     shareDialog.querySelectorAll('[data-export]').forEach(button => button.addEventListener('click', () => exportWeather(button.dataset.export)));
 
-    setView(preferences.view === 'list' ? 'list' : 'cards');
+    setView(preferences.view === 'cards' ? 'cards' : 'list');
     preferences.fahrenheit = preferences.fahrenheit === true;
     unitButton.hidden = false;
     unitButton.setAttribute('aria-pressed', String(Boolean(preferences.fahrenheit)));
@@ -597,14 +871,22 @@
     } else if (validPlace(tracked)) {
         selectPlace(tracked);
     } else {
-        renderQuickPlaces();
-        pageStatus.textContent = 'Choose a place to see its weather.';
-        weather.hasLocationPermission().then(granted => { if (granted && !location) useDeviceLocation(true); });
+        const defaultPlace = { ...settings.defaultCity, source: 'Default city' };
+        selectPlace(defaultPlace);
+        weather.hasLocationPermission().then(granted => {
+            if (granted && location?.source === 'Default city') useDeviceLocation(true);
+        });
     }
-    setInterval(() => {
-        if (location && navigator.onLine && !document.hidden && !refreshButton.disabled && !locationButton.disabled
-            && !dayDialog.open && !shareDialog.open && !byId('weeklyForecast').contains(document.activeElement)) {
+
+    function refreshForecast(afterReconnect = false) {
+        const due = Date.now() - lastWeatherAttempt >= 600000 || afterReconnect;
+        if (due && location && navigator.onLine && !document.hidden && !weatherRequest && !locationButton.disabled
+            && !dayDialog.open && !shareDialog.open) {
             loadWeather(true);
         }
-    }, 600000);
+    }
+
+    setInterval(refreshForecast, 60000);
+    document.addEventListener('visibilitychange', () => refreshForecast());
+    window.addEventListener('online', () => refreshForecast(true));
 })();

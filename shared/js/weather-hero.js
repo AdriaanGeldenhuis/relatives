@@ -7,7 +7,6 @@
     const clockFormat = new Intl.DateTimeFormat('en-ZA', {
         hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC'
     });
-    const symbols = { rain: '🌧️', storm: '⛈️', cloud: '☁️', snow: '❄️', fog: '🌫️' };
     const androidApp = Boolean(window.TrackingBridge) || /\bRelativesAndroid(?:\/|App\b)/.test(navigator.userAgent);
 
     async function getDeviceLocation() {
@@ -106,25 +105,13 @@
         return /light|drizzle/.test(description) ? 'light' : 'steady';
     }
 
-    function mount(hero, { formatTemperature = value => `${Math.round(value)}°C`, onTime, initial = {} } = {}) {
+    function mount(hero, { formatTemperature = value => `${Math.round(value)}°C`, onTime, onDaylight, initial = {} } = {}) {
         const panel = hero.querySelector('[data-weather-panel]');
         const field = name => panel.querySelector(`[data-sky-${name}]`);
-        const fields = Object.fromEntries(['readout', 'place', 'source', 'clock', 'time', 'period', 'date', 'temp',
-            'condition', 'feels', 'wind', 'icon', 'daylight', 'sunrise', 'sunset', 'sun-note'].map(name => [name, field(name)]));
-        const views = panel.querySelectorAll('[data-sky-view]');
-        const viewContents = panel.querySelectorAll('[data-sky-content]');
-        const switcher = panel.querySelector('.sky-switch');
+        const fields = Object.fromEntries(['readout', 'place', 'source', 'clock', 'time', 'date', 'temp',
+            'condition', 'feels', 'daylight', 'sunrise', 'sunset'].map(name => [name, field(name)]));
         const deviceClock = panel.hasAttribute('data-device-clock');
-        const hasLandscape = hero.classList.contains('welcome-hero');
         let data = initial;
-        let selectedView = 'now';
-
-        function showView(view) {
-            selectedView = view;
-            views.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.skyView === view)));
-            viewContents.forEach(content => { content.hidden = content.dataset.skyContent !== view; });
-        }
-        views.forEach(button => button.addEventListener('click', () => showView(button.dataset.skyView)));
 
         function text(element, value, hideWhenEmpty = false) {
             if (!element) return;
@@ -158,24 +145,19 @@
             const sun = sunState(now, hasSunTimes ? sunrise : null, hasSunTimes ? sunset : null, fallbackLight);
             const { light } = sun;
             const sky = skyFor(current);
+            hero.toggleAttribute('data-solar-update', hero.dataset.phase === sun.phase && hero.dataset.sky === sky);
             hero.dataset.time = period;
             hero.dataset.light = light;
             hero.dataset.sky = sky;
-            if (hasLandscape) {
-                hero.toggleAttribute('data-solar-update', hero.dataset.phase === sun.phase);
-                hero.dataset.phase = sun.phase;
-                hero.style.setProperty('--sun-altitude', `${sun.altitude.toFixed(2)}%`);
-                hero.style.setProperty('--night-mix', sun.darkness.toFixed(3));
-                const overcast = sky === 'cloud' && (Number.isFinite(current.clouds)
-                    ? current.clouds >= 65 : !/few|scattered/i.test(current.description ?? ''));
-                hero.toggleAttribute('data-overcast', overcast);
-                if (sky === 'rain' || sky === 'storm') hero.dataset.rainIntensity = rainIntensity(current);
-                else delete hero.dataset.rainIntensity;
-            }
-            const overnight = light === 'night' && (hour < 5 || hour >= 22);
-            const periodLabel = period ? period[0].toUpperCase() + period.slice(1) : '';
-            const lightLabel = { day: 'Daylight', twilight: 'Twilight', night: 'Night' }[light];
-            text(fields.period, overnight ? 'Overnight' : [periodLabel, lightLabel].filter(Boolean).join(' · '), true);
+            hero.dataset.phase = sun.phase;
+            hero.style.setProperty('--sun-altitude', `${sun.altitude.toFixed(2)}%`);
+            hero.style.setProperty('--night-mix', sun.darkness.toFixed(3));
+            const overcast = sky === 'cloud' && (Number.isFinite(current.clouds)
+                ? current.clouds >= 65 : !/few|scattered/i.test(current.description ?? ''));
+            hero.toggleAttribute('data-overcast', overcast);
+            if (sky === 'rain' || sky === 'storm') hero.dataset.rainIntensity = rainIntensity(current);
+            else delete hero.dataset.rainIntensity;
+
             text(fields.date, date, true);
             text(fields.time, time);
             if (time) fields.time.dateTime = time;
@@ -195,16 +177,10 @@
                 || (deviceClock ? 'Use your location for current weather' : 'Choose a place to see current conditions'));
             text(fields.feels, Number.isFinite(current?.feels_like)
                 ? `Feels like ${formatTemperature(current.feels_like)}` : '', true);
-            text(fields.wind, Number.isFinite(current?.wind_speed) ? `Wind ${current.wind_speed} km/h` : '', true);
-            const icon = sky === 'clear' ? (light === 'night' ? '🌙' : '☀️') : symbols[sky];
-            text(fields.icon, icon || '', true);
-
+            onDaylight?.(hasSunTimes ? { sunrise, sunset, now, offset: offsetSeconds } : null);
             if (fields.daylight) fields.daylight.hidden = !hasSunTimes;
-            if (switcher) switcher.hidden = !hasSunTimes;
-            if (!hasSunTimes) {
-                if (selectedView !== 'now') showView('now');
-                return;
-            }
+            if (!hasSunTimes) return;
+
             const sunTimes = [[fields.sunrise, sunrise], [fields.sunset, sunset]];
             for (const [element, instant] of sunTimes) {
                 if (!element) continue;
@@ -212,17 +188,6 @@
                 text(element, localTime);
                 element.dateTime = localTime;
             }
-            if (!fields['sun-note']) return;
-            const nextSunEvent = now < sunrise ? sunrise : now < sunset ? sunset : null;
-            let sunNote = 'The sun has set for today.';
-            if (nextSunEvent) {
-                const minutes = Math.ceil((nextSunEvent - now) / 60000);
-                const hours = Math.floor(minutes / 60);
-                const remaining = minutes % 60;
-                const countdown = [hours && `${hours}h`, remaining && `${remaining}m`].filter(Boolean).join(' ');
-                sunNote = `${nextSunEvent === sunrise ? 'Sunrise' : 'Sunset'} in ${countdown}`;
-            }
-            text(fields['sun-note'], sunNote);
         }
 
         paint();

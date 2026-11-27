@@ -186,13 +186,14 @@ jobs:
           fi
           REMOTE
           done
-      - name: Check deployed Notes, manifest and welcome assets
+      - name: Check deployed Notes, Weather and welcome assets
         shell: bash
         run: |
           set -euo pipefail
           version=$(git show -s --format=%ct HEAD)
           assets=(manifest.json "shared/js/planner-events.js?v=$version" "notes/js/notes.js?v=$version"
-            "shared/js/weather-hero.js?v=$version" "shared/js/welcome-sky.js?v=$version")
+            "shared/js/weather-hero.js?v=$version" "shared/js/welcome-sky.js?v=$version"
+            "weather/css/weather.css?v=$version" "weather/js/weather.js?v=$version")
           verify_asset() {
             local asset=$1 source_file=$2
             if ! curl --fail --silent --show-error --compressed --max-time 20 --retry 2 \

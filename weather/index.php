@@ -26,6 +26,7 @@ $userLocation = weatherTrackedLocation($db, (int)$user['id'], (int)$user['family
 
 $pageTitle = 'Weather';
 $pageCSS = ['/weather/css/weather.css?build=' . filemtime(__DIR__ . '/css/weather.css')];
+$pageInlineStylesheets = [__DIR__ . '/../shared/css/welcome-sky.css'];
 $pageJS = ['/weather/js/weather.js'];
 $pageJSVersion = filemtime(__DIR__ . '/js/weather.js');
 
@@ -33,63 +34,91 @@ require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
 <main class="family-main wx-main" id="weatherApp">
-    <header class="family-hero sky-hero" data-light="unknown">
-        <?php renderWeatherSky(); ?>
-        <div class="sky-layout">
-            <div class="family-hero-content">
-                <h1 class="family-hero-title" id="weatherHeroTitle">Weather</h1>
-                <p class="family-hero-summary" id="weatherHeroSummary">Search for a city or use your location to see its weather.</p>
-                <div class="family-actions">
-                    <button type="button" class="family-button family-button-primary" id="useCurrentLocation" hidden>Use my location</button>
-                    <button type="button" class="family-button" id="weatherUnits" aria-label="Fahrenheit temperatures" aria-pressed="false" hidden>°C / °F</button>
-                    <button type="button" class="family-button" id="weatherRefresh" hidden>Refresh</button>
-                    <button type="button" class="family-button" id="weatherShare" hidden>Share</button>
-                </div>
-                <p id="weatherLocationStatus" class="sky-feedback" role="status"></p>
-            </div>
-            <?php renderWeatherHeroPanel(); ?>
-        </div>
-    </header>
-
     <div class="wx-toolbar">
-        <div class="wx-search">
-            <label class="wx-sr-only" for="locationSearch">Search for a city or town</label>
-            <input type="search" id="locationSearch" placeholder="Search city or town…" maxlength="100"
-                   autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="searchResults">
-            <div class="wx-search-popover" id="searchPopover" hidden>
-                <ul id="searchResults" role="listbox" aria-label="Matching places"></ul>
-                <p id="searchStatus" role="status"></p>
+        <h1 class="wx-page-title">Weather</h1>
+        <div class="wx-location-tools">
+            <div class="wx-search">
+                <label class="wx-sr-only" for="locationSearch">Search for a city or town</label>
+                <input type="search" id="locationSearch" placeholder="Find a city" maxlength="100"
+                       autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="searchResults">
+                <div class="wx-search-popover" id="searchPopover" hidden>
+                    <ul id="searchResults" role="listbox" aria-label="Matching places"></ul>
+                    <p id="searchStatus" role="status"></p>
+                </div>
             </div>
+            <button type="button" class="wx-button wx-location-button" id="useCurrentLocation" hidden>
+                <span class="wx-location-icon" aria-hidden="true"></span>My location
+            </button>
         </div>
-        <div class="wx-places" id="weatherPlaces" aria-label="Quick locations"></div>
+        <div class="wx-tool-actions">
+            <button type="button" class="wx-button wx-unit" id="weatherUnits" aria-label="Fahrenheit temperatures" aria-pressed="false" hidden>
+                <span>°C</span><span>°F</span>
+            </button>
+            <button type="button" class="wx-button" id="weatherRefresh" aria-label="Refresh weather" hidden><span class="wx-refresh" aria-hidden="true">↻</span></button>
+            <button type="button" class="wx-button" id="weatherShare" hidden>Share</button>
+        </div>
     </div>
+    <div class="wx-places" id="weatherPlaces" role="group" aria-label="Quick locations" hidden></div>
+    <p id="weatherLocationStatus" class="wx-status" role="status"></p>
+
+    <?php renderWeatherHero(); ?>
 
     <p class="wx-status" id="weatherStatus" role="status"></p>
     <noscript><p class="wx-message">Enable JavaScript to search for a location and load its forecast.</p></noscript>
 
-    <section class="wx-overview" id="weatherOverview" aria-label="Weather at a glance" hidden>
-        <div class="wx-card wx-current" id="currentWeather"></div>
-        <div class="wx-card wx-plan" id="weatherPlan"></div>
-    </section>
+    <div class="wx-outlook">
+        <section class="wx-card wx-rain-card" id="weatherPlan" aria-labelledby="rainHeading" hidden>
+            <h2 id="rainHeading">Rain outlook</h2>
+            <p id="rainReading" class="wx-rain-reading"></p>
+            <p id="rainNote" class="wx-support"></p>
+            <button type="button" class="wx-text-button" id="showRainForecast" hidden>Show in graph <span aria-hidden="true">→</span></button>
+        </section>
 
-    <section class="wx-section" id="hourlySection" aria-labelledby="hourlyHeading" hidden>
-        <div class="wx-section-head">
-            <div><h2 class="family-section-title" id="hourlyHeading">Next 24 hours</h2><p>3-hour intervals · local time</p></div>
-        </div>
-        <div id="hourlyForecast" class="wx-hourly"></div>
-    </section>
+        <section class="wx-card wx-timeline" id="hourlySection" aria-labelledby="hourlyHeading" hidden>
+            <div class="wx-section-head">
+                <div><h2 id="hourlyHeading">Next 24 hours</h2><p class="wx-support">3-hour intervals · local time</p></div>
+                <div class="wx-segmented" role="group" aria-label="Forecast metric">
+                    <button type="button" data-metric="temperature" aria-pressed="true">Temp</button>
+                    <button type="button" data-metric="precipitation" id="precipitationMetric" aria-pressed="false">Rain</button>
+                    <button type="button" data-metric="wind_speed" aria-pressed="false">Wind</button>
+                </div>
+            </div>
+            <div class="wx-chart-reading" id="forecastReading" aria-live="polite"></div>
+            <div class="wx-chart-scroll">
+                <div class="wx-chart-track" id="forecastTrack">
+                    <canvas id="forecastGraph" aria-hidden="true"></canvas>
+                    <div class="wx-chart-slots" id="forecastSlots" role="group" aria-label="Forecast times"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="wx-card wx-daylight" id="weatherDaylight" aria-labelledby="daylightHeading" hidden>
+            <h2 id="daylightHeading">Daylight</h2>
+            <p id="daylightNote" class="wx-support"></p>
+            <div class="wx-daylight-track" aria-hidden="true"><span></span></div>
+            <dl>
+                <div><dt>Sunrise</dt><dd><time id="daylightSunrise"></time></dd></div>
+                <div><dt>Sunset</dt><dd><time id="daylightSunset"></time></dd></div>
+            </dl>
+        </section>
+    </div>
 
     <section class="wx-section" id="dailySection" aria-labelledby="dailyHeading" hidden>
         <div class="wx-section-head">
-            <div><h2 class="family-section-title" id="dailyHeading">Daily forecast</h2><p>Choose a day to see its full forecast.</p></div>
-            <div class="wx-layout" role="group" aria-label="Forecast layout">
-                <button type="button" data-view="cards" aria-pressed="true">Cards</button>
-                <button type="button" data-view="list" aria-pressed="false">List</button>
+            <h2 id="dailyHeading">Daily forecast</h2>
+            <div class="wx-segmented" role="group" aria-label="Forecast layout">
+                <button type="button" data-view="list" aria-pressed="true">List</button>
+                <button type="button" data-view="cards" aria-pressed="false">Cards</button>
             </div>
         </div>
         <div id="weeklyForecast" class="wx-daily"></div>
     </section>
-    <p class="wx-source" id="weatherSource" hidden>Weather data from OpenWeather.</p>
+
+    <section class="wx-section wx-card" id="currentWeather" aria-labelledby="currentHeading" hidden>
+        <h2 id="currentHeading">Current conditions</h2>
+        <div id="currentMetrics"></div>
+    </section>
+    <p class="wx-source" id="weatherSource" hidden>Forecast and observations from OpenWeather.</p>
 </main>
 
 <dialog id="dayDetailModal" class="wx-dialog" aria-labelledby="weatherDayTitle">
@@ -117,6 +146,7 @@ require_once __DIR__ . '/../shared/components/header.php';
     'userId' => (int)$user['id'],
     'trackedLocation' => $userLocation,
     'savedCity' => weatherSavedCity($db, (int) $user['id']),
+    'defaultCity' => WEATHER_DEFAULT_PLACE,
     'csrf' => CSRF::generate()
 ], JSON_HEX_TAG | JSON_THROW_ON_ERROR) ?></script>
 
