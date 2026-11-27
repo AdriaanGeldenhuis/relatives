@@ -2,20 +2,19 @@
 
 const CACHE_PREFIX = 'relatives-home-offline-';
 // Bump this when any of the offline files change, including shared home CSS or JS.
-const OFFLINE_VERSION = '14';
+const OFFLINE_VERSION = '15';
 const CACHE_NAME = CACHE_PREFIX + OFFLINE_VERSION;
-const OFFLINE_PAGE = '/home/offline.html';
-const STATIC_ASSETS = [OFFLINE_PAGE, '/home/css/home.css', '/shared/css/family-surfaces.css', '/shared/css/action-controls.css', '/home/js/home.js', '/favicon.ico'];
+const OFFLINE_PAGE = '/home/offline.php';
 
 self.addEventListener('install', (event) => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE_NAME);
-        // Fetch only public files. Dashboard responses and session redirects are never cached.
-        await cache.addAll(STATIC_ASSETS.map((url) => new Request(url + '?offline=' + OFFLINE_VERSION, {
+        // The public offline page contains its styles and script. Never cache the signed-in dashboard.
+        await cache.add(new Request(OFFLINE_PAGE + '?offline=' + OFFLINE_VERSION, {
             cache: 'reload',
             credentials: 'omit',
             redirect: 'error',
-        })));
+        }));
         await self.skipWaiting();
     })());
 });
@@ -30,9 +29,9 @@ self.addEventListener('activate', (event) => {
     })());
 });
 
-async function cachedAsset(path) {
+async function cachedOfflinePage() {
     const cache = await caches.open(CACHE_NAME);
-    return cache.match(path, { ignoreSearch: true });
+    return cache.match(OFFLINE_PAGE, { ignoreSearch: true });
 }
 
 self.addEventListener('fetch', (event) => {
@@ -40,14 +39,9 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(request.url);
     if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
-    if (request.mode === 'navigate' && ['/home/', '/home/index.php'].includes(url.pathname)) {
+    if (request.mode === 'navigate' && ['/home/', '/home/index.php', OFFLINE_PAGE].includes(url.pathname)) {
         event.respondWith(fetch(request).catch(async () =>
-            await cachedAsset(OFFLINE_PAGE) || Response.error()
+            await cachedOfflinePage() || Response.error()
         ));
-        return;
-    }
-
-    if (!url.search && STATIC_ASSETS.includes(url.pathname)) {
-        event.respondWith((async () => await cachedAsset(url.pathname) || fetch(request))());
     }
 });

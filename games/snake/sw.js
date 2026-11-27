@@ -4,7 +4,7 @@
  * and network-first for API calls.
  */
 
-const CACHE_VERSION = 'snake-v1.2.2';
+const CACHE_VERSION = 'snake-v1.2.3';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 const DYNAMIC_CACHE = CACHE_VERSION + '-dynamic';
 
@@ -35,7 +35,7 @@ self.addEventListener('install', (event) => {
         caches.open(STATIC_CACHE)
             .then((cache) => {
                 console.log('[SW] Caching static assets');
-                return cache.addAll(STATIC_ASSETS);
+                return cache.addAll(STATIC_ASSETS.map(url => new Request(url, { cache: 'reload' })));
             })
             .then(() => {
                 console.log('[SW] Install complete');
@@ -130,8 +130,14 @@ async function cacheFirst(request) {
         return networkResponse;
     }
 
-    // Offline fallback
-    return caches.match('/games/snake/');
+    // The initial cache uses paths without the page's asset version query.
+    if (new URL(request.url).pathname.startsWith('/games/snake/assets/')) {
+        return (await cache.match(request, { ignoreSearch: true })) ?? Response.error();
+    }
+    if (request.mode === 'navigate') {
+        return (await cache.match('/games/snake/')) ?? Response.error();
+    }
+    return Response.error();
 }
 
 /**

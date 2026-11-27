@@ -5,7 +5,7 @@
  * ============================================
  */
 
-const CACHE_NAME = 'flash-challenge-v1.0.4';
+const CACHE_NAME = 'flash-challenge-v1.0.5';
 const STATIC_ASSETS = [
     '/games/flash_challenge/',
     '/games/flash_challenge/index.php',
@@ -36,7 +36,7 @@ self.addEventListener('install', event => {
         caches.open(CACHE_NAME)
             .then(cache => {
                 console.log('[Flash SW] Caching static assets');
-                return cache.addAll(STATIC_ASSETS);
+                return cache.addAll(STATIC_ASSETS.map(url => new Request(url, { cache: 'reload' })));
             })
             .then(() => {
                 console.log('[Flash SW] Install complete');
@@ -167,8 +167,8 @@ async function fetchAndCache(request) {
 
         return response;
     } catch (err) {
-        // Try cache as last resort
-        const cached = await caches.match(request);
+        // Match the unversioned copy precached during installation.
+        const cached = await caches.match(request, { cacheName: CACHE_NAME, ignoreSearch: true });
         if (cached) {
             return cached;
         }

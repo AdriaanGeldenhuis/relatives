@@ -1,3 +1,9 @@
+<?php
+declare(strict_types=1);
+
+header('Content-Type: text/html; charset=UTF-8');
+header('Cache-Control: public, no-cache');
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,9 +12,11 @@
     <meta name="theme-color" content="#f3f2e9">
     <title>Home offline - Relatives</title>
     <link rel="icon" href="/favicon.ico">
-    <link rel="stylesheet" href="/home/css/home.css">
-    <link rel="stylesheet" href="/shared/css/family-surfaces.css">
-    <link rel="stylesheet" href="/shared/css/action-controls.css">
+    <style><?php
+        readfile(__DIR__ . '/css/home.css');
+        readfile(__DIR__ . '/../shared/css/family-surfaces.css');
+        readfile(__DIR__ . '/../shared/css/action-controls.css');
+    ?></style>
     <style>
         body.offline-home {
             --family-canvas: #f6f3ec;
@@ -29,7 +37,6 @@
         .offline-home .family-hero .family-hero-summary { color: #e1e7ee; }
         .offline-home .launch-chip { background: #e3ebf2; }
     </style>
-    <script src="/home/js/home.js" defer></script>
 </head>
 <body class="home-page family-page offline-home" data-area="home">
     <header class="offline-header"><span class="home-wordmark">Relatives<span>.</span></span></header>
@@ -70,5 +77,6 @@
             </ul>
         </div>
     </main>
+    <script><?php readfile(__DIR__ . '/js/home.js'); ?></script>
 </body>
 </html>

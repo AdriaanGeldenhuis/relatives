@@ -63,7 +63,7 @@
 
         window.addEventListener('online', () => showConnected(true));
         window.addEventListener('offline', () => showConnected(false));
-        if (window.location.pathname === '/home/offline.html') showConnected(navigator.onLine);
+        if (window.location.pathname === '/home/offline.php') showConnected(navigator.onLine);
 
         const offlineHero = offlineStatus.closest('.hero');
         const clock = byId('clockHM');

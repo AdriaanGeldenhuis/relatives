@@ -150,7 +150,8 @@ jobs:
             shared/public/welcome-sun.webp shared/public/welcome-dawn.webp shared/public/welcome-dusk.webp \
             shared/public/welcome-cloud.webp shared/public/welcome-rain.webp shared/public/welcome-night.webp \
             shared/public/family-travel.webp shared/public/family-planner.webp shared/public/family-notes.webp \
-            shared/public/family-shopping.webp shared/public/family-family.webp shared/public/family-games.webp; do
+            shared/public/family-shopping.webp shared/public/family-family.webp shared/public/family-games.webp \
+            home/sw.js; do
             path="$1/$asset"
             test -f "$path"
             test ! -L "$path"
@@ -214,9 +215,17 @@ jobs:
             collage/js/collage.images.js collage/js/collage.init.js collage/js/collage.layouts.js \
             games/css/games.css games/js/games.js games/flash_challenge/assets/css/flash.css \
             games/snake/assets/css/snake.css games/blockforge/assets/css/game.css \
-            calendar/css/calendar.css schedule/css/schedule.css admin/css/admin.css home/offline.html home/sw.js; do
+            calendar/css/calendar.css schedule/css/schedule.css admin/css/admin.css home/sw.js \
+            games/snake/sw.js games/blockforge/sw.js games/neon_nibbler/sw.js \
+            games/flash_challenge/sw.js games/30_seconds_offline/sw.js; do
             verify_asset "$asset?v=$version" "$asset"
           done
+          if ! curl --fail --silent --show-error --compressed --max-time 20 --retry 2 \
+            "https://www.relatives.co.za/home/offline.php?offline=$version" | cmp -s <(php home/offline.php) -; then
+            printf '::error::Could not verify the public Home offline page\n'
+            exit 1
+          fi
+          printf 'Verified home/offline.php\n'
           for scene in sun dawn dusk cloud rain night; do
             verify_asset "weather/api/welcome-image.php?scene=$scene&v=$version" "shared/public/welcome-$scene.webp"
           done

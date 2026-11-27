@@ -3,7 +3,7 @@
  * Provides complete offline functionality for airplane mode play
  */
 
-const CACHE_VERSION = 'v1.0.2';
+const CACHE_VERSION = 'v1.0.3';
 const CACHE_NAME = `thirty-seconds-offline-${CACHE_VERSION}`;
 
 // Static assets to cache for offline use
@@ -35,7 +35,7 @@ self.addEventListener('install', (event) => {
         caches.open(CACHE_NAME)
             .then((cache) => {
                 console.log('[SW] Caching static assets...');
-                return cache.addAll(STATIC_ASSETS);
+                return cache.addAll(STATIC_ASSETS.map(url => new Request(url, { cache: 'reload' })));
             })
             .then(() => {
                 console.log('[SW] All assets cached successfully');
@@ -106,8 +106,12 @@ self.addEventListener('fetch', (event) => {
                         }
                         return networkResponse;
                     })
-                    .catch((error) => {
+                    .catch(async (error) => {
                         console.error('[SW] Network fetch failed:', error);
+                        if (url.pathname.startsWith('/games/30_seconds_offline/assets/')) {
+                            return (await caches.match(event.request, { cacheName: CACHE_NAME, ignoreSearch: true })) ?? Response.error();
+                        }
+                        if (event.request.mode !== 'navigate') return Response.error();
 
                         // Return a fallback offline page
                         return new Response(

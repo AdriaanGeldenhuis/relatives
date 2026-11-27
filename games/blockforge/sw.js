@@ -2,7 +2,7 @@
    BLOCKFORGE - Service Worker (Offline-First)
    ============================================= */
 
-var CACHE_NAME = 'blockforge-v1.0.2';
+var CACHE_NAME = 'blockforge-v1.0.3';
 var ASSETS = [
     '/games/blockforge/',
     '/games/blockforge/index.php',
@@ -25,7 +25,7 @@ var ASSETS = [
 self.addEventListener('install', function(event) {
     event.waitUntil(
         caches.open(CACHE_NAME).then(function(cache) {
-            return cache.addAll(ASSETS);
+            return cache.addAll(ASSETS.map(function(url) { return new Request(url, { cache: 'reload' }); }));
         }).then(function() {
             return self.skipWaiting();
         })
@@ -89,6 +89,12 @@ self.addEventListener('fetch', function(event) {
                         });
                     }
                     return response;
+                }).catch(async function(error) {
+                    if (url.pathname.startsWith('/games/blockforge/assets/')) {
+                        const asset = await caches.match(event.request, { cacheName: CACHE_NAME, ignoreSearch: true });
+                        if (asset) return asset;
+                    }
+                    throw error;
                 });
             })
         );
