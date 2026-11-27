@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const WELCOME_SKY_SCENES = ['sun', 'cloud', 'rain', 'night'];
+const WELCOME_SKY_SCENES = ['sun', 'dawn', 'dusk', 'cloud', 'rain', 'night'];
 
 function welcomeSkyPhotoPath(string $scene): string
 {
@@ -28,15 +28,16 @@ function renderWelcomeLandscape(): void
     }
     ?>
     <div class="welcome-scene" style="<?= htmlspecialchars(implode('; ', $photos)) ?>" aria-hidden="true">
-        <span class="welcome-celestial"></span>
-        <span class="welcome-clouds"></span>
         <span class="welcome-hills"></span>
         <span class="welcome-photo"></span>
-        <div class="welcome-rain">
-            <?php for ($drop = 0; $drop < 20; $drop++): ?>
-            <span style="--drop: <?= $drop ?>"></span>
+        <span class="welcome-atmosphere"></span>
+        <span class="welcome-solar-horizon"><span class="welcome-sun"></span></span>
+        <div class="welcome-precipitation">
+            <?php for ($drop = 0; $drop < 52; $drop++): ?>
+            <span style="--drop-x: <?= ($drop * 37 + 8) % 103 ?>%; --drop-y: <?= ($drop * 61 + 19) % 103 ?>%; --drop-delay: -<?= ($drop * 173 + 41) % 1480 ?>ms"></span>
             <?php endfor; ?>
         </div>
+        <span class="welcome-scrim"></span>
     </div>
     <?php
 }
@@ -45,7 +46,6 @@ function renderWelcomeWeather(?string $city = null): void
 {
     ?>
     <section class="welcome-weather" aria-label="Current weather" data-weather-panel<?= $city === null ? ' data-device-clock' : '' ?>>
-        <?php renderWelcomeLandscape(); ?>
         <div class="welcome-reading" data-sky-readout>
             <span class="welcome-temperature" data-sky-temp hidden></span>
             <div class="welcome-conditions">
@@ -56,6 +56,10 @@ function renderWelcomeWeather(?string $city = null): void
                 </div>
             </div>
             <time class="welcome-time" data-sky-clock data-sky-time hidden></time>
+        </div>
+        <div class="welcome-daylight" data-sky-daylight aria-label="Sunrise and sunset" hidden>
+            <span>Sunrise <time data-sky-sunrise></time></span>
+            <span>Sunset <time data-sky-sunset></time></span>
         </div>
         <?php if ($city === null): ?>
         <div class="welcome-weather-links">

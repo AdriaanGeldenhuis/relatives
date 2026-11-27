@@ -147,7 +147,8 @@ jobs:
           ssh -F "$temp/ssh_config" relatives-production "sh -s -- '${DEPLOY_PATH%/}'" <<'REMOTE'
           set -eu
           for asset in manifest.json shared/js/planner-events.js shared/js/weather-hero.js shared/js/welcome-sky.js \
-            shared/public/welcome-sun.webp shared/public/welcome-cloud.webp shared/public/welcome-rain.webp shared/public/welcome-night.webp; do
+            shared/public/welcome-sun.webp shared/public/welcome-dawn.webp shared/public/welcome-dusk.webp \
+            shared/public/welcome-cloud.webp shared/public/welcome-rain.webp shared/public/welcome-night.webp; do
             path="$1/$asset"
             test -f "$path"
             test ! -L "$path"
@@ -204,6 +205,6 @@ jobs:
           for asset in "${assets[@]}"; do
             verify_asset "$asset" "${asset%%\?*}"
           done
-          for scene in sun cloud rain night; do
+          for scene in sun dawn dusk cloud rain night; do
             verify_asset "weather/api/welcome-image.php?scene=$scene&v=$version" "shared/public/welcome-$scene.webp"
           done

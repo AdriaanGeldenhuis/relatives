@@ -76,15 +76,46 @@
         return 'unknown';
     }
 
+    function sunState(now, sunrise, sunset, fallback) {
+        const twilight = 30 * 60 * 1000;
+        if (!sunrise || !sunset) return { light: fallback, phase: fallback, altitude: 0, darkness: fallback === 'night' ? 1 : 0 };
+
+        const fromSunrise = now - sunrise;
+        const untilSunset = sunset - now;
+        const rising = Math.abs(fromSunrise) <= Math.abs(untilSunset);
+        const distance = rising ? fromSunrise : untilSunset;
+        if (Math.abs(distance) <= twilight) {
+            const progress = distance / twilight;
+            return {
+                light: 'twilight', phase: rising ? 'dawn' : 'dusk',
+                altitude: progress * 18, darkness: Math.max(0, -progress)
+            };
+        }
+        const night = now < sunrise || now >= sunset;
+        const light = night ? 'night' : 'day';
+        return { light, phase: light, altitude: 0, darkness: night ? 1 : 0 };
+    }
+
+    function rainIntensity(current) {
+        if (Number.isFinite(current.rain_mm) && current.rain_mm > 0) {
+            if (current.rain_mm >= 7.6) return 'heavy';
+            return current.rain_mm < 2.5 ? 'light' : 'steady';
+        }
+        const description = `${current.condition ?? ''} ${current.description ?? ''}`.toLowerCase();
+        if (/heavy|extreme|thunder|storm/.test(description)) return 'heavy';
+        return /light|drizzle/.test(description) ? 'light' : 'steady';
+    }
+
     function mount(hero, { formatTemperature = value => `${Math.round(value)}°C`, onTime, initial = {} } = {}) {
         const panel = hero.querySelector('[data-weather-panel]');
         const field = name => panel.querySelector(`[data-sky-${name}]`);
         const fields = Object.fromEntries(['readout', 'place', 'source', 'clock', 'time', 'period', 'date', 'temp',
-            'condition', 'feels', 'wind', 'icon', 'sunrise', 'sunset', 'sun-note'].map(name => [name, field(name)]));
+            'condition', 'feels', 'wind', 'icon', 'daylight', 'sunrise', 'sunset', 'sun-note'].map(name => [name, field(name)]));
         const views = panel.querySelectorAll('[data-sky-view]');
         const viewContents = panel.querySelectorAll('[data-sky-content]');
         const switcher = panel.querySelector('.sky-switch');
         const deviceClock = panel.hasAttribute('data-device-clock');
+        const hasLandscape = hero.classList.contains('welcome-hero');
         let data = initial;
         let selectedView = 'now';
 
@@ -118,20 +149,29 @@
             const hasSunTimes = Boolean(local && sunrise && sunset && sunset > sunrise
                 && shifted(sunrise).toISOString().slice(0, 10) === local.toISOString().slice(0, 10)
                 && shifted(sunset).toISOString().slice(0, 10) === local.toISOString().slice(0, 10));
-            let light = 'unknown';
-            if (hasSunTimes) {
-                const nearSunrise = Math.abs(now - sunrise) <= 1800000;
-                const nearSunset = Math.abs(now - sunset) <= 1800000;
-                light = nearSunrise || nearSunset ? 'twilight' : now > sunrise && now < sunset ? 'day' : 'night';
-            } else if (current && /[dn]$/.test(current.icon ?? '') && (!current.dt || Math.abs(now - current.dt * 1000) < 5400000)) {
-                light = current.icon.endsWith('n') ? 'night' : 'day';
+            let fallbackLight = 'unknown';
+            if (current && /[dn]$/.test(current.icon ?? '') && (!current.dt || Math.abs(now - current.dt * 1000) < 5400000)) {
+                fallbackLight = current.icon.endsWith('n') ? 'night' : 'day';
             } else if (local) {
-                light = hour >= 6 && hour < 18 ? 'day' : 'night';
+                fallbackLight = hour >= 6 && hour < 18 ? 'day' : 'night';
             }
+            const sun = sunState(now, hasSunTimes ? sunrise : null, hasSunTimes ? sunset : null, fallbackLight);
+            const { light } = sun;
             const sky = skyFor(current);
             hero.dataset.time = period;
             hero.dataset.light = light;
             hero.dataset.sky = sky;
+            if (hasLandscape) {
+                hero.toggleAttribute('data-solar-update', hero.dataset.phase === sun.phase);
+                hero.dataset.phase = sun.phase;
+                hero.style.setProperty('--sun-altitude', `${sun.altitude.toFixed(2)}%`);
+                hero.style.setProperty('--night-mix', sun.darkness.toFixed(3));
+                const overcast = sky === 'cloud' && (Number.isFinite(current.clouds)
+                    ? current.clouds >= 65 : !/few|scattered/i.test(current.description ?? ''));
+                hero.toggleAttribute('data-overcast', overcast);
+                if (sky === 'rain' || sky === 'storm') hero.dataset.rainIntensity = rainIntensity(current);
+                else delete hero.dataset.rainIntensity;
+            }
             const overnight = light === 'night' && (hour < 5 || hour >= 22);
             const periodLabel = period ? period[0].toUpperCase() + period.slice(1) : '';
             const lightLabel = { day: 'Daylight', twilight: 'Twilight', night: 'Night' }[light];
@@ -159,18 +199,20 @@
             const icon = sky === 'clear' ? (light === 'night' ? '🌙' : '☀️') : symbols[sky];
             text(fields.icon, icon || '', true);
 
-            if (!switcher) return;
-            switcher.hidden = !hasSunTimes;
+            if (fields.daylight) fields.daylight.hidden = !hasSunTimes;
+            if (switcher) switcher.hidden = !hasSunTimes;
             if (!hasSunTimes) {
                 if (selectedView !== 'now') showView('now');
                 return;
             }
             const sunTimes = [[fields.sunrise, sunrise], [fields.sunset, sunset]];
             for (const [element, instant] of sunTimes) {
+                if (!element) continue;
                 const localTime = clockFormat.format(shifted(instant));
                 text(element, localTime);
                 element.dateTime = localTime;
             }
+            if (!fields['sun-note']) return;
             const nextSunEvent = now < sunrise ? sunrise : now < sunset ? sunset : null;
             let sunNote = 'The sun has set for today.';
             if (nextSunEvent) {

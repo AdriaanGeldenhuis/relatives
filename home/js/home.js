@@ -118,9 +118,11 @@
     const motionToggle = document.querySelector('.launch-motion-toggle');
     if (motionToggle) {
         const apps = motionToggle.closest('.apps-section');
+        const welcome = byId('homeWelcome');
         const preferenceKey = 'relatives-home-motion-paused';
         function setPaused(paused) {
             apps.toggleAttribute('data-motion-paused', paused);
+            welcome?.toggleAttribute('data-motion-paused', paused);
             motionToggle.textContent = paused ? 'Resume motion' : 'Pause motion';
         }
 
@@ -145,6 +147,7 @@
                 entries.forEach(({ target, isIntersecting }) => target.toggleAttribute('data-offscreen', !isIntersecting));
             });
             apps.querySelectorAll('.launch-tile').forEach(tile => observer.observe(tile));
+            if (welcome) observer.observe(welcome);
         }
     }
 
@@ -183,14 +186,11 @@
     const shortcutSummary = weatherShortcut.querySelector('.launch-summary');
     const defaultSummary = shortcutSummary.textContent;
     const greeting = byId('heroGreeting');
-    const periodIcon = byId('heroPeriodIcon');
-    const periodIcons = { morning: '🌅', afternoon: '☀️', evening: '🌙' };
     const weather = window.RelativesWeather;
     const sky = weather.mountHero(hero, {
         onTime: ({ period, date: formattedDate }) => {
             const phrase = `Good ${period}`;
             if (greeting.textContent !== phrase) greeting.textContent = phrase;
-            if (periodIcon.textContent !== periodIcons[period]) periodIcon.textContent = periodIcons[period];
             if (date.textContent !== formattedDate) date.textContent = formattedDate;
         }
     });

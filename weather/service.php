@@ -125,6 +125,7 @@ function getCurrentWeather(PDO $db, float $lat, float $lon): array
         'wind_speed' => isset($apiData['wind']['speed']) ? round($apiData['wind']['speed'] * 3.6) : null,
         'wind_direction' => $apiData['wind']['deg'] ?? null,
         'wind_gust' => isset($apiData['wind']['gust']) ? round($apiData['wind']['gust'] * 3.6) : null,
+        'rain_mm' => isset($apiData['rain']['1h']) ? round((float)$apiData['rain']['1h'], 1) : null,
         'clouds' => $apiData['clouds']['all'] ?? null,
         'visibility' => isset($apiData['visibility']) ? round($apiData['visibility'] / 1000, 1) : null,
         'sunrise' => $apiData['sys']['sunrise'] ?? null,

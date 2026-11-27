@@ -23,11 +23,12 @@ require __DIR__ . '/shared/components/public-head.php';
         <main>
             <section class="landing-hero welcome-hero" aria-labelledby="landing-title"
                      data-public-weather-offset="<?= WEATHER_DEFAULT_PLACE['offset'] ?>" data-light="<?= $light ?>">
+                <?php renderWelcomeLandscape(); ?>
                 <div class="landing-copy">
                     <h1 id="landing-title">A little closer.<br><em>Every day.</em></h1>
                     <p>Make plans, share lists, and stay in touch. Relatives gives your family one place for it all.</p>
                     <div class="landing-actions">
-                        <a class="button button-lime" href="/register-create.php">Create your family hub <span class="button-arrow" aria-hidden="true"></span></a>
+                        <a class="button welcome-primary" href="/register-create.php">Create your family hub <span class="button-arrow" aria-hidden="true"></span></a>
                         <a class="text-link" href="/register-join.php">I have an invite</a>
                     </div>
                 </div>

@@ -180,15 +180,12 @@ $hour = (int)$now->format('G');
 $light = $hour >= 6 && $hour < 18 ? 'day' : 'night';
 if ($hour < 12) {
     $greeting = 'Good morning';
-    $greetingIcon = '🌅';
     $greetingColor = 'morning';
 } elseif ($hour < 18) {
     $greeting = 'Good afternoon';
-    $greetingIcon = '☀️';
     $greetingColor = 'afternoon';
 } else {
     $greeting = 'Good evening';
-    $greetingIcon = '🌙';
     $greetingColor = 'evening';
 }
 
@@ -260,12 +257,12 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
         </section>
 
-        <section class="hero family-hero sky-hero welcome-hero" aria-labelledby="homeWelcomeTitle"
+        <section class="hero family-hero sky-hero welcome-hero" id="homeWelcome" aria-labelledby="homeWelcomeTitle"
                  data-time="<?= $greetingColor ?>" data-light="<?= $light ?>">
+            <?php renderWelcomeLandscape(); ?>
             <div class="welcome-home-layout">
                 <div class="hero-greeting family-hero-content">
                     <p class="hero-kicker">
-                        <span id="heroPeriodIcon" aria-hidden="true"><?= $greetingIcon ?></span>
                         <span id="heroDate"><?= $now->format('l, j F Y') ?></span>
                     </p>
                     <h1 class="family-hero-title" id="homeWelcomeTitle">
@@ -280,7 +277,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                         <a class="family-button family-button-primary" href="/calendar/">Open Calendar</a>
                         <?php if ($inviteLink): ?>
                         <button class="family-button" type="button" id="homeInviteCopy" aria-controls="homeInviteLink">
-                            <span aria-hidden="true">📨</span> Invite family
+                            Invite family
                         </button>
                         <?php endif; ?>
                     </div>
@@ -299,7 +296,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         <section class="apps-section" aria-labelledby="family-apps-heading">
             <div class="apps-heading">
                 <h2 id="family-apps-heading" class="home-section-title family-section-title">Family apps</h2>
-                <button type="button" class="launch-motion-toggle" aria-controls="family-apps-list" hidden>Pause motion</button>
+                <button type="button" class="launch-motion-toggle" aria-controls="family-apps-list homeWelcome" hidden>Pause motion</button>
             </div>
             <nav class="launcher" id="family-apps-list" aria-labelledby="family-apps-heading">
                 <?php foreach ($launcherApps as $appKey => $app): ?>
