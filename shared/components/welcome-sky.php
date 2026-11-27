@@ -1,6 +1,13 @@
 <?php
 declare(strict_types=1);
 
+const WELCOME_SKY_SCENES = ['sun', 'cloud', 'rain', 'night'];
+
+function welcomeSkyPhotoPath(string $scene): string
+{
+    return __DIR__ . "/../public/welcome-$scene.webp";
+}
+
 function renderWelcomeSkyAssets(bool $public = false): void
 {
     ?>
@@ -14,10 +21,10 @@ function renderWelcomeSkyAssets(bool $public = false): void
 function renderWelcomeLandscape(): void
 {
     $photos = [];
-    foreach (['sun', 'cloud', 'rain', 'night'] as $scene) {
-        $asset = "/shared/public/welcome-$scene.webp";
-        $version = filemtime(__DIR__ . '/../..' . $asset);
-        $photos[] = "--photo-$scene: url('$asset?v=$version')";
+    foreach (WELCOME_SKY_SCENES as $scene) {
+        $version = filemtime(welcomeSkyPhotoPath($scene));
+        $query = http_build_query(['scene' => $scene, 'v' => $version]);
+        $photos[] = "--photo-$scene: url('/weather/api/welcome-image.php?$query')";
     }
     ?>
     <div class="welcome-scene" style="<?= htmlspecialchars(implode('; ', $photos)) ?>" aria-hidden="true">

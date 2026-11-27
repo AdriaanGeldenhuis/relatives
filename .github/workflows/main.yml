@@ -192,13 +192,18 @@ jobs:
           version=$(git show -s --format=%ct HEAD)
           assets=(manifest.json "shared/js/planner-events.js?v=$version" "notes/js/notes.js?v=$version"
             "shared/js/weather-hero.js?v=$version" "shared/js/welcome-sky.js?v=$version")
-          for scene in sun cloud rain night; do assets+=("shared/public/welcome-$scene.webp?v=$version"); done
-          for asset in "${assets[@]}"; do
-            source_file=${asset%%\?*}
+          verify_asset() {
+            local asset=$1 source_file=$2
             if ! curl --fail --silent --show-error --compressed --max-time 20 --retry 2 \
               "https://www.relatives.co.za/$asset" | cmp -s "$source_file" -; then
               printf '::error::Could not verify public asset %s\n' "$source_file"
               exit 1
             fi
             printf 'Verified %s\n' "$source_file"
+          }
+          for asset in "${assets[@]}"; do
+            verify_asset "$asset" "${asset%%\?*}"
+          done
+          for scene in sun cloud rain night; do
+            verify_asset "weather/api/welcome-image.php?scene=$scene&v=$version" "shared/public/welcome-$scene.webp"
           done
