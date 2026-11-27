@@ -154,8 +154,8 @@ html, body {
 }
 
 .logo-block.b4 {
-    background: var(--neon-green);
-    box-shadow: 0 0 12px var(--neon-green);
+    background: #ffc57c;
+    box-shadow: 0 0 12px #ffc57c;
     animation-delay: 0.9s;
 }
 
@@ -260,8 +260,8 @@ html, body {
 }
 
 .mode-icon.family-icon {
-    background: linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(0, 255, 136, 0.05));
-    color: var(--neon-green);
+    background: linear-gradient(135deg, #ffc57c26, #ffc57c0d);
+    color: #ffc57c;
 }
 
 .mode-icon svg {

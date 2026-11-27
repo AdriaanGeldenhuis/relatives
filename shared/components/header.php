@@ -26,7 +26,7 @@ $familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'w
 $familyAppPage = in_array($activePage, ['home', 'tracking', 'weather', 'notes', 'shopping', 'calendar', 'schedule', 'holiday_traveling', 'games', 'messages', 'notifications'], true);
 $familyTheme = in_array($activePage, [
     'home', 'weather', 'calendar', 'schedule', 'holiday_traveling', 'notes', 'shopping',
-    'messages', 'notifications', 'profile', 'admin', 'upgrade', 'help'
+    'messages', 'notifications', 'profile', 'admin', 'upgrade', 'help', 'games'
 ], true);
 if ($familyTheme) {
     require_once __DIR__ . '/family-scenes.php';

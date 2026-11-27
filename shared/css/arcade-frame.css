@@ -1,14 +1,14 @@
 /* Frame the games with the Relatives palette while keeping individual boards legible. */
 :is(.game-header, .top-bar, .game-hud, .family-header, .lobby-header, .turn-header, .results-header, .scoreboard-header, .viewer-header, .menu-header) {
-    background: #17392c;
-    border-color: #527051;
+    background: #24384e;
+    border-color: #62728a;
     color: #fffdf2;
 }
 
 :is(.menu-content, .menu-container, .app-container) {
-    border: 1px solid #527051;
+    border: 1px solid #62728a;
     border-radius: 22px;
-    background-color: #173126;
+    background-color: #192a3c;
     padding-inline: clamp(12px, 3vw, 24px);
 }
 
@@ -19,12 +19,17 @@
 }
 
 :is(a, button).back-btn {
-    border: 1px solid #cbe37e;
-    background: #e1f79b;
-    color: #182c21;
+    border: 1px solid #d9ba8d;
+    background: #ffe3ba;
+    color: #202e40;
 }
 
-:is(a, button).back-btn:hover { background: #edffb5; }
+:is(a, button).back-btn:hover { background: #fff1db; }
 :is(a, button).back-btn:focus-visible { outline: 2px solid #fffdf2; outline-offset: 3px; }
 
-#screen-start .back-btn { box-shadow: 0 3px 14px #10221980; }
+#screen-start .back-btn { box-shadow: 0 3px 14px #111a2a80; }
+
+:is(a, button).back-link {
+    color: #ffe3ba;
+    text-underline-offset: 3px;
+}

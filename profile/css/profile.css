@@ -566,8 +566,8 @@ body[data-area="profile"] .profile-header {
 .profile-container .settings-link-arrow { color: var(--family-green); }
 .profile-container .form-input { background: #fffef9; }
 .profile-container :is(.form-input, .settings-link, .btn, .color-option, .toggle-switch input):focus-visible {
-    outline: 2px solid #3c7548;
+    outline: 2px solid #28566d;
     outline-offset: 2px;
 }
-.profile-container .toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid #3c7548; outline-offset: 2px; }
+.profile-container .toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid #28566d; outline-offset: 2px; }
 .profile-container .form-input:disabled { color: var(--family-muted); opacity: 1; background: #eef1e5; }

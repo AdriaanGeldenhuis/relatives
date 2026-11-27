@@ -36,7 +36,7 @@ try {
 }
 
 $pageTitle = 'Flash Challenge';
-$cacheVersion = '1.0.2';
+$cacheVersion = '1.0.3';
 ?>
 <!DOCTYPE html>
 <html lang="en">

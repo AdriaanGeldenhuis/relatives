@@ -29,7 +29,7 @@ $familyId = $_SESSION['family_id'] ?? null;
     <meta name="theme-color" content="#1a1a2e">
     <title>Snake Classic</title>
     <link rel="manifest" href="/games/snake/manifest.json">
-    <link rel="stylesheet" href="/games/snake/assets/css/snake.css?v=3.1">
+    <link rel="stylesheet" href="/games/snake/assets/css/snake.css?v=3.2">
     <style><?php readfile(__DIR__ . '/../../shared/css/arcade-frame.css'); ?></style>
 </head>
 <body>

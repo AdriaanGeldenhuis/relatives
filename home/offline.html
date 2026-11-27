@@ -9,6 +9,26 @@
     <link rel="stylesheet" href="/home/css/home.css">
     <link rel="stylesheet" href="/shared/css/family-surfaces.css">
     <link rel="stylesheet" href="/shared/css/action-controls.css">
+    <style>
+        body.offline-home {
+            --family-canvas: #f6f3ec;
+            --family-paper: #fffdf8;
+            --family-ink: #202e40;
+            --family-muted: #536172;
+            --family-line: #ded9cf;
+            --family-green: #28566d;
+            --family-lime: #ffe3ba;
+        }
+        .offline-home .family-main .family-hero {
+            --control-primary: #ffe3ba;
+            --control-primary-ink: #202e40;
+            --control-primary-hover: #fff1db;
+            background: linear-gradient(115deg, #182639, #304961);
+            border-color: #2c4158;
+        }
+        .offline-home .family-hero .family-hero-summary { color: #e1e7ee; }
+        .offline-home .launch-chip { background: #e3ebf2; }
+    </style>
     <script src="/home/js/home.js" defer></script>
 </head>
 <body class="home-page family-page offline-home" data-area="home">

@@ -191,7 +191,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         justify-content: space-between;
         align-items: center;
         padding: 14px;
-        background: #edf2e4;
+        background: #e9eff4;
         border-radius: 10px;
         margin-bottom: 10px;
     }
@@ -235,7 +235,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         align-items: center;
         gap: 10px;
         padding: 12px 16px;
-        background: #edf2e4;
+        background: #e9eff4;
         border-radius: 10px;
         color: var(--family-ink);
         text-decoration: none;
@@ -244,7 +244,7 @@ require_once __DIR__ . '/../shared/components/header.php';
     }
 
     .manage-link:hover {
-        background: #edf2e4;
+        background: #e9eff4;
         transform: translateX(4px);
     }
 

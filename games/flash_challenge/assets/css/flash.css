@@ -390,16 +390,16 @@ body {
 }
 
 .btn-start {
-    background: var(--success);
-    color: #0f0c29;
+    background: #ffe3ba;
+    color: #222c40;
     font-size: 1.125rem;
     padding: 18px 36px;
     border-radius: var(--radius-lg);
-    box-shadow: 0 8px 32px rgba(78, 204, 163, 0.3);
+    box-shadow: 0 8px 32px #eebc774d;
 }
 
 .btn-start:hover {
-    box-shadow: 0 12px 40px rgba(78, 204, 163, 0.4);
+    box-shadow: 0 12px 40px #eebc7766;
     transform: translateY(-3px);
 }
 

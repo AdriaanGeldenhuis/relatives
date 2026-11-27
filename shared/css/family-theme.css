@@ -38,6 +38,16 @@ body[data-family-theme] .site-header.global-header { background: #faf7f0; }
     border-color: #cad9de;
 }
 [data-family-theme] .site-wordmark span, [data-family-theme] .site-menu-head h2 span { color: #9e5835; }
+[data-family-theme] :is(.site-header, .site-menu) :focus-visible { outline-color: #28566d; }
+[data-family-theme] :is(.site-menu, .footer-assist-dialog)::backdrop { background: #192a3c99; }
+[data-family-theme] .global-footer .footer-assist-btn { border-color: #c8d5df; }
+[data-family-theme] .global-footer .help-btn-footer:hover { background: #e8eef4; }
+[data-family-theme] .global-footer .footer-assist-btn[aria-expanded="true"] { box-shadow: 0 0 0 3px #7191ac80, 0 4px 14px #182c4045; }
+[data-family-theme] .assist-prompt:nth-child(4n + 1) { --tile-color: #e5edf5; }
+[data-family-theme] .assist-prompt:not([aria-disabled="true"]):is(:hover, :focus-visible) {
+    border-color: #b7c9d7;
+    background: #edf2f6;
+}
 [data-family-theme] .global-footer .mic-btn { background: #21394e; border-color: #547185; }
 [data-family-theme] .global-footer .mic-btn:hover { background: #304b60; }
 [data-family-theme] .global-footer .plus-btn { background: var(--family-lime); border-color: #decaab; color: var(--family-ink); }

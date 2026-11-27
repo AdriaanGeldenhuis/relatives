@@ -5,7 +5,7 @@
  * ============================================
  */
 
-const CACHE_NAME = 'flash-challenge-v1.0.3';
+const CACHE_NAME = 'flash-challenge-v1.0.4';
 const STATIC_ASSETS = [
     '/games/flash_challenge/',
     '/games/flash_challenge/index.php',

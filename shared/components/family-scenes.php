@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const FAMILY_SCENES = ['travel', 'planner', 'notes', 'shopping', 'family'];
+const FAMILY_SCENES = ['travel', 'planner', 'notes', 'shopping', 'family', 'games'];
 
 function familyScenePath(string $scene): string
 {

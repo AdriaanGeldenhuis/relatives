@@ -17,8 +17,8 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
 .planner-main { width: min(100% - 64px, 1216px); margin-inline: auto; padding: clamp(20px, 3.4vw, 40px) 0 37px; }
 .planner-main [hidden], dialog.planner-modal [hidden], .schedule-toast[hidden] { display: none !important; }
 .planner-main :is(button, input, select, summary), dialog.planner-modal :is(button, input, select, textarea, summary) { font-family: inherit; }
-.workspace-page :is(.planner-main, dialog.planner-modal) :focus-visible { outline-color: #3c7548; }
-.workspace-page .planner-hero :focus-visible { outline-color: #e1f298; }
+.workspace-page :is(.planner-main, dialog.planner-modal) :focus-visible { outline-color: #28566d; }
+.workspace-page .planner-hero :focus-visible { outline-color: #ffe3ba; }
 
 .planner-sr-only {
     position: absolute;
@@ -101,7 +101,7 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
     text-decoration: none;
     cursor: pointer;
 }
-.planner-tools > div button:hover, .planner-event-menu > div :is(button, a):hover { background: #eef1e6; }
+.planner-tools > div button:hover, .planner-event-menu > div :is(button, a):hover { background: #edf1f3; }
 
 #scheduleDatePanel { position: relative; margin-top: 17px; }
 #scheduleDatePanel[aria-busy="true"]::after {
@@ -112,7 +112,7 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
     width: 26%;
     height: 2px;
     border-radius: 6px;
-    background: #7c9d61;
+    background: #709bbb;
     animation: planner-load 1.2s ease-in-out infinite alternate;
     pointer-events: none;
 }
@@ -142,7 +142,7 @@ body.workspace-page:is([data-area="schedule"], [data-area="calendar"]) {
     text-decoration: none;
 }
 .planner-views a:hover { background: var(--app-soft); }
-.planner-views a[aria-current="page"], .planner-control[aria-pressed="true"] { color: #28513a; background: #e4edd8; border-color: #d3dfc7; }
+.planner-views a[aria-current="page"], .planner-control[aria-pressed="true"] { color: #284b64; background: #e3ebf2; border-color: #cbd9e2; }
 .planner-icon-button { width: 38px; padding: 5px; font-size: 1.34rem; }
 
 .planner-date-heading { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin: 17px 0 12px; }

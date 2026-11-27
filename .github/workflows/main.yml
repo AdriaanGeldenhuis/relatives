@@ -150,7 +150,7 @@ jobs:
             shared/public/welcome-sun.webp shared/public/welcome-dawn.webp shared/public/welcome-dusk.webp \
             shared/public/welcome-cloud.webp shared/public/welcome-rain.webp shared/public/welcome-night.webp \
             shared/public/family-travel.webp shared/public/family-planner.webp shared/public/family-notes.webp \
-            shared/public/family-shopping.webp shared/public/family-family.webp; do
+            shared/public/family-shopping.webp shared/public/family-family.webp shared/public/family-games.webp; do
             path="$1/$asset"
             test -f "$path"
             test ! -L "$path"
@@ -211,12 +211,15 @@ jobs:
           for asset in calendar/js/calendar.js schedule/js/schedule.js schedule/timeline/js/timeline.js \
             holiday_traveling/assets/js/holiday.js holiday_traveling/assets/css/holiday.css \
             shopping/js/shopping.js messages/js/messages-enhanced.js collage/css/collage.css \
-            collage/js/collage.images.js collage/js/collage.init.js collage/js/collage.layouts.js; do
+            collage/js/collage.images.js collage/js/collage.init.js collage/js/collage.layouts.js \
+            games/css/games.css games/js/games.js games/flash_challenge/assets/css/flash.css \
+            games/snake/assets/css/snake.css games/blockforge/assets/css/game.css \
+            calendar/css/calendar.css schedule/css/schedule.css admin/css/admin.css home/offline.html home/sw.js; do
             verify_asset "$asset?v=$version" "$asset"
           done
           for scene in sun dawn dusk cloud rain night; do
             verify_asset "weather/api/welcome-image.php?scene=$scene&v=$version" "shared/public/welcome-$scene.webp"
           done
-          for scene in travel planner notes shopping family; do
+          for scene in travel planner notes shopping family games; do
             verify_asset "weather/api/welcome-image.php?family=$scene&v=$version" "shared/public/family-$scene.webp"
           done

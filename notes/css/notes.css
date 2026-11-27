@@ -120,7 +120,7 @@ body.workspace-page[data-area="notes"] {
     font-size: .84rem;
 }
 
-.notes-search:focus-within { outline: 2px solid #3c7548; outline-offset: 2px; }
+.notes-search:focus-within { outline: 2px solid #28566d; outline-offset: 2px; }
 .notes-board-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 15px 0; }
 .notes-board-tools h2 { font: 400 clamp(1.7rem, 3vw, 2.35rem)/1.1 var(--notes-display); letter-spacing: -.045em; }
 .notes-view-tools { gap: 8px; }
@@ -152,7 +152,7 @@ body.workspace-page[data-area="notes"] {
 }
 .notes-layout button { width: 34px; height: 30px; }
 .notes-layout button:hover, .notes-icon-button:hover { background: #30523c12; }
-.notes-layout button[aria-pressed="true"] { background: #e6eedb; color: #28543b; }
+.notes-layout button[aria-pressed="true"] { background: #e3edf4; color: #28566d; }
 .notes-icon-button { width: 36px; height: 36px; }
 
 .notes-group { margin-bottom: 24px; }

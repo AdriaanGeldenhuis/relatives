@@ -7,7 +7,7 @@
 }
 :is(body[data-area="notes"], [data-app="notes"]) { --app-accent: #be9be4; --app-deep: #67427e; }
 :is(body[data-area="shopping"], [data-app="shopping"]) { --app-accent: #f5ba55; --app-deep: #775019; }
-:is(body[data-area="calendar"], [data-app="calendar"]) { --app-accent: #6bcba1; --app-deep: #28644d; }
+:is(body[data-area="calendar"], [data-app="calendar"]) { --app-accent: #99bfdb; --app-deep: #28566d; }
 :is(body[data-area="schedule"], [data-app="schedule"]) { --app-accent: #e992ba; --app-deep: #803e60; }
 :is(body[data-area="holiday_traveling"], [data-app="travel"]) { --app-accent: #6fcbbf; --app-deep: #235e57; }
 :is(body[data-area="games"], [data-app="games"]) { --app-accent: #a89aee; --app-deep: #514184; }

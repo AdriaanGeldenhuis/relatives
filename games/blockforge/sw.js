@@ -2,7 +2,7 @@
    BLOCKFORGE - Service Worker (Offline-First)
    ============================================= */
 
-var CACHE_NAME = 'blockforge-v1.0.1';
+var CACHE_NAME = 'blockforge-v1.0.2';
 var ASSETS = [
     '/games/blockforge/',
     '/games/blockforge/index.php',

@@ -19,13 +19,14 @@ header('Cache-Control: private, no-store');
 $userId = (int)$user['id'];
 $familyId = (int)$user['family_id'];
 
+// Title, icon, description, directory, card color, label and play modes.
 $games = [
-    'flash' => ['Flash Challenge', '⚡', 'Race the clock in a daily 30-second trivia challenge.', 'flash_challenge', 'honey', 'Daily trivia'],
-    'snake' => ['Snake Classic', '🐍', 'Eat, grow and see how long you can keep going.', 'snake', 'mint', 'Arcade · Offline'],
-    'neon' => ['Neon Nibbler', '💠', 'Collect sparks and dodge sentinels as you explore the maze.', 'neon_nibbler', 'sky', 'Maze chase · Offline'],
-    'blockforge' => ['BlockForge', '🧱', 'Clear lines in solo play, a daily puzzle or the family board.', 'blockforge', 'rose', 'Block puzzle · Offline'],
-    '30seconds' => ['30 Seconds Party', '⏱️', 'Split into teams and help your partner guess the words before time runs out.', '30_seconds_offline', 'lilac', 'Team game · Offline'],
-    'memory' => ['Memory Match', '🧠', 'Match free tiles to clear the board. Choose from three layouts.', 'mahjong_solitaire', 'cream', 'Tile puzzle']
+    'flash' => ['Flash Challenge', '⚡', 'Race the clock in a daily 30-second trivia challenge.', 'flash_challenge', 'honey', 'Daily trivia', 'solo'],
+    'snake' => ['Snake Classic', '🐍', 'Eat, grow and see how long you can keep going.', 'snake', 'blue', 'Arcade · Offline', 'solo offline'],
+    'neon' => ['Neon Nibbler', '💠', 'Collect sparks and dodge sentinels as you explore the maze.', 'neon_nibbler', 'sky', 'Maze chase · Offline', 'solo offline'],
+    'blockforge' => ['BlockForge', '🧱', 'Clear lines in solo play, a daily puzzle or the family board.', 'blockforge', 'rose', 'Block puzzle · Offline', 'solo family offline'],
+    '30seconds' => ['30 Seconds Party', '⏱️', 'Split into teams and help your partner guess the words before time runs out.', '30_seconds_offline', 'lilac', 'Team game · Offline', 'family offline'],
+    'memory' => ['Memory Match', '🧠', 'Match free tiles to clear the board. Choose from three layouts.', 'mahjong_solitaire', 'cream', 'Tile puzzle', 'solo']
 ];
 $scoreSources = [
     'flash' => ['flash_attempts', 'challenge_date', '1 = 1'],
@@ -40,6 +41,11 @@ $combinedParts = [];
 $unavailableGames = [];
 $stats = ['Recorded plays' => 0, 'Plays today' => 0, 'Combined personal bests' => 0, 'Best Snake score' => 0];
 $flashPlayedToday = false;
+$personalBests = [];
+$today = new DateTimeImmutable('today');
+$tomorrow = $today->modify('+1 day');
+$utc = new DateTimeZone('UTC');
+$utcScoreWindow = [$today->setTimezone($utc)->format('Y-m-d H:i:s'), $tomorrow->setTimezone($utc)->format('Y-m-d H:i:s')];
 
 function gamesRows(PDO $db, string $sql, array $parameters = []): array
 {
@@ -69,10 +75,13 @@ function globalGameRanks(PDO $db, string $bestScores): array
 
 foreach ($scoreSources as $game => [$table, $dateColumn, $eligible]) {
     try {
+        // BlockForge writes UTC into a DATETIME. Flash dates and the other score queries use local dates.
+        [$start, $end] = $game === 'blockforge' ? $utcScoreWindow : [$today->format('Y-m-d'), $tomorrow->format('Y-m-d')];
         $personal = gamesRows($db, "
             SELECT COUNT(*) AS plays, MAX(score) AS best,
-                COUNT(CASE WHEN $dateColumn >= CURRENT_DATE AND $dateColumn < CURRENT_DATE + INTERVAL 1 DAY THEN 1 END) AS today
-            FROM $table WHERE user_id = ? AND $eligible", [$userId])[0];
+                COUNT(CASE WHEN $dateColumn >= ? AND $dateColumn < ? THEN 1 END) AS today
+            FROM $table WHERE user_id = ? AND $eligible", [$start, $end, $userId])[0];
+        if ($personal['best'] !== null) $personalBests[$game] = (int)$personal['best'];
         $stats['Recorded plays'] += (int)$personal['plays'];
         $stats['Plays today'] += (int)$personal['today'];
         $stats['Combined personal bests'] += (int)$personal['best'];
@@ -107,33 +116,49 @@ if ($combinedParts) {
 
 $pageTitle = 'Games';
 $pageCSS = ['/games/css/games.css?build=' . filemtime(__DIR__ . '/css/games.css')];
+$pageJS = ['/games/js/games.js'];
+$pageJSVersion = filemtime(__DIR__ . '/js/games.js');
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
 <main class="family-main games-main">
-    <header class="family-hero app-hero">
+    <header class="family-hero app-hero photo-hero photo-hero-wide games-hero">
         <div class="family-hero-content">
-            <h1 class="family-hero-title">Games</h1>
-            <p class="family-hero-summary">Play a quick round or get the family together for game night.</p>
+            <h1 class="family-hero-title">Family arcade</h1>
+            <div class="games-daily">
+                <span aria-hidden="true">⚡</span>
+                <div>
+                    <strong>Flash Challenge</strong>
+                    <p class="family-hero-summary"><?= $flashPlayedToday ? 'You played today' : 'Daily trivia · 30 seconds' ?></p>
+                </div>
+            </div>
             <div class="family-actions">
-                <a href="#allGames" class="family-button family-button-primary">Pick a game</a>
-                <a href="#familyLeaderboard" class="family-button">Leaderboards</a>
+                <a href="/games/flash_challenge/" class="family-button family-button-primary"><?= $flashPlayedToday ? 'See today’s result' : 'Play today’s challenge' ?></a>
+                <a href="#leaderboards" class="family-button">Leaderboards</a>
             </div>
         </div>
-        <?php renderFamilyAppArt('games', true); ?>
+        <?php renderFamilyScene('games'); ?>
     </header>
 
-    <dl class="games-stats" aria-label="Your recorded scores">
-        <?php foreach ($stats as $label => $value): ?>
-            <div><dt><?= $label ?></dt><dd><?= number_format($value) ?></dd></div>
-        <?php endforeach; ?>
-    </dl>
-
     <section id="allGames" class="games-section" aria-labelledby="gamesHeading">
-        <h2 class="family-section-title" id="gamesHeading">Pick a game</h2>
+        <div class="games-heading">
+            <h2 class="family-section-title" id="gamesHeading">Pick a game</h2>
+            <button type="button" class="family-button games-surprise" id="gamesSurprise" hidden>Surprise me</button>
+        </div>
+        <div class="games-filters" id="gamesModes" role="group" aria-label="How to play" hidden>
+            <?php foreach (['all' => 'All games', 'solo' => 'Solo', 'family' => 'Family', 'offline' => 'Offline'] as $mode => $label): ?>
+                <button type="button" data-mode="<?= $mode ?>" aria-pressed="<?= $mode === 'all' ? 'true' : 'false' ?>"><?= $label ?></button>
+            <?php endforeach; ?>
+        </div>
+        <div class="games-suggestion" id="gamesSuggestion" hidden>
+            <div><span>Try this</span><h3 id="gamesSuggestionName"></h3></div>
+            <a class="family-button family-button-primary" id="gamesSuggestionLink">Play</a>
+        </div>
+        <p class="games-sr-only" id="gamesBrowseStatus" role="status"></p>
         <div class="games-grid">
-            <?php foreach ($games as $key => [$name, $icon, $description, $directory, $tone, $type]): ?>
-                <a class="game-card" data-tone="<?= $tone ?>" href="/games/<?= $directory ?>/" aria-labelledby="game-<?= $key ?>">
+            <?php foreach ($games as $key => [$name, $icon, $description, $directory, $tone, $type, $modes]): ?>
+                <a class="game-card" data-tone="<?= $tone ?>" data-play-modes="<?= $modes ?>"
+                   href="/games/<?= $directory ?>/" aria-labelledby="game-<?= $key ?>">
                     <div class="game-card-top">
                         <span class="game-icon" aria-hidden="true"><?= $icon ?></span>
                         <span class="game-type"><?= $type ?></span>
@@ -142,29 +167,51 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <p><?= $description ?></p>
                     <div class="game-card-action">
                         <span>Play</span>
-                        <?php if ($key === 'flash' && $flashPlayedToday): ?><small>Played today</small><?php endif; ?>
+                        <?php if ($key === 'flash' && $flashPlayedToday): ?>
+                            <small>Played today</small>
+                        <?php elseif (isset($personalBests[$key])): ?>
+                            <small>Your best <?= number_format($personalBests[$key]) ?></small>
+                        <?php endif; ?>
                     </div>
                 </a>
             <?php endforeach; ?>
         </div>
     </section>
 
-    <div class="games-boards">
-        <?php
-        $boards = [
-            ['familyLeaderboard', 'Family leaderboard', $familyScores, $userId, 'You', 'Play a ranked game to put your family on the board.'],
-            ['globalLeaderboard', 'Global family rankings', $globalScores, $familyId, 'Your family', 'No family scores are available for this game yet.']
-        ];
-        foreach ($boards as [$boardId, $title, $board, $currentId, $marker, $emptyText]):
-        ?>
-            <section class="games-section" id="<?= $boardId ?>" aria-labelledby="<?= $boardId ?>Title">
-                <h2 class="family-section-title" id="<?= $boardId ?>Title"><?= $title ?></h2>
-                <div class="games-board">
-                    <div class="games-filters" role="group" aria-label="<?= $title ?> game filter" hidden>
-                        <?php foreach ($tabs as $key => $label): ?>
-                            <button type="button" data-game="<?= $key ?>" aria-pressed="<?= $key === 'all' ? 'true' : 'false' ?>"><?= $label ?></button>
-                        <?php endforeach; ?>
-                    </div>
+    <details class="games-personal">
+        <summary>Your game stats</summary>
+        <dl class="games-stats">
+            <?php foreach ($stats as $label => $value): ?>
+                <div><dt><?= $label ?></dt><dd><?= number_format($value) ?></dd></div>
+            <?php endforeach; ?>
+        </dl>
+    </details>
+
+    <section id="leaderboards" class="games-section" aria-labelledby="leaderboardsTitle">
+        <h2 class="family-section-title" id="leaderboardsTitle">Leaderboards</h2>
+        <div class="games-board-tools" id="gamesBoardTools" hidden>
+            <div class="games-filters" role="group" aria-label="Leaderboard scope">
+                <button type="button" data-board="familyLeaderboard" aria-pressed="true">Your family</button>
+                <button type="button" data-board="globalLeaderboard" aria-pressed="false">All families</button>
+            </div>
+            <label>Game
+                <select id="gamesRankingGame">
+                    <?php foreach ($tabs as $key => $label): ?>
+                        <option value="<?= $key ?>"><?= $label ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+        </div>
+        <div class="games-boards">
+            <?php
+            $boards = [
+                ['familyLeaderboard', 'Family leaderboard', $familyScores, $userId, 'You', 'Play a ranked game to put your family on the board.'],
+                ['globalLeaderboard', 'Global family rankings', $globalScores, $familyId, 'Your family', 'No family scores are available for this game yet.']
+            ];
+            foreach ($boards as [$boardId, $title, $board, $currentId, $marker, $emptyText]):
+            ?>
+                <section class="games-board" id="<?= $boardId ?>" data-score-board aria-labelledby="<?= $boardId ?>Title">
+                    <h3 id="<?= $boardId ?>Title"><?= $title ?></h3>
                     <?php foreach ($board as $key => $rows): ?>
                         <div data-ranks="<?= $key ?>" <?= $key !== 'all' ? 'hidden' : '' ?>>
                             <?php if ($rows): ?>
@@ -190,28 +237,11 @@ require_once __DIR__ . '/../shared/components/header.php';
                             <?php endif; ?>
                         </div>
                     <?php endforeach; ?>
-                    <p class="games-sr-only" role="status"></p>
-                </div>
-            </section>
-        <?php endforeach; ?>
-    </div>
+                </section>
+            <?php endforeach; ?>
+        </div>
+        <p class="games-sr-only" id="gamesRankingStatus" role="status"></p>
+    </section>
 </main>
-
-<script>
-document.querySelectorAll('.games-board').forEach(board => {
-    const filters = board.querySelector('.games-filters');
-    const buttons = filters.querySelectorAll('button');
-    const rankings = board.querySelectorAll('[data-ranks]');
-    const status = board.querySelector('[role="status"]');
-    filters.hidden = false;
-    filters.addEventListener('click', event => {
-        const button = event.target.closest('button[data-game]');
-        if (!button || button.getAttribute('aria-pressed') === 'true') return;
-        buttons.forEach(item => item.setAttribute('aria-pressed', String(item === button)));
-        rankings.forEach(panel => { panel.hidden = panel.dataset.ranks !== button.dataset.game; });
-        status.textContent = `Showing ${button.textContent} rankings.`;
-    });
-});
-</script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>
