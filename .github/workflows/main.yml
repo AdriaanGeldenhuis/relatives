@@ -151,7 +151,7 @@ jobs:
             shared/public/welcome-cloud.webp shared/public/welcome-rain.webp shared/public/welcome-night.webp \
             shared/public/family-travel.webp shared/public/family-planner.webp shared/public/family-notes.webp \
             shared/public/family-shopping.webp shared/public/family-family.webp shared/public/family-games.webp \
-            home/sw.js; do
+            messages/js/messages.js messages/js/messages-enhanced.js messages/js/outbox.js sw.js home/sw.js; do
             path="$1/$asset"
             test -f "$path"
             test ! -L "$path"
