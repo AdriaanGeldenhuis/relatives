@@ -146,11 +146,16 @@ jobs:
           # rsync preserves the modes of existing files. Repair the affected public assets.
           ssh -F "$temp/ssh_config" relatives-production "sh -s -- '${DEPLOY_PATH%/}'" <<'REMOTE'
           set -eu
-          for asset in manifest.json shared/js/planner-events.js; do
+          for asset in manifest.json shared/js/planner-events.js shared/js/weather-hero.js shared/js/welcome-sky.js \
+            shared/public/welcome-sun.webp shared/public/welcome-cloud.webp shared/public/welcome-rain.webp shared/public/welcome-night.webp; do
             path="$1/$asset"
             test -f "$path"
             test ! -L "$path"
+            previous_mode=$(stat -c '%a' "$path")
             chmod a+r "$path"
+            if [ "$previous_mode" != "$(stat -c '%a' "$path")" ]; then
+              printf 'Made %s readable (previous mode %s)\n' "$asset" "$previous_mode"
+            fi
           done
           REMOTE
 
@@ -180,12 +185,15 @@ jobs:
           fi
           REMOTE
           done
-      - name: Check deployed Notes and manifest assets
+      - name: Check deployed Notes, manifest and welcome assets
         shell: bash
         run: |
           set -euo pipefail
           version=$(git show -s --format=%ct HEAD)
-          for asset in manifest.json "shared/js/planner-events.js?v=$version" "notes/js/notes.js?v=$version"; do
+          assets=(manifest.json "shared/js/planner-events.js?v=$version" "notes/js/notes.js?v=$version"
+            "shared/js/weather-hero.js?v=$version" "shared/js/welcome-sky.js?v=$version")
+          for scene in sun cloud rain night; do assets+=("shared/public/welcome-$scene.webp?v=$version"); done
+          for asset in "${assets[@]}"; do
             source_file=${asset%%\?*}
             if ! curl --fail --silent --show-error --compressed --max-time 20 --retry 2 \
               "https://www.relatives.co.za/$asset" | cmp -s "$source_file" -; then

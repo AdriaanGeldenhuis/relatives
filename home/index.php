@@ -260,10 +260,9 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
         </section>
 
-        <section class="hero family-hero sky-hero welcome-hero" aria-labelledby="homeWelcomeTitle" data-welcome-sky
-                 data-time="<?= $greetingColor ?>" data-light="<?= $light ?>" data-sky-preview="live">
-            <?php renderWelcomeLandscape($light); ?>
-            <div class="sky-layout">
+        <section class="hero family-hero sky-hero welcome-hero" aria-labelledby="homeWelcomeTitle"
+                 data-time="<?= $greetingColor ?>" data-light="<?= $light ?>">
+            <div class="welcome-home-layout">
                 <div class="hero-greeting family-hero-content">
                     <p class="hero-kicker">
                         <span id="heroPeriodIcon" aria-hidden="true"><?= $greetingIcon ?></span>
@@ -293,10 +292,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <?php endif; ?>
                 </div>
 
-                <div class="welcome-weather">
-                    <?php renderWeatherHeroPanel('home'); ?>
-                    <?php renderWelcomeSkyControls(); ?>
-                </div>
+                <?php renderWelcomeWeather(); ?>
             </div>
         </section>
 

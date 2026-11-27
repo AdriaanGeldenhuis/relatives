@@ -213,7 +213,7 @@
         if (!quietly) {
             reading = null;
             shortcutSummary.textContent = defaultSummary;
-            sky.update({ place: place.name || 'Near you', source: place.source, offset: place.offset, message: 'Loading current weather…' });
+            sky.update({ place: place.name || 'Near you', offset: place.offset, message: 'Loading current weather…' });
             feedback.textContent = '';
         }
         try {
@@ -223,7 +223,6 @@
             const providerName = current.location_name || current.location;
             reading = {
                 place: place.name || (providerName && providerName !== 'Unknown' ? providerName : 'Near you'),
-                source: place.source,
                 current,
                 offset: current.timezone ?? place.offset
             };
@@ -233,7 +232,7 @@
         } catch (error) {
             if (request.signal.aborted) return;
             if (reading) sky.update({ ...reading, current: { ...reading.current, stale: true } });
-            else sky.update({ place: place.name || 'Near you', source: place.source, offset: place.offset, message: 'Current weather is unavailable' });
+            else sky.update({ place: place.name || 'Near you', offset: place.offset, message: 'Current weather unavailable' });
             if (locationButton.disabled) return;
             feedback.textContent = error.status === 401 ? 'Sign in again to load weather.' : '';
         } finally {

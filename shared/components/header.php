@@ -29,8 +29,7 @@ if ($familyAppPage) {
 }
 
 require_once __DIR__ . '/avatar.php';
-$hasWeatherHero = in_array($activePage, ['home', 'weather'], true);
-if ($hasWeatherHero) {
+if ($activePage === 'weather') {
     require_once __DIR__ . '/weather-hero.php';
 }
 
@@ -168,8 +167,10 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <?php if ($familyAppPage): ?>
         <style><?php readfile(__DIR__ . '/../css/family-app-art.css'); readfile(__DIR__ . '/../css/family-app-themes.css'); ?></style>
     <?php endif; ?>
-    <?php if ($hasWeatherHero): ?>
+    <?php if ($activePage === 'weather'): ?>
         <style><?php readfile(__DIR__ . '/../css/weather-hero.css'); ?></style>
+    <?php endif; ?>
+    <?php if (in_array($activePage, ['home', 'weather'], true)): ?>
         <script><?php readfile(__DIR__ . '/../js/weather-hero.js'); ?></script>
     <?php endif; ?>
     <?php if (!empty($homeStylesheet)): ?>

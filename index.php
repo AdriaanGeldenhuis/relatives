@@ -9,7 +9,6 @@ if (!empty($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/weather/location.php';
-require_once __DIR__ . '/shared/components/weather-hero.php';
 require_once __DIR__ . '/shared/components/welcome-sky.php';
 
 $hour = (int)gmdate('G', time() + WEATHER_DEFAULT_PLACE['offset']);
@@ -22,9 +21,8 @@ require __DIR__ . '/shared/components/public-head.php';
     <?php require __DIR__ . '/shared/components/site-navigation.php'; ?>
     <div class="public-wrap">
         <main>
-            <section class="landing-hero welcome-hero" aria-labelledby="landing-title" data-welcome-sky
-                     data-public-weather-offset="<?= WEATHER_DEFAULT_PLACE['offset'] ?>" data-sky-preview="live" data-light="<?= $light ?>">
-                <?php renderWelcomeLandscape($light); ?>
+            <section class="landing-hero welcome-hero" aria-labelledby="landing-title"
+                     data-public-weather-offset="<?= WEATHER_DEFAULT_PLACE['offset'] ?>" data-light="<?= $light ?>">
                 <div class="landing-copy">
                     <h1 id="landing-title">A little closer.<br><em>Every day.</em></h1>
                     <p>Make plans, share lists, and stay in touch. Relatives gives your family one place for it all.</p>
@@ -33,10 +31,7 @@ require __DIR__ . '/shared/components/public-head.php';
                         <a class="text-link" href="/register-join.php">I have an invite</a>
                     </div>
                 </div>
-                <div class="welcome-weather">
-                    <?php renderWeatherHeroPanel('welcome'); ?>
-                    <?php renderWelcomeSkyControls(); ?>
-                </div>
+                <?php renderWelcomeWeather(WEATHER_DEFAULT_PLACE['name']); ?>
             </section>
 
             <section class="landing-features" aria-label="What you can do with Relatives">
