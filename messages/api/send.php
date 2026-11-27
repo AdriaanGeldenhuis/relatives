@@ -43,6 +43,9 @@ $userId = (int) $user['id'];
 $familyId = (int) $user['family_id'];
 $userName = $user['name'];
 $clientId = $_POST['client_message_id'] ?? null;
+if (isset($_POST['family_id']) && (string) $familyId !== $_POST['family_id']) {
+    Response::error('This chat has changed. Reopen Messages to continue.', 403);
+}
 if ($clientId !== null && (!is_string($clientId)
     || !preg_match('/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/iD', $clientId))) {
     Response::error('Invalid message request.', 422);
@@ -106,11 +109,11 @@ try {
     $content = trim($_POST['content'] ?? '');
     $replyToMessageId = !empty($_POST['reply_to_message_id']) ? (int)$_POST['reply_to_message_id'] : null;
     
-    if (empty($content) && empty($_FILES['media'])) {
+    if ($content === '' && empty($_FILES['media'])) {
         throw new Exception('Message cannot be empty');
     }
 
-    if (strlen($content) > 5000) {
+    if (mb_strlen($content) > 5000) {
         throw new Exception('Message too long (max 5000 characters)');
     }
 
@@ -267,7 +270,7 @@ try {
             $familyId,
             $userId,
             $messageType,
-            $content ?: null,
+            $content !== '' ? $content : null,
             $mediaPath,
             $mediaThumbnail,
             $replyToMessageId
@@ -299,7 +302,7 @@ try {
         $triggers = new NotificationTriggers($db);
         
         $preview = $content;
-        if (empty($preview)) {
+        if ($preview === '') {
             if ($messageType === 'image') {
                 $preview = '📷 Sent a photo';
             } elseif ($messageType === 'video') {

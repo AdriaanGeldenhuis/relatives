@@ -57,6 +57,8 @@
             window.dispatchEvent(new CustomEvent('relativestrackingstate', { detail: snapshot.mode }));
         } else if (data.type === 'tracking_health') {
             window.dispatchEvent(new CustomEvent('relativestrackinghealth', { detail: data }));
+        } else if (data.type === 'notification_status') {
+            window.dispatchEvent(new CustomEvent('relativesnotificationstatus', { detail: data }));
         } else if (locationReply && data.type === locationReply.type) {
             locationReply.finish(data.allowed === true);
         }
@@ -87,6 +89,7 @@
         onTrackingScreenVisible: function () { send('map_visible'); },
         onTrackingScreenHidden: function () { send('map_hidden'); },
         requestNotificationPermission: function () { send('notifications'); },
+        requestNotificationStatus: function () { send('notification_status'); },
         openNotificationSettings: function () { send('notification_settings'); },
         prepareNavigation: () => prepareLocation('navigation'),
         prepareWeatherLocation: () => prepareLocation('weather_location')

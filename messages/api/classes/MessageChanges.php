@@ -86,4 +86,39 @@ final class MessageChanges
             'reset' => false,
         ];
     }
+
+    public static function markRead(PDO $db, int $family, int $user, array $ids): array
+    {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $db->beginTransaction();
+        try {
+            $select = $db->prepare("SELECT id FROM messages
+                WHERE family_id = ? AND deleted_at IS NULL AND id IN ($placeholders) ORDER BY id");
+            $select->execute([$family, ...$ids]);
+            $visible = $select->fetchAll(PDO::FETCH_COLUMN);
+            $marked = $notifications = 0;
+            if ($visible) {
+                $slots = implode(',', array_fill(0, count($visible), '?'));
+                $insert = $db->prepare("INSERT INTO message_reads (message_id, user_id, read_at)
+                    SELECT id, ?, NOW() FROM messages WHERE family_id = ? AND user_id != ?
+                        AND deleted_at IS NULL AND id IN ($slots) ORDER BY id
+                    ON DUPLICATE KEY UPDATE read_at = message_reads.read_at");
+                $insert->execute([$user, $family, $user, ...$visible]);
+                $marked = $insert->rowCount();
+
+                $paths = array_map(static fn ($id) => '/messages/?message=' . $id, $visible);
+                $update = $db->prepare("UPDATE notifications SET is_read = 1, read_at = NOW()
+                    WHERE user_id = ? AND type = 'message' AND is_read = 0
+                    AND (action_url IN ($slots) OR (action_url = '/messages/' AND
+                        JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(data_json), data_json, NULL), '$.message_id')) IN ($slots)))");
+                $update->execute([$user, ...$paths, ...array_map('strval', $visible)]);
+                $notifications = $update->rowCount();
+            }
+            $db->commit();
+            return ['message_ids' => array_map('strval', $visible), 'marked_count' => $marked, 'notifications_read' => $notifications];
+        } catch (Throwable $error) {
+            $db->rollBack();
+            throw $error;
+        }
+    }
 }

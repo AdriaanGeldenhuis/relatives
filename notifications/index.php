@@ -136,7 +136,7 @@ try {
         FROM notifications n
         LEFT JOIN users u ON n.from_user_id = u.id
         WHERE $whereClause
-        ORDER BY n.created_at DESC
+        ORDER BY n.created_at DESC, n.id DESC
         LIMIT 200
     ");
     $stmt->execute($params);
@@ -195,6 +195,7 @@ if (!$ajax) {
                     <button type="button" class="btn" data-notification-action="confirm_clear" aria-haspopup="dialog" aria-controls="clearConfirmModal">Clear read</button>
                 <?php endif; ?>
                 <button type="button" class="btn" data-notification-action="preferences" aria-haspopup="dialog" aria-controls="preferencesModal">Settings</button>
+                <a class="btn" href="/profile/notifications.php#deviceAlerts">Device alerts</a>
             </div>
         </div>
         <?php renderFamilyScene('family'); ?>

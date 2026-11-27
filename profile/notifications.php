@@ -200,7 +200,7 @@ require_once __DIR__ . '/../shared/components/header.php';
             <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
         <?php endif; ?>
 
-        <section class="settings-section" data-push-settings data-csrf="<?= htmlspecialchars($pushCsrf) ?>">
+        <section class="settings-section" id="deviceAlerts" data-push-settings data-csrf="<?= htmlspecialchars($pushCsrf) ?>">
             <h2 class="settings-section-title">This device</h2>
             <p role="status"></p>
             <div class="toggle-row">

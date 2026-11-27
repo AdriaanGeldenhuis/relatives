@@ -8,7 +8,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
 import java.util.concurrent.atomic.AtomicInteger
 import za.co.relatives.app.MainActivity
 import za.co.relatives.app.R
@@ -35,6 +37,14 @@ object NotificationHelper {
     private const val LOCATION_SOUND = "relatives_location_sound"
     private const val LOCATION_VIBRATION = "relatives_location_vibration"
     private const val LOCATION_QUIET = "relatives_location_quiet"
+    private const val CHAT_GROUP = "relatives_messages"
+    private const val CHAT_ALERTS = "relatives_messages_normal"
+    private const val CHAT_SOUND = "relatives_messages_sound"
+    private const val CHAT_VIBRATION = "relatives_messages_vibration"
+    private const val CHAT_QUIET = "relatives_messages_quiet"
+    private const val CHAT_SUMMARY_ID = 9003
+    private const val EXTRA_MESSAGE_ID = "za.co.relatives.app.message_id"
+    private val recentReads = linkedSetOf<String>()
 
     // ── Channel creation ───────────────────────────────────────────────────
 
@@ -69,16 +79,24 @@ object NotificationHelper {
         ))
         manager.createNotificationChannelGroup(NotificationChannelGroup(LOCATION_GROUP, "Geofence and place alerts"))
         manager.createNotificationChannels(listOf(
-            locationChannel(LOCATION_ALERTS, "Geofence and place alerts", true, true),
-            locationChannel(LOCATION_SOUND, "Geofence alerts with sound", true, false),
-            locationChannel(LOCATION_VIBRATION, "Geofence alerts with vibration", false, true),
-            locationChannel(LOCATION_QUIET, "Silent geofence alerts", false, false),
+            privateChannel(LOCATION_ALERTS, LOCATION_GROUP, "Geofence and place alerts", true, true),
+            privateChannel(LOCATION_SOUND, LOCATION_GROUP, "Geofence alerts with sound", true, false),
+            privateChannel(LOCATION_VIBRATION, LOCATION_GROUP, "Geofence alerts with vibration", false, true),
+            privateChannel(LOCATION_QUIET, LOCATION_GROUP, "Silent geofence alerts", false, false),
+        ))
+        val chat = context.getString(R.string.channel_chat)
+        manager.createNotificationChannelGroup(NotificationChannelGroup(CHAT_GROUP, chat))
+        manager.createNotificationChannels(listOf(
+            privateChannel(CHAT_ALERTS, CHAT_GROUP, chat, true, true),
+            privateChannel(CHAT_SOUND, CHAT_GROUP, context.getString(R.string.channel_chat_sound), true, false),
+            privateChannel(CHAT_VIBRATION, CHAT_GROUP, context.getString(R.string.channel_chat_vibration), false, true),
+            privateChannel(CHAT_QUIET, CHAT_GROUP, context.getString(R.string.channel_chat_quiet), false, false),
         ))
     }
 
-    private fun locationChannel(id: String, name: String, sound: Boolean, vibrate: Boolean): NotificationChannel =
+    private fun privateChannel(id: String, channelGroup: String, name: String, sound: Boolean, vibrate: Boolean): NotificationChannel =
         NotificationChannel(id, name, if (sound || vibrate) NotificationManager.IMPORTANCE_HIGH else NotificationManager.IMPORTANCE_LOW).apply {
-            group = LOCATION_GROUP
+            group = channelGroup
             if (!sound) setSound(null, null)
             enableVibration(vibrate)
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
@@ -93,12 +111,20 @@ object NotificationHelper {
     }
 
     fun canShowLocationAlerts(context: Context): Boolean {
+        return canShowInGroup(context, LOCATION_GROUP, listOf(LOCATION_ALERTS, LOCATION_SOUND, LOCATION_VIBRATION, LOCATION_QUIET))
+    }
+
+    fun canShowChatAlerts(context: Context): Boolean {
+        return canShowInGroup(context, CHAT_GROUP, listOf(CHAT_ALERTS, CHAT_SOUND, CHAT_VIBRATION, CHAT_QUIET))
+    }
+
+    private fun canShowInGroup(context: Context, group: String, channels: List<String>): Boolean {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return false
         val groupBlocked = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
-            manager.getNotificationChannelGroup(LOCATION_GROUP)?.isBlocked == true
+            manager.getNotificationChannelGroup(group)?.isBlocked == true
         return manager.areNotificationsEnabled() &&
             !groupBlocked &&
-            listOf(LOCATION_ALERTS, LOCATION_SOUND, LOCATION_VIBRATION, LOCATION_QUIET).any {
+            channels.any {
                 (manager.getNotificationChannel(it)?.importance ?: 0) > NotificationManager.IMPORTANCE_NONE
             }
     }
@@ -120,6 +146,7 @@ object NotificationHelper {
     private val nextNotificationId =
         AtomicInteger((System.currentTimeMillis() and 0x0FFFFFFF).toInt())
 
+    @Synchronized
     fun showAlertNotification(
         context: Context,
         title: String,
@@ -129,8 +156,18 @@ object NotificationHelper {
         silent: Boolean = false,
         vibrate: Boolean = true,
         locationAlert: Boolean = false,
+        messageId: String? = null,
+        newMessage: Boolean = false,
+        recipientId: String? = null,
     ): Boolean {
-        val channel = if (locationAlert) when {
+        if (messageId != null && !PreferencesManager(context).isPushRecipient(recipientId)) return false
+        if (newMessage && messageId in recentReads) return false
+        val channel = if (messageId != null) when {
+            silent && vibrate -> CHAT_VIBRATION
+            silent -> CHAT_QUIET
+            !vibrate -> CHAT_SOUND
+            else -> CHAT_ALERTS
+        } else if (locationAlert) when {
             silent && vibrate -> LOCATION_VIBRATION
             silent -> LOCATION_QUIET
             !vibrate -> LOCATION_SOUND
@@ -169,22 +206,77 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(if (locationAlert) NotificationCompat.CATEGORY_EVENT else NotificationCompat.CATEGORY_MESSAGE)
-        if (locationAlert) {
+        if (locationAlert || messageId != null) {
             builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setPublicVersion(NotificationCompat.Builder(context, channel)
                     .setSmallIcon(R.drawable.ic_notification)
-                    .setContentTitle(context.getString(R.string.channel_location_alerts))
+                    .setContentTitle(context.getString(
+                        if (locationAlert) R.string.channel_location_alerts else R.string.channel_chat
+                    ))
                     .build())
+        }
+        if (messageId != null) {
+            val chat = context.getString(R.string.channel_chat)
+            val sender = Person.Builder().setName(title).build()
+            builder.setStyle(NotificationCompat.MessagingStyle(Person.Builder().setName(context.getString(R.string.app_name)).build())
+                .setConversationTitle(chat)
+                .setGroupConversation(true)
+                .addMessage(body, System.currentTimeMillis(), sender))
+                .addExtras(Bundle().apply { putString(EXTRA_MESSAGE_ID, messageId) })
+                .setGroup(CHAT_GROUP)
+                .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
         }
 
         val manager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (!manager.areNotificationsEnabled() ||
+            (messageId != null && !canShowChatAlerts(context)) ||
             manager.getNotificationChannel(channel)?.importance == NotificationManager.IMPORTANCE_NONE
         ) return false
         val notification = builder.build()
         if (stableId == null) manager.notify(notificationId, notification)
         else manager.notify("relatives-$stableId", 0, notification)
+        if (messageId != null) showChatSummary(context, manager, channel)
         return true
+    }
+
+    private fun showChatSummary(context: Context, manager: NotificationManager, channel: String) {
+        val chat = context.getString(R.string.channel_chat)
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("action_url", "/messages/")
+        }
+        val open = PendingIntent.getActivity(context, CHAT_SUMMARY_ID, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val summary = NotificationCompat.Builder(context, channel)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(chat)
+            .setContentIntent(open)
+            .setGroup(CHAT_GROUP)
+            .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .build()
+        manager.notify(CHAT_SUMMARY_ID, summary)
+    }
+
+    @Synchronized
+    fun markMessagesRead(context: Context, ids: Set<String>) {
+        recentReads.addAll(ids)
+        while (recentReads.size > 400) recentReads.remove(recentReads.first())
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        val alerts = manager.activeNotifications.filter { it.notification.extras?.containsKey(EXTRA_MESSAGE_ID) == true }
+        val read = alerts.filter { it.notification.extras.getString(EXTRA_MESSAGE_ID) in ids }
+        read.forEach { manager.cancel(it.tag, it.id) }
+        if (read.size == alerts.size) manager.cancel(CHAT_SUMMARY_ID)
+    }
+
+    @Synchronized
+    fun clearChatAlerts(context: Context) {
+        recentReads.clear()
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        manager.activeNotifications.filter { it.notification.group == CHAT_GROUP }.forEach { manager.cancel(it.tag, it.id) }
     }
 }

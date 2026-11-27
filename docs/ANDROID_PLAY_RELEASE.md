@@ -1,6 +1,6 @@
 # Relatives Android release checks
 
-The Android project lives in `App Files`. This release uses package `za.co.relatives.app`, target SDK 36, version 1.9.2, version code 12, and Google Play Billing 8.3.0. Compare the version code against the highest code already uploaded in Play Console before signing.
+The Android project lives in `App Files`. This release uses package `za.co.relatives.app`, target SDK 36, version 1.9.3, version code 13, and Google Play Billing 8.3.0. Compare the version code against the highest code already uploaded in Play Console before signing.
 
 ## Build and deploy
 
@@ -36,6 +36,7 @@ Use two accounts and at least two Android phones. Include a Huawei or Honor devi
 4. Tap **Wake** from the second account. Verify a fresh location on the map without a toast, recipient notice, or new inbox entry on either phone. Open the map and verify that stale locations also refresh automatically. Verify that revoking consent prevents refreshes. Repeat with the location toggle disabled and with a different account signed in on the same device.
 5. Clear sharing from Privacy & Security and verify that family members lose access to the last location and location history. Test the deletion request using a synthetic account and verify the privacy team can complete it under the production retention policy.
 6. Use Play license testing to verify purchase, pending purchase, restore, cancellation, renewal, and expiry from Android through to the family entitlement.
+7. Enable device alerts on two phones signed into the same family. Send several messages while the recipient's screen is locked, then tap an individual alert and confirm it opens that message. Scroll to unread messages and confirm their alerts clear. Repeat while the recipient is already at the latest message, with Family Chat muted in Android settings, and after switching accounts on the device.
 
 ## Tracking and Wake rollout
 

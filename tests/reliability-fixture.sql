@@ -26,6 +26,11 @@ CREATE TABLE messages (
 CREATE TABLE message_reactions (
     message_id BIGINT UNSIGNED NOT NULL, user_id BIGINT UNSIGNED NOT NULL, emoji VARCHAR(40), created_at DATETIME
 ) ENGINE=InnoDB;
+CREATE TABLE message_reads (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    message_id BIGINT UNSIGNED NOT NULL, user_id BIGINT UNSIGNED NOT NULL,
+    read_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY unique_read (message_id, user_id)
+) ENGINE=InnoDB;
 CREATE TABLE notes (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, family_id BIGINT UNSIGNED NOT NULL, user_id BIGINT UNSIGNED,
     type ENUM('text','voice') NOT NULL DEFAULT 'text', title VARCHAR(160), body TEXT, audio_path VARCHAR(255),

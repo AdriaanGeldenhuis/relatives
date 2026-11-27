@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Relatives</string>
+    <string name="channel_chat">Family Chat</string>
+    <string name="channel_chat_sound">Family Chat with sound</string>
+    <string name="channel_chat_vibration">Family Chat with vibration</string>
+    <string name="channel_chat_quiet">Silent Family Chat</string>
 
     <string name="offline_home_title">Relatives Home</string>
     <string name="offline_home_message">You’re offline. Reconnect to see family activity and open apps.</string>

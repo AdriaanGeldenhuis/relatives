@@ -43,8 +43,13 @@
     }
 
     let pending = false;
+    let refreshAgain = false;
     async function refreshNotifications() {
-        if (!bell || pending || document.hidden) return;
+        if (!bell || document.hidden) return;
+        if (pending) {
+            refreshAgain = true;
+            return;
+        }
         pending = true;
         try {
             const response = await fetch('/notifications/api/count.php', { cache: 'no-store' });
@@ -53,6 +58,10 @@
             // Keep the last known count while offline.
         } finally {
             pending = false;
+            if (refreshAgain) {
+                refreshAgain = false;
+                refreshNotifications();
+            }
         }
     }
 

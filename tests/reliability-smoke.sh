@@ -61,6 +61,10 @@ done
 csrf=$(curl -fsS -b "$smoke_root/sender.cookie" "$base/messages/" |
     sed -n 's/.*id="sendBtn" data-csrf="\([a-f0-9]*\)".*/\1/p')
 [[ -n $csrf ]]
+chat_csrf() {
+    curl -fsS -b "$smoke_root/$1.cookie" "$base/messages/" |
+        sed -n 's/.*id="sendBtn" data-csrf="\([a-f0-9]*\)".*/\1/p'
+}
 
 send_message() {
     curl -fsS -b "$smoke_root/sender.cookie" -H "X-CSRF-Token: $csrf" \
@@ -78,6 +82,22 @@ delta() {
 }
 delta recipient 0 | php -r '$r=json_decode(stream_get_contents(STDIN), true); exit(($r["count"] === 1 && $r["cursor"] === "1") ? 0 : 1);'
 delta other 0 | php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["count"] === 0 ? 0 : 1);'
+[[ $(sql -Nse "SELECT action_url FROM notifications WHERE user_id=2 AND type='message'") == "/messages/?message=$id" ]]
+read_chat() {
+    curl -fsS -b "$smoke_root/$1.cookie" -H "X-CSRF-Token: $2" -H 'Content-Type: application/json' \
+        --data "{\"message_ids\":[\"$id\"]}" "$base/messages/api/read.php"
+}
+read_chat other "$(chat_csrf other)" |
+    php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["success"] && !$r["message_ids"] ? 0 : 1);'
+recipient_csrf=$(chat_csrf recipient)
+read_chat recipient "$recipient_csrf" |
+    php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["marked_count"] === 1 && $r["notifications_read"] === 1 ? 0 : 1);'
+read_chat recipient "$recipient_csrf" |
+    php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["marked_count"] === 0 && $r["notifications_read"] === 0 ? 0 : 1);'
+[[ $(sql -Nse "SELECT COUNT(*) FROM message_reads WHERE message_id=$id AND user_id=2") == 1 ]]
+sql -e 'UPDATE push_deliveries SET next_at=NOW()'
+php "$smoke_root/cron/push-deliveries.php"
+[[ $(sql -Nse 'SELECT reason FROM push_deliveries') == already_read ]]
 sql -e "UPDATE messages SET content='Edited fixture message', edited_at=NOW() WHERE id=$id"
 delta recipient 1 | php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["messages"][0]["content"] === "Edited fixture message" ? 0 : 1);'
 sql -e "UPDATE messages SET deleted_at=NOW() WHERE id=$id"

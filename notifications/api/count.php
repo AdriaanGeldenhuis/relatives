@@ -70,7 +70,7 @@ try {
             LEFT JOIN users u ON n.from_user_id = u.id
             WHERE n.user_id = ? 
               AND n.is_read = 0 AND $locationVisible
-            ORDER BY n.created_at DESC
+            ORDER BY n.created_at DESC, n.id DESC
             LIMIT 1
         ");
         $stmt->execute([$userId]);

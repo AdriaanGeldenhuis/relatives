@@ -85,6 +85,15 @@ class RelativesFirebaseService : FirebaseMessagingService() {
         val actionUrl = data["action_url"]
         val locationAlert = type == "tracking" && data["location_alert"] == "1"
         if (type == "tracking" && !locationAlert) return
+        val messageId = data["message_id"]?.takeIf {
+            type == "message" && it.length in 1..19 && it.all { char -> char in '0'..'9' }
+        }
+        val newMessage = messageId != null && data["new_message"] == "1"
+        val app = application as? RelativesApplication
+        if (newMessage && app?.viewingLatestMessages == true && app.notificationEvents.tryEmit(Unit)) {
+            data["receipt"]?.let { PushReceiptWorker.enqueue(this, it) }
+            return
+        }
 
         // Use the centralised alert notification helper
         val posted = NotificationHelper.showAlertNotification(
@@ -96,9 +105,12 @@ class RelativesFirebaseService : FirebaseMessagingService() {
             silent = data["silent"] == "1",
             vibrate = data["vibrate"] != "0",
             locationAlert = locationAlert,
+            messageId = messageId,
+            newMessage = newMessage,
+            recipientId = data["recipient_user_id"],
         )
         if (posted) data["receipt"]?.let { PushReceiptWorker.enqueue(this, it) }
-        (application as? RelativesApplication)?.notificationEvents?.tryEmit(Unit)
+        app?.notificationEvents?.tryEmit(Unit)
     }
 
     // ------------------------------------------------------------------ //

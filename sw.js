@@ -1,4 +1,6 @@
 /* Background notifications for the Relatives web app. */
+self.addEventListener('install', event => event.waitUntil(self.skipWaiting()));
+
 function sameOriginPath(value) {
     if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
         return '/notifications/';
@@ -35,7 +37,10 @@ self.addEventListener('push', event => {
             icon: '/icon-192.png',
             tag: 'relatives-' + payload.notification_id,
             silent: payload.silent === '1',
-            data: { path: verified ? sameOriginPath(payload.action_url) : '/notifications/' }
+            data: {
+                path: verified ? sameOriginPath(payload.action_url) : '/notifications/',
+                messageId: verified && /^\d+$/.test(payload.message_id) ? payload.message_id : null
+            }
         });
         if (verified) {
             const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -44,13 +49,29 @@ self.addEventListener('push', event => {
     })());
 });
 
+self.addEventListener('message', event => {
+    if (event.data?.type !== 'relatives-messages-read' || !Array.isArray(event.data.ids)) return;
+    const ids = new Set(event.data.ids);
+    event.waitUntil((async () => {
+        const notifications = await self.registration.getNotifications();
+        for (const notification of notifications) {
+            if (ids.has(notification.data?.messageId)) notification.close();
+        }
+    })());
+});
+
 self.addEventListener('notificationclick', event => {
     event.notification.close();
     event.waitUntil((async () => {
-        const target = new URL(sameOriginPath(event.notification.data?.path), self.location.origin).href;
+        const target = new URL(sameOriginPath(event.notification.data?.path), self.location.origin);
         const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-        const open = clients.find(client => client.url === target);
+        if (target.pathname === '/messages/') {
+            const chat = clients.find(client => new URL(client.url).pathname === target.pathname);
+            const focused = await chat?.navigate(target.href).catch(() => null);
+            if (focused) return focused.focus();
+        }
+        const open = clients.find(client => client.url === target.href);
         if (open) return open.focus();
-        return self.clients.openWindow(target);
+        return self.clients.openWindow(target.href);
     })());
 });

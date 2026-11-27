@@ -14,6 +14,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../../core/bootstrap.php';
+require_once __DIR__ . '/classes/MessageChanges.php';
 
 try {
     $userId = $_SESSION['user_id'];
@@ -172,54 +173,11 @@ function bulkDelete($db, $familyId, $userId, $messageIds, $userRole) {
  * Bulk mark as read
  */
 function bulkMarkRead($db, $familyId, $userId, $messageIds) {
-    $placeholders = str_repeat('?,', count($messageIds) - 1) . '?';
-    
-    // Verify messages belong to family
-    $stmt = $db->prepare("
-        SELECT id FROM messages 
-        WHERE id IN ($placeholders) 
-        AND family_id = ? 
-        AND deleted_at IS NULL
-    ");
-    $stmt->execute(array_merge($messageIds, [$familyId]));
-    $validIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    
-    if (empty($validIds)) {
+    $read = MessageChanges::markRead($db, (int) $familyId, (int) $userId, $messageIds);
+    if (!$read['message_ids']) {
         throw new Exception('No valid messages found');
     }
-    
-    // Check which messages are already read
-    $placeholders = str_repeat('?,', count($validIds) - 1) . '?';
-    $stmt = $db->prepare("
-        SELECT message_id FROM message_reads 
-        WHERE message_id IN ($placeholders) AND user_id = ?
-    ");
-    $stmt->execute(array_merge($validIds, [$userId]));
-    $alreadyRead = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    
-    $unreadIds = array_diff($validIds, $alreadyRead);
-    
-    if (!empty($unreadIds)) {
-        // Insert read receipts
-        $values = [];
-        $params = [];
-        foreach ($unreadIds as $msgId) {
-            $values[] = "(?, ?, NOW())";
-            $params[] = $msgId;
-            $params[] = $userId;
-        }
-        
-        $stmt = $db->prepare("
-            INSERT INTO message_reads (message_id, user_id, read_at)
-            VALUES " . implode(',', $values)
-        );
-        $stmt->execute($params);
-    }
-    
-    return [
-        'marked_count' => count($unreadIds),
-        'already_read' => count($alreadyRead)
-    ];
+    return $read;
 }
 
 /**

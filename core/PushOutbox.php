@@ -69,11 +69,16 @@ final class PushOutbox
                     return;
                 }
                 try {
+                    $budget = 2000;
                     if (function_exists('fastcgi_finish_request')) {
                         fastcgi_finish_request();
+                        $budget = 5000;
+                    } elseif (function_exists('litespeed_finish_request')) {
+                        litespeed_finish_request();
+                        $budget = 5000;
                     }
                     ignore_user_abort(true);
-                    $this->dispatch(2000, array_keys($this->immediate));
+                    $this->dispatch($budget, array_keys($this->immediate));
                 } catch (Throwable) {
                     error_log('Push delivery could not run after the response');
                 }
@@ -88,7 +93,7 @@ final class PushOutbox
         $lease = bin2hex(random_bytes(16));
         $scope = $only ? ' AND d.notification_id IN (' . implode(',', array_fill(0, count($only), '?')) . ')' : '';
         $locationVisible = LocationNotice::visible($this->db);
-        $select = $this->db->prepare("SELECT d.*, n.type, n.category, n.action_url, n.priority, n.data_json,
+        $select = $this->db->prepare("SELECT d.*, n.type, n.category, n.action_url, n.priority, n.data_json, n.is_read,
                 UNIX_TIMESTAMP(d.expires_at) AS expires_unix, $locationVisible AS location_visible,
                 sender.full_name AS sender_name, u.status AS user_status, f.timezone,
                 p.enabled, p.push_enabled, p.sound_enabled, p.vibrate_enabled,
@@ -114,6 +119,10 @@ final class PushOutbox
             $job['lease_id'] = $lease;
             $data = json_decode($job['data_json'] ?? '', true) ?: [];
             $ttl = (int) $job['expires_unix'] - time();
+            if ($job['type'] === 'message' && (bool) $job['is_read']) {
+                $this->finish($job, 'skipped', 'already_read');
+                continue;
+            }
             if ($ttl <= 0 || $job['type'] === null || $job['user_status'] !== 'active'
                 || (empty($data['device_test']) && !self::allowed($job))) {
                 $this->finish($job, 'skipped', $ttl <= 0 ? 'expired' : 'disabled');
@@ -144,6 +153,15 @@ final class PushOutbox
             ];
             if ($location) {
                 $payload['location_alert'] = '1';
+            }
+            if ($job['type'] === 'message' && (int) ($data['message_id'] ?? 0) > 0) {
+                $payload['message_id'] = (string) $data['message_id'];
+                if (isset($data['sender_id'])) {
+                    $payload['new_message'] = '1';
+                    $payload['body'] = 'New message';
+                } elseif (isset($data['reactor_id'])) {
+                    $payload['body'] = 'Reacted to your message';
+                }
             }
             if ($job['channel'] === 'fcm') {
                 $fcm[$job['id']] = ['job' => $job, 'device' => $device, 'payload' => $payload, 'ttl' => $ttl];
@@ -266,7 +284,8 @@ final class PushOutbox
                 accepted_at = COALESCE(accepted_at, NOW()), lease_id = NULL, lease_until = NULL
             WHERE d.receipt = ? AND d.user_id = ? AND d.expires_at > NOW()
             AND EXISTS (SELECT 1 FROM notifications n
-                WHERE n.id = d.notification_id AND n.user_id = d.user_id AND $locationVisible)
+                WHERE n.id = d.notification_id AND n.user_id = d.user_id AND $locationVisible
+                AND (n.type <> 'message' OR n.is_read = 0))
             AND d.state IN ('pending', 'accepted', 'delivered') AND (
                 (d.channel = 'fcm' AND EXISTS (SELECT 1 FROM fcm_tokens t
                     WHERE t.id = d.device_id AND t.user_id = d.user_id AND t.wake_session_hash = ?))

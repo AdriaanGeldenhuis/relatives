@@ -21,20 +21,7 @@ const EnhancedMessageApp = {
     editingMessageId: null,
     
     // Search
-    searchResults: [],
-    
-    // Cache & Queue
-    messageCache: new Map(),
-    offlineQueue: [],
-    statusUpdateQueue: [],
-    
-    // Feature Flags
-    features: {
-        editing: true,
-        search: true,
-        bulkOps: true,
-        statusTracking: true
-    }
+    searchResults: []
 };
 
 // ============================================
@@ -45,7 +32,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     setupEnhancedEventListeners();
     addEnhancedToolbar();
-    initOfflineSupport();
     checkMessageLimit();
     
     console.log('✅ Enhanced features loaded');
@@ -55,22 +41,9 @@ document.addEventListener('DOMContentLoaded', function() {
 // ENHANCED TOOLBAR (EXPORT REMOVED)
 // ============================================
 function addEnhancedToolbar() {
-    const members = document.getElementById('familyMembersDetails');
-    if (members && window.matchMedia('(min-width: 900px)').matches) members.open = true;
-    const toolbar = document.getElementById('messagesActions');
     const chat = document.getElementById('chatMain');
-    if (!toolbar || !chat) return;
+    if (!chat) return;
 
-    toolbar.innerHTML = `
-        <button onclick="openSearchDialog()" class="family-button" title="Search (Ctrl+F)">
-            🔍 Search
-        </button>
-        <button onclick="toggleBulkMode()" id="bulkModeBtn" class="family-button" title="Bulk Operations (Ctrl+B)">
-            ☑️ Select
-        </button>
-    `;
-    
-    
     // Add bulk actions bar (hidden by default)
     const bulkBar = document.createElement('div');
     bulkBar.id = 'bulkActionsBar';
@@ -92,7 +65,7 @@ function addEnhancedToolbar() {
         </div>
     `;
     
-    chat.prepend(bulkBar);
+    chat.querySelector('.messages-toolbar').after(bulkBar);
 }
 
 // ============================================
@@ -386,8 +359,8 @@ function toggleBulkMode() {
     const bulkActionsBar = document.getElementById('bulkActionsBar');
     
     if (EnhancedMessageApp.bulkMode) {
-        btn.textContent = '✖️ Cancel';
-        btn.classList.add('active');
+        btn.textContent = 'Cancel';
+        btn.setAttribute('aria-pressed', 'true');
         bulkActionsBar.style.display = 'flex';
         
         // Add checkboxes to messages
@@ -402,8 +375,8 @@ function toggleBulkMode() {
             }
         });
     } else {
-        btn.textContent = '☑️ Select';
-        btn.classList.remove('active');
+        btn.textContent = 'Select';
+        btn.setAttribute('aria-pressed', 'false');
         bulkActionsBar.style.display = 'none';
         
         // Remove checkboxes
@@ -472,15 +445,13 @@ async function performBulkAction(action) {
         const data = await response.json();
         
         if (data.success) {
-            showSuccess(`Successfully ${action.replace('_', ' ')}d ${data.affected_count || EnhancedMessageApp.selectedMessages.size} message(s)`);
-            
-            if (action === 'delete') {
-                // Remove deleted messages from UI
-                EnhancedMessageApp.selectedMessages.forEach(id => {
-                    document.querySelector(`[data-message-id="${id}"]`)?.remove();
-                });
+            if (action === 'mark_read') {
+                dismissChatAlerts(data.message_ids || [], data.notifications_read);
+                showSuccess('Messages marked read.');
+            } else {
+                showSuccess(`${data.deleted_count} messages deleted.`);
             }
-            
+
             toggleBulkMode(); // Exit bulk mode
             setTimeout(() => window.loadNewMessages(), 500);
         } else {
@@ -539,130 +510,6 @@ function updateLimitIndicator(stats) {
 }
 
 // ============================================
-// OFFLINE SUPPORT
-// ============================================
-function initOfflineSupport() {
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    // Load offline queue from localStorage
-    const savedQueue = localStorage.getItem('messageQueue');
-    if (savedQueue) {
-        try {
-            EnhancedMessageApp.offlineQueue = JSON.parse(savedQueue);
-            console.log('📦 Loaded offline queue:', EnhancedMessageApp.offlineQueue.length, 'messages');
-        } catch (e) {
-            localStorage.removeItem('messageQueue');
-        }
-    }
-    
-    // Process queue if online
-    if (navigator.onLine && EnhancedMessageApp.offlineQueue.length > 0) {
-        processOfflineQueue();
-    }
-}
-
-function handleOnline() {
-    console.log('🟢 Online');
-    showSuccess('Back online! Syncing messages...');
-    processOfflineQueue();
-    window.loadNewMessages();
-}
-
-function handleOffline() {
-    console.log('🔴 Offline');
-    showWarning('You are offline. Messages will be queued.');
-}
-
-function queueMessageForOffline(messageData) {
-    const queueItem = {
-        id: 'temp_' + Date.now(),
-        ...messageData,
-        queuedAt: Date.now()
-    };
-    
-    EnhancedMessageApp.offlineQueue.push(queueItem);
-    localStorage.setItem('messageQueue', JSON.stringify(EnhancedMessageApp.offlineQueue));
-    
-    // Show queued message in UI
-    showQueuedMessage(queueItem);
-}
-
-async function processOfflineQueue() {
-    if (EnhancedMessageApp.offlineQueue.length === 0) return;
-    
-    console.log('📤 Processing offline queue:', EnhancedMessageApp.offlineQueue.length, 'messages');
-    
-    const queue = [...EnhancedMessageApp.offlineQueue];
-    EnhancedMessageApp.offlineQueue = [];
-    
-    for (const item of queue) {
-        try {
-            const formData = new FormData();
-            formData.append('content', item.content);
-            if (item.reply_to_message_id) {
-                formData.append('reply_to_message_id', item.reply_to_message_id);
-            }
-            
-            const response = await fetch('/messages/api/send.php', {
-                method: 'POST',
-                body: formData,
-                credentials: 'same-origin'
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                // Remove queued message from UI
-                removeQueuedMessage(item.id);
-                console.log('✅ Sent queued message:', item.id);
-            } else {
-                // Re-queue failed message
-                EnhancedMessageApp.offlineQueue.push(item);
-            }
-        } catch (error) {
-            console.error('Failed to send queued message:', error);
-            EnhancedMessageApp.offlineQueue.push(item);
-        }
-    }
-    
-    // Save updated queue
-    localStorage.setItem('messageQueue', JSON.stringify(EnhancedMessageApp.offlineQueue));
-    
-    // Refresh messages
-    if (EnhancedMessageApp.offlineQueue.length === 0) {
-        showSuccess('All queued messages sent!');
-        setTimeout(() => window.loadNewMessages(), 500);
-    }
-}
-
-function showQueuedMessage(queueItem) {
-    const container = document.getElementById('messagesList');
-    
-    const messageEl = document.createElement('div');
-    messageEl.className = 'message own queued';
-    messageEl.dataset.tempId = queueItem.id;
-    
-    messageEl.innerHTML = `
-        <div class="message-content">
-            <div class="message-bubble">
-                <div class="message-text">${escapeHtml(queueItem.content)}</div>
-                <div class="queued-indicator">
-                    <span class="spinner-small"></span> Queued for sending...
-                </div>
-            </div>
-        </div>
-    `;
-    
-    container.appendChild(messageEl);
-    window.scrollToBottom && window.scrollToBottom();
-}
-
-function removeQueuedMessage(tempId) {
-    document.querySelector(`[data-temp-id="${tempId}"]`)?.remove();
-}
-
-// ============================================
 // ENHANCED EVENT LISTENERS
 // ============================================
 function setupEnhancedEventListeners() {
@@ -697,39 +544,26 @@ function enhanceMessageInput() {
     const input = document.getElementById('messageInput');
     if (!input) return;
     
-    // Auto-save draft
-    let draftTimeout;
-    input.addEventListener('input', function() {
-        clearTimeout(draftTimeout);
-        draftTimeout = setTimeout(() => {
-            saveDraft(input.value);
-        }, 1000);
-        
+    const key = `messageDraft_${window.MessageSystem.familyId}:${window.MessageSystem.currentUserId}`;
+    window.saveChatDraft = () => {
+        try {
+            if (input.value.trim()) localStorage.setItem(key, input.value);
+            else localStorage.removeItem(key);
+        } catch {
+            // The composer still works with browser storage disabled.
+        }
         updateCharacterCount(input.value.length);
-    });
-    
-    // Load draft on init
-    const draft = loadDraft();
-    if (draft) {
-        input.value = draft;
-        updateCharacterCount(draft.length);
+    };
+    input.addEventListener('input', window.saveChatDraft);
+    try {
+        input.value = localStorage.getItem(key) || '';
+    } catch {
+        return;
     }
-}
-
-function saveDraft(content) {
-    if (content.trim()) {
-        localStorage.setItem('messageDraft_' + window.MessageSystem.familyId, content);
-    } else {
-        localStorage.removeItem('messageDraft_' + window.MessageSystem.familyId);
+    if (input.value) {
+        input.style.height = input.scrollHeight + 'px';
+        updateCharacterCount(input.value.length);
     }
-}
-
-function loadDraft() {
-    return localStorage.getItem('messageDraft_' + window.MessageSystem.familyId);
-}
-
-function clearDraft() {
-    localStorage.removeItem('messageDraft_' + window.MessageSystem.familyId);
 }
 
 function updateCharacterCount(count) {
@@ -774,40 +608,6 @@ if (typeof window.createMessageElement === 'function') {
         }
         
         return element;
-    };
-}
-
-// ============================================
-// ENHANCED sendMessage WITH OFFLINE SUPPORT
-// ============================================
-if (typeof window.sendMessage === 'function') {
-    const originalSendMessage = window.sendMessage;
-    window.sendMessage = async function() {
-        const input = document.getElementById('messageInput');
-        const content = input.value.trim();
-        
-        if (!content && window.MessageSystem.mediaFiles.length === 0) return;
-        
-        // Check if offline
-        if (!navigator.onLine) {
-            queueMessageForOffline({
-                content: content,
-                reply_to_message_id: window.MessageSystem.replyToMessageId,
-                mediaFiles: window.MessageSystem.mediaFiles
-            });
-            
-            input.value = '';
-            clearDraft();
-            window.cancelReply && window.cancelReply();
-            return;
-        }
-        
-        // Call original function
-        await originalSendMessage();
-        
-        // Clear draft after successful send
-        clearDraft();
-        updateCharacterCount(0);
     };
 }
 

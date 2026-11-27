@@ -9,6 +9,9 @@
     let registration;
     let publicKey;
     let busy = false;
+    let nativeStatus;
+    let deviceStatus;
+    if (native) panel.querySelector('[data-push-action="disable"]').textContent = 'Android settings';
 
     async function request(action, values = {}) {
         const response = await fetch(url, {
@@ -23,6 +26,7 @@
 
     async function refresh() {
         if (busy) return;
+        if (native) window.TrackingBridge?.requestNotificationStatus?.();
         try {
             const subscription = await registration?.pushManager.getSubscription();
             if (!native && (!registration || !subscription || Notification.permission !== 'granted')) {
@@ -32,10 +36,25 @@
             const result = await request('status', subscription ? { endpoint: subscription.endpoint } : {});
             const state = { accepted: 'Accepted by provider', delivered: 'Received on this device',
                 pending: 'Awaiting delivery', skipped: 'Skipped', failed: 'Delivery failed' }[result.last?.state];
-            status.textContent = (result.registered ? 'This device is registered.' : 'This device is awaiting registration.')
+            deviceStatus = (result.registered ? 'This device is registered.' : 'This device is awaiting registration.')
                 + (state ? ' ' + state + '.' : '');
+            showDeviceStatus();
         } catch (error) {
             status.textContent = error.message;
+        }
+    }
+
+    function showDeviceStatus() {
+        const test = panel.querySelector('[data-push-action="test"]');
+        if (nativeStatus?.supported === false) {
+            status.textContent = 'Android push needs Google Play services on this device.';
+            buttons.forEach(button => { button.disabled = true; });
+        } else if (nativeStatus?.enabled === false) {
+            status.textContent = 'Family Chat alerts are off in Android settings.';
+            test.disabled = true;
+        } else {
+            if (deviceStatus) status.textContent = deviceStatus;
+            test.disabled = busy;
         }
     }
 
@@ -97,9 +116,15 @@
         } finally {
             busy = false;
             buttons.forEach(button => { button.disabled = false; });
+            if (nativeStatus?.enabled === false) showDeviceStatus();
         }
     });
     window.addEventListener('focus', refresh);
+    window.addEventListener('relativesappresume', refresh);
     window.addEventListener('relativesnotification', refresh);
+    window.addEventListener('relativesnotificationstatus', event => {
+        nativeStatus = event.detail;
+        showDeviceStatus();
+    });
     initialize();
 })();

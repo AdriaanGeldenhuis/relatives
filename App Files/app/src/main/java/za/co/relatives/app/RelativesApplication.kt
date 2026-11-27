@@ -8,6 +8,7 @@ import za.co.relatives.app.utils.PreferencesManager
 
 class RelativesApplication : Application() {
     internal val notificationEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    @Volatile internal var viewingLatestMessages = false
 
     lateinit var preferencesManager: PreferencesManager
         private set

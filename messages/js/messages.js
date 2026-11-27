@@ -10,406 +10,156 @@
 // GLOBAL STATE MANAGEMENT
 // ============================================
 const MessageSystem = {
-    // User Info
     currentUserId: null,
     currentUserName: null,
     familyId: null,
-    
-    // Message State
     lastMessageId: 0,
     changeCursor: null,
-    retryDraft: null,
+    initialLoadComplete: false,
     replyToMessageId: null,
     contextMessageId: null,
-    
-    // UI State
-    isLoadingMessages: false,
-    isLoadingInitial: false,
-    initialLoadComplete: false,
-    sessionWarmedUp: false,
-    
-    // Media
     mediaFiles: [],
-    
-    // Retry Logic
-    loadRetryCount: 0,
-    MAX_RETRIES: 5,
-    RETRY_DELAYS: [1000, 1500, 2000, 3000, 5000],
-    
-    // Typing
     typingTimeout: null,
-    
-    // Polling
-    pollingInterval: null,
-    typingInterval: null
+    typingInterval: null,
 };
 
-// ============================================
-// DETECT NATIVE APP
-// ============================================
-const isNativeApp = navigator.userAgent.includes('RelativesAndroidApp') ||
-                    navigator.userAgent.includes('wv') ||
-                    navigator.userAgent.includes('relatives-native') ||
-                    window.AndroidInterface !== undefined;
+const MESSAGE_POLL_INTERVAL = 3000;
+let chatOutbox;
+let syncTimer;
+let syncing = false;
+let syncAgain = false;
+let syncFailures = 0;
+let sessionExpired = false;
+let pendingMessageCount = 0;
+let readObserver;
+let readTimer;
+let reportingReads = false;
+let lastTypingPing = -Infinity;
+const visibleMessages = new Set();
+const confirmedReads = new Set();
+let nativeChatVisible = null;
 
-if (isNativeApp) {
-    console.log('📱 Running in native app mode');
-    MessageSystem.MAX_RETRIES = 3;
-    MessageSystem.RETRY_DELAYS = [2000, 3000, 5000];
-}
+document.addEventListener('DOMContentLoaded', () => {
+    MessageSystem.currentUserId = document.getElementById('currentUserId').value;
+    MessageSystem.currentUserName = document.getElementById('currentUserName').value;
+    MessageSystem.familyId = document.getElementById('familyId').value;
+    chatOutbox = new ChatOutbox(
+        `${MessageSystem.familyId}:${MessageSystem.currentUserId}`,
+        document.getElementById('sendBtn').dataset.csrf,
+        renderPendingMessages,
+        message => {
+            if (message) displayMessages([message]);
+            loadNewMessages();
+        }
+    );
 
-// ============================================
-// INITIALIZATION
-// ============================================
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🎬 Messages app starting...');
-    
-    initializeChat();
-    warmupSession();
     setupEventListeners();
-    initParticles();
     setupEmojiPicker();
+    resumeChat();
 });
 
-function initializeChat() {
-    var userIdEl = document.getElementById('currentUserId');
-    var userNameEl = document.getElementById('currentUserName');
-    var familyIdEl = document.getElementById('familyId');
-    MessageSystem.currentUserId = userIdEl ? userIdEl.value : null;
-    MessageSystem.currentUserName = userNameEl ? userNameEl.value : null;
-    MessageSystem.familyId = familyIdEl ? familyIdEl.value : null;
-
-    console.log('💬 Chat initialized:', {
-        userId: MessageSystem.currentUserId,
-        userName: MessageSystem.currentUserName,
-        familyId: MessageSystem.familyId
-    });
-}
-
-// ============================================
-// CONNECTION STATUS INDICATOR
-// ============================================
-function updateConnectionStatus(status, message) {
+function updateConnectionStatus(message) {
     const indicator = document.getElementById('connectionStatus');
-    if (!indicator) return;
-    
-    const statusText = indicator.querySelector('.status-text');
-    
-    indicator.className = 'connection-status ' + status;
-    statusText.textContent = message;
-    
-    if (status === 'connected') {
-        indicator.style.display = 'flex';
-        setTimeout(() => {
-            indicator.style.display = 'none';
-        }, 3000);
-    } else {
-        indicator.style.display = 'flex';
+    indicator.querySelector('.status-text').textContent = message;
+    indicator.style.display = message ? 'flex' : 'none';
+    updateNativeChatVisibility();
+}
+
+function showEmptyConversation() {
+    const list = document.getElementById('messagesList');
+    if (!list.firstElementChild) {
+        list.innerHTML = '<div class="empty-state"><h3>No messages yet</h3></div>';
     }
 }
 
-// ============================================
-// SESSION WARMUP
-// ============================================
-async function warmupSession() {
-    console.log('🔥 Warming up session...');
-    
-    const messagesList = document.getElementById('messagesList');
-    messagesList.innerHTML = `
-        <div class="loading-messages">
-            <div class="spinner"></div>
-            <p>Initializing...</p>
-        </div>
-    `;
-    
-    updateConnectionStatus('connecting', 'Initializing connection...');
-    
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        const response = await fetch(window.location.origin + '/messages/api/test.php?t=' + Date.now(), {
-            method: 'GET',
-            credentials: 'same-origin',
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        console.log('✅ Session warmup complete, status:', response.status);
-        MessageSystem.sessionWarmedUp = true;
-        
-    } catch (error) {
-        console.warn('⚠️ Session warmup failed:', error.name);
-        MessageSystem.sessionWarmedUp = false;
-    }
-    
-    loadInitialMessages();
-    startPolling();
-}
-
-// ============================================
-// PARTICLE ANIMATION - DISABLED FOR PERFORMANCE
-// Canvas hidden via CSS
-// ============================================
-function initParticles() {
-    // Disabled - canvas hidden via CSS for performance
-}
-
-// ============================================
-// LOAD INITIAL MESSAGES
-// ============================================
-async function loadInitialMessages() {
-    const messagesList = document.getElementById('messagesList');
-    
-    if (MessageSystem.isLoadingInitial) {
-        console.log('⏸️ Already loading initial messages, skipping...');
+async function loadNewMessages() {
+    clearTimeout(syncTimer);
+    if (document.hidden || sessionExpired) return;
+    if (!navigator.onLine) {
+        updateConnectionStatus('Offline');
         return;
     }
-    
-    MessageSystem.isLoadingInitial = true;
-    MessageSystem.isLoadingMessages = true;
-    
-    console.log(`📥 Loading initial messages (attempt ${MessageSystem.loadRetryCount + 1}/${MessageSystem.MAX_RETRIES})...`);
-    
-    messagesList.innerHTML = `
-        <div class="loading-messages">
-            <div class="spinner"></div>
-            <p>${MessageSystem.loadRetryCount === 0 ? 'Loading messages...' : `Connecting... (${MessageSystem.loadRetryCount}/${MessageSystem.MAX_RETRIES})`}</p>
-        </div>
-    `;
-    
-    updateConnectionStatus('connecting', `Connecting... (${MessageSystem.loadRetryCount + 1}/${MessageSystem.MAX_RETRIES})`);
-    
-    try {
-        const baseUrl = window.location.origin;
-        const timestamp = Date.now();
-        const params = new URLSearchParams({ t: timestamp });
-        const focusedMessage = new URLSearchParams(location.search).get('message');
-        if (focusedMessage) params.set('message', focusedMessage);
-        const fullUrl = `${baseUrl}/messages/api/fetch.php?${params}`;
-        
-        console.log('🌐 Fetching:', fullUrl);
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-        
-        const response = await fetch(fullUrl, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'Cache-Control': 'no-cache, no-store, must-revalidate'
-            },
-            credentials: 'same-origin',
-            cache: 'no-store',
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        console.log('📡 Response status:', response.status);
-        
-        if (!response.ok) {
-            console.error('❌ Server error, status:', response.status);
-            
-            if (response.status === 401 || response.status === 403) {
-                throw new Error('AUTH_ERROR');
-            }
-            
-            if (response.status === 429) {
-                throw new Error('TOO_MANY_REQUESTS');
-            }
-            
-            throw new Error(`HTTP_${response.status}`);
-        }
-        
-        const contentType = response.headers.get('content-type');
-        
-        if (!contentType || !contentType.includes('application/json')) {
-            console.error('❌ Invalid content type:', contentType);
-            throw new Error('INVALID_RESPONSE');
-        }
-        
-        const data = await response.json();
-        console.log('✅ Data received:', {
-            success: data.success,
-            messageCount: data.messages ? data.messages.length : 0
-        });
-        
-        if (data.success) {
-            MessageSystem.changeCursor = data.cursor ?? null;
-            MessageSystem.loadRetryCount = 0;
-            MessageSystem.initialLoadComplete = true;
-            MessageSystem.isLoadingInitial = false;
-            MessageSystem.isLoadingMessages = false;
-            
-            updateConnectionStatus('connected', 'Connected successfully');
-            
-            if (data.messages.length === 0) {
-                messagesList.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-icon">💬</div>
-                        <h3>No messages yet</h3>
-                        <p>Start the conversation with your family!</p>
-                    </div>
-                `;
-            } else {
-                displayMessages(data.messages, true);
-                MessageSystem.lastMessageId = Math.max(...data.messages.map(m => m.id));
-                if (focusedMessage && /^\d+$/.test(focusedMessage)) {
-                    scrollToMessage(focusedMessage);
-                }
-            }
-        } else {
-            throw new Error(data.message || 'UNKNOWN_ERROR');
-        }
-        
-    } catch (error) {
-        console.error('❌ Error loading messages:', error.name, error.message);
-        
-        MessageSystem.isLoadingInitial = false;
-        MessageSystem.isLoadingMessages = false;
-        
-        if (error.message === 'TOO_MANY_REQUESTS') {
-            console.log('⏸️ Too many requests, waiting longer...');
-            setTimeout(() => {
-                MessageSystem.loadRetryCount = 0;
-                loadInitialMessages();
-            }, 3000);
-            return;
-        }
-        
-        if (MessageSystem.loadRetryCount < MessageSystem.MAX_RETRIES) {
-            const delay = MessageSystem.RETRY_DELAYS[MessageSystem.loadRetryCount] || 5000;
-            MessageSystem.loadRetryCount++;
-            
-            console.log(`🔄 Retrying in ${delay}ms... (${MessageSystem.loadRetryCount}/${MessageSystem.MAX_RETRIES})`);
-            
-            updateConnectionStatus('error', `Retrying... (${MessageSystem.loadRetryCount}/${MessageSystem.MAX_RETRIES})`);
-            
-            setTimeout(() => loadInitialMessages(), delay);
-        } else {
-            console.error('❌ Max retries reached, stopping...');
-            
-            MessageSystem.initialLoadComplete = true;
-            MessageSystem.loadRetryCount = 0;
-            
-            updateConnectionStatus('error', 'Connection failed');
-            
-            if (error.message === 'AUTH_ERROR') {
-                messagesList.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-icon">🔒</div>
-                        <h3>Session expired</h3>
-                        <p style="margin-top: 15px;">
-                            <button onclick="window.location.reload()" 
-                                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                                           color: white; 
-                                           border: none; 
-                                           padding: 12px 24px; 
-                                           border-radius: 12px; 
-                                           cursor: pointer; 
-                                           font-weight: 600;
-                                           font-size: 16px;">
-                                Refresh Page
-                            </button>
-                        </p>
-                    </div>
-                `;
-            } else {
-                messagesList.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-icon">⚠️</div>
-                        <h3>Connection failed</h3>
-                        <p>Unable to load messages</p>
-                        <p style="margin-top: 15px;">
-                            <button onclick="retryConnection()" 
-                                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                                           color: white; 
-                                           border: none; 
-                                           padding: 12px 24px; 
-                                           border-radius: 12px; 
-                                           cursor: pointer; 
-                                           font-weight: 600;
-                                           font-size: 16px;">
-                                Try Again
-                            </button>
-                        </p>
-                    </div>
-                `;
-            }
-        }
+    if (syncing) {
+        syncAgain = true;
+        return;
     }
-}
 
-function retryConnection() {
-    MessageSystem.loadRetryCount = 0;
-    MessageSystem.initialLoadComplete = false;
-    MessageSystem.isLoadingInitial = false;
-    MessageSystem.isLoadingMessages = false;
-    loadInitialMessages();
-}
-
-// ============================================
-// LOAD NEW MESSAGES (POLLING)
-// ============================================
-async function loadNewMessages() {
-    if (document.hidden || MessageSystem.isLoadingMessages || !MessageSystem.initialLoadComplete) return;
-
-    MessageSystem.isLoadingMessages = true;
+    syncing = true;
+    const snapshot = !MessageSystem.initialLoadComplete;
     let more = false;
     try {
-        const params = new URLSearchParams(MessageSystem.changeCursor === null
-            ? { since: MessageSystem.lastMessageId } : { cursor: MessageSystem.changeCursor });
+        const focus = new URLSearchParams(location.search).get('message');
+        const params = new URLSearchParams();
+        if (snapshot) {
+            if (/^\d+$/.test(focus)) params.set('message', focus);
+        } else if (MessageSystem.changeCursor === null) {
+            params.set('since', MessageSystem.lastMessageId);
+        } else {
+            params.set('cursor', MessageSystem.changeCursor);
+        }
         const response = await fetch('/messages/api/fetch.php?' + params, {
             credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000)
         });
         if (response.status === 401 || response.status === 403) {
-            updateConnectionStatus('error', 'Sign in to continue');
-            document.getElementById('messagesList').replaceChildren();
+            sessionExpired = true;
             MessageSystem.initialLoadComplete = false;
-            stopPolling();
+            const link = document.createElement('a');
+            link.className = 'chat-sign-in';
+            link.href = '/login.php?redirect=' + encodeURIComponent(location.pathname + location.search);
+            link.textContent = 'Sign in to continue';
+            const list = document.getElementById('messagesList');
+            list.replaceChildren(link);
+            updateConnectionStatus('Session expired');
             return;
         }
-        if (!response.ok) return;
+        if (!response.ok) throw new Error('Chat sync failed');
         const data = await response.json();
-        if (!data.success) return;
+        if (!data.success) throw new Error('Chat sync failed');
         if (data.reset) {
-            MessageSystem.isLoadingMessages = false;
-            await loadInitialMessages();
+            MessageSystem.initialLoadComplete = false;
+            more = true;
             return;
         }
 
-        const container = document.getElementById('messagesList');
+        syncFailures = 0;
+        MessageSystem.initialLoadComplete = true;
+        MessageSystem.changeCursor = data.cursor ?? null;
+        updateConnectionStatus('');
+        const list = document.getElementById('messagesList');
         for (const id of data.removed ?? []) {
-            container.querySelector(`[data-message-id="${id}"]`)?.remove();
+            const row = list.querySelector(`[data-message-id="${id}"]`);
+            if (row) {
+                unobserveMessage(row);
+                row.remove();
+            }
         }
-        displayMessages(data.messages, false, true);
-        if (data.cursor != null) MessageSystem.changeCursor = data.cursor;
+        if (snapshot || data.messages.length || data.removed?.length) {
+            displayMessages(data.messages, snapshot, true, Boolean(data.removed?.length));
+        }
+        if (snapshot) renderPendingMessages();
+        showEmptyConversation();
         if (data.messages.length) {
-            MessageSystem.lastMessageId = Math.max(MessageSystem.lastMessageId, ...data.messages.map(m => m.id));
+            MessageSystem.lastMessageId = Math.max(MessageSystem.lastMessageId, ...data.messages.map(message => message.id));
         }
+        if (snapshot && params.has('message')) scrollToMessage(focus, { navigate: false, behavior: 'auto' });
         more = data.more === true;
-    } catch (error) {
-        if (error.name !== 'AbortError' && error.name !== 'TimeoutError') {
-            console.error('Error refreshing messages:', error.name);
-        }
+        scheduleRead();
+    } catch {
+        syncFailures++;
+        updateConnectionStatus(navigator.onLine ? 'Reconnecting…' : 'Offline');
     } finally {
-        MessageSystem.isLoadingMessages = false;
+        syncing = false;
+        if (!sessionExpired && !document.hidden && navigator.onLine) {
+            const delay = more || (syncAgain && !syncFailures) ? 0 : Math.min(MESSAGE_POLL_INTERVAL * 2 ** syncFailures, 30000);
+            syncTimer = setTimeout(loadNewMessages, delay);
+        }
+        syncAgain = false;
     }
-    if (more) setTimeout(loadNewMessages, 0);
 }
 
 // ============================================
 // DATE SEPARATOR
 // ============================================
-let lastDisplayedDate = null;
-
 function formatDateSeparator(date) {
     const today = new Date();
     const yesterday = new Date(today);
@@ -417,7 +167,7 @@ function formatDateSeparator(date) {
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const msgDate = new Date(date);
+    const msgDate = new Date(date.replace(' ', 'T'));
 
     // Reset time parts for comparison
     const todayStr = today.toDateString();
@@ -445,68 +195,72 @@ function formatDateSeparator(date) {
 function createDateSeparator(dateText) {
     const div = document.createElement('div');
     div.className = 'date-separator';
-    div.innerHTML = `<span>${dateText}</span>`;
+    const label = document.createElement('span');
+    label.textContent = dateText;
+    div.append(label);
     return div;
 }
 
 // ============================================
 // DISPLAY MESSAGES
 // ============================================
-function displayMessages(messages, clearFirst = false, applyEdits = false) {
-    const container = document.getElementById('messagesList');
-
+function displayMessages(messages, clearFirst = false, applyEdits = false, removed = false) {
+    const list = document.getElementById('messagesList');
     if (clearFirst) {
-        container.innerHTML = '';
-        lastDisplayedDate = null;
-    } else if (messages.length) {
-        container.querySelector(':scope > .empty-state')?.remove();
+        readObserver.disconnect();
+        visibleMessages.clear();
+        list.replaceChildren();
+        pendingMessageCount = 0;
     }
+    if (messages.length) list.querySelector(':scope > .empty-state')?.remove();
 
-    const shouldScroll = isScrolledToBottom();
+    const follow = clearFirst || isScrolledToBottom();
+    const rows = [...list.querySelectorAll(':scope > [data-message-id]')];
+    const lastId = rows.at(-1)?.dataset.messageId || '0';
+    const pending = list.querySelector('#pendingMessages');
+    let changed = clearFirst || removed;
+    let added = 0;
 
-    messages.forEach(msg => {
-        const existing = container.querySelector(`[data-message-id="${msg.id}"]`);
+    for (const message of messages) {
+        const existing = list.querySelector(`[data-message-id="${message.id}"]`);
         if (existing) {
-            if (applyEdits && (existing.dataset.editedAt !== (msg.edited_at || '') || existing.dataset.editCount !== String(msg.edit_count ?? 0)
-                || existing.dataset.pinned !== String(Boolean(Number(msg.pinned))))) {
-                existing.replaceWith(createMessageElement(msg));
-            } else if (applyEdits && existing.dataset.reactions !== reactionKey(msg.reactions)) {
-                updateReactionDOM(msg.id, msg.reactions);
+            if (applyEdits && (existing.dataset.editedAt !== (message.edited_at || '')
+                || existing.dataset.editCount !== String(message.edit_count ?? 0)
+                || existing.dataset.pinned !== String(Boolean(Number(message.pinned))))) {
+                const replacement = createMessageElement(message);
+                unobserveMessage(existing);
+                existing.replaceWith(replacement);
+                readObserver.observe(replacement);
+            } else if (applyEdits && existing.dataset.reactions !== reactionKey(message.reactions)) {
+                updateReactionDOM(message.id, message.reactions);
             }
-            return;
+            continue;
         }
 
-        const later = [...container.querySelectorAll(':scope > .message')].find(row => BigInt(row.dataset.messageId) > BigInt(msg.id));
-        if (later) {
-            const earlier = later.previousElementSibling;
-            const date = new Date(msg.created_at).toDateString();
-            if (later.dataset.day === date || earlier?.dataset.day === date) {
-                container.insertBefore(createMessageElement(msg), later);
-            } else {
-                const before = earlier?.classList.contains('date-separator') ? earlier : later;
-                container.insertBefore(createDateSeparator(formatDateSeparator(msg.created_at)), before);
-                container.insertBefore(createMessageElement(msg), before);
-            }
-            return;
-        }
-
-        // Check if we need a date separator
-        const msgDate = new Date(msg.created_at);
-        const msgDateStr = msgDate.toDateString();
-
-        if (lastDisplayedDate !== msgDateStr) {
-            const dateSeparator = createDateSeparator(formatDateSeparator(msg.created_at));
-            container.appendChild(dateSeparator);
-            lastDisplayedDate = msgDateStr;
-        }
-
-        const messageEl = createMessageElement(msg);
-        container.appendChild(messageEl);
-    });
-
-    if (shouldScroll) {
-        scrollToBottom();
+        const row = createMessageElement(message);
+        const later = rows.find(item => BigInt(item.dataset.messageId) > BigInt(message.id));
+        list.insertBefore(row, later || pending);
+        readObserver.observe(row);
+        changed = true;
+        if (BigInt(message.id) > BigInt(lastId) && !row.classList.contains('own')) added++;
     }
+
+    if (changed) {
+        list.querySelectorAll(':scope > .date-separator').forEach(separator => separator.remove());
+        let day = null;
+        for (const row of list.querySelectorAll(':scope > [data-message-id]')) {
+            if (row.dataset.day === day) continue;
+            day = row.dataset.day;
+            list.insertBefore(createDateSeparator(formatDateSeparator(row.dataset.createdAt)), row);
+        }
+    }
+    if (follow) {
+        scrollToBottom();
+    } else if (added) {
+        pendingMessageCount += added;
+        document.getElementById('chatAnnouncement').textContent = added === 1 ? 'New message' : `${added} new messages`;
+    }
+    updateScrollControls();
 }
 
 // ============================================
@@ -519,7 +273,8 @@ function createMessageElement(msg) {
     div.className = `message ${isOwn ? 'own' : ''} ${hasReactions ? 'has-reactions' : ''}`;
     div.dataset.messageId = msg.id;
     div.dataset.userId = msg.user_id;
-    div.dataset.day = new Date(msg.created_at).toDateString();
+    div.dataset.createdAt = msg.created_at;
+    div.dataset.day = new Date(msg.created_at.replace(' ', 'T')).toDateString();
     div.dataset.editedAt = msg.edited_at || '';
     div.dataset.editCount = String(msg.edit_count ?? 0);
     div.dataset.pinned = String(Boolean(Number(msg.pinned)));
@@ -560,7 +315,7 @@ function createMessageElement(msg) {
                     mediaHtml = '<div class="message-media message-media-multi">';
                     parsed.forEach(f => {
                         if (f.type && f.type.startsWith('image/')) {
-                            mediaHtml += `<img src="${f.path}" alt="${escapeHtml(f.name)}" loading="lazy" onclick="openMediaViewer('${f.path}', 'image')">`;
+                            mediaHtml += `<img src="${f.path}" alt="${escapeHtml(f.name).replace(/"/g, '&quot;')}" loading="lazy" onclick="openMediaViewer('${f.path}', 'image')">`;
                         } else if (f.type && f.type.startsWith('video/')) {
                             mediaHtml += `<video src="${f.path}" controls></video>`;
                         } else if (f.type && f.type.startsWith('audio/')) {
@@ -569,7 +324,7 @@ function createMessageElement(msg) {
                             const ext = f.name ? f.name.split('.').pop().toUpperCase() : 'FILE';
                             const icon = (f.type === 'application/pdf') ? '📄' : '📎';
                             const size = f.size ? (f.size / 1024).toFixed(0) + 'KB' : '';
-                            mediaHtml += `<a href="${f.path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(f.name)}</span><small>${ext} ${size}</small></a>`;
+                            mediaHtml += `<a href="${f.path}" target="_blank" rel="noopener" class="message-doc">${icon} <span>${escapeHtml(f.name)}</span><small>${escapeHtml(ext)} ${size}</small></a>`;
                         }
                     });
                     mediaHtml += '</div>';
@@ -644,14 +399,14 @@ function createMessageElement(msg) {
     
     const actions = `
         <div class="message-actions">
-            <button class="message-action-btn" onclick="replyToMessage(${msg.id}, '${escapeForAttr(msg.full_name)}', '${escapeForAttr(msg.content || '')}')" title="Reply">↩️</button>
+            <button type="button" class="message-action-btn" data-reply-trigger aria-label="Reply" title="Reply">↩️</button>
             <button type="button" class="message-action-btn" data-reaction-trigger aria-label="React" aria-haspopup="dialog" title="React">😊</button>
             ${isOwn && window.enableEditMessage ? `<button class="message-action-btn" onclick="enableEditMessage(${msg.id})" title="Edit">✏️</button>` : ''}
             <button class="message-action-btn" onclick="showMessageOptions(${msg.id}, event)" title="More actions" aria-label="More actions" aria-controls="contextMenu" aria-expanded="false">⋮</button>
         </div>
     `;
     
-    const msgDate = new Date(msg.created_at);
+    const msgDate = new Date(msg.created_at.replace(' ', 'T'));
     const time = msgDate.toLocaleTimeString([], {
         hour: 'numeric',
         minute: '2-digit'
@@ -670,14 +425,15 @@ function createMessageElement(msg) {
             ` : ''}
             <div class="message-bubble">
                 ${replyHtml}
-                ${msg.content ? `<div class="message-text">${linkify(escapeHtml(msg.content))}${editedIndicator}</div>` : ''}
+                ${msg.content ? `<div class="message-text">${linkify(msg.content)}${editedIndicator}</div>` : ''}
                 ${mediaHtml}
                 ${actions}
-                <span class="message-time">${time}</span>
+                <span class="message-time">${time}${isOwn ? ' <span title="Sent" aria-label="Sent">✓</span>' : ''}</span>
             </div>
         </div>
         ${isOwn ? avatar : ''}
     `;
+    div.querySelector('[data-reply-trigger]').addEventListener('click', () => replyToMessage(msg.id, msg.full_name, msg.content || ''));
     div.querySelector('[data-reaction-trigger]').addEventListener('click', () => showReactionPicker(msg.id));
     if (hasReactions) div.querySelector('.message-content').append(buildReactions(msg.id, msg.reactions));
     
@@ -690,110 +446,113 @@ function createMessageElement(msg) {
 async function sendMessage() {
     const input = document.getElementById('messageInput');
     const content = input.value.trim();
-    
-    if (!content && MessageSystem.mediaFiles.length === 0) return;
-    
-    const sendBtn = document.getElementById('sendBtn');
-    if (sendBtn.disabled) return;
-    sendBtn.disabled = true;
-    sendBtn.textContent = '⏳';
     const reply = MessageSystem.replyToMessageId;
     const media = MessageSystem.mediaFiles.slice();
-    const prior = MessageSystem.retryDraft;
-    const sameDraft = prior && prior.content === content && prior.reply === reply
-        && prior.media.length === media.length && prior.media.every((file, index) => file === media[index]);
-    const draft = sameDraft ? prior : { id: crypto.randomUUID(), content, reply, media };
-    MessageSystem.retryDraft = draft;
-    
+    const button = document.getElementById('sendBtn');
+    if (button.disabled || (!content && !media.length) || sessionExpired) return;
+
+    button.disabled = true;
     try {
-        const formData = new FormData();
-        formData.append('content', draft.content);
-        formData.append('client_message_id', draft.id);
-        
-        if (draft.reply) {
-            formData.append('reply_to_message_id', draft.reply);
+        const saved = await chatOutbox.add(content, reply, media);
+        if (!saved && !navigator.onLine) showError('Keep chat open until this message sends.');
+        if (input.value.trim() === content) {
+            input.value = '';
+            input.style.height = '';
+            window.saveChatDraft?.();
         }
-
-        draft.media.forEach(file => {
-            formData.append('media[]', file);
-        });
-        
-        const url = window.location.origin + '/messages/api/send.php';
-        
-        const response = await fetch(url, {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-CSRF-Token': sendBtn.dataset.csrf },
-            credentials: 'same-origin', signal: AbortSignal.timeout(45000)
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            MessageSystem.retryDraft = null;
-            if (input.value.trim() === draft.content) {
-                input.value = '';
-                input.style.height = 'auto';
-            }
-            if (MessageSystem.replyToMessageId === draft.reply) cancelReply();
-            if (MessageSystem.mediaFiles.length === draft.media.length
-                && MessageSystem.mediaFiles.every((file, index) => file === draft.media[index])) cancelMedia();
-
-            // Instantly display the sent message from server response
-            if (data.sent_message) {
-                displayMessages([data.sent_message], false);
-                scrollToBottom();
-            }
-        } else {
-            showError(data.error || data.message || 'Failed to send message');
-        }
-    } catch (error) {
-        console.error('Error sending message:', error);
-        showError('Failed to send message');
+        if (MessageSystem.replyToMessageId === reply) cancelReply();
+        if (MessageSystem.mediaFiles.length === media.length
+            && MessageSystem.mediaFiles.every((file, index) => file === media[index])) cancelMedia();
+        scrollToBottom();
+    } catch {
+        showError('Could not queue this message. Try again.');
     } finally {
-        sendBtn.disabled = false;
-        sendBtn.textContent = '➤';
+        button.disabled = false;
     }
+}
+
+function renderPendingMessages() {
+    if (sessionExpired) return;
+    const list = document.getElementById('messagesList');
+    const follow = isScrolledToBottom();
+    list.querySelector('#pendingMessages')?.remove();
+    if (chatOutbox.items.size) {
+        list.querySelector(':scope > .empty-state')?.remove();
+        const queue = document.createElement('div');
+        queue.id = 'pendingMessages';
+        queue.className = 'pending-messages';
+
+        for (const item of chatOutbox.items.values()) {
+            const row = document.createElement('div');
+            row.className = 'pending-message';
+            const body = document.createElement('div');
+            body.className = 'message-bubble';
+            const message = document.createElement('div');
+            message.className = 'message-text';
+            message.textContent = [item.content, ...item.media.map(file => file.name)].filter(Boolean).join('\n');
+            const status = document.createElement('div');
+            status.className = 'pending-status';
+            const sending = chatOutbox.sending === item.id;
+            status.textContent = item.error || (sending ? 'Sending…' : 'Waiting to send');
+            if (item.error) {
+                const retry = document.createElement('button');
+                retry.type = 'button';
+                retry.textContent = 'Retry';
+                retry.addEventListener('click', () => chatOutbox.retry(item.id));
+                status.append(retry);
+            }
+            if (!sending) {
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.textContent = 'Cancel';
+                remove.addEventListener('click', () => chatOutbox.remove(item.id));
+                status.append(remove);
+            }
+            body.append(message, status);
+            row.append(body);
+            queue.append(row);
+        }
+        list.append(queue);
+    } else if (MessageSystem.initialLoadComplete) {
+        showEmptyConversation();
+    }
+    if (follow) scrollToBottom();
 }
 
 // ============================================
 // TYPING INDICATOR
 // ============================================
-async function handleTyping() {
+function handleTyping() {
+    if (!navigator.onLine || sessionExpired) return;
     clearTimeout(MessageSystem.typingTimeout);
-    
-    try {
-        const url = window.location.origin + '/messages/api/typing.php';
-        
-        await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ typing: true }),
-            credentials: 'same-origin'
-        });
-        
-        MessageSystem.typingTimeout = setTimeout(async () => {
-            await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ typing: false }),
-                credentials: 'same-origin'
-            });
-        }, 2000);
-    } catch (error) {
-        // Silently fail
+    const now = performance.now();
+    if (now - lastTypingPing > 2000) {
+        lastTypingPing = now;
+        setTyping(true);
     }
+    MessageSystem.typingTimeout = setTimeout(() => {
+        lastTypingPing = -Infinity;
+        setTyping(false);
+    }, 3500);
+}
+
+function setTyping(typing) {
+    fetch('/messages/api/typing.php', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ typing }), signal: AbortSignal.timeout(3000)
+    }).catch(() => {});
 }
 
 async function checkTypingStatus() {
-    if (!MessageSystem.initialLoadComplete) return;
-    
+    if (!MessageSystem.initialLoadComplete || document.hidden || !navigator.onLine) return;
+
     try {
         const url = window.location.origin + '/messages/api/typing.php?t=' + Date.now();
         
         const response = await fetch(url, {
             credentials: 'same-origin',
-            cache: 'no-cache'
+            cache: 'no-store',
+            signal: AbortSignal.timeout(3000)
         });
         const data = await response.json();
         
@@ -1372,101 +1131,203 @@ function insertEmoji(emoji) {
 // ============================================
 function setupEventListeners() {
     const input = document.getElementById('messageInput');
-    
-    // Auto-resize textarea
-    input.addEventListener('input', function() {
-        this.style.height = 'auto';
-        this.style.height = this.scrollHeight + 'px';
+    const list = document.getElementById('messagesList');
+    const familyButton = document.getElementById('familyMembersButton');
+    const family = document.getElementById('familyMembers');
+    const showFamily = open => {
+        family.classList.toggle('is-open', open);
+        familyButton.setAttribute('aria-expanded', String(open));
+        updateNativeChatVisibility();
+        scheduleRead();
+    };
+    familyButton.addEventListener('click', () => showFamily(!family.classList.contains('is-open')));
+    document.addEventListener('click', event => {
+        if (!family.contains(event.target) && !familyButton.contains(event.target)) showFamily(false);
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && family.classList.contains('is-open')) {
+            showFamily(false);
+            familyButton.focus();
+        }
+    });
+    matchMedia('(min-width: 900px)').addEventListener('change', () => showFamily(false));
+
+    input.addEventListener('input', () => {
+        input.style.height = 'auto';
+        input.style.height = input.scrollHeight + 'px';
         handleTyping();
     });
-    
-    // Enter to send
-    input.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
             sendMessage();
         }
     });
-    
-    // Visibility-based polling pause/resume to save battery
-    document.addEventListener('visibilitychange', function() {
-        if (document.hidden) {
-            // Stop polling when page is hidden (tab switched, app minimized)
-            console.log('👁️ Page hidden, stopping polling...');
-            stopPolling();
-        } else if (MessageSystem.initialLoadComplete) {
-            // Resume polling when page becomes visible
-            console.log('👀 Page visible, resuming polling...');
-            loadNewMessages(); // Immediate refresh
-            startPolling();    // Resume interval polling
+
+    readObserver = new IntersectionObserver(entries => {
+        for (const entry of entries) {
+            if (entry.isIntersecting) visibleMessages.add(entry.target);
+            else visibleMessages.delete(entry.target);
+        }
+        scheduleRead();
+    }, { root: list, threshold: 0.01 });
+
+    list.addEventListener('scroll', updateScrollControls, { passive: true });
+    document.getElementById('latestMessages').addEventListener('click', () => {
+        list.focus({ preventScroll: true });
+        scrollToBottom();
+    });
+
+    let followLayout = true;
+    list.addEventListener('scroll', () => { followLayout = isScrolledToBottom(); }, { passive: true });
+    new ResizeObserver(() => {
+        if (followLayout) scrollToBottom();
+        updateScrollControls();
+    }).observe(list);
+
+    const viewport = window.visualViewport;
+    const resize = () => {
+        if (viewport.scale === 1) {
+            document.body.style.setProperty('--chat-viewport-height', Math.round(viewport.height) + 'px');
+        } else {
+            document.body.style.removeProperty('--chat-viewport-height');
+        }
+    };
+    if (viewport) {
+        viewport.addEventListener('resize', resize);
+        resize();
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            resumeChat();
+        } else {
+            clearTimeout(syncTimer);
+            clearInterval(MessageSystem.typingInterval);
+            MessageSystem.typingInterval = null;
+            updateNativeChatVisibility();
         }
     });
-    
-    window.addEventListener('online', loadNewMessages);
-    window.addEventListener('relativesnotification', loadNewMessages);
-
-    // Handle page unload
-    window.addEventListener('beforeunload', function() {
-        stopPolling();
+    window.addEventListener('online', resumeChat);
+    window.addEventListener('relativesappresume', resumeChat);
+    window.addEventListener('offline', () => updateConnectionStatus('Offline'));
+    window.addEventListener('pageshow', event => { if (event.persisted) resumeChat(); });
+    window.addEventListener('relativesnotification', () => {
+        loadNewMessages();
+        updateNativeChatVisibility(true);
     });
 }
 
-// ============================================
-// POLLING
-// ============================================
-
-// Reduced polling intervals to save battery
-// Push notifications handle real-time alerts; polling is just for thread refresh
-const MESSAGE_POLL_INTERVAL = 5000;
-const TYPING_POLL_INTERVAL = isNativeApp ? 12000 : 8000;    // 12s native, 8s web
-
-function startPolling() {
-    // Don't start if already running
-    if (MessageSystem.pollingInterval) {
-        clearInterval(MessageSystem.pollingInterval);
+function resumeChat() {
+    if (document.hidden) return;
+    loadNewMessages();
+    chatOutbox.resume();
+    scheduleRead();
+    if (!MessageSystem.typingInterval) {
+        MessageSystem.typingInterval = setInterval(checkTypingStatus, 4000);
     }
-    if (MessageSystem.typingInterval) {
-        clearInterval(MessageSystem.typingInterval);
-    }
-
-    MessageSystem.pollingInterval = setInterval(loadNewMessages, MESSAGE_POLL_INTERVAL);
-    MessageSystem.typingInterval = setInterval(checkTypingStatus, TYPING_POLL_INTERVAL);
-
-    console.log(`⏱️ Polling started: messages every ${MESSAGE_POLL_INTERVAL}ms, typing every ${TYPING_POLL_INTERVAL}ms`);
 }
 
-function stopPolling() {
-    if (MessageSystem.pollingInterval) {
-        clearInterval(MessageSystem.pollingInterval);
-        MessageSystem.pollingInterval = null;
-    }
-    if (MessageSystem.typingInterval) {
-        clearInterval(MessageSystem.typingInterval);
-        MessageSystem.typingInterval = null;
-    }
-    console.log('⏹️ Polling stopped');
-}
-
-// ============================================
-// SCROLL UTILITIES
-// ============================================
 function scrollToBottom() {
-    const container = document.getElementById('messagesList');
-    container.scrollTop = container.scrollHeight;
+    const list = document.getElementById('messagesList');
+    list.scrollTop = list.scrollHeight;
+    updateScrollControls();
 }
 
 function isScrolledToBottom() {
-    const container = document.getElementById('messagesList');
-    return container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    const list = document.getElementById('messagesList');
+    return list.scrollHeight - list.scrollTop - list.clientHeight < 48;
 }
 
-function scrollToMessage(messageId) {
+function updateScrollControls() {
+    const button = document.getElementById('latestMessages');
+    button.hidden = isScrolledToBottom();
+    if (button.hidden) pendingMessageCount = 0;
+    button.textContent = pendingMessageCount
+        ? `${pendingMessageCount} new ${pendingMessageCount === 1 ? 'message' : 'messages'} ↓`
+        : 'Latest ↓';
+    updateNativeChatVisibility();
+}
+
+function scrollToMessage(messageId, { navigate = true, behavior = 'smooth' } = {}) {
+    if (!/^\d+$/.test(String(messageId))) return;
     const element = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        element.classList.add('highlight');
-        setTimeout(() => element.classList.remove('highlight'), 2000);
+    if (!element) {
+        if (navigate) location.assign('/messages/?message=' + messageId);
+        else showError('This message is no longer available.');
+        return;
     }
+    element.scrollIntoView({ behavior, block: 'center' });
+    element.classList.add('highlight');
+    setTimeout(() => element.classList.remove('highlight'), 2000);
+}
+
+function chatObscured() {
+    return document.hidden || document.getElementById('familyMembers').classList.contains('is-open')
+        || Boolean(document.querySelector('dialog[open], .modal-overlay.active'));
+}
+
+function updateNativeChatVisibility(force = false) {
+    const visible = MessageSystem.initialLoadComplete && !chatObscured() && isScrolledToBottom()
+        && document.getElementById('connectionStatus').style.display === 'none';
+    if (force || visible !== nativeChatVisible) {
+        window.RelativesNative?.postMessage(visible ? 'messages_visible' : 'messages_hidden');
+        nativeChatVisible = visible;
+    }
+}
+
+function unobserveMessage(row) {
+    readObserver.unobserve(row);
+    visibleMessages.delete(row);
+}
+
+function scheduleRead() {
+    if (readTimer || reportingReads || chatObscured() || !navigator.onLine || sessionExpired) return;
+    readTimer = setTimeout(reportVisibleMessages, 250);
+}
+
+async function reportVisibleMessages() {
+    readTimer = null;
+    if (chatObscured() || !navigator.onLine || sessionExpired) return;
+    const viewport = document.getElementById('messagesList').getBoundingClientRect();
+    const ids = [...visibleMessages]
+        .filter(row => {
+            if (!row.isConnected || confirmedReads.has(row.dataset.messageId)) return false;
+            const bounds = row.getBoundingClientRect();
+            return bounds.bottom > viewport.top && bounds.top < viewport.bottom;
+        })
+        .slice(0, 100).map(row => row.dataset.messageId);
+    if (!ids.length) return;
+
+    reportingReads = true;
+    let recorded = false;
+    try {
+        const response = await fetch('/messages/api/read.php', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': document.getElementById('sendBtn').dataset.csrf },
+            body: JSON.stringify({ message_ids: ids }), signal: AbortSignal.timeout(8000)
+        });
+        if (!response.ok) return;
+        const { success, message_ids = [], notifications_read = 0 } = await response.json();
+        if (!success) return;
+        ids.forEach(id => confirmedReads.add(id));
+        recorded = true;
+        dismissChatAlerts(message_ids, notifications_read);
+    } catch {
+        // The next successful sync or connection change retries the read.
+    } finally {
+        reportingReads = false;
+        if (recorded && ids.length === 100) scheduleRead();
+    }
+}
+
+function dismissChatAlerts(ids, count) {
+    if (count) window.HeaderMenu?.refreshNotifications();
+    if (!ids.length) return;
+    window.RelativesNative?.postMessage('messages_read:' + ids.join(','));
+    navigator.serviceWorker?.getRegistration('/').then(registration => {
+        registration?.active?.postMessage({ type: 'relatives-messages-read', ids });
+    }).catch(() => {});
 }
 
 // ============================================
@@ -1479,14 +1340,16 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function escapeForAttr(text) {
-    if (!text) return '';
-    return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
-}
-
 function linkify(text) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return text.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    return text.split(/(https?:\/\/[^\s<>"']+)/g).map((part, index) => {
+        if (index % 2 === 0) return escapeHtml(part);
+        const link = document.createElement('a');
+        link.href = part;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = part;
+        return link.outerHTML;
+    }).join('');
 }
 
 function showError(message) {
@@ -1552,7 +1415,6 @@ function playNotificationSound() {
 // EXPOSE PUBLIC API
 // ============================================
 window.MessageSystem = MessageSystem;
-window.loadInitialMessages = loadInitialMessages;
 window.loadNewMessages = loadNewMessages;
 window.sendMessage = sendMessage;
 window.toggleReaction = toggleReaction;
@@ -1568,10 +1430,8 @@ window.deleteMessage = deleteMessage;
 window.copyMessage = copyMessage;
 window.scrollToMessage = scrollToMessage;
 window.openMediaViewer = openMediaViewer;
-window.retryConnection = retryConnection;
+window.retryConnection = loadNewMessages;
 window.updateConnectionStatus = updateConnectionStatus;
 window.replyToMessage = replyToMessage;
-window.startPolling = startPolling;
-window.stopPolling = stopPolling;
 
 console.log('✅ Core messaging system ready');

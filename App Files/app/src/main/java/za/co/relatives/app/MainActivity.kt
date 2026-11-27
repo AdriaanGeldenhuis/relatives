@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.graphics.Bitmap
@@ -52,6 +53,7 @@ import za.co.relatives.app.tracking.GmsSupport
 import za.co.relatives.app.tracking.PermissionGate
 import za.co.relatives.app.tracking.TrackingBridge
 import za.co.relatives.app.tracking.TrackingService
+import za.co.relatives.app.utils.NotificationHelper
 import za.co.relatives.app.utils.PreferencesManager
 import za.co.relatives.app.ui.SubscriptionActivity
 
@@ -83,6 +85,7 @@ class MainActivity : ComponentActivity() {
             WebViewClient.ERROR_IO,
         )
         private val MAP_PATHS = setOf("/tracking/app", "/tracking/app/", "/tracking/app/index.php")
+        private val CHAT_PATHS = setOf("/messages", "/messages/", "/messages/index.php")
     }
 
     // ── Core modules ────────────────────────────────────────────────────
@@ -153,7 +156,9 @@ class MainActivity : ComponentActivity() {
         // permission opens Settings and the system destroys this Activity).
         // Only load the initial URL on a truly fresh start — but never leave
         // a blank WebView if restoration produced nothing.
-        if (savedInstanceState?.getBoolean(STATE_OFFLINE_HOME) == true) {
+        if (!intent?.getStringExtra("action_url").isNullOrBlank()) {
+            loadInitialUrl(intent)
+        } else if (savedInstanceState?.getBoolean(STATE_OFFLINE_HOME) == true) {
             loadHome()
         } else if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState)
@@ -193,6 +198,9 @@ class MainActivity : ComponentActivity() {
         syncNativeSession(webView.url)
         familyPoller.start()
         refreshVisibleNotifications()
+        if (isTrustedUrl(webView.url?.let(Uri::parse))) {
+            webView.evaluateJavascript("window.dispatchEvent(new Event('relativesappresume'))", null)
+        }
         syncFcmToken()
         FcmRegistrationWorker.enqueue(this)
         if (isTrackingMap(webView.url)) {
@@ -211,6 +219,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         TrackingService.appVisible = false
+        setChatVisible(false)
         super.onPause()
         // Persist cookies NOW. Chromium commits cookies to disk lazily; if the
         // process dies while we're paused, a login cookie set since the last
@@ -303,7 +312,28 @@ class MainActivity : ComponentActivity() {
         else -> "disabled"
     }
 
-    fun requestNotificationPermission() = permissionGate.requestNotifications()
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionGate.requestNotifications()
+        } else {
+            openNotificationSettings()
+        }
+    }
+
+    fun supportsMessageAlerts() = GmsSupport.available(this)
+
+    fun canShowMessageAlerts() = NotificationHelper.canShowChatAlerts(this)
+
+    fun setChatVisible(visible: Boolean) {
+        (application as RelativesApplication).viewingLatestMessages =
+            visible && TrackingService.appVisible && prefs.sessionToken != null && isMessagesPage(webView.url)
+    }
+
+    fun markChatMessagesRead(ids: Set<String>) {
+        if (prefs.sessionToken != null) NotificationHelper.markMessagesRead(this, ids)
+    }
 
     fun openNotificationSettings() {
         startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
@@ -518,6 +548,7 @@ class MainActivity : ComponentActivity() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 if (view != webView) return
+                setChatVisible(false)
                 familyPoller.setActive(false)
                 webOwnsFamilyPolling = false
                 visiblePolicyRefresh?.cancel()
@@ -579,6 +610,7 @@ class MainActivity : ComponentActivity() {
                 view: WebView?,
                 detail: RenderProcessGoneDetail?,
             ): Boolean {
+                setChatVisible(false)
                 Log.e(TAG, "WebView renderer gone (didCrash=${detail?.didCrash()}); rebuilding WebView")
                 val lastUrl = view?.url
                 runOnUiThread {
@@ -671,7 +703,7 @@ class MainActivity : ComponentActivity() {
         if (!deepLink.isNullOrBlank()) {
             // Deep links (FCM notifications) load in the WebView like any
             // other page; logged-out users get the server's login redirect.
-            loadDeepLink(deepLink)
+            handleDeepLink(intent)
         } else {
             loadHome()
         }
@@ -708,6 +740,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleDeepLink(intent: Intent?) {
         val actionUrl = intent?.getStringExtra("action_url") ?: return
+        intent.removeExtra("action_url")
         loadDeepLink(actionUrl)
     }
 
@@ -743,6 +776,9 @@ class MainActivity : ComponentActivity() {
 
     fun isTrackingMap(url: String?): Boolean =
         url?.let { Uri.parse(it).let { uri -> isTrustedUrl(uri) && uri.path in MAP_PATHS } } == true
+
+    fun isMessagesPage(url: String?): Boolean =
+        url?.let { Uri.parse(it).let { uri -> isTrustedUrl(uri) && uri.path in CHAT_PATHS } } == true
 
     private fun isWeatherLocationPage(url: String?): Boolean =
         url?.let { Uri.parse(it).let { uri -> isTrustedUrl(uri) && uri.path in WEATHER_LOCATION_PATHS } } == true
@@ -828,8 +864,11 @@ class MainActivity : ComponentActivity() {
         if (::webView.isInitialized && isTrackingMap(webView.url) && prefs.sessionToken != null) {
             webView.evaluateJavascript("window.dispatchEvent(new Event('relativesfamilyclear'))", null)
         }
-        if (prefs.sessionToken != null) TrackingService.stop(this)
+        setChatVisible(false)
+        val hadSession = prefs.sessionToken != null
+        if (hadSession) TrackingService.stop(this)
         prefs.clearSession()
+        if (hadSession) NotificationHelper.clearChatAlerts(this)
         FcmRegistrationWorker.cancel(this)
         trackingStore.clearFamilyLocations()
         NetworkClient.clearCookies()

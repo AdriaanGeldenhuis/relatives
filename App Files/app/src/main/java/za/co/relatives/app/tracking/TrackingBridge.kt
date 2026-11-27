@@ -12,6 +12,7 @@ import za.co.relatives.app.utils.NotificationHelper
 internal class TrackingBridge(private val activity: MainActivity) {
     companion object {
         private val ALLOWED_ORIGINS = setOf("https://www.relatives.co.za", "https://relatives.co.za")
+        private val MESSAGE_ID = Regex("[1-9][0-9]{0,18}")
     }
 
     fun install(webView: WebView) {
@@ -27,6 +28,19 @@ internal class TrackingBridge(private val activity: MainActivity) {
                 activity.requestNotificationPermission()
             } else if (path == "/profile/notifications.php" && command == "notification_settings") {
                 activity.openNotificationSettings()
+            } else if (path == "/profile/notifications.php" && command == "notification_status") {
+                sendReply(reply, JSONObject().put("type", command)
+                    .put("supported", activity.supportsMessageAlerts())
+                    .put("enabled", activity.canShowMessageAlerts()))
+            } else if (activity.isMessagesPage(view.url)) {
+                when {
+                    command == "messages_visible" -> activity.setChatVisible(true)
+                    command == "messages_hidden" -> activity.setChatVisible(false)
+                    command.startsWith("messages_read:") && command.length <= 2014 -> {
+                        val ids = command.substringAfter(':').split(',')
+                        if (ids.size <= 100 && ids.all(MESSAGE_ID::matches)) activity.markChatMessagesRead(ids.toSet())
+                    }
+                }
             } else if (command == "stop" && (path == "/profile/privacy.php" || path == "/legal/delete-account.php")) {
                 activity.stopTrackingService()
             } else if (command == "weather_location") {
