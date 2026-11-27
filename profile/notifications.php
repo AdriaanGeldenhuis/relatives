@@ -185,13 +185,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 
         <div class="profile-header">
             <div class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
-                <?php if (!empty($user['profile_picture'])): ?>
-                    <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>" alt="Profile Picture">
-                <?php else: ?>
-                    <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
-                <?php endif; ?>
+                <?php renderProfileAvatar($user); ?>
             </div>
-            <div class="profile-name">Notification Preferences</div>
+            <h1 class="profile-name">Notification Preferences</h1>
         </div>
 
         <?php if ($error): ?>
@@ -224,22 +220,22 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Push Notifications</div>
+                        <div class="toggle-label" id="setting-push-enabled">Push Notifications</div>
                         <div class="toggle-description">Receive push notifications on your device</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="push_enabled" <?php echo $preferences['push_enabled'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="push_enabled" aria-labelledby="setting-push-enabled" <?php echo $preferences['push_enabled'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Sound</div>
+                        <div class="toggle-label" id="setting-sound-enabled">Sound</div>
                         <div class="toggle-description">Play sound for notifications</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="sound_enabled" <?php echo $preferences['sound_enabled'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="sound_enabled" aria-labelledby="setting-sound-enabled" <?php echo $preferences['sound_enabled'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
@@ -253,66 +249,66 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Messages</div>
+                        <div class="toggle-label" id="setting-messages-notify">Messages</div>
                         <div class="toggle-description">New messages from family members</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="messages_notify" <?php echo $preferences['messages_notify'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="messages_notify" aria-labelledby="setting-messages-notify" <?php echo $preferences['messages_notify'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Shopping Lists</div>
+                        <div class="toggle-label" id="setting-shopping-notify">Shopping Lists</div>
                         <div class="toggle-description">Updates to shared shopping lists</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="shopping_notify" <?php echo $preferences['shopping_notify'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="shopping_notify" aria-labelledby="setting-shopping-notify" <?php echo $preferences['shopping_notify'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Calendar Events</div>
+                        <div class="toggle-label" id="setting-calendar-notify">Calendar Events</div>
                         <div class="toggle-description">Upcoming events and invitations</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="calendar_notify" <?php echo $preferences['calendar_notify'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="calendar_notify" aria-labelledby="setting-calendar-notify" <?php echo $preferences['calendar_notify'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Reminders</div>
+                        <div class="toggle-label" id="setting-reminders-notify">Reminders</div>
                         <div class="toggle-description">Scheduled reminders and alerts</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="reminders_notify" <?php echo $preferences['reminders_notify'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="reminders_notify" aria-labelledby="setting-reminders-notify" <?php echo $preferences['reminders_notify'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Location Tracking</div>
+                        <div class="toggle-label" id="setting-tracking-notify">Location Tracking</div>
                         <div class="toggle-description">Location updates from family members</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="tracking_notify" <?php echo $preferences['tracking_notify'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="tracking_notify" aria-labelledby="setting-tracking-notify" <?php echo $preferences['tracking_notify'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Family Updates</div>
+                        <div class="toggle-label" id="setting-family-notify">Family Updates</div>
                         <div class="toggle-description">New members and family changes</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="family_notify" <?php echo $preferences['family_notify'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="family_notify" aria-labelledby="setting-family-notify" <?php echo $preferences['family_notify'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>

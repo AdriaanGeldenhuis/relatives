@@ -35,6 +35,7 @@ const CollageDrag = (() => {
         startY = coords.y;
 
         const id = target.dataset.id;
+        if (CollageState.get('selectedImage') !== id) CollageImages.selectImage(id);
         const imageData = CollageState.getImageById(id);
         if (imageData) {
             startLeft = imageData.x;
@@ -91,6 +92,7 @@ const CollageDrag = (() => {
 
         document.addEventListener('mouseup', onEnd);
         document.addEventListener('touchend', onEnd);
+        document.addEventListener('touchcancel', onEnd);
     }
 
     function destroy() {
@@ -102,6 +104,7 @@ const CollageDrag = (() => {
         document.removeEventListener('touchmove', onMove);
         document.removeEventListener('mouseup', onEnd);
         document.removeEventListener('touchend', onEnd);
+        document.removeEventListener('touchcancel', onEnd);
     }
 
     return { init, destroy };

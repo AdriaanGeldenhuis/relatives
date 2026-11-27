@@ -30,6 +30,11 @@ try {
 // Handle AJAX POST actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
+    if (!CSRF::validate($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Reload Notifications and try again.']);
+        exit;
+    }
     
     try {
         $response = ['success' => false];
@@ -83,8 +88,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
         
     } catch (Exception $e) {
+        error_log('Notification update failed: ' . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        echo json_encode(['success' => false, 'error' => 'Could not update notifications.']);
         exit;
     }
 }

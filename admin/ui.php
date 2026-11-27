@@ -69,7 +69,7 @@ function adminHeroArt(): void
 function adminNavigation(array $user, string $active): void
 {
     $links = ['family' => ['/admin/', 'Family']];
-    if ($user['role'] === 'owner') {
+    if (in_array($user['role'], ['owner', 'admin'], true)) {
         $links['subscription'] = ['/admin/plans-public.php', 'Your subscription'];
     }
     if (adminPlatformAccess($user)) {

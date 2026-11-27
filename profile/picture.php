@@ -16,6 +16,8 @@ if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/../core/CSRF.php';
+require_once __DIR__ . '/../shared/components/avatar.php';
 
 try {
     $auth = new Auth($db);
@@ -33,96 +35,71 @@ try {
 
 $error = '';
 $success = '';
+$csrfToken = CSRF::generate();
 
 // Avatar color options
 $avatarColors = [
-    '#667eea', '#764ba2', '#f093fb', '#4facfe',
-    '#43e97b', '#fa709a', '#fee140', '#30cfd0',
-    '#a8edea', '#fed6e3', '#fccb90', '#d57eeb'
+    '#667eea' => 'Periwinkle', '#764ba2' => 'Purple', '#f093fb' => 'Orchid', '#4facfe' => 'Blue',
+    '#43e97b' => 'Green', '#fa709a' => 'Rose', '#fee140' => 'Yellow', '#30cfd0' => 'Turquoise',
+    '#a8edea' => 'Mint', '#fed6e3' => 'Pink', '#fccb90' => 'Peach', '#d57eeb' => 'Lilac',
 ];
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        // Handle avatar color change
-        if (isset($_POST['avatar_color']) && !empty($_POST['avatar_color'])) {
-            $newColor = $_POST['avatar_color'];
-
-            // Validate color is in allowed list
-            if (in_array($newColor, $avatarColors)) {
-                $stmt = $db->prepare("UPDATE users SET avatar_color = ? WHERE id = ?");
-                $stmt->execute([$newColor, $user['id']]);
-                $user['avatar_color'] = $newColor;
-                $success = 'Avatar color updated successfully!';
-            }
+        $token = $_POST['csrf_token'] ?? null;
+        if (!is_string($token) || !CSRF::validate($token)) {
+            http_response_code(403);
+            throw new DomainException('Reload Profile Picture and try again.');
         }
-
-        // Handle profile picture upload
-        if (isset($_FILES['profile_picture']) && $_FILES['profile_picture']['error'] === UPLOAD_ERR_OK) {
+        $newColor = $_POST['avatar_color'] ?? null;
+        if (is_string($newColor) && isset($avatarColors[$newColor])) {
+            $stmt = $db->prepare('UPDATE users SET avatar_color = ? WHERE id = ?');
+            $stmt->execute([$newColor, $user['id']]);
+            $user['avatar_color'] = $newColor;
+            $success = 'Avatar color updated.';
+        } elseif (isset($_FILES['profile_picture'])) {
             $file = $_FILES['profile_picture'];
-            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-            $maxSize = 5 * 1024 * 1024; // 5MB
+            $uploadError = $file['error'] ?? UPLOAD_ERR_NO_FILE;
+            if (in_array($uploadError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) || ($file['size'] ?? 0) > 5 * 1024 * 1024) {
+                throw new DomainException('Choose a photo within the 5 MB upload limit.');
+            }
+            if ($uploadError !== UPLOAD_ERR_OK) {
+                throw new DomainException('Choose a photo and try again.');
+            }
+            $dimensions = @getimagesize($file['tmp_name']);
+            if (!$dimensions || !in_array($dimensions['mime'], ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)
+                || $dimensions[0] * $dimensions[1] > 24000000) {
+                throw new DomainException('Choose a JPG, PNG, GIF or WebP of up to 24 megapixels.');
+            }
+            $image = @imagecreatefromstring((string)file_get_contents($file['tmp_name']));
+            if (!$image) throw new DomainException('Could not read this photo. Choose another image.');
 
-            // Validate file type
-            $finfo = new finfo(FILEINFO_MIME_TYPE);
-            $mimeType = $finfo->file($file['tmp_name']);
-
-            if (!in_array($mimeType, $allowedTypes)) {
-                $error = 'Invalid file type. Please upload a JPG, PNG, GIF, or WebP image.';
-            } elseif ($file['size'] > $maxSize) {
-                $error = 'File is too large. Maximum size is 5MB.';
-            } else {
-                // Create user's avatar directory
-                $uploadDir = __DIR__ . '/../saves/' . $user['id'] . '/avatar/';
-                if (!is_dir($uploadDir)) {
-                    mkdir($uploadDir, 0755, true);
+            $path = avatarPath($user['id']);
+            $directory = dirname($path);
+            if (!is_dir($directory) && !@mkdir($directory, 0755, true) && !is_dir($directory)) {
+                throw new RuntimeException('Could not create the avatar directory.');
+            }
+            $temporary = tempnam($directory, '.avatar-');
+            try {
+                if (!$temporary || dirname($temporary) !== realpath($directory)) {
+                    throw new RuntimeException('Could not prepare the avatar replacement.');
                 }
-
-                $filepath = $uploadDir . 'avatar.webp';
-
-                // Delete old avatar if it exists
-                if (file_exists($filepath)) {
-                    unlink($filepath);
+                imagepalettetotruecolor($image);
+                imagealphablending($image, false);
+                imagesavealpha($image, true);
+                if (!imagewebp($image, $temporary, 85) || !filesize($temporary) || !chmod($temporary, 0644) || !rename($temporary, $path)) {
+                    throw new RuntimeException('Could not save the avatar.');
                 }
-
-                // Load image based on type
-                $sourceImage = null;
-                switch ($mimeType) {
-                    case 'image/jpeg':
-                        $sourceImage = imagecreatefromjpeg($file['tmp_name']);
-                        break;
-                    case 'image/png':
-                        $sourceImage = imagecreatefrompng($file['tmp_name']);
-                        break;
-                    case 'image/gif':
-                        $sourceImage = imagecreatefromgif($file['tmp_name']);
-                        break;
-                    case 'image/webp':
-                        $sourceImage = imagecreatefromwebp($file['tmp_name']);
-                        break;
-                }
-
-                if ($sourceImage) {
-                    // Preserve transparency for PNG
-                    imagepalettetotruecolor($sourceImage);
-                    imagealphablending($sourceImage, true);
-                    imagesavealpha($sourceImage, true);
-
-                    // Save as webp with good quality
-                    if (imagewebp($sourceImage, $filepath, 85)) {
-                        imagedestroy($sourceImage);
-                        $success = 'Profile picture uploaded successfully!';
-                    } else {
-                        imagedestroy($sourceImage);
-                        $error = 'Failed to convert image. Please try again.';
-                    }
-                } else {
-                    $error = 'Failed to process the image. Please try again.';
-                }
+                clearstatcache(true, $path);
+                $success = 'Profile picture updated.';
+            } finally {
+                if ($temporary && is_file($temporary)) unlink($temporary);
             }
         }
-
-    } catch (Exception $e) {
+    } catch (DomainException $e) {
+        $error = $e->getMessage();
+    } catch (Throwable $e) {
         error_log('Picture update error: ' . $e->getMessage());
         $error = 'An error occurred. Please try again.';
     }
@@ -137,25 +114,19 @@ require_once __DIR__ . '/../shared/components/header.php';
 <main class="main-content">
     <div class="profile-container">
 
-        <?php $avatarPath = '/saves/' . $user['id'] . '/avatar/avatar.webp'; ?>
         <div class="profile-header">
             <div class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
-                <img src="<?php echo avatarUrl($user['id']); ?>"
-                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                     alt="Profile Picture" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
-                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-size:48px; font-weight:800;">
-                    <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
-                </span>
+                <?php renderProfileAvatar($user); ?>
             </div>
-            <div class="profile-name"><?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?></div>
+            <h1 class="profile-name">Profile Picture</h1>
         </div>
 
         <?php if ($error): ?>
-            <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
+            <div class="alert alert-error" role="alert"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
 
         <?php if ($success): ?>
-            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+            <div class="alert alert-success" role="status"><?php echo htmlspecialchars($success); ?></div>
         <?php endif; ?>
 
         <!-- Upload Picture -->
@@ -165,18 +136,16 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
 
             <form method="POST" enctype="multipart/form-data" id="uploadForm">
-                <div class="picture-upload-area" id="dropZone" onclick="document.getElementById('pictureInput').click()">
-                    <div class="upload-icon">+</div>
-                    <div class="upload-text">Click or drag to upload</div>
-                    <div class="upload-hint">JPG, PNG, GIF or WebP. Max 5MB.</div>
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                <label class="picture-upload-area" id="dropZone" for="pictureInput">
+                    <span class="upload-text">Choose or drop a photo</span>
+                    <span class="upload-hint" id="pictureHint">JPG, PNG, GIF or WebP up to 5 MB</span>
+                    <input type="file" id="pictureInput" name="profile_picture" accept="image/jpeg,image/png,image/gif,image/webp" aria-describedby="pictureHint" required>
+                </label>
+                <div class="picture-preview" id="previewContainer" hidden>
+                    <img alt="New profile picture preview" class="preview-image" id="previewImage">
                 </div>
-
-                <input type="file" id="pictureInput" name="profile_picture" accept="image/jpeg,image/png,image/gif,image/webp" style="display: none;">
-
-                <div class="picture-preview" id="previewContainer">
-                    <img src="" alt="Preview" class="preview-image" id="previewImage">
-                    <button type="submit" class="btn btn-primary btn-block">Upload Picture</button>
-                </div>
+                <button type="submit" class="btn btn-primary btn-block picture-submit">Upload Picture</button>
             </form>
 
         </div>
@@ -192,19 +161,14 @@ require_once __DIR__ . '/../shared/components/header.php';
             </p>
 
             <form method="POST" id="colorForm">
-                <div class="color-picker">
-                    <?php foreach ($avatarColors as $color): ?>
-                        <div class="color-option <?php echo ($user['avatar_color'] ?? '#667eea') === $color ? 'selected' : ''; ?>"
-                             style="background: <?php echo $color; ?>"
-                             data-color="<?php echo $color; ?>"
-                             onclick="selectColor(this, '<?php echo $color; ?>')">
-                        </div>
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                <div class="color-picker" role="group" aria-label="Avatar colors">
+                    <?php foreach ($avatarColors as $color => $label): ?>
+                        <?php $selected = ($user['avatar_color'] ?? '#667eea') === $color; ?>
+                        <button type="submit" class="color-option<?= $selected ? ' selected' : '' ?>" name="avatar_color" value="<?= $color ?>"
+                                aria-label="<?= $label ?>" aria-pressed="<?= $selected ? 'true' : 'false' ?>" style="background: <?= $color ?>"></button>
                     <?php endforeach; ?>
                 </div>
-                <input type="hidden" name="avatar_color" id="selectedColor" value="<?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
-                <button type="submit" class="btn btn-primary btn-block" style="margin-top: 20px;" id="saveColorBtn" disabled>
-                    Save Color
-                </button>
             </form>
         </div>
 
@@ -221,18 +185,17 @@ const pictureInput = document.getElementById('pictureInput');
 const previewContainer = document.getElementById('previewContainer');
 const previewImage = document.getElementById('previewImage');
 const dropZone = document.getElementById('dropZone');
+let previewUrl;
 
-pictureInput.addEventListener('change', function() {
-    if (this.files && this.files[0]) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            previewImage.src = e.target.result;
-            previewContainer.classList.add('active');
-            dropZone.style.display = 'none';
-        };
-        reader.readAsDataURL(this.files[0]);
-    }
+pictureInput.addEventListener('change', () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    const file = pictureInput.files[0];
+    previewContainer.hidden = true;
+    if (!file) return;
+    previewUrl = URL.createObjectURL(file);
+    previewImage.src = previewUrl;
 });
+previewImage.addEventListener('load', () => { previewContainer.hidden = false; });
 
 // Drag and drop
 dropZone.addEventListener('dragover', function(e) {
@@ -257,21 +220,6 @@ dropZone.addEventListener('drop', function(e) {
     }
 });
 
-// Color selection
-const originalColor = '<?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>';
-const saveColorBtn = document.getElementById('saveColorBtn');
-
-function selectColor(element, color) {
-    document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
-    element.classList.add('selected');
-    document.getElementById('selectedColor').value = color;
-
-    // Update preview avatar
-    document.querySelector('.profile-avatar-large').style.background = color;
-
-    // Enable save button if color changed
-    saveColorBtn.disabled = (color === originalColor);
-}
 </script>
 
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

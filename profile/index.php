@@ -34,17 +34,15 @@ try {
 // Get family info
 $family = null;
 try {
-    $stmt = $db->prepare("SELECT * FROM families WHERE id = ?");
-    $stmt->execute([$user['family_id']]);
+    $stmt = $db->prepare('SELECT f.name, u.created_at FROM families f JOIN users u ON u.family_id = f.id WHERE u.id = ?');
+    $stmt->execute([$user['id']]);
     $family = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     error_log('Family fetch error: ' . $e->getMessage());
 }
 
 // Format member since date
-$memberSince = isset($user['created_at'])
-    ? date('F Y', strtotime($user['created_at']))
-    : 'Unknown';
+$memberSince = $family && $family['created_at'] ? new DateTimeImmutable($family['created_at']) : null;
 
 $pageTitle = 'My Profile';
 $pageCSS = ['/profile/css/profile.css?build=' . filemtime(__DIR__ . '/css/profile.css')];
@@ -55,19 +53,13 @@ require_once __DIR__ . '/../shared/components/header.php';
 <main class="main-content">
     <div class="profile-container">
 
-        <?php $avatarPath = '/saves/' . $user['id'] . '/avatar/avatar.webp'; ?>
         <div class="profile-header">
-            <a href="/profile/picture.php" class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>; text-decoration: none;">
-                <img src="<?php echo avatarUrl($user['id']); ?>"
-                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                     alt="Profile Picture" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
-                <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; font-size:48px; font-weight:800;">
-                    <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
-                </span>
-                <div class="profile-avatar-edit">Change</div>
+            <a href="/profile/picture.php" aria-label="Change profile picture" class="profile-avatar-large" style="background: <?= htmlspecialchars($user['avatar_color'] ?? '#667eea') ?>">
+                <?php renderProfileAvatar($user); ?>
+                <span class="profile-avatar-edit" aria-hidden="true">Change</span>
             </a>
 
-            <div class="profile-name"><?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? 'User'); ?></div>
+            <h1 class="profile-name"><?= htmlspecialchars($user['name']) ?></h1>
             <div class="profile-email"><?php echo htmlspecialchars($user['email'] ?? ''); ?></div>
             <div class="profile-role"><?php echo htmlspecialchars($user['role'] ?? 'member'); ?></div>
         </div>
@@ -138,13 +130,13 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
 
             <div class="form-group">
-                <label class="form-label">Family Name</label>
-                <input type="text" class="form-input" value="<?php echo htmlspecialchars($family['name'] ?? 'My Family'); ?>" disabled>
+                <label class="form-label" for="profileFamilyName">Family Name</label>
+                <input id="profileFamilyName" type="text" class="form-input" value="<?php echo htmlspecialchars($family['name'] ?? 'My Family'); ?>" readonly>
             </div>
 
             <div class="form-group">
-                <label class="form-label">Your Role</label>
-                <input type="text" class="form-input" value="<?php echo ucfirst(htmlspecialchars($user['role'] ?? 'member')); ?>" disabled>
+                <label class="form-label" for="profileFamilyRole">Your Role</label>
+                <input id="profileFamilyRole" type="text" class="form-input" value="<?php echo ucfirst(htmlspecialchars($user['role'] ?? 'member')); ?>" readonly>
             </div>
 
             <?php if (in_array($user['role'], ['owner', 'admin'])): ?>
@@ -186,9 +178,9 @@ require_once __DIR__ . '/../shared/components/header.php';
             Logout
         </a>
 
-        <div class="member-since">
-            Member since <?php echo $memberSince; ?>
-        </div>
+        <?php if ($memberSince): ?>
+        <div class="member-since">Member since <time datetime="<?= $memberSince->format('Y-m') ?>"><?= $memberSince->format('F Y') ?></time></div>
+        <?php endif; ?>
 
     </div>
 </main>

@@ -74,9 +74,8 @@ try {
     }
 
     // Insert expense
-    $expenseId = HT_DB::insert('ht_trip_expenses', [
+    $expenseData = [
         'trip_id' => $tripId,
-        'user_id' => HT_Auth::userId(),
         'category' => $category,
         'description' => $description,
         'amount' => $amount,
@@ -85,7 +84,12 @@ try {
         'paid_by' => $paidBy,
         'split_with_json' => $splitWithJson,
         'notes' => $notes ?: null
-    ]);
+    ];
+    // Some installations also record the creator separately from the payer.
+    if (HT_DB::fetchOne("SHOW COLUMNS FROM ht_trip_expenses WHERE Field = 'user_id'")) {
+        $expenseData['user_id'] = HT_Auth::userId();
+    }
+    $expenseId = HT_DB::insert('ht_trip_expenses', $expenseData);
 
     // Fetch created expense
     $expense = HT_DB::fetchOne(

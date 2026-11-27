@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../../../shared/components/avatar.php';
+
 final class MessageChanges
 {
     public static function installed(PDO $db): bool
@@ -9,11 +11,19 @@ final class MessageChanges
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'message_revisions'")->fetchColumn();
     }
 
+    public static function recordReaction(PDO $db, int $familyId, int $messageId): void
+    {
+        $db->prepare('INSERT INTO message_revisions (family_id, revision) VALUES (?, 1)
+            ON DUPLICATE KEY UPDATE revision = revision + 1')->execute([$familyId]);
+        $db->prepare('INSERT INTO message_changes (family_id, revision, message_id)
+            SELECT family_id, revision, ? FROM message_revisions WHERE family_id = ?')->execute([$messageId, $familyId]);
+    }
+
     public static function selectRows(PDO $db, int $familyId, string $predicate, array $parameters, string $order): array
     {
         $stmt = $db->prepare("SELECT m.id, m.user_id, m.content, m.message_type, m.media_path,
             m.reply_to_message_id, m.created_at, m.edited_at, m.edit_count, m.pinned,
-            u.full_name, u.avatar_color, u.has_avatar, replied.content AS reply_to_content
+            u.full_name, u.avatar_color, replied.content AS reply_to_content
             FROM messages m JOIN users u ON m.user_id = u.id
             LEFT JOIN messages replied ON replied.id = m.reply_to_message_id
                 AND replied.family_id = m.family_id AND replied.deleted_at IS NULL
@@ -32,8 +42,16 @@ final class MessageChanges
         foreach ($reactionQuery->fetchAll(PDO::FETCH_ASSOC) as $reaction) {
             $reactions[$reaction['message_id']][] = ['user_id' => $reaction['user_id'], 'emoji' => $reaction['emoji']];
         }
+        $avatars = [];
         foreach ($rows as &$row) {
             $row['reactions'] = $reactions[$row['id']] ?? [];
+            $userId = (int)$row['user_id'];
+            if (!isset($avatars[$userId])) {
+                $path = avatarPath($userId);
+                $avatars[$userId] = is_file($path) ? (int)filemtime($path) : 0;
+            }
+            $row['avatar_version'] = $avatars[$userId];
+            $row['has_avatar'] = $row['avatar_version'] > 0;
         }
         return $rows;
     }

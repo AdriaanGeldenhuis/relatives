@@ -1,6 +1,3 @@
-<?php
-$cacheVersion = '1.0.0';
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -17,34 +14,31 @@ $cacheVersion = '1.0.0';
     <h1>Collage builder</h1>
 </header>
 
-<div class="modal">
+<main class="collage-workspace" aria-label="Collage editor">
     <div class="modal-body">
 
         <div class="collage-toolbar">
             <button type="button" class="btn" id="btnChooseImages">Choose images</button>
-            <button type="button" class="btn" id="btnChooseLayout">Choose layout</button>
-            <button type="button" class="btn" id="btnChooseBackground">Choose background</button>
-            <button type="button" class="btn btn-primary" id="btnDone">Done</button>
-            <button type="button" class="btn btn-danger" id="btnDelete">Delete</button>
+            <button type="button" class="btn" id="btnChooseLayout" aria-expanded="false">Choose layout</button>
+            <label class="btn collage-background" for="collageColor">Background <input type="color" id="collageColor" value="#e8f4f8"></label>
+            <button type="button" class="btn btn-primary" id="btnDone" disabled>Download image</button>
+            <button type="button" class="btn btn-danger" id="btnDelete" disabled>Clear collage</button>
         </div>
 
         <div id="collageCanvasWrapper">
-            <div id="collageCanvas"></div>
+            <div id="collageCanvas">
+                <p id="collageEmpty">Choose photos to start your collage.</p>
+            </div>
         </div>
+        <p id="collageStatus" class="collage-status" role="status"></p>
 
     </div>
-</div>
+</main>
 
 <!-- Modular JS in correct load order -->
-<script src="js/collage.state.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="js/collage.images.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="js/collage.drag.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="js/collage.resize.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="js/collage.rotate.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="js/collage.layouts.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="js/collage.background.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="js/collage.cleanup.js?v=<?php echo $cacheVersion; ?>"></script>
-<script src="js/collage.init.js?v=<?php echo $cacheVersion; ?>"></script>
+<?php foreach (['state', 'images', 'drag', 'resize', 'rotate', 'layouts', 'background', 'cleanup', 'init'] as $module): ?>
+    <script defer src="js/collage.<?= $module ?>.js?v=<?= filemtime(__DIR__ . '/js/collage.' . $module . '.js') ?>"></script>
+<?php endforeach; ?>
 
 </body>
 </html>

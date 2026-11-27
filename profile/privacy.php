@@ -133,13 +133,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 
         <div class="profile-header">
             <div class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
-                <?php if (!empty($user['profile_picture'])): ?>
-                    <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>" alt="Profile Picture">
-                <?php else: ?>
-                    <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
-                <?php endif; ?>
+                <?php renderProfileAvatar($user); ?>
             </div>
-            <div class="profile-name">Privacy & Security</div>
+            <h1 class="profile-name">Privacy &amp; Security</h1>
         </div>
 
         <?php if ($error): ?>
@@ -162,44 +158,44 @@ require_once __DIR__ . '/../shared/components/header.php';
 
                 <div class="toggle-row" id="locationSharing">
                     <div class="toggle-info">
-                        <div class="toggle-label">Location Sharing</div>
+                        <div class="toggle-label" id="setting-location-sharing">Location Sharing</div>
                         <div class="toggle-description">Allow family members to see your position and available history</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="location_sharing" <?php echo $privacySettings['location_sharing'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="location_sharing" aria-labelledby="setting-location-sharing" <?php echo $privacySettings['location_sharing'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Online Status</div>
+                        <div class="toggle-label" id="setting-show-online-status">Online Status</div>
                         <div class="toggle-description">Show when you're online</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="show_online_status" <?php echo $privacySettings['show_online_status'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="show_online_status" aria-labelledby="setting-show-online-status" <?php echo $privacySettings['show_online_status'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Last Seen</div>
+                        <div class="toggle-label" id="setting-show-last-seen">Last Seen</div>
                         <div class="toggle-description">Show when you were last active</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="show_last_seen" <?php echo $privacySettings['show_last_seen'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="show_last_seen" aria-labelledby="setting-show-last-seen" <?php echo $privacySettings['show_last_seen'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
 
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-label">Family chat alerts</div>
+                        <div class="toggle-label" id="setting-allow-messages">Family chat alerts</div>
                         <div class="toggle-description">Receive alerts from your family chat. Shared messages remain in the conversation.</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" name="allow_messages" <?php echo $privacySettings['allow_messages'] ? 'checked' : ''; ?>>
+                        <input type="checkbox" name="allow_messages" aria-labelledby="setting-allow-messages" <?php echo $privacySettings['allow_messages'] ? 'checked' : ''; ?>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>

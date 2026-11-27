@@ -81,7 +81,7 @@ try {
 
     // Fetch created poll
     $poll = HT_DB::fetchOne(
-        "SELECT v.*, u.name as creator_name
+        "SELECT v.*, u.full_name as creator_name
          FROM ht_trip_votes v
          JOIN users u ON v.created_by_user_id = u.id
          WHERE v.id = ?",

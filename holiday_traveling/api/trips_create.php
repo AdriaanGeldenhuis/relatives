@@ -31,7 +31,7 @@ try {
 
     // Clean and validate input
     $data = HT_Validators::cleanTripInput($input);
-    $errors = HT_Validators::tripData($data);
+    $errors = HT_Validators::tripData($data, allowUntitled: true);
 
     if (!empty($errors)) {
         HT_Response::validationError($errors);
@@ -39,7 +39,7 @@ try {
 
     // Generate title if not provided
     if (empty($data['title'])) {
-        $data['title'] = generateTripTitle($data['destination'], $data['start_date'], $data['end_date']);
+        $data['title'] = generateTripTitle($data['destination'], $data['start_date']);
     }
 
     // Prepare database insert
@@ -64,17 +64,21 @@ try {
         'status' => $input['status'] ?? 'draft'
     ];
 
-    // Insert trip
+    // A new trip and its owner must be saved together.
+    HT_DB::beginTransaction();
     $tripId = HT_DB::insert('ht_trips', $insertData);
 
     // Add creator as trip member (owner)
+    $statusColumn = HT_DB::fetchOne("SHOW COLUMNS FROM ht_trip_members LIKE 'status'");
+    $membershipStatus = str_contains($statusColumn['Type'] ?? '', "'accepted'") ? 'accepted' : 'joined';
     HT_DB::insert('ht_trip_members', [
         'trip_id' => $tripId,
         'user_id' => $userId,
         'role' => 'owner',
-        'status' => 'joined',
+        'status' => $membershipStatus,
         'joined_at' => date('Y-m-d H:i:s')
     ]);
+    HT_DB::commit();
 
     // Create main holiday event in internal calendar with standardized notes format
     try {
@@ -172,9 +176,10 @@ try {
         'plan_version' => $planVersion
     ]);
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
+    if (HT_DB::get()->inTransaction()) HT_DB::rollback();
     error_log('Trip creation error: ' . $e->getMessage());
-    HT_Response::error('Failed to create trip: ' . $e->getMessage(), 500);
+    HT_Response::error('Could not create the trip. Try again.', 500);
 }
 
 /**
@@ -220,10 +225,9 @@ function parseQuickPrompt(string $prompt): array {
 /**
  * Generate automatic trip title
  */
-function generateTripTitle(string $destination, string $startDate, string $endDate): string {
-    $month = date('F', strtotime($startDate));
-    $year = date('Y', strtotime($startDate));
-    return "{$destination} Trip - {$month} {$year}";
+function generateTripTitle(string $destination, string $startDate): string {
+    $suffix = ' Trip - ' . date('F Y', strtotime($startDate));
+    return mb_substr($destination, 0, 255 - mb_strlen($suffix)) . $suffix;
 }
 
 /**

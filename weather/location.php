@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+const WEATHER_DEFAULT_PLACE = ['lat' => -26.2041, 'lon' => 28.0473, 'name' => 'Johannesburg', 'offset' => 7200];
+
 function weatherTrackedLocation(PDO $db, int $userId, int $familyId): ?array
 {
     $now = time();
@@ -58,5 +60,5 @@ function weatherLocationForUser(PDO $db, int $userId, int $familyId): array
 {
     return weatherTrackedLocation($db, $userId, $familyId)
         ?? weatherSavedCity($db, $userId)
-        ?? ['lat' => -26.2041, 'lon' => 28.0473, 'name' => 'Johannesburg'];
+        ?? WEATHER_DEFAULT_PLACE;
 }

@@ -172,6 +172,9 @@ if (isset($db) && isset($_SESSION['user_id'])) {
         <style><?php readfile(__DIR__ . '/../css/weather-hero.css'); ?></style>
         <script><?php readfile(__DIR__ . '/../js/weather-hero.js'); ?></script>
     <?php endif; ?>
+    <?php if (!empty($homeStylesheet)): ?>
+        <?php renderWelcomeSkyAssets(); ?>
+    <?php endif; ?>
     <style><?php readfile(__DIR__ . '/../css/site-navigation.css'); readfile(__DIR__ . '/../css/action-controls.css'); ?></style>
     <style><?php readfile(__DIR__ . '/../css/footer-assistance.css'); ?></style>
 </head>

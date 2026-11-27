@@ -154,6 +154,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <button type="button" data-filter="all" aria-pressed="true">All <span></span></button>
                 <button type="button" data-filter="pending" aria-pressed="false">To buy <span></span></button>
                 <button type="button" data-filter="bought" aria-pressed="false">Bought <span></span></button>
+                <button type="button" data-filter="mine" aria-pressed="false">For me <span></span></button>
             </div>
             <label class="shopping-search"><span class="shopping-sr-only">Search items</span>
                 <input type="search" id="shopSearch" placeholder="Search items…" autocomplete="off">
@@ -519,6 +520,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <script type="application/json" id="shopData"><?= json_encode([
     'listId' => $currentListId,
+    'userId' => (int)$user['id'],
     'lists' => $lists,
     'items' => $currentList['items'],
     'categories' => $categories,

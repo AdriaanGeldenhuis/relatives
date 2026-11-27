@@ -470,6 +470,8 @@ function displayMessages(messages, clearFirst = false, applyEdits = false) {
             if (applyEdits && (existing.dataset.editedAt !== (msg.edited_at || '') || existing.dataset.editCount !== String(msg.edit_count ?? 0)
                 || existing.dataset.pinned !== String(Boolean(Number(msg.pinned))))) {
                 existing.replaceWith(createMessageElement(msg));
+            } else if (applyEdits && existing.dataset.reactions !== reactionKey(msg.reactions)) {
+                updateReactionDOM(msg.id, msg.reactions);
             }
             return;
         }
@@ -521,15 +523,18 @@ function createMessageElement(msg) {
     div.dataset.editedAt = msg.edited_at || '';
     div.dataset.editCount = String(msg.edit_count ?? 0);
     div.dataset.pinned = String(Boolean(Number(msg.pinned)));
+    div.dataset.reactions = reactionKey(msg.reactions);
 
     // Avatar with image support
+    const initials = escapeHtml(Array.from(msg.full_name).slice(0, 2).join('').toUpperCase());
+    const avatarColor = /^#[a-f\d]{6}$/i.test(msg.avatar_color) ? msg.avatar_color : '#667eea';
     const avatarContent = msg.has_avatar
-        ? `<img src="/saves/${msg.user_id}/avatar/avatar.webp?v=${window.avatarVersion || 0}" alt="${escapeHtml(msg.full_name)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-           <span class="avatar-fallback" style="display:none; background: ${msg.avatar_color}; width:100%; height:100%; align-items:center; justify-content:center; border-radius:50%;">${msg.full_name.substring(0, 2).toUpperCase()}</span>`
-        : msg.full_name.substring(0, 2).toUpperCase();
+        ? `<img src="/saves/${msg.user_id}/avatar/avatar.webp?v=${msg.avatar_version ?? 0}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+           <span class="avatar-fallback" style="display:none; width:100%; height:100%; align-items:center; justify-content:center">${initials}</span>`
+        : initials;
 
     const avatar = `
-        <div class="message-avatar" style="background: ${msg.has_avatar ? 'transparent' : msg.avatar_color}">
+        <div class="message-avatar" aria-hidden="true" style="background: ${avatarColor}">
             ${avatarContent}
         </div>
     `;
@@ -637,36 +642,10 @@ function createMessageElement(msg) {
         }
     }
     
-    let reactionsHtml = '';
-    if (msg.reactions && msg.reactions.length > 0) {
-        reactionsHtml = '<div class="message-reactions">';
-
-        const grouped = {};
-        msg.reactions.forEach(r => {
-            if (!grouped[r.emoji]) grouped[r.emoji] = [];
-            grouped[r.emoji].push(r.user_id);
-        });
-
-        Object.entries(grouped).forEach(([emoji, users]) => {
-            const hasOwn = users.includes(parseInt(MessageSystem.currentUserId));
-            const countDisplay = users.length > 1 ? `<span class="reaction-count">${users.length}</span>` : '';
-            reactionsHtml += `
-                <div class="reaction ${hasOwn ? 'own' : ''}"
-                     onclick="toggleReaction(${msg.id}, '${emoji}')"
-                     title="${users.length} reaction(s)">
-                    ${emoji}${countDisplay}
-                </div>
-            `;
-        });
-
-        reactionsHtml += `<div class="reaction reaction-add" onclick="showReactionPicker(${msg.id})" title="Add reaction">+</div>`;
-        reactionsHtml += '</div>';
-    }
-    
     const actions = `
         <div class="message-actions">
             <button class="message-action-btn" onclick="replyToMessage(${msg.id}, '${escapeForAttr(msg.full_name)}', '${escapeForAttr(msg.content || '')}')" title="Reply">↩️</button>
-            <button class="message-action-btn" onclick="showReactionPicker(${msg.id})" title="React">😊</button>
+            <button type="button" class="message-action-btn" data-reaction-trigger aria-label="React" aria-haspopup="dialog" title="React">😊</button>
             ${isOwn && window.enableEditMessage ? `<button class="message-action-btn" onclick="enableEditMessage(${msg.id})" title="Edit">✏️</button>` : ''}
             <button class="message-action-btn" onclick="showMessageOptions(${msg.id}, event)" title="More actions" aria-label="More actions" aria-controls="contextMenu" aria-expanded="false">⋮</button>
         </div>
@@ -696,10 +675,11 @@ function createMessageElement(msg) {
                 ${actions}
                 <span class="message-time">${time}</span>
             </div>
-            ${reactionsHtml}
         </div>
         ${isOwn ? avatar : ''}
     `;
+    div.querySelector('[data-reaction-trigger]').addEventListener('click', () => showReactionPicker(msg.id));
+    if (hasReactions) div.querySelector('.message-content').append(buildReactions(msg.id, msg.reactions));
     
     return div;
 }
@@ -835,32 +815,45 @@ async function checkTypingStatus() {
 // ============================================
 // REACTIONS
 // ============================================
-function buildReactionsHtml(messageId, reactions) {
-    if (!reactions || reactions.length === 0) return '';
+function reactionKey(reactions = []) {
+    return JSON.stringify(reactions.map(reaction => [String(reaction.user_id), reaction.emoji]));
+}
 
-    const grouped = {};
-    reactions.forEach(r => {
-        if (!grouped[r.emoji]) grouped[r.emoji] = [];
-        grouped[r.emoji].push(parseInt(r.user_id));
-    });
-
-    let html = '<div class="message-reactions">';
-
-    Object.entries(grouped).forEach(([emoji, users]) => {
-        const hasOwn = users.includes(parseInt(MessageSystem.currentUserId));
-        const countDisplay = users.length > 1 ? `<span class="reaction-count">${users.length}</span>` : '';
-        html += `
-            <div class="reaction ${hasOwn ? 'own' : ''}"
-                 onclick="toggleReaction(${messageId}, '${emoji}')"
-                 title="${users.length} reaction(s)">
-                ${emoji}${countDisplay}
-            </div>
-        `;
-    });
-
-    html += `<div class="reaction reaction-add" onclick="showReactionPicker(${messageId})" title="Add reaction">+</div>`;
-    html += '</div>';
-    return html;
+function buildReactions(messageId, reactions) {
+    const grouped = new Map();
+    for (const { emoji, user_id } of reactions) {
+        if (!grouped.has(emoji)) grouped.set(emoji, []);
+        grouped.get(emoji).push(String(user_id));
+    }
+    const row = document.createElement('div');
+    row.className = 'message-reactions';
+    for (const [emoji, users] of grouped) {
+        const own = users.includes(String(MessageSystem.currentUserId));
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = own ? 'reaction own' : 'reaction';
+        button.dataset.emoji = emoji;
+        button.textContent = emoji;
+        button.setAttribute('aria-pressed', String(own));
+        button.setAttribute('aria-label', `${emoji}, ${users.length} ${users.length === 1 ? 'reaction' : 'reactions'}`);
+        if (users.length > 1) {
+            const count = document.createElement('span');
+            count.className = 'reaction-count';
+            count.textContent = users.length;
+            button.append(count);
+        }
+        button.addEventListener('click', () => toggleReaction(messageId, emoji));
+        row.append(button);
+    }
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'reaction reaction-add';
+    more.textContent = '+';
+    more.setAttribute('aria-label', 'Add reaction');
+    more.setAttribute('aria-haspopup', 'dialog');
+    more.addEventListener('click', () => showReactionPicker(messageId));
+    row.append(more);
+    return row;
 }
 
 function updateReactionDOM(messageId, reactions) {
@@ -869,82 +862,80 @@ function updateReactionDOM(messageId, reactions) {
 
     const contentEl = messageEl.querySelector('.message-content');
     if (!contentEl) return;
+    messageEl.dataset.reactions = reactionKey(reactions);
 
     // Remove old reactions
     const oldReactions = messageEl.querySelector('.message-reactions');
+    const active = oldReactions?.contains(document.activeElement) ? document.activeElement : null;
     if (oldReactions) oldReactions.remove();
 
     if (reactions && reactions.length > 0) {
-        const html = buildReactionsHtml(messageId, reactions);
-        const temp = document.createElement('div');
-        temp.innerHTML = html;
-        contentEl.appendChild(temp.firstElementChild);
+        contentEl.append(buildReactions(messageId, reactions));
         messageEl.classList.add('has-reactions');
     } else {
         messageEl.classList.remove('has-reactions');
     }
+    if (active) {
+        const replacement = [...contentEl.querySelectorAll('.reaction')].find(button => button.dataset.emoji === active.dataset.emoji);
+        (replacement || messageEl.querySelector('[data-reaction-trigger]'))?.focus({ preventScroll: true });
+    }
 }
 
+const pendingReactions = new Set();
 async function toggleReaction(messageId, emoji) {
+    if (pendingReactions.has(messageId)) return;
+    pendingReactions.add(messageId);
     try {
         const url = window.location.origin + '/messages/api/react.php';
 
         const response = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': document.getElementById('sendBtn').dataset.csrf },
             body: JSON.stringify({ message_id: messageId, emoji: emoji }),
             credentials: 'same-origin'
         });
 
         const data = await response.json();
 
-        if (data.success) {
-            updateReactionDOM(messageId, data.reactions || []);
-        }
+        if (!response.ok || !data.success) throw new Error(data.message || 'Could not update the reaction.');
+        updateReactionDOM(messageId, data.reactions || []);
     } catch (error) {
-        console.error('Error toggling reaction:', error);
+        showError(error.message || 'Could not update the reaction.');
+    } finally {
+        pendingReactions.delete(messageId);
     }
 }
 
-function showReactionPicker(messageId, event) {
-    // Remove any existing reaction picker
-    const existingPicker = document.querySelector('.reaction-picker');
-    if (existingPicker) existingPicker.remove();
-
-    const picker = document.createElement('div');
+function showReactionPicker(messageId) {
+    if (document.querySelector('.reaction-picker[open]')) return;
+    const picker = document.createElement('dialog');
     picker.className = 'reaction-picker';
+    picker.setAttribute('aria-label', 'Choose a reaction');
 
     const quickEmojis = ['👍', '❤️', '😂', '🔥'];
     const moreEmojis = ['🎉', '👏', '💯', '🤔', '😍', '🥳', '😭', '💀', '😮', '😢', '😡', '🙏'];
 
-    picker.innerHTML = `
-        <div class="reaction-picker-row">
-            ${quickEmojis.map(e => `<button class="reaction-picker-item" onclick="toggleReaction(${messageId}, '${e}'); document.querySelector('.reaction-picker').remove();">${e}</button>`).join('')}
-            <button class="reaction-picker-item reaction-picker-more" onclick="document.querySelector('.reaction-picker-expanded').style.display='grid'">+</button>
-        </div>
-        <div class="reaction-picker-expanded" style="display:none;">
-            ${moreEmojis.map(e => `<button class="reaction-picker-item" onclick="toggleReaction(${messageId}, '${e}'); document.querySelector('.reaction-picker').remove();">${e}</button>`).join('')}
-        </div>
-    `;
-
-    document.body.appendChild(picker);
-
-    // Position near the message
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const pickerRect = picker.getBoundingClientRect();
-
-    picker.style.left = Math.max(10, (viewportWidth - pickerRect.width) / 2) + 'px';
-    picker.style.top = Math.max(10, (viewportHeight - pickerRect.height) / 2) + 'px';
-
-    setTimeout(() => {
-        document.addEventListener('click', function removePickerClick(e) {
-            if (!picker.contains(e.target)) {
-                picker.remove();
-                document.removeEventListener('click', removePickerClick);
-            }
-        });
-    }, 100);
+    const buttonFor = emoji => `<button type="button" class="reaction-picker-item" data-emoji="${emoji}">${emoji}</button>`;
+    picker.innerHTML = `<div class="reaction-picker-row">${quickEmojis.map(buttonFor).join('')}
+            <button type="button" class="reaction-picker-item reaction-picker-more" data-more aria-label="More reactions" aria-expanded="false" aria-controls="moreReactions">+</button>
+            <button type="button" class="reaction-picker-item reaction-picker-more" data-close-reactions aria-label="Close reactions">×</button>
+        </div><div id="moreReactions" class="reaction-picker-expanded" hidden>${moreEmojis.map(buttonFor).join('')}</div>`;
+    picker.addEventListener('click', event => {
+        const button = event.target.closest('button');
+        if (button?.hasAttribute('data-more')) {
+            const more = picker.querySelector('#moreReactions');
+            more.hidden = !more.hidden;
+            button.setAttribute('aria-expanded', String(!more.hidden));
+        } else if (button?.dataset.emoji) {
+            toggleReaction(messageId, button.dataset.emoji);
+            picker.close();
+        } else if (event.target === picker || button?.hasAttribute('data-close-reactions')) {
+            picker.close();
+        }
+    });
+    picker.addEventListener('close', () => picker.remove(), { once: true });
+    document.body.append(picker);
+    picker.showModal();
 }
 
 // ============================================
@@ -1501,6 +1492,7 @@ function linkify(text) {
 function showError(message) {
     const toast = document.createElement('div');
     toast.className = 'toast toast-error';
+    toast.setAttribute('role', 'alert');
     toast.textContent = message;
     document.body.appendChild(toast);
     

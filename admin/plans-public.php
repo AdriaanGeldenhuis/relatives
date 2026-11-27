@@ -5,10 +5,11 @@ require_once __DIR__ . '/../core/bootstrap.php';
 require_once __DIR__ . '/ui.php';
 
 $user = (new Auth($db))->getCurrentUser();
-if (!$user || $user['role'] !== 'owner') {
+if (!$user || !in_array($user['role'], ['owner', 'admin'], true)) {
     header('Location: ' . ($user ? '/home/' : '/login.php'));
     exit;
 }
+$isOwner = $user['role'] === 'owner';
 
 $status = null;
 try {
@@ -49,10 +50,12 @@ require __DIR__ . '/header.php';
             <p><?= adminEscape($statusDetail) ?></p>
             <?php if ($status['plan_code'] ?? null): ?><code><?= adminEscape($status['plan_code']) ?></code><?php endif; ?>
         </div>
-        <?php if ($manageLink): ?>
+        <?php if ($isOwner && $manageLink): ?>
             <a class="admin-button admin-primary" href="<?= $manageLink ?>">Manage in store</a>
-        <?php elseif ($plans && ($status['status'] ?? '') !== 'active'): ?>
+        <?php elseif ($isOwner && $plans && ($status['status'] ?? '') !== 'active'): ?>
             <a class="admin-button admin-primary" href="<?= $subscribeLink ?>">Subscribe in the app</a>
+        <?php elseif (!$isOwner): ?>
+            <p>The family owner manages the subscription.</p>
         <?php endif; ?>
     </section>
 

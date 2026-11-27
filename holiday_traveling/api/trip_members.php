@@ -54,7 +54,7 @@ try {
         "SELECT tm.user_id, u.full_name as name, u.email, tm.role
          FROM ht_trip_members tm
          JOIN users u ON tm.user_id = u.id
-         WHERE tm.trip_id = ? AND tm.status = 'joined'
+         WHERE tm.trip_id = ? AND tm.status IN ('accepted', 'joined')
          ORDER BY u.full_name",
         [$tripId]
     );

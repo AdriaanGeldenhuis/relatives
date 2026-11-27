@@ -353,7 +353,10 @@
             event.preventDefault();
             loadCalendar(day.dataset.selectDate, 'month', { focus: 'date' });
         }
-        if (event.target.closest('[data-calendar-add]')) editor.open();
+        if (standardClick && event.target.closest('[data-calendar-add]')) {
+            event.preventDefault();
+            editor.open();
+        }
         const view = event.target.closest('[data-calendar-view], [data-week-date]');
         if (view && standardClick) {
             event.preventDefault();

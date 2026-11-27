@@ -198,7 +198,7 @@
     let location;
     let activeRequest;
     let lastAttempt = 0;
-    let hasWeather = false;
+    let reading;
 
     async function loadWeather(place, quietly = false) {
         activeRequest?.abort();
@@ -211,32 +211,31 @@
         const forecastUrl = `/weather/?${new URLSearchParams(coordinates)}`;
         forecastLink.href = weatherShortcut.href = forecastUrl;
         if (!quietly) {
-            hasWeather = false;
+            reading = null;
             shortcutSummary.textContent = defaultSummary;
-            sky.update({ place: 'Near you', source: place.source, message: 'Loading current weather…' });
+            sky.update({ place: place.name || 'Near you', source: place.source, offset: place.offset, message: 'Loading current weather…' });
             feedback.textContent = '';
         }
         try {
             const current = await weather.request('current', coordinates, request.signal);
             if (request.signal.aborted) return;
             if (!Number.isFinite(current?.temperature)) throw new Error('Current conditions are missing.');
-            hasWeather = true;
             const providerName = current.location_name || current.location;
-            sky.update({
-                place: providerName && providerName !== 'Unknown' ? providerName : 'Near you',
+            reading = {
+                place: place.name || (providerName && providerName !== 'Unknown' ? providerName : 'Near you'),
                 source: place.source,
                 current,
-                offset: current.timezone
-            });
+                offset: current.timezone ?? place.offset
+            };
+            sky.update(reading);
             shortcutSummary.textContent = [`${current.temperature}°C`, current.description || current.condition].filter(Boolean).join(' · ');
             if (!locationButton.disabled) feedback.textContent = '';
         } catch (error) {
             if (request.signal.aborted) return;
-            if (!hasWeather) sky.update({ place: 'Near you', source: place.source, message: 'Current weather is unavailable' });
+            if (reading) sky.update({ ...reading, current: { ...reading.current, stale: true } });
+            else sky.update({ place: place.name || 'Near you', source: place.source, offset: place.offset, message: 'Current weather is unavailable' });
             if (locationButton.disabled) return;
-            feedback.textContent = error.status === 401 ? 'Sign in again to load weather.' : hasWeather
-                ? 'Weather could not refresh. Showing the last available conditions.'
-                : 'Try again or choose a city under Full forecast.';
+            feedback.textContent = error.status === 401 ? 'Sign in again to load weather.' : '';
         } finally {
             if (activeRequest === request) activeRequest = null;
         }
@@ -258,11 +257,12 @@
 
     locationButton.hidden = false;
     locationButton.addEventListener('click', () => locate());
-    const tracked = JSON.parse(byId('homeWeatherLocation').textContent);
-    if (tracked) {
-        loadWeather({ ...tracked, source: 'Last shared location' });
+    const places = JSON.parse(byId('homeWeatherLocation').textContent);
+    if (places.saved) {
+        loadWeather({ ...places.saved, source: places.saved.name ? 'Saved city' : 'Last shared location' });
     } else {
-        weather.hasLocationPermission().then(granted => { if (granted && !location) locate(true); });
+        loadWeather({ ...places.default, source: 'Default city' });
+        weather.hasLocationPermission().then(granted => { if (granted && location?.source === 'Default city') locate(true); });
     }
 
     function refresh() {
@@ -273,4 +273,5 @@
     }
     setInterval(refresh, 600000);
     document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('online', refresh);
 })();

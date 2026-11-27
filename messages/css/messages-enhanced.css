@@ -332,6 +332,7 @@
 
 .reaction-picker {
     position: fixed;
+    margin: auto;
     z-index: 9100;
     padding: 7px;
     border-radius: 18px;
@@ -366,7 +367,7 @@
 }
 
 .reaction-picker-expanded {
-    display: none;
+    display: grid;
     grid-template-columns: repeat(6, 1fr);
     gap: 2px;
     margin-top: 6px;
@@ -375,6 +376,8 @@
     max-height: 180px;
     overflow-y: auto;
 }
+.reaction-picker-expanded[hidden] { display: none; }
+.reaction-picker::backdrop { background: #10201970; }
 
 /* ============================================
    MEDIA VIEWER

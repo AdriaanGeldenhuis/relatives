@@ -5,6 +5,7 @@
 const CollageLayouts = (() => {
     let canvas = null;
     let layoutMenu = null;
+    let menuButton = null;
 
     const LAYOUTS = {
         grid: 'Grid',
@@ -24,7 +25,7 @@ const CollageLayouts = (() => {
 
         const cellWidth = (canvasRect.width - SPACING * (cols + 1)) / cols;
         const cellHeight = (canvasRect.height - SPACING * (rows + 1)) / rows;
-        const size = Math.min(cellWidth, cellHeight);
+        const size = Math.max(1, Math.min(cellWidth, cellHeight));
 
         images.forEach((img, i) => {
             const col = i % cols;
@@ -48,27 +49,28 @@ const CollageLayouts = (() => {
         if (images.length === 0) return;
 
         const canvasRect = CollageState.getCanvasRect();
-        const cols = 3;
+        const cols = Math.min(3, images.length);
         const colWidth = (canvasRect.width - SPACING * (cols + 1)) / cols;
         const colHeights = new Array(cols).fill(SPACING);
 
-        images.forEach((img) => {
+        const placements = images.map(img => {
             const shortestCol = colHeights.indexOf(Math.min(...colHeights));
             const x = SPACING + shortestCol * (colWidth + SPACING);
             const y = colHeights[shortestCol];
 
-            const aspectRatio = 0.6 + Math.random() * 0.8;
-            const height = colWidth * aspectRatio;
-
+            const height = colWidth * Math.max(.6, Math.min(1.4, img.aspect));
+            colHeights[shortestCol] += height + SPACING;
+            return { img, x, y, height };
+        });
+        const scale = Math.min(1, canvasRect.height / Math.max(...colHeights));
+        for (const { img, x, y, height } of placements) {
             CollageState.updateImage(img.id, {
-                x, y,
-                width: colWidth,
-                height: height,
+                x: x * scale, y: y * scale,
+                width: colWidth * scale,
+                height: height * scale,
                 rotation: 0
             });
-
-            colHeights[shortestCol] += height + SPACING;
-        });
+        }
 
         updateCanvasClass('layout-masonry');
     }
@@ -99,12 +101,13 @@ const CollageLayouts = (() => {
                 break;
         }
 
-        closeLayoutMenu();
+        closeLayoutMenu(true);
     }
 
     function createLayoutMenu() {
         layoutMenu = document.createElement('div');
         layoutMenu.className = 'layout-menu';
+        layoutMenu.id = 'collageLayoutOptions';
         layoutMenu.innerHTML = Object.entries(LAYOUTS).map(([key, label]) => `
             <button class="layout-option" data-layout="${key}">${label}</button>
         `).join('');
@@ -115,6 +118,9 @@ const CollageLayouts = (() => {
                 applyLayout(btn.dataset.layout);
             }
         });
+        layoutMenu.addEventListener('keydown', event => {
+            if (event.key === 'Escape') closeLayoutMenu(true);
+        });
 
         document.body.appendChild(layoutMenu);
     }
@@ -122,26 +128,40 @@ const CollageLayouts = (() => {
     function openLayoutMenu(anchorBtn) {
         if (CollageState.isLocked()) return;
         if (!layoutMenu) createLayoutMenu();
+        if (menuButton === anchorBtn) {
+            closeLayoutMenu(true);
+            return;
+        }
+        menuButton = anchorBtn;
+        anchorBtn.setAttribute('aria-controls', layoutMenu.id);
+        anchorBtn.setAttribute('aria-expanded', 'true');
 
         const rect = anchorBtn.getBoundingClientRect();
         layoutMenu.style.top = `${rect.bottom + 5}px`;
         layoutMenu.style.left = `${rect.left}px`;
         layoutMenu.classList.add('visible');
+        layoutMenu.style.left = `${Math.min(rect.left, innerWidth - layoutMenu.offsetWidth - 8)}px`;
+        layoutMenu.querySelector('button')?.focus();
 
         setTimeout(() => {
             document.addEventListener('click', closeOnOutsideClick);
         }, 0);
     }
 
-    function closeLayoutMenu() {
+    function closeLayoutMenu(restoreFocus = false) {
         if (layoutMenu) {
             layoutMenu.classList.remove('visible');
+        }
+        if (menuButton) {
+            menuButton.setAttribute('aria-expanded', 'false');
+            if (restoreFocus) menuButton.focus();
+            menuButton = null;
         }
         document.removeEventListener('click', closeOnOutsideClick);
     }
 
     function closeOnOutsideClick(e) {
-        if (!layoutMenu.contains(e.target)) {
+        if (!layoutMenu.contains(e.target) && !menuButton?.contains(e.target)) {
             closeLayoutMenu();
         }
     }

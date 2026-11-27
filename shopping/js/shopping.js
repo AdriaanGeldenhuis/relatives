@@ -194,7 +194,8 @@ function renderBoard() {
     document.querySelector('[data-shop-action="delete-list"]').hidden = ShoppingApp.lists.length <= 1;
     shop('bulkModeBtn').disabled = !items.length;
 
-    const counts = { all: items.length, pending: pendingCount, bought: boughtCount };
+    const assignedToMe = item => Number(item.assigned_to) === initialShopping.userId;
+    const counts = { all: items.length, pending: pendingCount, bought: boughtCount, mine: items.filter(assignedToMe).length };
     const filter = ShoppingApp.filter;
     document.querySelectorAll('.shopping-filters button').forEach(button => {
         button.setAttribute('aria-pressed', String(filter === button.dataset.filter));
@@ -203,7 +204,7 @@ function renderBoard() {
 
     const terms = searchKey(shop('shopSearch').value.trim()).split(/\s+/).filter(Boolean);
     const matches = items.filter(item => {
-        if (filter !== 'all' && item.status !== filter) return false;
+        if (filter === 'mine' ? !assignedToMe(item) : filter !== 'all' && item.status !== filter) return false;
         if (!terms.length) return true;
         const category = ShoppingApp.categories[categoryFor(item)];
         const text = searchKey([item.name, item.qty, item.store, item.assigned_to_name, category.name].filter(Boolean).join(' '));
@@ -228,6 +229,7 @@ function renderBoard() {
     if (!matches.length) {
         if (!items.length) emptyMessage = 'This list is empty. Add something to get started.';
         else if (terms.length) emptyMessage = 'No items match your search.';
+        else if (filter === 'mine') emptyMessage = 'No items are assigned to you on this list.';
         else if (filter === 'bought') emptyMessage = 'Nothing bought yet.';
         else emptyMessage = 'Everything on this list has been bought.';
     }
@@ -449,7 +451,7 @@ async function addShoppingItems(items, dialog = null) {
     if (!saved) return false;
     if (dialog) closeModal(dialog.id);
     showToast(isBatch ? `Added ${items.length} items` : `Added “${items[0].name}”`);
-    if (ShoppingApp.currentListId === listId && ShoppingApp.filter === 'bought') setFilter('pending');
+    if (ShoppingApp.currentListId === listId && ['bought', 'mine'].includes(ShoppingApp.filter)) setFilter('pending');
     return true;
 }
 

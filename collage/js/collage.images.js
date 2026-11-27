@@ -19,58 +19,57 @@ const CollageImages = (() => {
         fileInput.type = 'file';
         fileInput.multiple = true;
         fileInput.accept = 'image/*';
-        fileInput.style.cssText = 'position:absolute;top:-9999px;left:-9999px;opacity:0;';
+        fileInput.hidden = true;
         document.body.appendChild(fileInput);
         fileInput.addEventListener('change', handleFileSelect);
     }
 
-    function handleFileSelect(e) {
+    async function handleFileSelect(e) {
         const files = Array.from(e.target.files);
-        files.forEach((file, index) => {
-            uploadPhoto(file, index);
-        });
         fileInput.value = '';
-    }
-
-    async function uploadPhoto(file, index) {
-        const formData = new FormData();
-        formData.append('photo', file);
-
+        if (!files.length) return;
+        CollageState.set('loading', true);
+        const status = document.getElementById('collageStatus');
+        status.textContent = 'Opening photos…';
         try {
-            const response = await fetch('/notes/api/upload-photo.php', {
-                method: 'POST',
-                body: formData
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                addImageToCanvas(data.url, index);
-            } else {
-                console.error('Upload failed:', data.error);
-                alert('Failed to upload photo: ' + (data.error || 'Unknown error'));
-            }
-        } catch (error) {
-            console.error('Upload error:', error);
-            alert('Failed to upload photo. Please try again.');
+            const results = await Promise.allSettled(files.map(async file => {
+                const url = URL.createObjectURL(file);
+                const image = new Image();
+                image.src = url;
+                try {
+                    await image.decode();
+                    return { url, name: file.name, aspect: image.naturalHeight / image.naturalWidth };
+                } catch (error) {
+                    URL.revokeObjectURL(url);
+                    throw error;
+                }
+            }));
+            const loaded = results.filter(result => result.status === 'fulfilled');
+            loaded.forEach(({ value }) => addImageToCanvas(value));
+            if (loaded.length) CollageLayouts.applyLayout(CollageState.get('layout'));
+            status.textContent = loaded.length === files.length ? '' : 'Some photos could not be opened. Try JPG or PNG copies.';
+        } finally {
+            CollageState.set('loading', false);
         }
     }
 
-    function addImageToCanvas(src, index) {
+    function addImageToCanvas({ url: src, name, aspect }) {
         const canvasRect = CollageState.getCanvasRect();
         const existingCount = CollageState.getImages().length;
-        const offsetIndex = existingCount + index;
-
-        const x = SPACING + (offsetIndex % 4) * (DEFAULT_SIZE + SPACING);
-        const y = SPACING + Math.floor(offsetIndex / 4) * (DEFAULT_SIZE + SPACING);
+        const size = Math.max(1, Math.min(DEFAULT_SIZE, canvasRect.width - SPACING * 2));
+        const columns = Math.max(1, Math.floor((canvasRect.width - SPACING) / (size + SPACING)));
+        const x = SPACING + (existingCount % columns) * (size + SPACING);
+        const y = SPACING + Math.floor(existingCount / columns) * (size + SPACING);
 
         const imageData = {
             id: generateId(),
-            src: src,
-            x: Math.min(x, canvasRect.width - DEFAULT_SIZE - SPACING),
-            y: Math.min(y, canvasRect.height - DEFAULT_SIZE - SPACING),
-            width: DEFAULT_SIZE,
-            height: DEFAULT_SIZE,
+            src,
+            name,
+            aspect,
+            x: Math.max(0, Math.min(x, canvasRect.width - size - SPACING)),
+            y: Math.max(0, Math.min(y, canvasRect.height - size - SPACING)),
+            width: size,
+            height: size,
             rotation: 0
         };
 
@@ -79,13 +78,17 @@ const CollageImages = (() => {
     }
 
     function renderImage(imageData) {
-        const item = document.createElement('div');
+        const item = document.createElement('button');
+        item.type = 'button';
         item.className = 'collage-item';
+        item.setAttribute('aria-label', imageData.name);
+        item.setAttribute('aria-pressed', 'false');
         item.dataset.id = imageData.id;
         applyTransform(item, imageData);
 
         const img = document.createElement('img');
         img.src = imageData.src;
+        img.alt = '';
         img.draggable = false;
 
         item.appendChild(img);
@@ -110,12 +113,14 @@ const CollageImages = (() => {
     function selectImage(id) {
         document.querySelectorAll('.collage-item').forEach(item => {
             item.classList.remove('selected');
+            item.setAttribute('aria-pressed', 'false');
             removeHandles(item);
         });
 
         const item = canvas.querySelector(`[data-id="${id}"]`);
         if (item) {
             item.classList.add('selected');
+            item.setAttribute('aria-pressed', 'true');
             addHandles(item, id);
             CollageState.selectImage(id);
         }
@@ -150,12 +155,13 @@ const CollageImages = (() => {
     function removeImageElement(id) {
         const item = canvas.querySelector(`[data-id="${id}"]`);
         if (item) {
+            URL.revokeObjectURL(item.querySelector('img').src);
             item.remove();
         }
     }
 
     function clearAllImages() {
-        canvas.querySelectorAll('.collage-item').forEach(item => item.remove());
+        canvas.querySelectorAll('.collage-item').forEach(item => removeImageElement(item.dataset.id));
     }
 
     function openFilePicker() {

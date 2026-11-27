@@ -129,7 +129,7 @@ class HT_Auth {
 
         // Check if user is a trip member
         $member = HT_DB::fetchOne(
-            "SELECT id FROM ht_trip_members WHERE trip_id = ? AND user_id = ? AND status = 'joined'",
+            "SELECT id FROM ht_trip_members WHERE trip_id = ? AND user_id = ? AND status IN ('accepted', 'joined')",
             [$tripId, $userId]
         );
 
@@ -160,7 +160,7 @@ class HT_Auth {
         // Check if user is an editor member
         $member = HT_DB::fetchOne(
             "SELECT id FROM ht_trip_members
-             WHERE trip_id = ? AND user_id = ? AND status = 'joined' AND role IN ('owner', 'editor')",
+             WHERE trip_id = ? AND user_id = ? AND status IN ('accepted', 'joined') AND role IN ('owner', 'editor')",
             [$tripId, $userId]
         );
 

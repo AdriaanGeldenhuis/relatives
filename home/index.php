@@ -12,6 +12,7 @@ if (empty($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../core/bootstrap.php';
 require_once __DIR__ . '/../weather/location.php';
+require_once __DIR__ . '/../shared/components/welcome-sky.php';
 
 try {
     $auth = new Auth($db);
@@ -138,6 +139,7 @@ $upcomingEvents = [];
 try {
     $stmt = $db->prepare("
         SELECT
+            id,
             title,
             starts_at,
             location,
@@ -175,6 +177,7 @@ try {
 // Initial greeting and clock use the server timezone until the browser takes over.
 $now = new DateTimeImmutable();
 $hour = (int)$now->format('G');
+$light = $hour >= 6 && $hour < 18 ? 'day' : 'night';
 if ($hour < 12) {
     $greeting = 'Good morning';
     $greetingIcon = '🌅';
@@ -257,15 +260,16 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
         </section>
 
-        <section class="hero family-hero sky-hero" data-time="<?= $greetingColor ?>" data-light="<?= $hour >= 6 && $hour < 18 ? 'day' : 'night' ?>">
-            <?php renderWeatherSky(); ?>
+        <section class="hero family-hero sky-hero welcome-hero" aria-labelledby="homeWelcomeTitle" data-welcome-sky
+                 data-time="<?= $greetingColor ?>" data-light="<?= $light ?>" data-sky-preview="live">
+            <?php renderWelcomeLandscape($light); ?>
             <div class="sky-layout">
                 <div class="hero-greeting family-hero-content">
                     <p class="hero-kicker">
                         <span id="heroPeriodIcon" aria-hidden="true"><?= $greetingIcon ?></span>
                         <span id="heroDate"><?= $now->format('l, j F Y') ?></span>
                     </p>
-                    <h1 class="family-hero-title">
+                    <h1 class="family-hero-title" id="homeWelcomeTitle">
                         <span id="heroGreeting"><?= $greeting ?></span>, <span class="hero-name"><?php echo htmlspecialchars($firstName); ?></span>
                     </h1>
                     <p class="family-hero-summary">
@@ -289,7 +293,10 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <?php endif; ?>
                 </div>
 
-                <?php renderWeatherHeroPanel(true); ?>
+                <div class="welcome-weather">
+                    <?php renderWeatherHeroPanel('home'); ?>
+                    <?php renderWelcomeSkyControls(); ?>
+                </div>
             </div>
         </section>
 
@@ -345,7 +352,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                     <li class="event-row <?= $tone ?>">
                         <time class="event-when" datetime="<?= $startsAt->format($event['all_day'] ? 'Y-m-d' : DATE_ATOM) ?>"<?= $event['all_day'] ? '' : ' data-event-start' ?>><?= $when ?></time>
                         <div class="event-body">
-                            <span class="event-name"><?php echo htmlspecialchars($event['title']); ?></span>
+                            <a class="event-name" href="/calendar/?event=<?= (int)$event['id'] ?>"><?= htmlspecialchars($event['title']) ?></a>
                             <?php if ($event['location']): ?>
                             <span class="event-where"><span aria-hidden="true">📍</span> <?php echo htmlspecialchars($event['location']); ?></span>
                             <?php endif; ?>
@@ -357,7 +364,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <div class="panel-empty">
                     <span aria-hidden="true">🌴</span>
                     <p>Nothing scheduled — enjoy the calm.</p>
-                    <a href="/calendar/" class="btn btn-primary">Plan something</a>
+                    <a href="/schedule/add.php" class="btn btn-primary">Add an event</a>
                 </div>
                 <?php endif; ?>
             </section>
@@ -460,7 +467,9 @@ require_once __DIR__ . '/../shared/components/header.php';
     </div>
 </main>
 
-<script type="application/json" id="homeWeatherLocation"><?= json_encode($userLocation, JSON_THROW_ON_ERROR) ?></script>
+<script type="application/json" id="homeWeatherLocation"><?= json_encode([
+    'saved' => $userLocation, 'default' => WEATHER_DEFAULT_PLACE,
+], JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?></script>
 
 <script><?php readfile(__DIR__ . '/js/home.js'); ?></script>
 <?php require_once __DIR__ . '/../shared/components/footer.php'; ?>

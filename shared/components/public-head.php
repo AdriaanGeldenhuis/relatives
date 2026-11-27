@@ -15,4 +15,9 @@
     </script>
     <?php endif; ?>
     <style><?php readfile(__DIR__ . '/../css/site-navigation.css'); ?></style>
+    <?php if (!empty($publicWelcomeSky)): ?>
+    <style><?php readfile(__DIR__ . '/../css/weather-hero.css'); ?></style>
+    <script defer src="/shared/js/weather-hero.js?v=<?= filemtime(__DIR__ . '/../js/weather-hero.js') ?>"></script>
+    <?php renderWelcomeSkyAssets(); ?>
+    <?php endif; ?>
 </head>

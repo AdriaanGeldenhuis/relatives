@@ -28,7 +28,7 @@ try {
 
     // Get all polls with creator info
     $polls = HT_DB::fetchAll(
-        "SELECT v.*, u.name as creator_name
+        "SELECT v.*, u.full_name as creator_name
          FROM ht_trip_votes v
          JOIN users u ON v.created_by_user_id = u.id
          WHERE v.trip_id = ?
@@ -43,7 +43,7 @@ try {
 
         // Get all responses for this poll
         $responses = HT_DB::fetchAll(
-            "SELECT vr.*, u.name as user_name
+            "SELECT vr.*, u.full_name as user_name
              FROM ht_trip_vote_responses vr
              JOIN users u ON vr.user_id = u.id
              WHERE vr.vote_id = ?",

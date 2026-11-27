@@ -7,7 +7,10 @@ require_once __DIR__ . '/planner.php';
 header('Cache-Control: private, no-store');
 
 $day = scheduleDate($_GET['date'] ?? null);
-$viewMode = ($_GET['view'] ?? null) === 'week' ? 'week' : 'day';
+$fromCalendar = ($_GET['from'] ?? null) === 'calendar';
+$viewMode = $_GET['view'] ?? null;
+$allowedViews = $fromCalendar ? ['month', 'week', 'day'] : ['week', 'day'];
+$viewMode = in_array($viewMode, $allowedViews, true) ? $viewMode : ($fromCalendar ? 'month' : 'day');
 $user = null;
 if (!empty($_SESSION['user_id'])) {
     require_once __DIR__ . '/../core/bootstrap.php';
@@ -15,7 +18,7 @@ if (!empty($_SESSION['user_id'])) {
 }
 if (!$user) {
     unset($_SESSION['user_id']);
-    $returnTo = $day ? scheduleAddUrl($day->format('Y-m-d'), $viewMode) : '/schedule/add.php';
+    $returnTo = $day || $fromCalendar ? scheduleAddUrl($day?->format('Y-m-d') ?? '', $viewMode, $fromCalendar) : '/schedule/add.php';
     header('Location: /login.php?redirect=' . rawurlencode($returnTo), true, 303);
     exit;
 }
@@ -30,8 +33,9 @@ $now = new DateTimeImmutable();
 $selectedDate = $day ? $day->format('Y-m-d') : $now->format('Y-m-d');
 $start = $selectedDate === $now->format('Y-m-d') ? $now : new DateTimeImmutable($selectedDate . ' 09:00');
 $end = $start->modify('+1 hour');
-$eventFormAction = scheduleAddUrl($selectedDate, $viewMode);
-$eventFormBack = '/schedule/?' . http_build_query(['date' => $selectedDate, 'view' => $viewMode]);
+$eventFormAction = scheduleAddUrl($selectedDate, $viewMode, $fromCalendar);
+$plannerUrl = $fromCalendar ? '/calendar/' : '/schedule/';
+$eventFormBack = $plannerUrl . '?' . http_build_query(['date' => $selectedDate, 'view' => $viewMode]);
 $eventFormValues = [
     'date' => $selectedDate,
     'end_date' => $end->format('Y-m-d'),
@@ -58,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             $saved = scheduleSaveEvent($db, $familyId, $userId);
-            header('Location: /schedule/?' . http_build_query([
+            header('Location: ' . $plannerUrl . '?' . http_build_query([
                 'date' => substr($saved['starts_at'], 0, 10), 'view' => $viewMode,
             ]), true, 303);
             exit;
@@ -82,7 +86,7 @@ require __DIR__ . '/../shared/components/header.php';
     <section class="planner-event-page" aria-labelledby="eventEditorHeading">
         <header class="modal-header">
             <h1 id="eventEditorHeading">Add event</h1>
-            <a href="<?= scheduleEscape($eventFormBack) ?>" class="btn btn-secondary">Back to Schedule</a>
+            <a href="<?= scheduleEscape($eventFormBack) ?>" class="btn btn-secondary">Back to <?= $fromCalendar ? 'Calendar' : 'Schedule' ?></a>
         </header>
         <?php require __DIR__ . '/../shared/components/event-form.php'; ?>
     </section>

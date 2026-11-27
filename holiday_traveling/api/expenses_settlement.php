@@ -29,7 +29,7 @@ try {
     require_once __DIR__ . '/../lib/expense-totals.php';
     $trip = HT_DB::fetchOne('SELECT budget_currency, user_id FROM ht_trips WHERE id = ?', [$tripId]);
     $members = HT_DB::fetchAll("SELECT DISTINCT u.id AS user_id, u.full_name AS name
-        FROM users u LEFT JOIN ht_trip_members tm ON tm.user_id = u.id AND tm.trip_id = ? AND tm.status = 'joined'
+        FROM users u LEFT JOIN ht_trip_members tm ON tm.user_id = u.id AND tm.trip_id = ? AND tm.status IN ('accepted', 'joined')
         WHERE u.id = ? OR tm.user_id IS NOT NULL ORDER BY u.id", [$tripId, $trip['user_id']]);
     $expenses = HT_DB::fetchAll("SELECT e.*, u.full_name AS paid_by_name FROM ht_trip_expenses e
         LEFT JOIN users u ON u.id = e.paid_by WHERE e.trip_id = ? ORDER BY e.id", [$tripId]);

@@ -20,6 +20,12 @@ if (!isset($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../core/bootstrap.php';
 
+if (!class_exists('Yoco')) {
+    http_response_code(503);
+    echo json_encode(['success' => false, 'error' => 'Choose a subscription in the Relatives app.']);
+    exit;
+}
+
 try {
     $auth = new Auth($db);
     $user = $auth->getCurrentUser();

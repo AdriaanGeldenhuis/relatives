@@ -39,6 +39,7 @@
             const next = template.content.firstElementChild;
             if (navigation !== request) return;
             if (next?.id !== 'notificationsContent') throw new Error('Invalid inbox response');
+            if (quiet && inbox().innerHTML === next.innerHTML && inbox().dataset.unread === next.dataset.unread) return;
             const active = document.activeElement;
             const action = active?.dataset.notificationAction;
             const card = active?.closest('[data-notification-id]');
@@ -46,8 +47,11 @@
             if (push) history.pushState(null, '', target);
             window.HeaderMenu?.updateNotificationBadge(next.dataset.unread);
 
-            if (focusFilter) {
-                next.querySelector('.notifications-filters [aria-current="page"]')?.focus({ preventScroll: true });
+            if (focusFilter || active?.dataset.notificationFilter) {
+                const filter = active?.dataset.notificationFilter;
+                const filterLink = !focusFilter && [...next.querySelectorAll('.notifications-filters [data-notification-filter]')]
+                    .find(link => link.dataset.notificationFilter === filter);
+                (filterLink || next.querySelector('.notifications-filters [aria-current="page"]'))?.focus({ preventScroll: true });
             } else if (action && !active.isConnected) {
                 const replacement = card
                     ? next.querySelector(`[data-notification-id="${card.dataset.notificationId}"]`)
@@ -73,8 +77,8 @@
         return navigation ? loadInbox(navigation.target, navigation) : loadInbox();
     }
 
-    async function post(url, action, values = {}) {
-        const response = await fetch(url, { method: 'POST', headers: { 'X-CSRF-Token': preferences.dataset.csrf }, body: new URLSearchParams({ action, ...values }) });
+    async function post(url, action, values = {}, keepalive = false) {
+        const response = await fetch(url, { method: 'POST', keepalive, headers: { 'X-CSRF-Token': preferences.dataset.csrf }, body: new URLSearchParams({ action, ...values }) });
         const result = await response.json();
         if (!response.ok || !result.success) throw new Error(result.error || 'Request failed');
     }
@@ -231,21 +235,14 @@
             case 'close': control.closest('dialog').close(); break;
             case 'open':
                 if (!card.hasAttribute('data-unread')) break;
-                event.preventDefault();
-                try {
-                    await post('/notifications/', 'mark_read', { notification_id: card.dataset.notificationId });
-                } catch {
-                    // The destination is still available when the read status cannot be saved.
-                }
-                location.assign(control.href);
+                post('/notifications/', 'mark_read', { notification_id: card.dataset.notificationId }, true).catch(() => {});
                 break;
             case 'test':
             case 'test_weather': sendTest(control, action); break;
             case 'mark_all_read':
-                if (confirm('Mark all notifications as read?')) updateInbox(control, action);
-                break;
             case 'delete_notification':
-                if (confirm('Delete this notification?')) updateInbox(control, action, card);
+                if (action === 'delete_notification' && !confirm('Delete this notification?')) break;
+                updateInbox(control, action, card);
                 break;
             case 'mark_read':
             case 'clear_all': updateInbox(control, action, card); break;

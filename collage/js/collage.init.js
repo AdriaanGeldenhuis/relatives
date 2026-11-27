@@ -1,131 +1,60 @@
-/**
- * Collage Init Module
- * Main initialization and event binding
- */
-const CollageInit = (() => {
-    let canvas = null;
-    let isInitialized = false;
+'use strict';
 
-    function addTouchHandler(element, handler) {
-        let touchHandled = false;
+(() => {
+    const canvas = document.getElementById('collageCanvas');
+    const emptyMessage = document.getElementById('collageEmpty');
+    const chooseImages = document.getElementById('btnChooseImages');
+    const layout = document.getElementById('btnChooseLayout');
+    const download = document.getElementById('btnDone');
+    const remove = document.getElementById('btnDelete');
 
-        element.addEventListener('touchstart', () => {
-            element.style.opacity = '0.7';
-        }, { passive: true });
+    CollageState.setCanvas(canvas);
+    CollageImages.init(canvas);
+    CollageDrag.init(canvas);
+    CollageResize.init(canvas);
+    CollageRotate.init(canvas);
+    CollageLayouts.init(canvas);
+    CollageBackground.init(canvas);
+    CollageCleanup.init(canvas);
 
-        element.addEventListener('touchend', (e) => {
-            element.style.opacity = '';
-            e.preventDefault();
-            touchHandled = true;
-            handler(e);
-            setTimeout(() => { touchHandled = false; }, 300);
-        }, { passive: false });
+    chooseImages.addEventListener('click', CollageImages.openFilePicker);
+    layout.addEventListener('click', () => CollageLayouts.openLayoutMenu(layout));
+    download.addEventListener('click', CollageCleanup.done);
+    remove.addEventListener('click', CollageCleanup.deleteSelected);
 
-        element.addEventListener('touchcancel', () => {
-            element.style.opacity = '';
-        }, { passive: true });
+    function updateControls() {
+        const empty = CollageState.getImages().length === 0;
+        const loading = Boolean(CollageState.get('loading'));
+        emptyMessage.hidden = !empty;
+        chooseImages.disabled = loading;
+        download.disabled = empty || loading || Boolean(CollageState.get('exporting'));
+        remove.disabled = empty || loading;
+        remove.textContent = CollageState.get('selectedImage') ? 'Remove photo' : 'Clear collage';
+    }
 
-        element.addEventListener('click', (e) => {
-            if (!touchHandled) {
-                handler(e);
-            }
+    CollageState.subscribe(updateControls);
+    updateControls();
+
+    canvas.addEventListener('click', event => {
+        if (event.target !== canvas && event.target !== emptyMessage) return;
+        CollageState.clearSelection();
+        canvas.querySelectorAll('.collage-item.selected').forEach(item => {
+            item.classList.remove('selected');
+            item.setAttribute('aria-pressed', 'false');
+            item.querySelectorAll('.resize-handle, .rotate-handle').forEach(handle => handle.remove());
         });
-    }
+    });
 
-    function bindToolbarEvents() {
-        const btnChooseImages = document.getElementById('btnChooseImages');
-        const btnChooseLayout = document.getElementById('btnChooseLayout');
-        const btnChooseBackground = document.getElementById('btnChooseBackground');
-        const btnDone = document.getElementById('btnDone');
-        const btnDelete = document.getElementById('btnDelete');
-
-        if (btnChooseImages) {
-            addTouchHandler(btnChooseImages, () => {
-                CollageImages.openFilePicker();
-            });
-        }
-
-        if (btnChooseLayout) {
-            addTouchHandler(btnChooseLayout, (e) => {
-                CollageLayouts.openLayoutMenu(e.currentTarget || btnChooseLayout);
-            });
-        }
-
-        if (btnChooseBackground) {
-            addTouchHandler(btnChooseBackground, () => {
-                CollageBackground.openColorPicker();
-            });
-        }
-
-        if (btnDone) {
-            addTouchHandler(btnDone, () => {
-                CollageCleanup.done();
-            });
-        }
-
-        if (btnDelete) {
-            addTouchHandler(btnDelete, () => {
-                CollageCleanup.deleteSelected();
-            });
-        }
-    }
-
-    function bindCanvasEvents() {
-        canvas.addEventListener('click', (e) => {
-            if (e.target === canvas && !CollageState.isLocked()) {
-                CollageState.clearSelection();
-                document.querySelectorAll('.collage-item').forEach(item => {
-                    item.classList.remove('selected');
-                    item.querySelectorAll('.resize-handle, .rotate-handle').forEach(h => h.remove());
-                });
-            }
-        });
-    }
-
-    function handleResize() {
+    window.addEventListener('resize', () => {
+        const oldWidth = CollageState.getCanvasRect().width;
         CollageState.updateCanvasRect();
-    }
-
-    function init() {
-        if (isInitialized) return;
-
-        canvas = document.getElementById('collageCanvas');
-        if (!canvas) {
-            console.error('Collage canvas not found');
-            return;
+        const width = CollageState.getCanvasRect().width;
+        if (!oldWidth || !width || width === oldWidth) return;
+        const scale = width / oldWidth;
+        for (const image of CollageState.getImages()) {
+            CollageState.updateImage(image.id, {
+                x: image.x * scale, y: image.y * scale, width: image.width * scale, height: image.height * scale
+            });
         }
-
-        CollageState.setCanvas(canvas);
-
-        CollageImages.init(canvas);
-        CollageDrag.init(canvas);
-        CollageResize.init(canvas);
-        CollageRotate.init(canvas);
-        CollageLayouts.init(canvas);
-        CollageBackground.init(canvas);
-        CollageCleanup.init(canvas);
-
-        bindToolbarEvents();
-        bindCanvasEvents();
-
-        window.addEventListener('resize', handleResize);
-
-        isInitialized = true;
-    }
-
-    function destroy() {
-        if (!isInitialized) return;
-
-        CollageDrag.destroy();
-        CollageResize.destroy();
-        CollageRotate.destroy();
-        CollageLayouts.destroy();
-        CollageBackground.destroy();
-
-        window.removeEventListener('resize', handleResize);
-
-        isInitialized = false;
-    }
-
-    return { init, destroy };
+    });
 })();

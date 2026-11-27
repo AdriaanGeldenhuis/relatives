@@ -1,139 +1,87 @@
 <?php
-/**
- * MESSAGE REACTION API
- * POST: {message_id, emoji}
- * Toggles reaction (add if not exists, remove if exists)
- */
+declare(strict_types=1);
 
 require_once __DIR__ . '/../../core/session_boot.php';
-header('Content-Type: application/json');
+require_once __DIR__ . '/../../core/CSRF.php';
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: private, no-store');
 
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Not authenticated']);
+function reactionResponse(array $data, int $status = 200): never
+{
+    http_response_code($status);
+    echo json_encode($data, JSON_INVALID_UTF8_SUBSTITUTE);
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Allow: POST');
+    reactionResponse(['success' => false, 'message' => 'Use POST to update a reaction.'], 405);
+}
+if (empty($_SESSION['user_id'])) {
+    reactionResponse(['success' => false, 'message' => 'Sign in again to react.'], 401);
+}
+if (!CSRF::validate($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
+    reactionResponse(['success' => false, 'message' => 'Reload Messages and try again.'], 403);
+}
+
 require_once __DIR__ . '/../../core/bootstrap.php';
+require_once __DIR__ . '/classes/MessageChanges.php';
 
 try {
-    $userId = $_SESSION['user_id'];
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $messageId = (int)($input['message_id'] ?? 0);
-    $emoji = trim($input['emoji'] ?? '');
-    
-    if (!$messageId || !$emoji) {
-        throw new Exception('Missing message_id or emoji');
+    $user = (new Auth($db))->getCurrentUser();
+    if (!$user) reactionResponse(['success' => false, 'message' => 'Sign in again to react.'], 401);
+    session_write_close();
+
+    $input = json_decode(file_get_contents('php://input', false, null, 0, 1024), true);
+    $messageId = filter_var($input['message_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    $emoji = is_string($input['emoji'] ?? null) ? trim($input['emoji']) : '';
+    if (!$messageId || $emoji === '' || mb_strlen($emoji) > 10) {
+        reactionResponse(['success' => false, 'message' => 'Choose a message and a reaction.'], 400);
     }
-    
-    // Validate emoji (basic check)
-    if (mb_strlen($emoji) > 10) {
-        throw new Exception('Invalid emoji');
+
+    $userId = (int)$user['id'];
+    $familyId = (int)$user['family_id'];
+    if ((new SubscriptionManager($db))->isFamilyLocked($familyId)) {
+        reactionResponse(['success' => false, 'error' => 'subscription_locked', 'message' => 'Subscribe to react to messages.'], 402);
     }
-    
-    // Get user's family
-    $stmt = $db->prepare("SELECT family_id FROM users WHERE id = ?");
-    $stmt->execute([$userId]);
-    $user = $stmt->fetch();
-    
-    if (!$user) {
-        throw new Exception('User not found');
-    }
-    
-    $familyId = $user['family_id'];
-    
-    // ========== SUBSCRIPTION LOCK CHECK ==========
-    require_once __DIR__ . '/../../core/SubscriptionManager.php';
-    
-    $subscriptionManager = new SubscriptionManager($db);
-    
-    if ($subscriptionManager->isFamilyLocked($familyId)) {
-        http_response_code(402);
-        echo json_encode([
-            'success' => false,
-            'error' => 'subscription_locked',
-            'message' => 'Your trial has ended. Please subscribe to continue using this feature.'
-        ]);
-        exit;
-    }
-    // ========== END SUBSCRIPTION LOCK ==========
-    
-    // Verify message belongs to family
-    $stmt = $db->prepare("
-        SELECT id FROM messages 
-        WHERE id = ? AND family_id = ? AND deleted_at IS NULL
-    ");
+
+    $recordChange = MessageChanges::installed($db);
+    $db->beginTransaction();
+    $stmt = $db->prepare('SELECT user_id FROM messages WHERE id = ? AND family_id = ? AND deleted_at IS NULL FOR UPDATE');
     $stmt->execute([$messageId, $familyId]);
-    
-    if (!$stmt->fetchColumn()) {
-        throw new Exception('Message not found');
+    $ownerId = (int)$stmt->fetchColumn();
+    if (!$ownerId) {
+        $db->rollBack();
+        reactionResponse(['success' => false, 'message' => 'This message is no longer available.'], 404);
     }
-    
-    // Check if this exact reaction already exists (for toggle off)
-    $stmt = $db->prepare("
-        SELECT id FROM message_reactions
-        WHERE message_id = ? AND user_id = ? AND emoji = ?
-    ");
+
+    $stmt = $db->prepare('SELECT emoji FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?');
     $stmt->execute([$messageId, $userId, $emoji]);
-    $existingReaction = $stmt->fetchColumn();
-
-    if ($existingReaction) {
-        // Remove reaction (toggle off)
-        $stmt = $db->prepare("
-            DELETE FROM message_reactions
-            WHERE id = ?
-        ");
-        $stmt->execute([$existingReaction]);
-        $action = 'removed';
-    } else {
-        // Limit: one emoji per person per message - remove any previous reaction first
-        $stmt = $db->prepare("
-            DELETE FROM message_reactions
-            WHERE message_id = ? AND user_id = ?
-        ");
-        $stmt->execute([$messageId, $userId]);
-
-        // Add the new reaction
-        $stmt = $db->prepare("
-            INSERT INTO message_reactions (message_id, user_id, emoji, created_at)
-            VALUES (?, ?, ?, NOW())
-        ");
-        $stmt->execute([$messageId, $userId, $emoji]);
-        $action = 'added';
-
-        // Send notification to message owner
-        $stmt = $db->prepare("SELECT user_id FROM messages WHERE id = ?");
-        $stmt->execute([$messageId]);
-        $messageOwnerId = (int)$stmt->fetchColumn();
-
-        if ($messageOwnerId && $messageOwnerId !== $userId) {
-            require_once __DIR__ . '/../../core/NotificationManager.php';
-            require_once __DIR__ . '/../../core/NotificationTriggers.php';
-            $triggers = new NotificationTriggers($db);
-            $triggers->onMessageReaction($messageId, $userId, $messageOwnerId, $emoji);
-        }
+    $sameReaction = $stmt->fetchColumn() !== false;
+    $db->prepare('DELETE FROM message_reactions WHERE message_id = ? AND user_id = ?')->execute([$messageId, $userId]);
+    if (!$sameReaction) {
+        $db->prepare('INSERT INTO message_reactions (message_id, user_id, emoji, created_at) VALUES (?, ?, ?, NOW())')
+            ->execute([$messageId, $userId, $emoji]);
     }
-    
-    // Fetch updated reactions for this message
-    $stmt = $db->prepare("
-        SELECT user_id, emoji
-        FROM message_reactions
-        WHERE message_id = ?
-        ORDER BY created_at ASC
-    ");
+    if ($recordChange) MessageChanges::recordReaction($db, $familyId, $messageId);
+
+    $stmt = $db->prepare('SELECT user_id, emoji FROM message_reactions WHERE message_id = ? ORDER BY created_at, user_id');
     $stmt->execute([$messageId]);
     $reactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $db->commit();
 
-    echo json_encode([
-        'success' => true,
-        'action' => $action,
-        'reactions' => $reactions
-    ]);
-    
-} catch (Exception $e) {
-    http_response_code(400);
-    echo json_encode([
-        'success' => false,
-        'message' => $e->getMessage()
-    ]);
+    if (!$sameReaction && $ownerId !== $userId) {
+        try {
+            require_once __DIR__ . '/../../core/NotificationManager.php';
+            require_once __DIR__ . '/../../core/NotificationTriggers.php';
+            (new NotificationTriggers($db))->onMessageReaction($messageId, $userId, $ownerId, $emoji);
+        } catch (Throwable $error) {
+            error_log('Reaction notification failed: ' . $error->getMessage());
+        }
+    }
+    reactionResponse(['success' => true, 'action' => $sameReaction ? 'removed' : 'added', 'reactions' => $reactions]);
+} catch (Throwable $error) {
+    if ($db->inTransaction()) $db->rollBack();
+    error_log('Reaction update failed: ' . $error->getMessage());
+    reactionResponse(['success' => false, 'message' => 'Could not update the reaction.'], 500);
 }

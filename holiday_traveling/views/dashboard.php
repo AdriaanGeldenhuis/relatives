@@ -43,7 +43,7 @@ $sections = [
                     <?php foreach ($section['trips'] as $trip): ?>
                         <?php
                         $id = (int)$trip['id'];
-                        $active = $trip['status'] === 'active';
+                        $past = in_array($trip['status'], ['completed', 'cancelled'], true);
                         $travelers = (int)$trip['travelers_count'];
                         $tripTitle = trim($trip['title']);
                         ?>
@@ -67,8 +67,11 @@ $sections = [
                             </div>
                             <div class="ht-board-card-actions">
                                 <a href="/holiday_traveling/trip_view.php?id=<?= $id ?>" class="ht-btn ht-btn-secondary">View trip</a>
-                                <?php if ($active): ?>
+                                <?php if (!$past): ?>
+                                    <a href="/holiday_traveling/packing_view.php?id=<?= $id ?>" class="ht-btn ht-btn-outline">Packing</a>
                                     <a href="/holiday_traveling/wallet_view.php?id=<?= $id ?>" class="ht-btn ht-btn-outline">Wallet</a>
+                                <?php endif; ?>
+                                <?php if ($trip['status'] !== 'cancelled'): ?>
                                     <a href="/holiday_traveling/expenses_view.php?id=<?= $id ?>" class="ht-btn ht-btn-outline">Expenses</a>
                                 <?php endif; ?>
                             </div>

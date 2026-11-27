@@ -92,6 +92,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <button type="button" class="family-button family-button-primary" data-create="text"><?= notesIcon('plus') ?> New note</button>
                 <button type="button" class="family-button" data-create="list"><?= notesIcon('list') ?> Checklist</button>
                 <button type="button" class="family-button" data-create="voice"><?= notesIcon('mic') ?> Record</button>
+                <a class="family-button" href="/collage/"><?= notesIcon('photo') ?> Make a collage</a>
             </div>
         </div>
         <?php renderFamilyAppArt('notes', true); ?>

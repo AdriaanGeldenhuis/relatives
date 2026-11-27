@@ -55,7 +55,7 @@
 
     async function request(action, parameters, signal) {
         const query = new URLSearchParams({ action, ...parameters });
-        const response = await fetch(`/weather/api/api.php?${query}`, { signal, cache: 'no-store' });
+        const response = await fetch(`/weather/api/api.php?${query}`, { cache: action === 'welcome' ? 'default' : 'no-store', signal });
         if (!response.ok) {
             const error = new Error('Weather request failed.');
             error.status = response.status;
@@ -76,7 +76,7 @@
         return 'unknown';
     }
 
-    function mount(hero, { formatTemperature = value => `${Math.round(value)}°C`, onTime } = {}) {
+    function mount(hero, { formatTemperature = value => `${Math.round(value)}°C`, onTime, initial = {} } = {}) {
         const panel = hero.querySelector('[data-weather-panel]');
         const field = name => panel.querySelector(`[data-sky-${name}]`);
         const fields = Object.fromEntries(['readout', 'place', 'source', 'clock', 'time', 'period', 'date', 'temp',
@@ -85,7 +85,7 @@
         const viewContents = panel.querySelectorAll('[data-sky-content]');
         const switcher = panel.querySelector('.sky-switch');
         const deviceClock = panel.hasAttribute('data-device-clock');
-        let data = {};
+        let data = initial;
         let selectedView = 'now';
 
         function showView(view) {
@@ -104,11 +104,13 @@
         function paint() {
             const { place, source, current, offset, message } = data;
             const now = Date.now();
-            const offsetSeconds = Number.isFinite(offset) ? offset : deviceClock ? -new Date(now).getTimezoneOffset() * 60 : null;
+            const deviceOffset = -new Date(now).getTimezoneOffset() * 60;
+            const offsetSeconds = Number.isFinite(offset) ? offset : deviceClock ? deviceOffset : null;
             const shifted = instant => new Date(instant + offsetSeconds * 1000);
             const local = offsetSeconds === null ? null : shifted(now);
             const hour = local?.getUTCHours();
-            const period = hour === undefined ? '' : hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
+            const periodFor = hours => hours < 12 ? 'morning' : hours < 18 ? 'afternoon' : 'evening';
+            const period = local ? periodFor(hour) : '';
             const time = local ? clockFormat.format(local) : '';
             const date = local ? dateFormat.format(local) : '';
             const sunrise = Number.isFinite(current?.sunrise) && current.sunrise > 0 ? current.sunrise * 1000 : null;
@@ -140,10 +142,13 @@
             else fields.time.removeAttribute('datetime');
             fields.clock.hidden = !time;
             fields.readout.hidden = !time && !deviceClock;
-            if (onTime && local) onTime({ period, date });
+            if (onTime) {
+                const greetingTime = deviceClock ? new Date(now + deviceOffset * 1000) : local;
+                if (greetingTime) onTime({ period: periodFor(greetingTime.getUTCHours()), date: dateFormat.format(greetingTime) });
+            }
 
             text(fields.place, place || 'On this device');
-            text(fields.source, source || '', true);
+            text(fields.source, [source, current?.stale ? 'Last available reading' : ''].filter(Boolean).join(' · '), true);
             const temp = Number.isFinite(current?.temperature) ? formatTemperature(current.temperature) : '';
             text(fields.temp, temp, true);
             text(fields.condition, current?.description || current?.condition || message
@@ -154,6 +159,7 @@
             const icon = sky === 'clear' ? (light === 'night' ? '🌙' : '☀️') : symbols[sky];
             text(fields.icon, icon || '', true);
 
+            if (!switcher) return;
             switcher.hidden = !hasSunTimes;
             if (!hasSunTimes) {
                 if (selectedView !== 'now') showView('now');

@@ -173,14 +173,14 @@ class HT_Validators {
     /**
      * Validate trip data (all-in-one)
      */
-    public static function tripData(array $data): array {
+    public static function tripData(array $data, bool $allowUntitled = false): array {
         $errors = [];
 
         // Required fields
-        if ($err = self::required($data['title'] ?? null, 'Title')) {
-            $errors['title'] = $err;
-        } elseif ($err = self::length($data['title'], 3, 255, 'Title')) {
-            $errors['title'] = $err;
+        $title = $data['title'] ?? '';
+        if ($title !== '' || !$allowUntitled) {
+            $error = self::required($title, 'Title') ?: self::length($title, 3, 255, 'Title');
+            if ($error) $errors['title'] = $error;
         }
 
         if ($err = self::required($data['destination'] ?? null, 'Destination')) {
@@ -221,15 +221,9 @@ class HT_Validators {
             }
         }
 
-        if (isset($data['budget_min']) && $data['budget_min'] !== '') {
-            if ($err = self::nonNegativeNumber($data['budget_min'], 'Minimum budget')) {
-                $errors['budget_min'] = $err;
-            }
-        }
-
-        if (isset($data['budget_max']) && $data['budget_max'] !== '') {
-            if ($err = self::nonNegativeNumber($data['budget_max'], 'Maximum budget')) {
-                $errors['budget_max'] = $err;
+        foreach (['budget_min' => 'Minimum budget', 'budget_comfort' => 'Comfortable budget', 'budget_max' => 'Maximum budget'] as $field => $label) {
+            if (isset($data[$field]) && $data[$field] !== '') {
+                if ($err = self::nonNegativeNumber($data[$field], $label)) $errors[$field] = $err;
             }
         }
 
@@ -265,9 +259,9 @@ class HT_Validators {
             'travelers_count' => (int) ($input['travelers_count'] ?? 1),
             'travelers_json' => $input['travelers_json'] ?? null,
             'budget_currency' => strtoupper($input['budget_currency'] ?? 'ZAR'),
-            'budget_min' => $input['budget_min'] !== '' ? (float) $input['budget_min'] : null,
-            'budget_comfort' => $input['budget_comfort'] !== '' ? (float) $input['budget_comfort'] : null,
-            'budget_max' => $input['budget_max'] !== '' ? (float) $input['budget_max'] : null,
+            'budget_min' => ($input['budget_min'] ?? '') === '' ? null : $input['budget_min'],
+            'budget_comfort' => ($input['budget_comfort'] ?? '') === '' ? null : $input['budget_comfort'],
+            'budget_max' => ($input['budget_max'] ?? '') === '' ? null : $input['budget_max'],
             'preferences_json' => $input['preferences_json'] ?? null,
         ];
     }

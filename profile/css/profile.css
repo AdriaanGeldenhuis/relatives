@@ -37,6 +37,8 @@
 }
 
 .profile-avatar-large:hover { transform: scale(1.04); }
+.profile-avatar-large { text-decoration: none; }
+.profile-avatar-large img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 .profile-avatar-edit {
     position: absolute;
@@ -258,6 +260,8 @@ select.form-input option { background: var(--family-paper); }
 .upload-hint { font-size: 0.68rem; color: var(--family-muted); }
 
 .picture-preview { text-align: center; margin: 14px 0; }
+.picture-upload-area input { max-width: 100%; font: inherit; }
+.picture-submit { margin-top: 12px; }
 
 .preview-image {
     width: 140px;

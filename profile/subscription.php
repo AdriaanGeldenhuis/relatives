@@ -279,13 +279,9 @@ require_once __DIR__ . '/../shared/components/header.php';
 
         <div class="profile-header">
             <div class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
-                <?php if (!empty($user['profile_picture'])): ?>
-                    <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>" alt="Profile Picture">
-                <?php else: ?>
-                    <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
-                <?php endif; ?>
+                <?php renderProfileAvatar($user); ?>
             </div>
-            <div class="profile-name">Subscription & Billing</div>
+            <h1 class="profile-name">Subscription &amp; Billing</h1>
         </div>
 
         <!-- Current Plan -->

@@ -44,7 +44,7 @@ try {
     $trips = HT_DB::fetchAll(
         "SELECT t.*,
                 u.full_name as creator_name,
-                (SELECT COUNT(*) FROM ht_trip_members WHERE trip_id = t.id AND status = 'joined') as member_count,
+                (SELECT COUNT(*) FROM ht_trip_members WHERE trip_id = t.id AND status IN ('accepted', 'joined')) as member_count,
                 (SELECT version_number FROM ht_trip_plan_versions WHERE trip_id = t.id AND is_active = 1 LIMIT 1) as active_plan_version
          FROM ht_trips t
          LEFT JOIN users u ON t.user_id = u.id

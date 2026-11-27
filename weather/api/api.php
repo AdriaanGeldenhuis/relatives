@@ -5,7 +5,8 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: private, no-store');
 require_once __DIR__ . '/../../core/session_boot.php';
 
-if (empty($_SESSION['user_id'])) {
+$action = $_GET['action'] ?? '';
+if ($action !== 'welcome' && empty($_SESSION['user_id'])) {
     weatherResponse(['error' => 'Sign in to load weather.'], 401);
 }
 
@@ -17,15 +18,26 @@ try {
 }
 
 require_once __DIR__ . '/../service.php';
+require_once __DIR__ . '/../location.php';
 require_once __DIR__ . '/../../core/CSRF.php';
 
 try {
+    if ($action === 'welcome') {
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            header('Allow: GET');
+            weatherResponse(['error' => 'Method not allowed.'], 405);
+        }
+        // The public welcome page shares a single city and cannot query arbitrary places.
+        session_write_close();
+        $current = getCurrentWeather($db, WEATHER_DEFAULT_PLACE['lat'], WEATHER_DEFAULT_PLACE['lon']);
+        header('Cache-Control: private, max-age=300');
+        weatherResponse($current);
+    }
     $user = (new Session($db))->validate();
     if (!$user) {
         unset($_SESSION['user_id']);
         weatherResponse(['error' => 'Sign in to load weather.'], 401);
     }
-    $action = $_GET['action'] ?? '';
     if ($action === 'save-city') {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             weatherResponse(['error' => 'Method not allowed.'], 405);
@@ -54,8 +66,8 @@ try {
         throw new InvalidArgumentException('Invalid weather action.');
     }
 
-    $lat = weatherCoordinate($_GET['lat'] ?? -26.2041, 90);
-    $lon = weatherCoordinate($_GET['lon'] ?? 28.0473, 180);
+    $lat = weatherCoordinate($_GET['lat'] ?? WEATHER_DEFAULT_PLACE['lat'], 90);
+    $lon = weatherCoordinate($_GET['lon'] ?? WEATHER_DEFAULT_PLACE['lon'], 180);
     if ($action === 'current') {
         weatherResponse(getCurrentWeather($db, $lat, $lon));
     }

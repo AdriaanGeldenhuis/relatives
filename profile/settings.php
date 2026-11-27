@@ -16,6 +16,7 @@ if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/../core/CSRF.php';
 
 try {
     $auth = new Auth($db);
@@ -33,19 +34,25 @@ try {
 
 $error = '';
 $success = '';
+$csrfToken = CSRF::generate();
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $token = $_POST['csrf_token'] ?? null;
     try {
+        if (!is_string($token) || !CSRF::validate($token)) {
+            http_response_code(403);
+            throw new InvalidArgumentException('Reload Account Settings and try again.');
+        }
         $action = $_POST['action'] ?? '';
 
         if ($action === 'update_profile') {
-            $name = trim($_POST['name'] ?? '');
-            $email = trim($_POST['email'] ?? '');
+            $name = is_string($_POST['name'] ?? null) ? trim($_POST['name']) : '';
+            $email = is_string($_POST['email'] ?? null) ? strtolower(trim($_POST['email'])) : '';
 
-            if (empty($name) || strlen($name) < 2) {
-                $error = 'Name must be at least 2 characters.';
-            } elseif (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if (mb_strlen($name) < 2 || mb_strlen($name) > 120) {
+                $error = 'Enter a name between 2 and 120 characters.';
+            } elseif (strlen($email) > 190 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $error = 'Please enter a valid email address.';
             } else {
                 // Check if email is already taken by another user
@@ -54,14 +61,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($stmt->fetch()) {
                     $error = 'This email is already in use.';
                 } else {
-                    // Determine which name column to update
-                    $nameColumn = isset($user['full_name']) ? 'full_name' : 'name';
-
-                    $stmt = $db->prepare("UPDATE users SET {$nameColumn} = ?, email = ? WHERE id = ?");
+                    $stmt = $db->prepare('UPDATE users SET full_name = ?, email = ? WHERE id = ?');
                     $stmt->execute([$name, $email, $user['id']]);
 
                     $user['name'] = $name;
-                    $user['full_name'] = $name;
                     $user['email'] = $email;
                     $success = 'Profile updated successfully!';
                 }
@@ -73,35 +76,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newPassword = $_POST['new_password'] ?? '';
             $confirmPassword = $_POST['confirm_password'] ?? '';
 
-            if (empty($currentPassword)) {
+            if (!is_string($currentPassword) || $currentPassword === '') {
                 $error = 'Please enter your current password.';
-            } elseif (empty($newPassword) || strlen($newPassword) < 8) {
-                $error = 'New password must be at least 8 characters.';
+            } elseif (!is_string($newPassword) || strlen($newPassword) < 12) {
+                $error = 'New password must be at least 12 characters.';
             } elseif ($newPassword !== $confirmPassword) {
                 $error = 'New passwords do not match.';
             } else {
-                // Verify current password
-                $stmt = $db->prepare("SELECT password FROM users WHERE id = ?");
+                $stmt = $db->prepare('SELECT password_hash FROM users WHERE id = ?');
                 $stmt->execute([$user['id']]);
-                $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+                $currentHash = $stmt->fetchColumn();
 
-                if (!password_verify($currentPassword, $userData['password'])) {
+                if (!is_string($currentHash) || !password_verify($currentPassword, $currentHash)) {
                     $error = 'Current password is incorrect.';
                 } else {
-                    // Update password
-                    $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-                    $stmt = $db->prepare("UPDATE users SET password = ? WHERE id = ?");
-                    $stmt->execute([$hashedPassword, $user['id']]);
-                    $success = 'Password changed successfully!';
+                    $hashedPassword = password_hash($newPassword, PASSWORD_BCRYPT, ['cost' => 12]);
+                    $stmt = $db->prepare('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL
+                        WHERE id = ? AND password_hash = ?');
+                    $stmt->execute([$hashedPassword, $user['id'], $currentHash]);
+                    if ($stmt->rowCount()) $success = 'Password changed successfully!';
+                    else $error = 'Your password changed during this request. Try again with the current password.';
                 }
             }
         }
 
-    } catch (Exception $e) {
+    } catch (InvalidArgumentException $e) {
+        $error = $e->getMessage();
+    } catch (Throwable $e) {
         error_log('Settings update error: ' . $e->getMessage());
         $error = 'An error occurred. Please try again.';
     }
 }
+
+$stmt = $db->prepare('SELECT created_at FROM users WHERE id = ?');
+$stmt->execute([$user['id']]);
+$memberSince = $stmt->fetchColumn();
 
 $pageTitle = 'Account Settings';
 $pageCSS = ['/profile/css/profile.css?build=' . filemtime(__DIR__ . '/css/profile.css')];
@@ -114,21 +123,17 @@ require_once __DIR__ . '/../shared/components/header.php';
 
         <div class="profile-header">
             <div class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
-                <?php if (!empty($user['profile_picture'])): ?>
-                    <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>" alt="Profile Picture">
-                <?php else: ?>
-                    <?php echo strtoupper(substr($user['name'] ?? $user['full_name'] ?? '?', 0, 1)); ?>
-                <?php endif; ?>
+                <?php renderProfileAvatar($user); ?>
             </div>
-            <div class="profile-name">Account Settings</div>
+            <h1 class="profile-name">Account Settings</h1>
         </div>
 
         <?php if ($error): ?>
-            <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
+            <div class="alert alert-error" role="alert"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
 
         <?php if ($success): ?>
-            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+            <div class="alert alert-success" role="status"><?php echo htmlspecialchars($success); ?></div>
         <?php endif; ?>
 
         <!-- Profile Information -->
@@ -138,16 +143,17 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
 
             <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                 <input type="hidden" name="action" value="update_profile">
 
                 <div class="form-group">
-                    <label class="form-label">Full Name</label>
-                    <input type="text" name="name" class="form-input" value="<?php echo htmlspecialchars($user['name'] ?? $user['full_name'] ?? ''); ?>" required minlength="2">
+                    <label class="form-label" for="accountName">Full Name</label>
+                    <input id="accountName" type="text" name="name" class="form-input" autocomplete="name" value="<?= htmlspecialchars($user['name']) ?>" required minlength="2" maxlength="120">
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Email Address</label>
-                    <input type="email" name="email" class="form-input" value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>" required>
+                    <label class="form-label" for="accountEmail">Email Address</label>
+                    <input id="accountEmail" type="email" name="email" class="form-input" autocomplete="email" value="<?= htmlspecialchars($user['email']) ?>" required maxlength="190">
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
@@ -161,21 +167,23 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
 
             <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                 <input type="hidden" name="action" value="change_password">
 
                 <div class="form-group">
-                    <label class="form-label">Current Password</label>
-                    <input type="password" name="current_password" class="form-input" required>
+                    <label class="form-label" for="currentPassword">Current Password</label>
+                    <input id="currentPassword" type="password" name="current_password" class="form-input" autocomplete="current-password" required>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">New Password</label>
-                    <input type="password" name="new_password" class="form-input" required minlength="8" placeholder="At least 8 characters">
+                    <label class="form-label" for="newPassword">New Password</label>
+                    <input id="newPassword" type="password" name="new_password" class="form-input" autocomplete="new-password" required minlength="12" aria-describedby="passwordLength">
+                    <small id="passwordLength">Use at least 12 characters.</small>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Confirm New Password</label>
-                    <input type="password" name="confirm_password" class="form-input" required minlength="8">
+                    <label class="form-label" for="confirmPassword">Confirm New Password</label>
+                    <input id="confirmPassword" type="password" name="confirm_password" class="form-input" autocomplete="new-password" required minlength="12">
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-block">Change Password</button>
@@ -189,18 +197,18 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
 
             <div class="form-group">
-                <label class="form-label">User ID</label>
-                <input type="text" class="form-input" value="<?php echo htmlspecialchars((string)$user['id']); ?>" disabled>
+                <label class="form-label" for="accountId">User ID</label>
+                <input id="accountId" type="text" class="form-input" value="<?php echo htmlspecialchars((string)$user['id']); ?>" readonly>
             </div>
 
             <div class="form-group">
-                <label class="form-label">Role</label>
-                <input type="text" class="form-input" value="<?php echo ucfirst(htmlspecialchars($user['role'] ?? 'member')); ?>" disabled>
+                <label class="form-label" for="accountRole">Role</label>
+                <input id="accountRole" type="text" class="form-input" value="<?php echo ucfirst(htmlspecialchars($user['role'] ?? 'member')); ?>" readonly>
             </div>
 
             <div class="form-group">
-                <label class="form-label">Member Since</label>
-                <input type="text" class="form-input" value="<?php echo isset($user['created_at']) ? date('F j, Y', strtotime($user['created_at'])) : 'Unknown'; ?>" disabled>
+                <label class="form-label" for="accountMemberSince">Member Since</label>
+                <input id="accountMemberSince" type="text" class="form-input" value="<?= $memberSince ? date('F j, Y', strtotime($memberSince)) : 'Unknown' ?>" readonly>
             </div>
         </div>
 

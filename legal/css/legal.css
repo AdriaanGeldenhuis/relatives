@@ -27,7 +27,7 @@
 .legal-nav a {
     display: inline-flex;
     align-items: center;
-    min-height: 40px;
+    min-height: 44px;
     padding: 4px 11px;
     box-sizing: border-box;
     border: 1px solid transparent;
@@ -59,3 +59,21 @@
 .legal-document form { display: grid; gap: 9px; max-width: 31rem; margin-top: 17px; }
 .legal-document input[type="password"], .legal-document button { min-height: 43px; padding: 6px 10px; border: 1px solid var(--family-line); border-radius: 9px; font: inherit; }
 .legal-document button { justify-self: start; background: var(--family-green); color: #fffdf6; cursor: pointer; }
+
+@media print {
+    .legal-page { background: #fff; color: #111; }
+    .legal-page :is(.site-header, .legal-nav, .family-hero-art) { display: none; }
+    .legal-page .legal-main { max-width: none; margin: 0; padding: 0; }
+    .legal-main .family-hero, .legal-document {
+        max-width: none;
+        padding: 0;
+        border: 0;
+        background: #fff;
+        color: #111;
+        box-shadow: none;
+    }
+    .legal-main .family-hero { min-height: auto; margin-bottom: 16px; }
+    .legal-main .family-hero .family-hero-summary { color: #333; }
+    .legal-document :is(h2, h3, h4) { break-after: avoid; }
+    .legal-document form { display: none; }
+}

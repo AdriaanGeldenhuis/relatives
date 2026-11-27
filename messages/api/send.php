@@ -277,7 +277,7 @@ try {
         
         try {
             $searchContent = $content . ' ' . $userName;
-            $hasMedia = !empty($mediaPath);
+            $hasMedia = (int)!empty($mediaPath);
             
             $stmt = $db->prepare("
                 INSERT INTO message_search_index (message_id, family_id, search_content, has_media, indexed_at)

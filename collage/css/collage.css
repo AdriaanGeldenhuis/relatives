@@ -312,4 +312,24 @@
 .collage-heading h1 { margin-block: 6px 0; font: 400 clamp(2rem, 6vw, 3.25rem)/1.1 Georgia, serif; }
 .collage-heading a { color: #def788; text-underline-offset: 3px; }
 .collage-page .collage-toolbar { border-radius: 14px 14px 0 0; background: #eef1e1; }
+.collage-page .collage-toolbar button:disabled { opacity: .58; cursor: default; }
+.collage-page #collageCanvasWrapper { border-radius: 0 0 14px 14px; }
+.collage-page #collageCanvas {
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    width: min(100%, 760px);
+    height: auto;
+    aspect-ratio: 4 / 3;
+    padding: 16px;
+    color: #173123;
+    text-align: center;
+}
+.collage-page #collageEmpty { padding: 6px 10px; border-radius: 8px; background: #fffdf2; }
+.collage-page .collage-item { box-sizing: border-box; padding: 0; overflow: visible; min-width: 0; min-height: 0; }
+.collage-page .collage-item img { border-radius: 1px; }
+.collage-page .collage-status { margin: 8px 3px; min-height: 1.5em; font-size: .9rem; }
 .collage-page :focus-visible { outline: 2px solid #def788; outline-offset: 3px; }
+.collage-page .collage-toolbar :focus-visible { outline-color: #256241; }
+.collage-page .collage-background { display: inline-flex; align-items: center; gap: 8px; }
+.collage-page .collage-background input { width: 25px; height: 25px; padding: 0; cursor: pointer; }
