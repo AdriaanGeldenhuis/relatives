@@ -18,7 +18,7 @@ $itemTypes = [
 
 <div class="ht-wallet-page">
     <!-- Page Header -->
-    <div class="ht-page-header app-hero">
+    <div class="ht-page-header app-hero photo-hero photo-hero-compact">
         <a href="/holiday_traveling/trip_view.php?id=<?php echo $trip['id']; ?>" class="ht-back-link">← Back to Trip</a>
         <div class="ht-page-header-content">
             <h1 class="ht-page-title">
@@ -33,7 +33,7 @@ $itemTypes = [
             Add Item
         </button>
         <?php endif; ?>
-        <?php renderFamilyAppArt('travel', true); ?>
+        <?php renderFamilyScene('travel'); ?>
     </div>
 
     <!-- Offline Notice -->

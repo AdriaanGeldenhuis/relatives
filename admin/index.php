@@ -160,16 +160,17 @@ require __DIR__ . '/header.php';
 ?>
 
 <main class="family-main admin-main">
-    <header class="family-hero admin-hero">
+    <header class="family-hero admin-hero photo-hero">
         <div class="family-hero-content">
             <h1 class="family-hero-title"><?= adminEscape($family['name']) ?></h1>
             <p class="family-hero-summary">Manage your family, invite members and review activity.</p>
             <div class="family-actions">
                 <button class="family-button family-button-primary" type="button" data-open-dialog="inviteModal">Invite member</button>
                 <a href="#members" class="family-button">Family members</a>
+                <a href="#settings" class="family-button">Family settings</a>
             </div>
         </div>
-        <?php adminHeroArt(); ?>
+        <?php renderFamilyScene('family'); ?>
     </header>
     <?php adminNavigation($user, 'family'); ?>
 
@@ -196,7 +197,7 @@ require __DIR__ . '/header.php';
     <?php adminShowFlash(); ?>
     <p class="admin-feedback" id="adminCopyFeedback" role="status" hidden></p>
 
-    <section class="admin-section" id="settings" aria-labelledby="settingsTitle">
+    <section class="admin-section" id="settings" data-family-jump aria-labelledby="settingsTitle">
         <h2 class="family-section-title" id="settingsTitle">Family settings</h2>
         <dl class="admin-settings">
             <div class="admin-setting admin-card">

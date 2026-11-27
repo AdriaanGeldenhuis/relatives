@@ -293,6 +293,58 @@ require_once __DIR__ . '/../shared/components/header.php';
             </div>
         </section>
 
+        <section class="panel home-up-next" style="--glow:#a4c8d4">
+            <header class="panel-head">
+                <span class="panel-glyph" aria-hidden="true">📅</span>
+                <h2>Up next</h2>
+                <a class="panel-link" href="/schedule/">Day agenda →</a>
+            </header>
+            <?php if (!empty($upcomingEvents)): ?>
+            <?php foreach ([array_slice($upcomingEvents, 0, 1), array_slice($upcomingEvents, 1)] as $group => $items):
+                if (!$items) continue;
+                ?>
+                <?php if ($group): ?><details class="home-more-events"><summary>More upcoming events</summary><?php endif; ?>
+                <ul class="event-list">
+                <?php foreach ($items as $event):
+                    $startsAt = new DateTimeImmutable($event['starts_at']);
+                    $diff = $startsAt->getTimestamp() - $now->getTimestamp();
+                    $eventDate = $startsAt->format('Y-m-d');
+                    $dayLabel = match ($eventDate) {
+                        $today => 'Today',
+                        $tomorrow => 'Tomorrow',
+                        default => $startsAt->format('D j M'),
+                    };
+                    $tone = $eventDate === $today ? 'is-today' : '';
+                    if ($event['all_day']) {
+                        $when = $dayLabel . ' · all day';
+                    } elseif ($diff < 3600 && $diff > 0) {
+                        $when = 'In ' . ceil($diff / 60) . ' min';
+                        $tone = 'is-urgent';
+                    } else {
+                        $when = $dayLabel . ' ' . $startsAt->format('H:i');
+                    }
+                ?>
+                <li class="event-row <?= $tone ?>">
+                    <time class="event-when" datetime="<?= $startsAt->format($event['all_day'] ? 'Y-m-d' : DATE_ATOM) ?>"<?= $event['all_day'] ? '' : ' data-event-start' ?>><?= $when ?></time>
+                    <div class="event-body">
+                        <a class="event-name" href="/calendar/?event=<?= (int)$event['id'] ?>"><?= htmlspecialchars($event['title']) ?></a>
+                        <?php if ($event['location']): ?>
+                        <span class="event-where"><span aria-hidden="true">📍</span> <?php echo htmlspecialchars($event['location']); ?></span>
+                        <?php endif; ?>
+                    </div>
+                </li>
+                <?php endforeach; ?>
+                </ul>
+                <?php if ($group): ?></details><?php endif; ?>
+            <?php endforeach; ?>
+            <?php else: ?>
+            <div class="panel-empty">
+                <p>Nothing scheduled</p>
+                <a href="/schedule/add.php" class="btn btn-primary">Add an event</a>
+            </div>
+            <?php endif; ?>
+        </section>
+
         <section class="apps-section" aria-labelledby="family-apps-heading">
             <div class="apps-heading">
                 <h2 id="family-apps-heading" class="home-section-title family-section-title">Family apps</h2>
@@ -314,53 +366,6 @@ require_once __DIR__ . '/../shared/components/header.php';
 
         <!-- ============ BENTO GRID ============ -->
         <div class="bento">
-
-            <section class="panel panel-today" style="--glow:#34d399">
-                <header class="panel-head">
-                    <span class="panel-glyph" aria-hidden="true">📅</span>
-                    <h2>Up next</h2>
-                    <a class="panel-link" href="/calendar/">Calendar →</a>
-                </header>
-                <?php if (!empty($upcomingEvents)): ?>
-                <ul class="event-list">
-                    <?php foreach ($upcomingEvents as $event):
-                        $startsAt = new DateTimeImmutable($event['starts_at']);
-                        $diff = $startsAt->getTimestamp() - $now->getTimestamp();
-                        $eventDate = $startsAt->format('Y-m-d');
-                        $dayLabel = match ($eventDate) {
-                            $today => 'Today',
-                            $tomorrow => 'Tomorrow',
-                            default => $startsAt->format('D j M'),
-                        };
-                        $tone = $eventDate === $today ? 'is-today' : '';
-                        if ($event['all_day']) {
-                            $when = $dayLabel . ' · all day';
-                        } elseif ($diff < 3600 && $diff > 0) {
-                            $when = 'In ' . ceil($diff / 60) . ' min';
-                            $tone = 'is-urgent';
-                        } else {
-                            $when = $dayLabel . ' ' . $startsAt->format('H:i');
-                        }
-                    ?>
-                    <li class="event-row <?= $tone ?>">
-                        <time class="event-when" datetime="<?= $startsAt->format($event['all_day'] ? 'Y-m-d' : DATE_ATOM) ?>"<?= $event['all_day'] ? '' : ' data-event-start' ?>><?= $when ?></time>
-                        <div class="event-body">
-                            <a class="event-name" href="/calendar/?event=<?= (int)$event['id'] ?>"><?= htmlspecialchars($event['title']) ?></a>
-                            <?php if ($event['location']): ?>
-                            <span class="event-where"><span aria-hidden="true">📍</span> <?php echo htmlspecialchars($event['location']); ?></span>
-                            <?php endif; ?>
-                        </div>
-                    </li>
-                    <?php endforeach; ?>
-                </ul>
-                <?php else: ?>
-                <div class="panel-empty">
-                    <span aria-hidden="true">🌴</span>
-                    <p>Nothing scheduled — enjoy the calm.</p>
-                    <a href="/schedule/add.php" class="btn btn-primary">Add an event</a>
-                </div>
-                <?php endif; ?>
-            </section>
 
             <!-- This week pulse -->
             <section class="panel" style="--glow:#fbbf24">

@@ -126,7 +126,7 @@ $pageJSVersion = max(filemtime(__DIR__ . '/js/calendar.js'), filemtime(__DIR__ .
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 <main class="planner-main calendar-main">
-    <header class="planner-hero calendar-hero app-hero">
+    <header class="planner-hero calendar-hero app-hero photo-hero">
         <div>
             <h1>Family calendar</h1>
             <p>Birthdays, appointments and plans for the whole family.</p>
@@ -135,7 +135,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 <a class="planner-hero-button" id="calendarScheduleLink" href="/schedule/?date=<?= $selectedDate ?>">Open Schedule</a>
             </div>
         </div>
-        <?php renderFamilyAppArt('calendar', true); ?>
+        <?php renderFamilyScene('planner'); ?>
     </header>
 
     <div class="planner-toolbar calendar-toolbar">

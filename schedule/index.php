@@ -86,7 +86,7 @@ $pageJSVersion = substr(hash('sha256',
 require_once __DIR__ . '/../shared/components/header.php';
 ?>
 <main class="planner-main">
-    <header class="planner-hero app-hero">
+    <header class="planner-hero app-hero photo-hero">
         <div>
             <h1>Family schedule</h1>
             <p>See what’s coming up and make time for what matters.</p>
@@ -103,7 +103,7 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </details>
             </div>
         </div>
-        <?php renderFamilyAppArt('schedule', true); ?>
+        <?php renderFamilyScene('planner'); ?>
     </header>
     <?php require __DIR__ . '/agenda.php'; ?>
 </main>

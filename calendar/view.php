@@ -78,6 +78,18 @@ function calendarRender(array $data, array $types, array $filters, DateTimeImmut
             <?php endfor; ?>
         </div>
     <?php return; endif; ?>
+    <?php $daily = scheduleOnDay($events, $day); ?>
+    <?php if ($view === 'day'): ?>
+        <?php renderPlannerWeek($day, $today, static fn(string $date): string => calendarUrl($date, 'day', $filters)); ?>
+    <?php elseif ($daily): ?>
+        <div class="calendar-focus">
+            <div>
+                <span><?= $day->format('l, j M') ?></span>
+                <?php calendarEntry($daily[0], $day, $view, $filters, $types); ?>
+            </div>
+            <a href="<?= scheduleEscape(calendarUrl($data['date'], 'day', $filters)) ?>" data-week-date="<?= $data['date'] ?>">Day view</a>
+        </div>
+    <?php endif; ?>
     <div class="<?= $view === 'month' ? 'calendar-layout' : 'calendar-single-day' ?>">
         <?php if ($view === 'month'): ?>
             <section class="calendar-month" aria-label="Month grid">
@@ -113,7 +125,6 @@ function calendarRender(array $data, array $types, array $filters, DateTimeImmut
             <section class="calendar-day-panel">
                 <header><h3><?= $day->format('l, j F Y') ?></h3><a class="btn btn-primary" href="<?= scheduleEscape(scheduleAddUrl($data['date'], $view, true)) ?>" data-calendar-add aria-haspopup="dialog" aria-controls="eventEditor">Add event</a></header>
                 <div class="calendar-day-list">
-                    <?php $daily = scheduleOnDay($events, $day); ?>
                     <?php foreach ($daily as $event) calendarEntry($event, $day, $view, $filters, $types); ?>
                     <?php if (!$daily): ?><p class="calendar-empty"><?= $hasFilters ? 'No matching events for this day.' : 'Nothing scheduled for this day.' ?></p><?php endif; ?>
                 </div>

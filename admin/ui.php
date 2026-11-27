@@ -47,22 +47,13 @@ function adminRedirect(string $location, string $message, bool $success = true):
 function adminHero(string $title, string $summary): void
 {
     ?>
-    <header class="family-hero admin-hero">
+    <header class="family-hero admin-hero photo-hero photo-hero-compact">
         <div class="family-hero-content">
             <h1 class="family-hero-title"><?= adminEscape($title) ?></h1>
             <p class="family-hero-summary"><?= adminEscape($summary) ?></p>
         </div>
-        <?php adminHeroArt(); ?>
+        <?php renderFamilyScene('family'); ?>
     </header>
-    <?php
-}
-
-function adminHeroArt(): void
-{
-    ?>
-    <div class="family-hero-art" aria-hidden="true">
-        <span class="admin-art"><i></i><i></i><i></i></span>
-    </div>
     <?php
 }
 

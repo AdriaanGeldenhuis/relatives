@@ -18,6 +18,25 @@ function scheduleAddUrl(string $date, string $view, bool $fromCalendar = false):
     return '/schedule/add.php?' . http_build_query($parameters);
 }
 
+function renderPlannerWeek(DateTimeImmutable $day, DateTimeImmutable $today, callable $href): void
+{
+    $start = $day->modify('monday this week');
+    ?>
+    <nav class="family-week-strip" aria-label="Choose a day this week">
+        <?php for ($i = 0; $i < 7; $i++):
+            $date = $start->modify("+$i days");
+            $key = $date->format('Y-m-d');
+            ?>
+            <a href="<?= scheduleEscape($href($key)) ?>" data-planner-date="<?= $key ?>"
+               aria-label="<?= $date->format('l, j F Y') ?>"<?= $date == $day ? ' aria-current="date"' : '' ?>
+               <?= $date == $today ? 'class="is-today"' : '' ?>>
+                <span><?= $date->format('D') ?></span><strong><?= $date->format('j') ?></strong>
+            </a>
+        <?php endfor; ?>
+    </nav>
+    <?php
+}
+
 function scheduleTypes(): array
 {
     return [

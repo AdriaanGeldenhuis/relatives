@@ -84,24 +84,25 @@ require_once __DIR__ . '/../shared/components/header.php';
 </svg>
 
 <main class="notes-main family-main" id="notesApp">
-    <header class="family-hero app-hero">
+    <header class="family-hero app-hero photo-hero">
         <div class="family-hero-content">
             <h1 class="family-hero-title">Family notes</h1>
-            <p class="family-hero-summary">Keep lists, photos and little reminders in one place.</p>
             <div class="family-actions">
                 <button type="button" class="family-button family-button-primary" data-create="text"><?= notesIcon('plus') ?> New note</button>
                 <button type="button" class="family-button" data-create="list"><?= notesIcon('list') ?> Checklist</button>
                 <button type="button" class="family-button" data-create="voice"><?= notesIcon('mic') ?> Record</button>
+                <button type="button" class="family-button" data-filter="pinned" id="notesPinnedShortcut" aria-pressed="false">
+                    <?= notesIcon('pin') ?> Pinned <span id="notesPinnedTotal" aria-hidden="true" hidden></span>
+                </button>
                 <a class="family-button" href="/collage/"><?= notesIcon('photo') ?> Make a collage</a>
             </div>
         </div>
-        <?php renderFamilyAppArt('notes', true); ?>
+        <?php renderFamilyScene('notes'); ?>
     </header>
 
     <div class="notes-toolbar">
         <div class="notes-filters" role="group" aria-label="Filter notes">
             <button type="button" data-filter="all" aria-pressed="true">All notes <span id="notesTotal"><?= count($notes) ?></span></button>
-            <button type="button" data-filter="pinned" aria-pressed="false"><?= notesIcon('pin') ?> Pinned</button>
             <button type="button" data-filter="list" aria-pressed="false"><?= notesIcon('list') ?> Checklists</button>
             <button type="button" data-filter="text" aria-pressed="false"><?= notesIcon('note') ?> Text</button>
             <button type="button" data-filter="photos" aria-pressed="false"><?= notesIcon('photo') ?> Photos</button>
@@ -113,7 +114,7 @@ require_once __DIR__ . '/../shared/components/header.php';
     </div>
 
     <div class="notes-board-tools">
-        <h2 class="family-section-title" id="notesBoardHeading">Board</h2>
+        <h2 class="family-section-title" id="notesBoardHeading" tabindex="-1">Board</h2>
         <div class="notes-view-tools">
             <label class="notes-sort"><span class="notes-sr-only">Sort notes</span>
                 <select id="notesSort">

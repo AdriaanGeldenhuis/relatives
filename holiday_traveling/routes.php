@@ -38,7 +38,7 @@ require_once __DIR__ . '/lib/calendar_internal.php';
  * @param array $data Variables to pass to view
  */
 function ht_view(string $viewName, array $data = []): void {
-    require_once __DIR__ . '/../shared/components/family-app-art.php';
+    require_once __DIR__ . '/../shared/components/family-scenes.php';
 
     // Extract data to variables
     extract($data);

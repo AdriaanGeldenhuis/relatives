@@ -24,10 +24,14 @@ const CollageImages = (() => {
         fileInput.addEventListener('change', handleFileSelect);
     }
 
-    async function handleFileSelect(e) {
-        const files = Array.from(e.target.files);
+    function handleFileSelect(event) {
+        const files = Array.from(event.target.files);
         fileInput.value = '';
-        if (!files.length) return;
+        void addFiles(files);
+    }
+
+    async function addFiles(files) {
+        if (!files.length || CollageState.get('loading') || CollageState.isLocked()) return;
         CollageState.set('loading', true);
         const status = document.getElementById('collageStatus');
         status.textContent = 'Opening photos…';
@@ -184,6 +188,7 @@ const CollageImages = (() => {
     return {
         init,
         openFilePicker,
+        addFiles,
         selectImage,
         removeImageElement,
         clearAllImages

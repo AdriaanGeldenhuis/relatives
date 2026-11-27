@@ -621,11 +621,11 @@ document.addEventListener('click', event => {
             console.warn('Could not open the event dialog. Opening the event form page.', error);
         }
     }
-    const link = event.target.closest('[data-schedule-view]');
+    const link = event.target.closest('[data-schedule-view], [data-planner-date]');
     if (link && plainClick) {
         event.preventDefault();
         const params = new URL(link.href).searchParams;
-        loadScheduleData(params.get('date'), { view: link.dataset.scheduleView, focus: true, event: params.get('event') });
+        loadScheduleData(params.get('date'), { view: link.dataset.scheduleView || 'day', focus: true, event: params.get('event') });
     }
     if (event.target.matches('dialog.planner-modal')) closeModal(event.target.id);
     document.querySelectorAll('.planner-tools[open], .planner-event-menu[open]').forEach(menu => {

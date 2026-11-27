@@ -357,10 +357,10 @@
             event.preventDefault();
             editor.open();
         }
-        const view = event.target.closest('[data-calendar-view], [data-week-date]');
+        const view = event.target.closest('[data-calendar-view], [data-week-date], [data-planner-date]');
         if (view && standardClick) {
             event.preventDefault();
-            loadCalendar(view.dataset.weekDate || state.date, view.dataset.calendarView || 'day', { focus: 'period' });
+            loadCalendar(view.dataset.weekDate || view.dataset.plannerDate || state.date, view.dataset.calendarView || 'day', { focus: 'period' });
         }
         if (event.target.closest('[data-calendar-close]')) event.target.closest('dialog').close();
         if (event.target === eventDialog || event.target === dateDialog) event.target.close();

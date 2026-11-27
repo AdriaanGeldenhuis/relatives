@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../shared/components/welcome-sky.php';
+require_once __DIR__ . '/../../shared/components/family-scenes.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 if (!in_array($method, ['GET', 'HEAD'], true)) {
@@ -11,12 +12,16 @@ if (!in_array($method, ['GET', 'HEAD'], true)) {
 }
 
 $scene = $_GET['scene'] ?? null;
-if (!in_array($scene, WELCOME_SKY_SCENES, true)) {
+$familyScene = $_GET['family'] ?? null;
+if ($familyScene !== null && in_array($familyScene, FAMILY_SCENES, true)) {
+    $path = familyScenePath($familyScene);
+} elseif ($familyScene === null && in_array($scene, WELCOME_SKY_SCENES, true)) {
+    $path = welcomeSkyPhotoPath($scene);
+} else {
     http_response_code(404);
     exit;
 }
 
-$path = welcomeSkyPhotoPath($scene);
 if (!is_readable($path)) {
     http_response_code(404);
     exit;

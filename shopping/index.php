@@ -103,16 +103,17 @@ require_once __DIR__ . '/../shared/components/header.php';
 ?>
 
 <main class="family-main shopping-main" id="shopping">
-    <header class="family-hero app-hero shopping-hero">
+    <header class="family-hero app-hero shopping-hero photo-hero photo-hero-compact">
         <div class="family-hero-content">
             <h1 class="family-hero-title">Family shopping</h1>
-            <p class="family-hero-summary">Plan together and tick things off as you shop.</p>
+            <p class="family-hero-summary" id="shopHeroSummary">Your family’s shopping lists</p>
             <div class="family-actions">
-                <button type="button" class="family-button family-button-primary" id="shopAdd">＋ Add item</button>
+                <button type="button" class="family-button family-button-primary" id="shopStart" hidden>See what’s left</button>
+                <button type="button" class="family-button" id="shopAdd">＋ Add item</button>
                 <button type="button" class="family-button" id="shopPaste">Paste a list</button>
             </div>
         </div>
-        <?php renderFamilyAppArt('shopping', true); ?>
+        <?php renderFamilyScene('shopping'); ?>
     </header>
 
     <section aria-labelledby="shopping-lists-heading">
@@ -126,7 +127,7 @@ require_once __DIR__ . '/../shared/components/header.php';
     <section class="shopping-board" id="shopBoard" aria-labelledby="shopListTitle">
         <div class="shopping-heading shopping-list-heading">
             <div>
-                <h2 class="family-section-title" id="shopListTitle"></h2>
+                <h2 class="family-section-title" id="shopListTitle" tabindex="-1"></h2>
                 <p class="shopping-progress"><span id="shopProgress"></span><span id="shopEstimate" hidden></span></p>
             </div>
             <div class="shopping-list-actions">

@@ -53,7 +53,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 <main class="main-content">
     <div class="profile-container">
 
-        <div class="profile-header">
+        <div class="profile-header photo-hero photo-hero-compact family-hero-profile">
             <a href="/profile/picture.php" aria-label="Change profile picture" class="profile-avatar-large" style="background: <?= htmlspecialchars($user['avatar_color'] ?? '#667eea') ?>">
                 <?php renderProfileAvatar($user); ?>
                 <span class="profile-avatar-edit" aria-hidden="true">Change</span>
@@ -62,6 +62,12 @@ require_once __DIR__ . '/../shared/components/header.php';
             <h1 class="profile-name"><?= htmlspecialchars($user['name']) ?></h1>
             <div class="profile-email"><?php echo htmlspecialchars($user['email'] ?? ''); ?></div>
             <div class="profile-role"><?php echo htmlspecialchars($user['role'] ?? 'member'); ?></div>
+            <nav class="family-jump" aria-label="Profile sections">
+                <a href="#profileSettings">Settings</a>
+                <?php if ($family): ?><a href="#profileFamily">Family</a><?php endif; ?>
+                <a href="#profileSupport">Support</a>
+            </nav>
+            <?php renderFamilyScene('family'); ?>
         </div>
 
         <?php if (isset($_GET['success'])): ?>
@@ -79,7 +85,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         <?php endif; ?>
 
         <!-- Quick Links -->
-        <div class="settings-section">
+        <div class="settings-section" id="profileSettings" data-family-jump>
             <div class="settings-section-title">
                 <span class="icon">Settings</span>
             </div>
@@ -124,7 +130,7 @@ require_once __DIR__ . '/../shared/components/header.php';
 
         <!-- Family Info -->
         <?php if ($family): ?>
-        <div class="settings-section">
+        <div class="settings-section" id="profileFamily" data-family-jump>
             <div class="settings-section-title">
                 <span class="icon">Family</span>
             </div>
@@ -148,7 +154,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         <?php endif; ?>
 
         <!-- Help & Support -->
-        <div class="settings-section">
+        <div class="settings-section" id="profileSupport" data-family-jump>
             <div class="settings-section-title">
                 <span class="icon">Support</span>
             </div>

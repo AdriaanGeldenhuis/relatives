@@ -13,11 +13,15 @@ $pageInlineStylesheets = [__DIR__ . '/css/help.css'];
 require __DIR__ . '/../shared/components/header.php';
 ?>
 <main class="family-main">
-    <header class="family-hero">
+    <header class="family-hero photo-hero photo-hero-compact">
         <div class="family-hero-content">
             <h1 class="family-hero-title">Help</h1>
             <p class="family-hero-summary">Set up your family and find answers to common questions.</p>
+            <label class="help-search" for="helpSearch">Find a help topic
+                <input id="helpSearch" type="search" placeholder="Search help" autocomplete="off">
+            </label>
         </div>
+        <?php renderFamilyScene('family'); ?>
     </header>
     <section class="family-panel help-topics" aria-labelledby="help-topics">
         <h2 class="family-section-title" id="help-topics">Common tasks</h2>
@@ -61,6 +65,22 @@ require __DIR__ . '/../shared/components/header.php';
             <p>Set up sharing on each phone that wants to share. The Android app asks for location and the tracking notification. Choose Allow all the time if you want the phone to respond to refresh requests while the app is closed. In a browser, keep the map visible for updates.</p>
             <a href="/tracking/app/?setup=1">Set up family tracking</a>
         </details>
+        <p id="helpEmpty" role="status" hidden>No help topics match your search.</p>
     </section>
 </main>
+<script>
+(() => {
+    const search = document.getElementById('helpSearch');
+    const topics = Array.from(document.querySelectorAll('.help-topics details'));
+    const empty = document.getElementById('helpEmpty');
+    search.addEventListener('input', () => {
+        const words = search.value.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
+        for (const topic of topics) {
+            const content = topic.textContent.toLocaleLowerCase();
+            topic.hidden = !words.every(word => content.includes(word));
+        }
+        empty.hidden = topics.some(topic => !topic.hidden);
+    });
+})();
+</script>
 <?php require __DIR__ . '/../shared/components/footer.php'; ?>

@@ -148,7 +148,9 @@ jobs:
           set -eu
           for asset in manifest.json shared/js/planner-events.js shared/js/weather-hero.js shared/js/welcome-sky.js \
             shared/public/welcome-sun.webp shared/public/welcome-dawn.webp shared/public/welcome-dusk.webp \
-            shared/public/welcome-cloud.webp shared/public/welcome-rain.webp shared/public/welcome-night.webp; do
+            shared/public/welcome-cloud.webp shared/public/welcome-rain.webp shared/public/welcome-night.webp \
+            shared/public/family-travel.webp shared/public/family-planner.webp shared/public/family-notes.webp \
+            shared/public/family-shopping.webp shared/public/family-family.webp; do
             path="$1/$asset"
             test -f "$path"
             test ! -L "$path"
@@ -186,7 +188,7 @@ jobs:
           fi
           REMOTE
           done
-      - name: Check deployed Notes, Weather and welcome assets
+      - name: Check deployed family app assets
         shell: bash
         run: |
           set -euo pipefail
@@ -206,6 +208,15 @@ jobs:
           for asset in "${assets[@]}"; do
             verify_asset "$asset" "${asset%%\?*}"
           done
+          for asset in calendar/js/calendar.js schedule/js/schedule.js schedule/timeline/js/timeline.js \
+            holiday_traveling/assets/js/holiday.js holiday_traveling/assets/css/holiday.css \
+            shopping/js/shopping.js messages/js/messages-enhanced.js collage/css/collage.css \
+            collage/js/collage.images.js collage/js/collage.init.js collage/js/collage.layouts.js; do
+            verify_asset "$asset?v=$version" "$asset"
+          done
           for scene in sun dawn dusk cloud rain night; do
             verify_asset "weather/api/welcome-image.php?scene=$scene&v=$version" "shared/public/welcome-$scene.webp"
+          done
+          for scene in travel planner notes shopping family; do
+            verify_asset "weather/api/welcome-image.php?family=$scene&v=$version" "shared/public/family-$scene.webp"
           done

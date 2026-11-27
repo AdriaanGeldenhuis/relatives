@@ -41,7 +41,7 @@ $pageTitle = 'Reset Password - Relatives';
 $authPage = true;
 require __DIR__ . '/shared/components/public-head.php';
 ?>
-<body>
+<body class="family-public" data-family-theme>
     <?php require __DIR__ . '/shared/components/site-navigation.php'; ?>
     <div class="auth-layout">
         <?php require __DIR__ . '/shared/components/auth-aside.php'; ?>

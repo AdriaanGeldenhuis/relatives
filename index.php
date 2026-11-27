@@ -17,7 +17,7 @@ $publicWelcomeSky = true;
 $pageTitle = 'Relatives — A little closer, every day';
 require __DIR__ . '/shared/components/public-head.php';
 ?>
-<body>
+<body class="family-public" data-family-theme>
     <?php require __DIR__ . '/shared/components/site-navigation.php'; ?>
     <div class="public-wrap">
         <main>

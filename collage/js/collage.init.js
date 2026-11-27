@@ -2,6 +2,7 @@
 
 (() => {
     const canvas = document.getElementById('collageCanvas');
+    const dropZone = document.getElementById('collageCanvasWrapper');
     const emptyMessage = document.getElementById('collageEmpty');
     const chooseImages = document.getElementById('btnChooseImages');
     const layout = document.getElementById('btnChooseLayout');
@@ -21,6 +22,24 @@
     layout.addEventListener('click', () => CollageLayouts.openLayoutMenu(layout));
     download.addEventListener('click', CollageCleanup.done);
     remove.addEventListener('click', CollageCleanup.deleteSelected);
+
+    dropZone.addEventListener('dragover', event => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault();
+        const canDrop = !CollageState.isLocked() && !CollageState.get('loading');
+        event.dataTransfer.dropEffect = canDrop ? 'copy' : 'none';
+        dropZone.classList.toggle('is-file-target', canDrop);
+    });
+    dropZone.addEventListener('dragleave', event => {
+        if (!dropZone.contains(event.relatedTarget)) dropZone.classList.remove('is-file-target');
+    });
+    dropZone.addEventListener('drop', event => {
+        if (!event.dataTransfer.files.length) return;
+        event.preventDefault();
+        dropZone.classList.remove('is-file-target');
+        void CollageImages.addFiles(Array.from(event.dataTransfer.files));
+    });
+
 
     function updateControls() {
         const empty = CollageState.getImages().length === 0;

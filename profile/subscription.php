@@ -277,15 +277,21 @@ require_once __DIR__ . '/../shared/components/header.php';
 <main class="main-content">
     <div class="profile-container">
 
-        <div class="profile-header">
+        <div class="profile-header photo-hero photo-hero-compact family-hero-profile">
             <div class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
                 <?php renderProfileAvatar($user); ?>
             </div>
             <h1 class="profile-name">Subscription &amp; Billing</h1>
+            <nav class="family-jump" aria-label="Billing sections">
+                <a href="/profile/">← Profile &amp; settings</a>
+                <a href="#currentSubscription">Current plan</a>
+                <a href="#paymentHistory">Payment history</a>
+            </nav>
+            <?php renderFamilyScene('family'); ?>
         </div>
 
         <!-- Current Plan -->
-        <div class="subscription-card">
+        <div class="subscription-card" id="currentSubscription" data-family-jump>
             <div class="subscription-status">
                 <span class="status-badge <?php echo $statusLabels[$subStatus['status']]['class'] ?? 'status-expired'; ?>">
                     <?php echo $statusLabels[$subStatus['status']]['label'] ?? 'Unknown'; ?>
@@ -358,7 +364,7 @@ require_once __DIR__ . '/../shared/components/header.php';
         </div>
 
         <!-- Payment History -->
-        <div class="settings-section">
+        <div class="settings-section" id="paymentHistory" data-family-jump>
             <div class="settings-section-title">
                 <span class="icon">Payment History</span>
             </div>

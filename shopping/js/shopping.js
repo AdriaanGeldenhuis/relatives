@@ -186,6 +186,10 @@ function renderBoard() {
     renderLists();
     if (!list) return;
     setText(shop('shopListTitle'), list.name);
+    setText(shop('shopHeroSummary'), `${list.name} · ${pendingCount} ${pendingCount === 1 ? 'item' : 'items'} left to buy`);
+    const start = shop('shopStart');
+    start.hidden = false;
+    setText(start, pendingCount ? 'See what’s left' : 'Open list');
     setText(shop('shopProgress'), `${boughtCount} of ${items.length} bought`);
     shop('shopProgressBar').max = items.length || 1;
     shop('shopProgressBar').value = boughtCount;
@@ -301,6 +305,7 @@ async function switchList(id, historyMode = 'push') {
     ShoppingApp.switching = true;
     shop('shopBoard').setAttribute('aria-busy', 'true');
     shop('shopBoard').inert = true;
+    shop('shopStart').disabled = true;
     shop('shopAdd').disabled = true;
     shop('shopPaste').disabled = true;
     try {
@@ -336,6 +341,7 @@ async function switchList(id, historyMode = 'push') {
             ShoppingApp.switching = false;
             shop('shopBoard').removeAttribute('aria-busy');
             shop('shopBoard').inert = false;
+            shop('shopStart').disabled = false;
             shop('shopAdd').disabled = false;
             shop('shopPaste').disabled = false;
             if (version !== ShoppingApp.writeVersion) void refreshBoard();
@@ -589,6 +595,12 @@ async function setBought(item, checkbox) {
     }
 }
 
+shop('shopStart').addEventListener('click', () => {
+    shop('shopSearch').value = '';
+    setFilter(ShoppingApp.allItems.some(item => item.status === 'pending') ? 'pending' : 'all');
+    shop('shopBoard').scrollIntoView({ block: 'start', behavior: 'instant' });
+    shop('shopListTitle').focus({ preventScroll: true });
+});
 shop('shopAdd').addEventListener('click', () => {
     shop('addItemForm').reset();
     shop('itemName').value = '';

@@ -7,14 +7,14 @@
 
 <div class="ht-create-trip">
     <!-- Page Header -->
-    <div class="ht-page-header app-hero">
+    <div class="ht-page-header app-hero photo-hero photo-hero-compact">
         <a href="/holiday_traveling/" class="ht-back-link">← Back to Trips</a>
         <h1 class="ht-page-title">
             <span class="ht-title-icon">✨</span>
             Plan a New Trip
         </h1>
         <p class="ht-page-subtitle">Describe your trip and let AI create the perfect plan</p>
-        <?php renderFamilyAppArt('travel', true); ?>
+        <?php renderFamilyScene('travel'); ?>
     </div>
 
     <!-- Quick Prompt Section -->

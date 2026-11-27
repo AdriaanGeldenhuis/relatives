@@ -208,10 +208,10 @@
                 </div>
             </div>
             <h3><button type="button" class="notes-open" data-action="open">${escape(noteTitle(note))} ${icon('arrow')}</button></h3>
+            ${photo ? photoButton(photo, 0, note.images.length) : ''}
             ${text?.content ? `<div class="notes-card-content">${text.content}</div>` : ''}
             ${text?.progress || ''}
             ${note.type === 'voice' ? `<div class="notes-audio">${audioPlayer(note)}</div>` : ''}
-            ${photo ? photoButton(photo, 0, note.images.length) : ''}
             <footer class="notes-card-footer">${authorLine(note)}</footer>
         </article>`;
     }
@@ -238,6 +238,10 @@
             return sort === 'old' ? -difference : difference;
         });
         $('notesTotal').textContent = notes.size;
+        const pinnedCount = [...notes.values()].filter(note => note.pinned).length;
+        const pinnedTotal = $('notesPinnedTotal');
+        pinnedTotal.textContent = pinnedCount;
+        pinnedTotal.hidden = pinnedCount === 0;
         $('notesResultCount').textContent = `${relevant.length} ${relevant.length === 1 ? 'note' : 'notes'} shown`;
         board.dataset.layout = layout;
         if (!relevant.length) {
@@ -1301,6 +1305,7 @@
         if (button.dataset.filter) {
             filter = button.dataset.filter;
             updateFilters();
+            if (button.id === 'notesPinnedShortcut') $('notesBoardHeading').focus();
         }
         if (button.dataset.layout) {
             layout = button.dataset.layout;

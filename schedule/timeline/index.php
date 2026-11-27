@@ -60,12 +60,12 @@ $pageJSVersion = filemtime(__DIR__ . '/js/timeline.js');
 require_once __DIR__ . '/../../shared/components/header.php';
 ?>
 <main class="planner-main">
-    <header class="planner-hero timeline-hero app-hero">
+    <header class="planner-hero timeline-hero app-hero photo-hero photo-hero-compact">
         <div>
             <h1>Timeline</h1>
             <p><?= $day->format('l, j F Y') ?></p>
         </div>
-        <?php renderFamilyAppArt('schedule', true); ?>
+        <?php renderFamilyScene('planner'); ?>
     </header>
     <div class="planner-toolbar timeline-toolbar">
         <div class="planner-views" aria-label="Schedule views">
@@ -81,12 +81,16 @@ require_once __DIR__ . '/../../shared/components/header.php';
         </div>
     </div>
 
+    <?php renderPlannerWeek($day, new DateTimeImmutable($today), static fn(string $key): string => "?date=$key"); ?>
     <?php if (!$events): ?>
         <div class="planner-empty"><h2>Nothing scheduled</h2><p>No events on <?= $day->format('l') ?>.</p><a class="btn btn-primary" href="/schedule/?date=<?= $date ?>">Open day agenda</a></div>
     <?php else: ?>
         <div class="timeline-board">
             <section class="timeline-chart planner-panel" aria-labelledby="timelineHeading">
-                <h2 id="timelineHeading">Day timeline</h2>
+                <div class="timeline-heading">
+                    <h2 id="timelineHeading">Day timeline</h2>
+                    <button type="button" class="planner-control" id="timelineJumpNow" hidden>Jump to now</button>
+                </div>
                 <?php if ($allDay): ?>
                     <div class="timeline-all-day">
                         <h3>All day</h3>

@@ -2340,3 +2340,16 @@ body[data-area="holiday_traveling"] {
 @media (max-width: 555px) {
     .ht-board-nav { margin-top: 13px; }
 }
+
+.ht-board-nav { scroll-margin-top: 85px; }
+.ht-board-nav a[aria-current="true"] {
+    background: #e2edf1;
+    color: #204e65;
+    border-color: #bfd3db;
+}
+.ht-board-section[hidden] { display: none; }
+.ht-hero-countdown {
+    margin-top: 12px;
+    font-size: clamp(1rem, 2.2vw, 1.35rem);
+    font-weight: 750;
+}

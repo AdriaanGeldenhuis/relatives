@@ -19,7 +19,7 @@ $categories = [
 
 <div class="ht-packing-page">
     <!-- Page Header -->
-    <div class="ht-page-header app-hero">
+    <div class="ht-page-header app-hero photo-hero photo-hero-compact">
         <a href="/holiday_traveling/trip_view.php?id=<?php echo $trip['id']; ?>" class="ht-back-link">← Back to Trip</a>
         <div class="ht-page-header-content">
             <h1 class="ht-page-title">
@@ -32,7 +32,7 @@ $categories = [
             <span class="ht-btn-icon">+</span>
             Add Item
         </button>
-        <?php renderFamilyAppArt('travel', true); ?>
+        <?php renderFamilyScene('travel'); ?>
     </div>
 
     <!-- Progress Stats -->

@@ -425,7 +425,26 @@
     /**
      * Initialize all components
      */
+    function initTripBoard() {
+        const board = document.getElementById('tripBoard');
+        if (!board) return;
+        const filters = Array.from(board.querySelectorAll('[data-trip-filter]'));
+        const sections = document.querySelectorAll('[data-trip-section]');
+        board.addEventListener('click', event => {
+            const link = event.target.closest('[data-trip-filter]');
+            if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            const filter = link.dataset.tripFilter;
+            for (const section of sections) section.hidden = filter !== 'all' && filter !== section.id;
+            for (const target of filters) {
+                if (target.dataset.tripFilter === filter) target.setAttribute('aria-current', 'true');
+                else target.removeAttribute('aria-current');
+            }
+        });
+    }
+
     function init() {
+        initTripBoard();
         initAccordions();
         initChipGroups();
         initCounters();

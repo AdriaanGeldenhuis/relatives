@@ -6,6 +6,7 @@
     const dialog = document.getElementById('timelineEventDialog');
     const planner = window.RelativesPlanner;
     const nowLine = document.getElementById('timelineNow');
+    const jump = document.getElementById('timelineJumpNow');
 
     function drawClock() {
         if (document.hidden) return;
@@ -14,11 +15,15 @@
         const minutes = hour * 60 + minute;
         const { start, end } = nowLine.dataset;
         nowLine.hidden = today !== date || minutes < Number(start) || minutes >= Number(end);
+        jump.hidden = nowLine.hidden;
         if (!nowLine.hidden) nowLine.style.top = ((minutes - start) / (end - start) * 100) + '%';
     }
 
     if (nowLine) {
         drawClock();
+        jump.addEventListener('click', () => {
+            nowLine.scrollIntoView({ block: 'center', behavior: 'instant' });
+        });
         setInterval(drawClock, 15000);
         document.addEventListener('visibilitychange', drawClock);
     }

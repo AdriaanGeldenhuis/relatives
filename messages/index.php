@@ -74,74 +74,76 @@ require_once __DIR__ . '/../shared/components/header.php';
 
 <main class="main-content family-main">
     <div class="hub">
-        <header class="messages-toolbar app-hero">
+        <header class="messages-toolbar app-hero photo-hero photo-hero-compact">
             <div class="messages-hero-content">
                 <h1 id="messages-title">Messages</h1>
                 <div id="messagesActions" role="group" aria-label="Conversation tools"></div>
             </div>
-            <?php renderFamilyAppArt('messages', true); ?>
+            <?php renderFamilyScene('family'); ?>
         </header>
         <div class="messages-container">
             
             <!-- Sidebar -->
             <aside class="messages-sidebar">
-                <div class="sidebar-header">
-                    <h2>Family members</h2>
-                    <span class="member-total"><?php echo count($familyMembers) + 1; ?></span>
-                </div>
+                <details class="member-details" id="familyMembersDetails">
+                    <summary class="sidebar-header">
+                        <h2>Family members</h2>
+                        <span class="member-total"><?php echo count($familyMembers) + 1; ?></span>
+                    </summary>
 
-                <div class="members-list">
-                    <!-- Current User -->
-                    <div class="member-item current-user">
-                        <?php $myAvatarExists = is_file(__DIR__ . "/../saves/{$user['id']}/avatar/avatar.webp"); ?>
-                        <div class="member-avatar" style="background: <?php echo $myAvatarExists ? 'transparent' : htmlspecialchars($user['avatar_color'] ?: '#667eea'); ?>">
-                            <?php if ($myAvatarExists): ?>
-                                <img src="<?php echo avatarUrl($user['id']); ?>" alt="You">
-                            <?php else: ?>
-                                <?php echo htmlspecialchars(mb_strtoupper(mb_substr($user['name'], 0, 2))); ?>
-                            <?php endif; ?>
-                        </div>
-                        <div class="member-info">
-                            <div class="member-name">You</div>
-                            <div class="member-status online">Online</div>
-                        </div>
-                    </div>
-
-                    <!-- Family Members -->
-                    <?php foreach ($familyMembers as $member):
-                        $lastSeen = $member['last_login'] ? new DateTime($member['last_login']) : null;
-                        $isOnline = !empty($member['show_online']) && !empty($member['online_now']);
-                        $memberAvatarPath = __DIR__ . "/../saves/{$member['id']}/avatar/avatar.webp";
-                        $memberHasAvatar = file_exists($memberAvatarPath);
-                    ?>
-                        <div class="member-item" data-user-id="<?php echo $member['id']; ?>">
-                            <div class="member-avatar" style="background: <?php echo $memberHasAvatar ? 'transparent' : htmlspecialchars($member['avatar_color']); ?>">
-                                <?php if ($memberHasAvatar): ?>
-                                    <img src="<?php echo avatarUrl($member['id']); ?>" alt="<?php echo htmlspecialchars($member['full_name']); ?>">
+                    <div class="members-list">
+                        <!-- Current User -->
+                        <div class="member-item current-user">
+                            <?php $myAvatarExists = is_file(__DIR__ . "/../saves/{$user['id']}/avatar/avatar.webp"); ?>
+                            <div class="member-avatar" style="background: <?php echo $myAvatarExists ? 'transparent' : htmlspecialchars($user['avatar_color'] ?: '#667eea'); ?>">
+                                <?php if ($myAvatarExists): ?>
+                                    <img src="<?php echo avatarUrl($user['id']); ?>" alt="You">
                                 <?php else: ?>
-                                    <?php echo htmlspecialchars(mb_strtoupper(mb_substr($member['full_name'], 0, 2))); ?>
+                                    <?php echo htmlspecialchars(mb_strtoupper(mb_substr($user['name'], 0, 2))); ?>
                                 <?php endif; ?>
                             </div>
                             <div class="member-info">
-                                <div class="member-name"><?php echo htmlspecialchars($member['full_name']); ?></div>
-                                <div class="member-status <?php echo $isOnline ? 'online' : 'offline'; ?>">
-                                    <?php
-                                    if ($isOnline) {
-                                        echo 'Online';
-                                    } elseif ($lastSeen) {
-                                        $diff = time() - $lastSeen->getTimestamp();
-                                        if ($diff < 3600) echo floor($diff/60) . 'm ago';
-                                        elseif ($diff < 86400) echo floor($diff/3600) . 'h ago';
-                                        else echo $lastSeen->format('M j');
-                                    } else {
-                                        echo 'Offline';
-                                    }
-                                    ?>
-                                </div>
+                                <div class="member-name">You</div>
+                                <div class="member-status online">Online</div>
                             </div>
                         </div>
-                    <?php endforeach; ?>
-                </div>
+
+                        <!-- Family Members -->
+                        <?php foreach ($familyMembers as $member):
+                            $lastSeen = $member['last_login'] ? new DateTime($member['last_login']) : null;
+                            $isOnline = !empty($member['show_online']) && !empty($member['online_now']);
+                            $memberAvatarPath = __DIR__ . "/../saves/{$member['id']}/avatar/avatar.webp";
+                            $memberHasAvatar = file_exists($memberAvatarPath);
+                        ?>
+                            <div class="member-item" data-user-id="<?php echo $member['id']; ?>">
+                                <div class="member-avatar" style="background: <?php echo $memberHasAvatar ? 'transparent' : htmlspecialchars($member['avatar_color']); ?>">
+                                    <?php if ($memberHasAvatar): ?>
+                                        <img src="<?php echo avatarUrl($member['id']); ?>" alt="<?php echo htmlspecialchars($member['full_name']); ?>">
+                                    <?php else: ?>
+                                        <?php echo htmlspecialchars(mb_strtoupper(mb_substr($member['full_name'], 0, 2))); ?>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="member-info">
+                                    <div class="member-name"><?php echo htmlspecialchars($member['full_name']); ?></div>
+                                    <div class="member-status <?php echo $isOnline ? 'online' : 'offline'; ?>">
+                                        <?php
+                                        if ($isOnline) {
+                                            echo 'Online';
+                                        } elseif ($lastSeen) {
+                                            $diff = time() - $lastSeen->getTimestamp();
+                                            if ($diff < 3600) echo floor($diff/60) . 'm ago';
+                                            elseif ($diff < 86400) echo floor($diff/3600) . 'h ago';
+                                            else echo $lastSeen->format('M j');
+                                        } else {
+                                            echo 'Offline';
+                                        }
+                                        ?>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </details>
             </aside>
 
             <!-- Chat Main Area -->

@@ -22,8 +22,15 @@ $appVersion = '12.4.0';
 $cacheVersion = '12.13.0';
 $workspacePage = !isset($homeStylesheet) && !isset($messagesStylesheets);
 $buildTime = $cacheVersion;
-$familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'weather', 'holiday_traveling', 'games', 'admin', 'profile', 'notifications', 'upgrade'], true);
+$familyPage = in_array($activePage, ['home', 'notes', 'shopping', 'messages', 'weather', 'holiday_traveling', 'games', 'admin', 'profile', 'notifications', 'upgrade', 'help'], true);
 $familyAppPage = in_array($activePage, ['home', 'tracking', 'weather', 'notes', 'shopping', 'calendar', 'schedule', 'holiday_traveling', 'games', 'messages', 'notifications'], true);
+$familyTheme = in_array($activePage, [
+    'home', 'weather', 'calendar', 'schedule', 'holiday_traveling', 'notes', 'shopping',
+    'messages', 'notifications', 'profile', 'admin', 'upgrade', 'help'
+], true);
+if ($familyTheme) {
+    require_once __DIR__ . '/family-scenes.php';
+}
 if ($familyAppPage) {
     require_once __DIR__ . '/family-app-art.php';
 }
@@ -178,8 +185,11 @@ if (isset($db) && isset($_SESSION['user_id'])) {
     <?php endif; ?>
     <style><?php readfile(__DIR__ . '/../css/site-navigation.css'); readfile(__DIR__ . '/../css/action-controls.css'); ?></style>
     <style><?php readfile(__DIR__ . '/../css/footer-assistance.css'); ?></style>
+    <?php if ($familyTheme): ?>
+        <style><?php readfile(__DIR__ . '/../css/family-theme.css'); ?></style>
+    <?php endif; ?>
 </head>
-<body class="<?= $workspacePage ? 'workspace-page' : (isset($homeStylesheet) ? 'home-page' : 'messages-page') ?><?= $familyPage ? ' family-page' : '' ?>" data-area="<?= htmlspecialchars($activePage) ?>" <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
+<body class="<?= $workspacePage ? 'workspace-page' : (isset($homeStylesheet) ? 'home-page' : 'messages-page') ?><?= $familyPage ? ' family-page' : '' ?>" data-area="<?= htmlspecialchars($activePage) ?>"<?= $familyTheme ? ' data-family-theme' : '' ?> <?php echo isset($user) ? 'data-logged-in="true"' : ''; ?>>
     
     <!-- App Loader -->
     <div id="appLoader" class="app-loader">

@@ -131,11 +131,13 @@ require_once __DIR__ . '/../shared/components/header.php';
 <main class="main-content">
     <div class="profile-container">
 
-        <div class="profile-header">
+        <div class="profile-header photo-hero photo-hero-compact family-hero-profile">
             <div class="profile-avatar-large" style="background: <?php echo htmlspecialchars($user['avatar_color'] ?? '#667eea'); ?>">
                 <?php renderProfileAvatar($user); ?>
             </div>
             <h1 class="profile-name">Privacy &amp; Security</h1>
+            <nav class="family-jump" aria-label="Profile navigation"><a href="/profile/">← Profile &amp; settings</a></nav>
+            <?php renderFamilyScene('family'); ?>
         </div>
 
         <?php if ($error): ?>

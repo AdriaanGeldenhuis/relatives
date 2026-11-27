@@ -58,7 +58,7 @@ $statusDisplay = $tripStatus ?? 'upcoming';
     <?php endif; ?>
 
     <!-- Trip Header -->
-    <div class="ht-trip-header app-hero">
+    <div class="ht-trip-header app-hero photo-hero">
         <div class="ht-trip-header-top">
             <a href="/holiday_traveling/" class="ht-back-link">← Back to Trips</a>
             <div class="ht-trip-actions-menu">
@@ -107,6 +107,15 @@ $statusDisplay = $tripStatus ?? 'upcoming';
             <?php endif; ?>
         </div>
 
+        <nav class="family-jump" aria-label="Trip essentials">
+            <?php if (!$isPast && $trip['status'] !== 'cancelled'): ?>
+                <a href="/holiday_traveling/packing_view.php?id=<?= (int)$trip['id'] ?>">Packing list</a>
+                <a href="/weather/?place=<?= rawurlencode($trip['destination']) ?>">Destination weather</a>
+            <?php endif; ?>
+            <a href="/holiday_traveling/wallet_view.php?id=<?= (int)$trip['id'] ?>">Wallet</a>
+            <a href="/holiday_traveling/expenses_view.php?id=<?= (int)$trip['id'] ?>">Expenses</a>
+        </nav>
+
         <?php if ($activePlan && isset($activePlan['_version'])): ?>
         <div class="ht-plan-version-bar">
             <span class="ht-version-label">Plan Version:</span>
@@ -125,7 +134,7 @@ $statusDisplay = $tripStatus ?? 'upcoming';
             <?php endif; ?>
         </div>
         <?php endif; ?>
-        <?php renderFamilyAppArt('travel', true); ?>
+        <?php renderFamilyScene('travel'); ?>
     </div>
 
     <!-- Tab Navigation -->

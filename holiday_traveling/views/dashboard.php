@@ -4,40 +4,69 @@ $sections = [
     ['id' => 'upcomingTrips', 'title' => 'Upcoming trips', 'trips' => $upcomingTrips],
     ['id' => 'pastTrips', 'title' => 'Past trips', 'trips' => $pastTrips]
 ];
+$today = new DateTimeImmutable('today');
+$todayKey = $today->format('Y-m-d');
+$current = array_filter($activeTrips, static fn(array $trip): bool => $trip['start_date'] <= $todayKey && $trip['end_date'] >= $todayKey);
+$future = array_values(array_filter($upcomingTrips, static fn(array $trip): bool => $trip['start_date'] >= $todayKey));
+usort($future, static fn(array $a, array $b): int => $a['start_date'] <=> $b['start_date']);
+$featured = reset($current) ?: ($future[0] ?? null);
+$featuredId = (int)($featured['id'] ?? 0);
 ?>
 
 <div class="ht-dashboard">
-    <header class="family-hero app-hero">
+    <header class="family-hero app-hero photo-hero photo-hero-wide">
         <div class="family-hero-content">
-            <h1 class="family-hero-title">Holiday &amp; traveling</h1>
-            <p class="family-hero-summary">Plan family trips and keep your bookings, packing and expenses together.</p>
-            <div class="family-actions">
-                <a href="/holiday_traveling/trip_create.php" class="family-button family-button-primary">＋ New trip</a>
-                <?php if ($activeTrips): ?>
-                    <a href="#activeTrips" class="family-button">Active trips</a>
+            <?php if ($featured): ?>
+                <span class="hero-kicker-label"><?= $featured['status'] === 'active' ? 'On your trip' : 'Next family trip' ?></span>
+                <h1 class="family-hero-title"><?= htmlspecialchars($featured['destination']) ?></h1>
+                <?php if ($featured['status'] !== 'active'):
+                    $daysToGo = $today->diff(new DateTimeImmutable($featured['start_date']))->days;
+                    ?>
+                    <p class="ht-hero-countdown"><?= match ($daysToGo) {
+                        0 => 'Leaves today',
+                        1 => 'Leaves tomorrow',
+                        default => $daysToGo . ' days until departure'
+                    } ?></p>
                 <?php endif; ?>
-            </div>
+                <p class="family-hero-summary">
+                    <time datetime="<?= htmlspecialchars($featured['start_date']) ?>"><?= ht_format_date($featured['start_date'], 'j M Y') ?></time>
+                    –
+                    <time datetime="<?= htmlspecialchars($featured['end_date']) ?>"><?= ht_format_date($featured['end_date'], 'j M Y') ?></time>
+                </p>
+                <div class="family-actions">
+                    <a href="/holiday_traveling/trip_view.php?id=<?= $featuredId ?>" class="family-button family-button-primary">Open trip</a>
+                    <a href="/holiday_traveling/packing_view.php?id=<?= $featuredId ?>" class="family-button">Packing</a>
+                    <a href="/weather/?place=<?= rawurlencode($featured['destination']) ?>" class="family-button">Destination weather</a>
+                    <a href="/holiday_traveling/trip_create.php" class="family-button">New trip</a>
+                </div>
+            <?php else: ?>
+                <h1 class="family-hero-title">Travel</h1>
+                <p class="family-hero-summary">Plan a family trip and keep your itinerary, packing and bookings together.</p>
+                <div class="family-actions">
+                    <a href="/holiday_traveling/trip_create.php" class="family-button family-button-primary">＋ New trip</a>
+                </div>
+            <?php endif; ?>
         </div>
-        <?php renderFamilyAppArt('travel', true); ?>
+        <?php renderFamilyScene('travel'); ?>
     </header>
 
     <?php if (!$trips): ?>
         <section class="ht-empty-state ht-board-empty">
             <h2 class="family-section-title">No trips yet</h2>
             <p class="ht-empty-description">Add a destination and travel dates to get started.</p>
-            <a href="/holiday_traveling/trip_create.php" class="ht-btn ht-btn-primary">Create a trip</a>
         </section>
     <?php else: ?>
-        <nav class="ht-board-nav" aria-label="Trip sections">
+        <nav class="ht-board-nav" id="tripBoard" aria-label="Trip sections">
+            <a href="#tripBoard" data-trip-filter="all" aria-current="true">All trips <span><?= count($trips) ?></span></a>
             <?php foreach ($sections as $section): ?>
                 <?php if (!$section['trips']) continue; ?>
-                <a href="#<?= $section['id'] ?>"><?= $section['title'] ?> <span><?= count($section['trips']) ?></span></a>
+                <a href="#<?= $section['id'] ?>" data-trip-filter="<?= $section['id'] ?>"><?= $section['title'] ?> <span><?= count($section['trips']) ?></span></a>
             <?php endforeach; ?>
         </nav>
 
         <?php foreach ($sections as $section): ?>
             <?php if (!$section['trips']) continue; ?>
-            <section class="ht-board-section" id="<?= $section['id'] ?>" aria-labelledby="<?= $section['id'] ?>Heading">
+            <section class="ht-board-section" id="<?= $section['id'] ?>" data-trip-section aria-labelledby="<?= $section['id'] ?>Heading">
                 <h2 class="family-section-title" id="<?= $section['id'] ?>Heading"><?= $section['title'] ?></h2>
                 <div class="ht-board-grid">
                     <?php foreach ($section['trips'] as $trip): ?>

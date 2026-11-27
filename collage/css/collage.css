@@ -333,3 +333,50 @@
 .collage-page .collage-toolbar :focus-visible { outline-color: #256241; }
 .collage-page .collage-background { display: inline-flex; align-items: center; gap: 8px; }
 .collage-page .collage-background input { width: 25px; height: 25px; padding: 0; cursor: pointer; }
+
+.collage-heading.photo-hero { margin-top: 16px; margin-bottom: 13px; }
+.collage-heading.photo-hero > a { color: #ffe3ba; }
+body.collage-page .collage-toolbar {
+    border: 1px solid var(--family-line);
+    background: var(--family-paper);
+}
+body.collage-page #collageCanvasWrapper {
+    border: 1px solid var(--family-line);
+    border-top: 0;
+    background: #e8e2d7;
+}
+body.collage-page #collageCanvasWrapper.is-file-target { box-shadow: inset 0 0 0 3px #477d94; }
+.collage-page .layout-menu.visible {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: min(310px, calc(100vw - 16px));
+    border: 1px solid var(--family-line);
+    background: var(--family-paper);
+}
+.collage-page .layout-option {
+    display: grid;
+    gap: 7px;
+    place-items: center;
+    padding: 6px 3px;
+    color: var(--family-ink);
+    font-size: .83rem;
+    font-weight: 750;
+}
+.collage-page .layout-option:is(:hover, [aria-pressed="true"]) { background: #e1edf1; }
+.layout-preview {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    width: 48px;
+    height: 39px;
+    gap: 2px;
+}
+.layout-preview i { border-radius: 3px; background: #607f92; }
+.layout-preview i:nth-child(2) { background: #ba8053; }
+.layout-preview i:nth-child(3) { background: #94abb5; }
+.layout-preview i:nth-child(4) { background: #d9b694; }
+[data-layout="masonry"] .layout-preview { grid-template-columns: 2fr 1fr; }
+[data-layout="masonry"] .layout-preview i:first-child { grid-row: span 2; }
+[data-layout="masonry"] .layout-preview i:last-child { display: none; }
+[data-layout="freeform"] .layout-preview i:first-child { transform: translate(5px, 4px) rotate(-12deg); }
+[data-layout="freeform"] .layout-preview i:nth-child(4) { transform: translate(-5px, -4px) rotate(12deg); }

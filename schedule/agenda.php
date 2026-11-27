@@ -24,6 +24,9 @@ $dateLabel = $viewMode === 'week'
             <button type="button" class="planner-control" onclick="showDatePicker()">Pick date</button>
         </div>
     </div>
+    <?php if ($viewMode === 'day'): ?>
+        <?php renderPlannerWeek($day, new DateTimeImmutable($today), static fn(string $date): string => "?date=$date&view=day"); ?>
+    <?php endif; ?>
     <header class="planner-date-heading">
         <div>
             <h2 tabindex="-1" id="scheduleDateHeading"><?= $dateLabel ?></h2>

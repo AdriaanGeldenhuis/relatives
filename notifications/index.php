@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../shared/components/avatar.php';
-require_once __DIR__ . '/../shared/components/family-app-art.php';
+require_once __DIR__ . '/../shared/components/family-scenes.php';
 
 header('Cache-Control: private, no-store');
 
@@ -181,13 +181,15 @@ if (!$ajax) {
 ?>
 
 <main class="family-main notifications-main" id="notificationsContent" data-unread="<?= $unreadCount ?>">
-    <header class="family-hero app-hero">
+    <header class="family-hero app-hero photo-hero photo-hero-compact">
         <div class="family-hero-content">
             <h1 class="family-hero-title">Notifications</h1>
-            <p class="family-hero-summary"><?= $unreadCount ? $unreadCount . ' unread' : 'You’re all caught up.' ?></p>
+            <?php if (!$unreadCount): ?><p class="family-hero-summary">You’re all caught up.</p><?php endif; ?>
             <div class="family-actions">
                 <?php if ($unreadCount): ?>
-                    <button type="button" class="btn btn-primary" data-notification-action="mark_all_read">Mark all read</button>
+                    <a href="?filter=unread" class="btn btn-primary" data-notification-filter="unread"
+                       <?= $filter === 'unread' ? 'aria-current="page"' : '' ?>><?= $unreadCount ?> unread</a>
+                    <button type="button" class="btn" data-notification-action="mark_all_read">Mark all read</button>
                 <?php endif; ?>
                 <?php if ($hasRead): ?>
                     <button type="button" class="btn" data-notification-action="confirm_clear" aria-haspopup="dialog" aria-controls="clearConfirmModal">Clear read</button>
@@ -195,17 +197,16 @@ if (!$ajax) {
                 <button type="button" class="btn" data-notification-action="preferences" aria-haspopup="dialog" aria-controls="preferencesModal">Settings</button>
             </div>
         </div>
-        <?php renderFamilyAppArt('notifications', true); ?>
+        <?php renderFamilyScene('family'); ?>
     </header>
 
     <nav class="notifications-filters" aria-label="Filter notifications">
-        <?php foreach ($notifTypes as $key => $type): ?>
+        <?php foreach ($notifTypes as $key => $type):
+            if ($key === 'unread' && $unreadCount) continue;
+            ?>
             <a href="<?= $key === 'all' ? '/notifications/' : '?filter=' . $key ?>" class="btn"
                 data-notification-filter="<?= $key ?>" <?= $key === $filter ? 'aria-current="page"' : '' ?>>
                 <?= $type['label'] ?>
-                <?php if ($key === 'unread' && $unreadCount): ?>
-                    <span class="notifications-count"><?= $unreadCount ?></span>
-                <?php endif; ?>
             </a>
         <?php endforeach; ?>
     </nav>

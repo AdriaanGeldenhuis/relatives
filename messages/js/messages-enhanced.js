@@ -55,6 +55,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // ENHANCED TOOLBAR (EXPORT REMOVED)
 // ============================================
 function addEnhancedToolbar() {
+    const members = document.getElementById('familyMembersDetails');
+    if (members && window.matchMedia('(min-width: 900px)').matches) members.open = true;
     const toolbar = document.getElementById('messagesActions');
     const chat = document.getElementById('chatMain');
     if (!toolbar || !chat) return;

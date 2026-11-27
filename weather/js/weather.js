@@ -862,8 +862,16 @@
     const linked = query.get('lat')?.trim() && query.get('lon')?.trim()
         ? { lat: Number(query.get('lat')), lon: Number(query.get('lon')), name: 'Your location', useProviderName: true }
         : null;
+    const tripDestination = query.get('place')?.trim().slice(0, searchInput.maxLength);
+    const destinationCity = tripDestination && places.find(place => place.name.toLowerCase() === tripDestination.toLowerCase());
     if (validPlace(linked)) {
         selectPlace(linked);
+    } else if (destinationCity) {
+        selectPlace(destinationCity);
+    } else if (tripDestination) {
+        renderQuickPlaces();
+        searchInput.value = tripDestination;
+        searchInput.focus();
     } else if (validPlace(preferences.recent)) {
         selectPlace(preferences.recent);
     } else if (validPlace(settings.savedCity)) {

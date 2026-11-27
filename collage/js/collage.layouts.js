@@ -109,7 +109,10 @@ const CollageLayouts = (() => {
         layoutMenu.className = 'layout-menu';
         layoutMenu.id = 'collageLayoutOptions';
         layoutMenu.innerHTML = Object.entries(LAYOUTS).map(([key, label]) => `
-            <button class="layout-option" data-layout="${key}">${label}</button>
+            <button type="button" class="layout-option" data-layout="${key}" aria-pressed="false">
+                <span class="layout-preview" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+                <span>${label}</span>
+            </button>
         `).join('');
 
         layoutMenu.addEventListener('click', (e) => {
@@ -137,11 +140,15 @@ const CollageLayouts = (() => {
         anchorBtn.setAttribute('aria-expanded', 'true');
 
         const rect = anchorBtn.getBoundingClientRect();
-        layoutMenu.style.top = `${rect.bottom + 5}px`;
-        layoutMenu.style.left = `${rect.left}px`;
+        for (const option of layoutMenu.querySelectorAll('button')) {
+            option.setAttribute('aria-pressed', String(CollageState.get('layout') === option.dataset.layout));
+        }
         layoutMenu.classList.add('visible');
-        layoutMenu.style.left = `${Math.min(rect.left, innerWidth - layoutMenu.offsetWidth - 8)}px`;
-        layoutMenu.querySelector('button')?.focus();
+        const top = rect.bottom + layoutMenu.offsetHeight + 5 <= innerHeight ? rect.bottom + 5
+            : Math.max(6, rect.top - layoutMenu.offsetHeight - 5);
+        layoutMenu.style.top = `${top}px`;
+        layoutMenu.style.left = `${Math.max(6, Math.min(rect.left, innerWidth - layoutMenu.offsetWidth - 8))}px`;
+        layoutMenu.querySelector('[aria-pressed="true"]')?.focus();
 
         setTimeout(() => {
             document.addEventListener('click', closeOnOutsideClick);
