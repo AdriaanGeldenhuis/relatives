@@ -18,10 +18,7 @@ const EnhancedMessageApp = {
     bulkMode: false,
     
     // Editing
-    editingMessageId: null,
-    
-    // Search
-    searchResults: []
+    editingMessageId: null
 };
 
 // ============================================
@@ -187,166 +184,160 @@ function cancelEdit(messageId) {
 // SEARCH DIALOG
 // ============================================
 function openSearchDialog() {
-    const dialogHtml = `
-        <div class="modal-overlay" id="searchModal">
-            <div class="modal-dialog search-dialog">
-                <div class="modal-header">
-                    <h3>🔍 Search Messages</h3>
-                    <button onclick="closeSearchDialog()" class="modal-close">✖️</button>
-                </div>
-                <div class="modal-body">
-                    <div class="search-form">
-                        <input type="text" id="searchQuery" placeholder="Search messages..." class="search-input">
-                        
-                        <div class="search-filters">
-                            <h4>Filters</h4>
-                            
-                            <div class="filter-group">
-                                <label>From User:</label>
-                                <select id="filterUserId" class="filter-select">
-                                    <option value="">All Members</option>
-                                </select>
-                            </div>
-                            
-                            <div class="filter-group">
-                                <label>Message Type:</label>
-                                <select id="filterType" class="filter-select">
-                                    <option value="">All Types</option>
-                                    <option value="text">Text</option>
-                                    <option value="image">Images</option>
-                                    <option value="video">Videos</option>
-                                    <option value="audio">Audio</option>
-                                </select>
-                            </div>
-                            
-                            <div class="filter-group">
-                                <label>Date From:</label>
-                                <input type="date" id="filterDateFrom" class="filter-input">
-                            </div>
-                            
-                            <div class="filter-group">
-                                <label>Date To:</label>
-                                <input type="date" id="filterDateTo" class="filter-input">
-                            </div>
-                            
-                            <div class="filter-group">
-                                <label>
-                                    <input type="checkbox" id="filterHasMedia">
-                                    Only messages with media
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <button onclick="performSearch()" class="btn btn-primary">Search</button>
-                    </div>
-                    
-                    <div id="searchResults" class="search-results"></div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', dialogHtml);
-    
-    // Load family members for filter
-    loadFamilyMembersForFilter();
-    
-    // Focus search input
-    document.getElementById('searchQuery').focus();
-    
-    // Enter to search
-    document.getElementById('searchQuery').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            performSearch();
-        }
-    });
-}
-
-function closeSearchDialog() {
-    document.getElementById('searchModal')?.remove();
-}
-
-function loadFamilyMembersForFilter() {
-    const members = document.querySelectorAll('.member-item');
-    const select = document.getElementById('filterUserId');
-    
-    members.forEach(member => {
-        const name = member.querySelector('.member-name')?.textContent;
-        const userId = member.dataset.userId;
-        if (name && userId && name !== 'You') {
-            const option = document.createElement('option');
-            option.value = userId;
-            option.textContent = name;
-            select.appendChild(option);
-        }
-    });
-}
-
-async function performSearch() {
-    const query = document.getElementById('searchQuery').value.trim();
-    const userId = document.getElementById('filterUserId').value;
-    const type = document.getElementById('filterType').value;
-    const dateFrom = document.getElementById('filterDateFrom').value;
-    const dateTo = document.getElementById('filterDateTo').value;
-    const hasMedia = document.getElementById('filterHasMedia').checked;
-    
-    const resultsContainer = document.getElementById('searchResults');
-    resultsContainer.innerHTML = '<div class="loading">Searching...</div>';
-    
-    try {
-        const params = new URLSearchParams();
-        if (query) params.append('query', query);
-        if (userId) params.append('user_id', userId);
-        if (type) params.append('type', type);
-        if (dateFrom) params.append('date_from', dateFrom);
-        if (dateTo) params.append('date_to', dateTo);
-        if (hasMedia) params.append('has_media', '1');
-        
-        const response = await fetch(`/messages/api/search.php?${params.toString()}`, {
-            credentials: 'same-origin'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            displaySearchResults(data.results || [], data.total || 0);
-        } else {
-            resultsContainer.innerHTML = '<div class="empty-results">Search failed: ' + data.message + '</div>';
-        }
-    } catch (error) {
-        console.error('Search error:', error);
-        resultsContainer.innerHTML = '<div class="empty-results">Search failed</div>';
-    }
-}
-
-function displaySearchResults(results, total) {
-    const container = document.getElementById('searchResults');
-    
-    if (results.length === 0) {
-        container.innerHTML = '<div class="empty-results">No messages found</div>';
+    const open = document.getElementById('searchModal');
+    if (open) {
+        open.querySelector('#searchQuery').focus();
         return;
     }
-    
-    let html = `<div class="search-results-header">Found ${total} message${total !== 1 ? 's' : ''}</div>`;
-    
-    results.forEach(msg => {
-        const date = new Date(msg.created_at).toLocaleString();
-        const content = msg.content_highlighted || msg.content || '[No text content]';
-        
-        html += `
-            <div class="search-result-item" onclick="scrollToMessage(${msg.id}); closeSearchDialog();">
-                <div class="result-header">
-                    <strong>${escapeHtml(msg.full_name)}</strong>
-                    <span class="result-date">${date}</span>
-                </div>
-                <div class="result-content">${content}</div>
-                ${msg.media_path ? '<div class="result-media-indicator">📎 Has media</div>' : ''}
-                ${msg.edited_at ? '<div class="result-edited-indicator">(edited)</div>' : ''}
-            </div>
-        `;
+    const dialog = document.createElement('dialog');
+    dialog.id = 'searchModal';
+    dialog.className = 'search-dialog';
+    dialog.setAttribute('aria-labelledby', 'chatSearchTitle');
+    dialog.innerHTML = `
+        <div class="modal-header">
+            <h2 id="chatSearchTitle">Search messages</h2>
+            <button type="button" class="modal-close" aria-label="Close search">×</button>
+        </div>
+        <div class="modal-body">
+            <form class="search-form">
+                <input type="search" name="query" id="searchQuery" maxlength="200"
+                       placeholder="Search messages or filenames" aria-label="Search messages or filenames" class="search-input">
+                <details class="search-filters">
+                    <summary>Filters</summary>
+                    <label class="filter-group">From
+                        <select name="user_id" class="filter-select"><option value="">Everyone</option></select>
+                    </label>
+                    <label class="filter-group">Type
+                        <select name="type" class="filter-select">
+                            <option value="">All types</option>
+                            <option value="text">Text</option>
+                            <option value="image">Photos</option>
+                            <option value="video">Videos</option>
+                            <option value="audio">Audio</option>
+                            <option value="file">Files</option>
+                        </select>
+                    </label>
+                    <label class="filter-group">From date
+                        <input type="date" name="date_from" class="filter-input">
+                    </label>
+                    <label class="filter-group">To date
+                        <input type="date" name="date_to" class="filter-input">
+                    </label>
+                    <label><input type="checkbox" name="has_media" value="1"> Only with attachments</label>
+                </details>
+                <button type="submit" class="btn btn-primary">Search</button>
+            </form>
+            <p id="chatSearchStatus" class="search-results-header" role="status"></p>
+            <div id="searchResults" class="search-results"></div>
+            <button type="button" class="search-more" hidden>More results</button>
+        </div>`;
+
+    const form = dialog.querySelector('form');
+    const member = form.elements.user_id;
+    member.add(new Option('You', MessageSystem.currentUserId));
+    document.querySelectorAll('.member-item[data-user-id]').forEach(row => {
+        member.add(new Option(row.querySelector('.member-name').textContent, row.dataset.userId));
     });
-    
-    container.innerHTML = html;
+
+    const results = dialog.querySelector('#searchResults');
+    const status = dialog.querySelector('#chatSearchStatus');
+    const more = dialog.querySelector('.search-more');
+    let request;
+    let filters;
+    let next;
+    async function load(append = false) {
+        request?.abort();
+        const active = new AbortController();
+        request = active;
+        if (!append) {
+            filters = new URLSearchParams();
+            for (const [key, value] of new FormData(form)) if (value) filters.set(key, value);
+            filters.set('account', `${MessageSystem.familyId}:${MessageSystem.currentUserId}`);
+            results.replaceChildren();
+        }
+        more.hidden = true;
+        status.textContent = 'Searching…';
+        const params = new URLSearchParams(filters);
+        if (append && next) params.set('before', next);
+        const timeout = setTimeout(() => active.abort(), 8000);
+        try {
+            const response = await fetch('/messages/api/search.php?' + params, { cache: 'no-store', signal: active.signal });
+            const data = await response.json();
+            if (request !== active || !dialog.open) return;
+            if (!response.ok || !data.success) throw new Error(data.error || 'Could not search messages.');
+            const query = filters.get('query')?.trim();
+            results.append(...data.results.map(message => searchResult(message, query, dialog)));
+            status.textContent = data.total ? `${data.total} ${data.total === 1 ? 'match' : 'matches'}` : 'No messages found.';
+            next = data.next_before;
+            more.hidden = !next;
+        } catch (error) {
+            if (request !== active || !dialog.open) return;
+            status.textContent = active.signal.aborted ? 'Search timed out. Try again.' : (error.message || 'Search unavailable.');
+            more.hidden = !append;
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    form.addEventListener('submit', event => {
+        event.preventDefault();
+        load();
+    });
+    more.addEventListener('click', () => load(true));
+    dialog.querySelector('.modal-close').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => {
+        request?.abort();
+        dialog.remove();
+        updateNativeChatVisibility();
+        scheduleRead();
+    }, { once: true });
+    document.body.append(dialog);
+    dialog.showModal();
+    form.elements.query.focus();
+    updateNativeChatVisibility();
+}
+
+function searchResult(message, query, dialog) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'search-result-item';
+    const header = document.createElement('span');
+    header.className = 'result-header';
+    const name = document.createElement('strong');
+    name.textContent = message.full_name;
+    const date = document.createElement('span');
+    date.className = 'result-date';
+    date.textContent = messageDate(message).toLocaleString();
+    header.append(name, date);
+    button.append(header);
+    const content = document.createElement('span');
+    content.className = 'result-content';
+    const text = message.excerpt || message.attachments.map(file => file.name).join(', ') || 'Message';
+    if (query) {
+        const literal = [...query].map(character => '\\^$.*+?()[]{}|'.includes(character) ? '\\' + character : character).join('');
+        text.split(new RegExp(`(${literal})`, 'giu')).forEach((part, index) => {
+            if (index % 2 === 0) content.append(part);
+            else {
+                const mark = document.createElement('mark');
+                mark.textContent = part;
+                content.append(mark);
+            }
+        });
+    } else {
+        content.textContent = text;
+    }
+    button.append(content);
+    if (message.excerpt && message.attachments.length) {
+        const attachments = document.createElement('span');
+        attachments.className = 'result-media-indicator';
+        attachments.textContent = message.attachments.map(file => file.name).join(', ');
+        button.append(attachments);
+    }
+    button.addEventListener('click', () => {
+        dialog.close();
+        scrollToMessage(message.id);
+    });
+    return button;
 }
 
 // ============================================
@@ -528,8 +519,7 @@ function setupEnhancedEventListeners() {
         }
         
         // Escape: Close modals
-        if (e.key === 'Escape') {
-            closeSearchDialog();
+        if (e.key === 'Escape' && !document.getElementById('searchModal')) {
             if (EnhancedMessageApp.editingMessageId) {
                 cancelEdit(EnhancedMessageApp.editingMessageId);
             }
@@ -576,7 +566,7 @@ function updateCharacterCount(count) {
         document.querySelector('.message-input-wrapper')?.appendChild(counter);
     }
     
-    counter.hidden = count === 0;
+    counter.hidden = count <= 4500;
     counter.textContent = `${count}/5000`;
     
     if (count > 4500) {
@@ -658,8 +648,6 @@ window.enableEditMessage = enableEditMessage;
 window.saveEditedMessage = saveEditedMessage;
 window.cancelEdit = cancelEdit;
 window.openSearchDialog = openSearchDialog;
-window.closeSearchDialog = closeSearchDialog;
-window.performSearch = performSearch;
 window.toggleBulkMode = toggleBulkMode;
 window.selectAllMessages = selectAllMessages;
 window.deselectAllMessages = deselectAllMessages;

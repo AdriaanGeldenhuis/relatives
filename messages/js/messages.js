@@ -13,17 +13,17 @@ const MessageSystem = {
     currentUserId: null,
     currentUserName: null,
     familyId: null,
-    lastMessageId: 0,
     changeCursor: null,
     initialLoadComplete: false,
     replyToMessageId: null,
     contextMessageId: null,
     mediaFiles: [],
     typingTimeout: null,
-    typingInterval: null,
 };
 
-const MESSAGE_POLL_INTERVAL = 3000;
+const MESSAGE_POLL_INTERVAL = 1800;
+const timeline = { hasOlder: false, hasNewer: false, latestId: 0n, jump: null, page: null };
+const messageRows = new Map();
 let chatOutbox;
 let syncTimer;
 let syncing = false;
@@ -35,6 +35,7 @@ let readObserver;
 let readTimer;
 let reportingReads = false;
 let lastTypingPing = -Infinity;
+let followViewport = true;
 const visibleMessages = new Set();
 const confirmedReads = new Set();
 let nativeChatVisible = null;
@@ -43,12 +44,15 @@ document.addEventListener('DOMContentLoaded', () => {
     MessageSystem.currentUserId = document.getElementById('currentUserId').value;
     MessageSystem.currentUserName = document.getElementById('currentUserName').value;
     MessageSystem.familyId = document.getElementById('familyId').value;
+    timeline.jump = { id: linkedMessage(), push: false };
     chatOutbox = new ChatOutbox(
         `${MessageSystem.familyId}:${MessageSystem.currentUserId}`,
         document.getElementById('sendBtn').dataset.csrf,
         renderPendingMessages,
         message => {
-            if (message) displayMessages([message]);
+            if (message && MessageSystem.initialLoadComplete && !timeline.hasNewer && !timeline.jump && !timeline.page) {
+                displayMessages([message], { follow: isScrolledToBottom() });
+            }
             loadNewMessages();
         }
     );
@@ -67,9 +71,15 @@ function updateConnectionStatus(message) {
 
 function showEmptyConversation() {
     const list = document.getElementById('messagesList');
-    if (!list.firstElementChild) {
-        list.innerHTML = '<div class="empty-state"><h3>No messages yet</h3></div>';
+    if (MessageSystem.initialLoadComplete && !messageRows.size
+        && !list.querySelector('#pendingMessages, .empty-state')) {
+        document.getElementById('newerMessages').insertAdjacentHTML('beforebegin', '<div class="empty-state"><h3>No messages yet</h3></div>');
     }
+}
+
+function linkedMessage() {
+    const id = new URLSearchParams(location.search).get('message');
+    return /^[1-9][0-9]*$/.test(id) ? id : null;
 }
 
 async function loadNewMessages() {
@@ -85,67 +95,81 @@ async function loadNewMessages() {
     }
 
     syncing = true;
-    const snapshot = !MessageSystem.initialLoadComplete;
+    const jump = timeline.jump;
+    const page = jump ? null : timeline.page;
     let more = false;
     try {
-        const focus = new URLSearchParams(location.search).get('message');
-        const params = new URLSearchParams();
-        if (snapshot) {
-            if (/^\d+$/.test(focus)) params.set('message', focus);
-        } else if (MessageSystem.changeCursor === null) {
-            params.set('since', MessageSystem.lastMessageId);
+        const params = new URLSearchParams({ account: chatOutbox.account });
+        if (page) {
+            params.set(page.direction, page.id);
         } else {
-            params.set('cursor', MessageSystem.changeCursor);
+            params.set('typing', '1');
+            const pending = chatOutbox.pendingIds();
+            if (pending.length) params.set('pending', pending.join(','));
+            if (jump) {
+                if (jump.id) params.set('message', jump.id);
+            } else if (MessageSystem.changeCursor === null) {
+                params.set('since', timeline.latestId);
+            } else {
+                params.set('cursor', MessageSystem.changeCursor);
+            }
         }
         const response = await fetch('/messages/api/fetch.php?' + params, {
             credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000)
         });
-        if (response.status === 401 || response.status === 403) {
-            sessionExpired = true;
-            MessageSystem.initialLoadComplete = false;
-            const link = document.createElement('a');
-            link.className = 'chat-sign-in';
-            link.href = '/login.php?redirect=' + encodeURIComponent(location.pathname + location.search);
-            link.textContent = 'Sign in to continue';
-            const list = document.getElementById('messagesList');
-            list.replaceChildren(link);
-            updateConnectionStatus('Session expired');
+        if ([401, 403, 409].includes(response.status)) {
+            closeExpiredConversation(response.status);
             return;
         }
         if (!response.ok) throw new Error('Chat sync failed');
         const data = await response.json();
         if (!data.success) throw new Error('Chat sync failed');
-        if (data.reset) {
-            MessageSystem.initialLoadComplete = false;
-            more = true;
-            return;
-        }
+        if (jump !== timeline.jump || (page && page !== timeline.page)) return;
 
         syncFailures = 0;
-        MessageSystem.initialLoadComplete = true;
-        MessageSystem.changeCursor = data.cursor ?? null;
         updateConnectionStatus('');
-        const list = document.getElementById('messagesList');
-        for (const id of data.removed ?? []) {
-            const row = list.querySelector(`[data-message-id="${id}"]`);
-            if (row) {
-                unobserveMessage(row);
-                row.remove();
+        if (page) {
+            if (page.direction === 'before') timeline.hasOlder = data.has_older;
+            else timeline.hasNewer = data.has_newer;
+            displayMessages(data.messages);
+            timeline.page = null;
+            more = true;
+        } else {
+            chatOutbox.confirm(data.acknowledged || []);
+            updateTypingIndicator(data.typing || []);
+            if (data.reset) {
+                timeline.jump = { id: currentScrollAnchor()?.id || linkedMessage(), push: false };
+                more = true;
+                return;
             }
+            if (jump) {
+                timeline.latestId = BigInt(data.latest_message_id ?? 0);
+                timeline.hasOlder = data.has_older;
+                timeline.hasNewer = data.has_newer;
+                timeline.jump = null;
+                pendingMessageCount = 0;
+                MessageSystem.initialLoadComplete = true;
+                displayMessages(data.messages, { replace: true, follow: !data.focused });
+                renderPendingMessages();
+                if (data.focused) revealMessage(jump.id, 'auto');
+                else if (jump.id) showError('This message is no longer available.');
+                if (jump.push) {
+                    const url = jump.id && data.focused ? '/messages/?message=' + jump.id : '/messages/';
+                    if (location.pathname + location.search !== url) history.pushState(null, '', url);
+                }
+            } else {
+                applyLiveMessages(data.messages, data.removed || []);
+            }
+            MessageSystem.changeCursor = data.cursor ?? null;
+            more = data.more === true;
         }
-        if (snapshot || data.messages.length || data.removed?.length) {
-            displayMessages(data.messages, snapshot, true, Boolean(data.removed?.length));
-        }
-        if (snapshot) renderPendingMessages();
         showEmptyConversation();
-        if (data.messages.length) {
-            MessageSystem.lastMessageId = Math.max(MessageSystem.lastMessageId, ...data.messages.map(message => message.id));
-        }
-        if (snapshot && params.has('message')) scrollToMessage(focus, { navigate: false, behavior: 'auto' });
-        more = data.more === true;
+        updateScrollControls();
         scheduleRead();
     } catch {
         syncFailures++;
+        timeline.page = null;
+        updateScrollControls();
         updateConnectionStatus(navigator.onLine ? 'Reconnecting…' : 'Offline');
     } finally {
         syncing = false;
@@ -155,6 +179,82 @@ async function loadNewMessages() {
         }
         syncAgain = false;
     }
+}
+
+function closeExpiredConversation(status) {
+    sessionExpired = true;
+    chatOutbox.pause();
+    MessageSystem.initialLoadComplete = false;
+    timeline.jump = timeline.page = null;
+    document.getElementById('searchModal')?.close();
+    document.querySelector('.media-viewer[open]')?.close();
+    const input = document.getElementById('messageInput');
+    input.value = '';
+    input.disabled = true;
+    document.getElementById('sendBtn').disabled = true;
+    cancelReply();
+    cancelMedia();
+    readObserver.disconnect();
+    visibleMessages.clear();
+    messageRows.clear();
+    const link = document.createElement('a');
+    link.className = 'chat-sign-in';
+    link.href = status === 409 ? '/messages/' : '/login.php?redirect=' + encodeURIComponent(location.pathname + location.search);
+    link.textContent = status === 409 ? 'Reopen Messages' : 'Sign in to continue';
+    const list = document.getElementById('messagesList');
+    list.replaceChildren(document.getElementById('earlierMessages'), link, document.getElementById('newerMessages'));
+    timeline.hasOlder = timeline.hasNewer = false;
+    updateScrollControls();
+    updateConnectionStatus(status === 409 ? 'Account changed' : 'Session expired');
+}
+
+function loadHistory(direction) {
+    if (timeline.jump || timeline.page || sessionExpired || !navigator.onLine) return;
+    const before = direction === 'before';
+    if (before ? !timeline.hasOlder : !timeline.hasNewer) return;
+    const rows = document.getElementById('messagesList').querySelectorAll(':scope > [data-message-id]');
+    const row = before ? rows[0] : rows[rows.length - 1];
+    if (!row) return;
+    timeline.page = { direction, id: row.dataset.messageId };
+    updateScrollControls();
+    loadNewMessages();
+}
+
+function openChatWindow(id, push = true) {
+    timeline.jump = { id, push };
+    timeline.page = null;
+    if (!navigator.onLine) showError('Chat will open when you reconnect.');
+    updateNativeChatVisibility();
+    loadNewMessages();
+}
+
+function applyLiveMessages(messages, removed) {
+    if (!messages.length && !removed.length) return;
+    const list = document.getElementById('messagesList');
+    const first = list.querySelector(':scope > [data-message-id]')?.dataset.messageId;
+    const newest = previousMessage(document.getElementById('newerMessages'))?.dataset.messageId;
+    const following = !timeline.hasNewer && isScrolledToBottom();
+    let added = 0;
+    const inWindow = messages.filter(message => {
+        const id = BigInt(message.id);
+        const key = String(message.id);
+        if (id > timeline.latestId && String(message.user_id) !== String(MessageSystem.currentUserId)) added++;
+        if (messageRows.has(key)) return true;
+        if (timeline.hasNewer) {
+            return first && newest && id >= BigInt(first) && id <= BigInt(newest);
+        }
+        return !first || id >= BigInt(first) || !timeline.hasOlder;
+    });
+    if (messages.length) {
+        const mostRecent = BigInt(messages.at(-1).id);
+        if (mostRecent > timeline.latestId) timeline.latestId = mostRecent;
+    }
+    if (!following && added) {
+        pendingMessageCount += added;
+        document.getElementById('chatAnnouncement').textContent = added === 1 ? 'New message' : `${added} new messages`;
+    }
+    displayMessages(inWindow, { removed, follow: following });
+    if (!messageRows.size && (timeline.hasOlder || timeline.hasNewer)) openChatWindow(null, false);
 }
 
 // ============================================
@@ -167,7 +267,8 @@ function formatDateSeparator(date) {
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const msgDate = new Date(date.replace(' ', 'T'));
+    const msgDate = date;
+    if (Number.isNaN(msgDate.getTime())) return 'Date unavailable';
 
     // Reset time parts for comparison
     const todayStr = today.toDateString();
@@ -187,7 +288,8 @@ function formatDateSeparator(date) {
         // Older than a week - show full date
         return msgDate.toLocaleDateString([], {
             day: 'numeric',
-            month: 'long'
+            month: 'long',
+            ...(msgDate.getFullYear() === today.getFullYear() ? {} : { year: 'numeric' })
         });
     }
 }
@@ -204,63 +306,123 @@ function createDateSeparator(dateText) {
 // ============================================
 // DISPLAY MESSAGES
 // ============================================
-function displayMessages(messages, clearFirst = false, applyEdits = false, removed = false) {
+function displayMessages(messages, { replace = false, follow = false, removed = [] } = {}) {
     const list = document.getElementById('messagesList');
-    if (clearFirst) {
+    const earlier = document.getElementById('earlierMessages');
+    const newer = document.getElementById('newerMessages');
+    const anchor = replace || follow ? null : currentScrollAnchor();
+    if (replace) {
         readObserver.disconnect();
         visibleMessages.clear();
-        list.replaceChildren();
-        pendingMessageCount = 0;
+        messageRows.clear();
+        list.replaceChildren(earlier, newer);
+    }
+    removed.forEach(removeMessageRow);
+    for (const id of removed) {
+        list.querySelectorAll(`[data-quote="${id}"]`).forEach(quote => {
+            quote.disabled = true;
+            quote.textContent = 'Message unavailable';
+        });
     }
     if (messages.length) list.querySelector(':scope > .empty-state')?.remove();
 
-    const follow = clearFirst || isScrolledToBottom();
-    const rows = [...list.querySelectorAll(':scope > [data-message-id]')];
-    const lastId = rows.at(-1)?.dataset.messageId || '0';
-    const pending = list.querySelector('#pendingMessages');
-    let changed = clearFirst || removed;
-    let added = 0;
-
+    const ordered = [...list.querySelectorAll(':scope > [data-message-id]')];
     for (const message of messages) {
-        const existing = list.querySelector(`[data-message-id="${message.id}"]`);
+        const key = String(message.id);
+        const existing = messageRows.get(key);
         if (existing) {
-            if (applyEdits && (existing.dataset.editedAt !== (message.edited_at || '')
-                || existing.dataset.editCount !== String(message.edit_count ?? 0)
-                || existing.dataset.pinned !== String(Boolean(Number(message.pinned))))) {
+            if (existing.dataset.editCount !== String(message.edit_count ?? 0)
+                || existing.dataset.editedAt !== (message.edited_at || '')
+                || existing.dataset.pinned !== String(Boolean(Number(message.pinned)))) {
                 const replacement = createMessageElement(message);
                 unobserveMessage(existing);
                 existing.replaceWith(replacement);
-                readObserver.observe(replacement);
-            } else if (applyEdits && existing.dataset.reactions !== reactionKey(message.reactions)) {
+                observeMessage(replacement);
+            } else if (existing.dataset.reactions !== reactionKey(message.reactions)) {
                 updateReactionDOM(message.id, message.reactions);
+                if (existing.classList.contains('own')) confirmedReads.delete(key);
             }
             continue;
         }
 
+        const id = BigInt(key);
+        let low = 0;
+        let high = ordered.length;
+        while (low < high) {
+            const middle = (low + high) >>> 1;
+            if (BigInt(ordered[middle].dataset.messageId) < id) low = middle + 1;
+            else high = middle;
+        }
+        const next = ordered[low] ? messageRows.get(ordered[low].dataset.messageId) : null;
         const row = createMessageElement(message);
-        const later = rows.find(item => BigInt(item.dataset.messageId) > BigInt(message.id));
-        list.insertBefore(row, later || pending);
-        readObserver.observe(row);
-        changed = true;
-        if (BigInt(message.id) > BigInt(lastId) && !row.classList.contains('own')) added++;
+        const separator = next?.previousElementSibling;
+        list.insertBefore(row, separator?.classList.contains('date-separator') ? separator : next || newer);
+        observeMessage(row);
+        updateDateSeparator(row);
+        if (next) updateDateSeparator(next);
     }
 
-    if (changed) {
-        list.querySelectorAll(':scope > .date-separator').forEach(separator => separator.remove());
-        let day = null;
-        for (const row of list.querySelectorAll(':scope > [data-message-id]')) {
-            if (row.dataset.day === day) continue;
-            day = row.dataset.day;
-            list.insertBefore(createDateSeparator(formatDateSeparator(row.dataset.createdAt)), row);
-        }
-    }
-    if (follow) {
-        scrollToBottom();
-    } else if (added) {
-        pendingMessageCount += added;
-        document.getElementById('chatAnnouncement').textContent = added === 1 ? 'New message' : `${added} new messages`;
+    if (follow) scrollToBottom();
+    else if (anchor && messageRows.has(anchor.id)) {
+        list.scrollTop += messageRows.get(anchor.id).getBoundingClientRect().top - anchor.top;
     }
     updateScrollControls();
+}
+
+function previousMessage(element) {
+    const previous = element.previousElementSibling;
+    const candidate = previous?.classList.contains('date-separator') ? previous.previousElementSibling : previous;
+    return candidate?.hasAttribute('data-message-id') ? candidate : null;
+}
+
+function updateDateSeparator(row) {
+    const previous = row.previousElementSibling;
+    const separator = previous?.classList.contains('date-separator') ? previous : null;
+    if (previousMessage(row)?.dataset.day === row.dataset.day) {
+        separator?.remove();
+    } else if (!separator) {
+        row.before(createDateSeparator(row.dataset.dayLabel));
+    }
+}
+
+function observeMessage(row) {
+    messageRows.set(row.dataset.messageId, row);
+    readObserver.observe(row);
+}
+
+function removeMessageRow(id) {
+    const row = messageRows.get(String(id));
+    if (!row) return;
+    const previous = row.previousElementSibling;
+    const next = row.nextElementSibling;
+    const following = next?.classList.contains('date-separator') ? next.nextElementSibling : next;
+    if (previous?.classList.contains('date-separator')) previous.remove();
+    unobserveMessage(row);
+    row.remove();
+    messageRows.delete(String(id));
+    if (following?.hasAttribute('data-message-id')) updateDateSeparator(following);
+}
+
+function currentScrollAnchor() {
+    const list = document.getElementById('messagesList');
+    const viewport = list.getBoundingClientRect();
+    const rows = list.querySelectorAll(':scope > [data-message-id]');
+    let low = 0;
+    let high = rows.length;
+    while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (rows[middle].getBoundingClientRect().bottom <= viewport.top) low = middle + 1;
+        else high = middle;
+    }
+    const row = rows[low];
+    const top = row?.getBoundingClientRect().top;
+    return row && top < viewport.bottom ? { id: row.dataset.messageId, top } : null;
+}
+
+function messageDate(message) {
+    return message.sent_timestamp == null
+        ? new Date(message.created_at?.replace(' ', 'T') + '+02:00')
+        : new Date(Number(message.sent_timestamp) * 1000);
 }
 
 // ============================================
@@ -273,8 +435,9 @@ function createMessageElement(msg) {
     div.className = `message ${isOwn ? 'own' : ''} ${hasReactions ? 'has-reactions' : ''}`;
     div.dataset.messageId = msg.id;
     div.dataset.userId = msg.user_id;
-    div.dataset.createdAt = msg.created_at;
-    div.dataset.day = new Date(msg.created_at.replace(' ', 'T')).toDateString();
+    const msgDate = messageDate(msg);
+    div.dataset.day = msgDate.toDateString();
+    div.dataset.dayLabel = formatDateSeparator(msgDate);
     div.dataset.editedAt = msg.edited_at || '';
     div.dataset.editCount = String(msg.edit_count ?? 0);
     div.dataset.pinned = String(Boolean(Number(msg.pinned)));
@@ -294,109 +457,13 @@ function createMessageElement(msg) {
         </div>
     `;
     
-    let replyHtml = '';
-    if (msg.reply_to_message_id) {
-        replyHtml = `
-            <div class="message-reply" onclick="scrollToMessage(${msg.reply_to_message_id})">
-                ↩️ Replying to: ${escapeHtml(msg.reply_to_content || 'Message')}
-            </div>
-        `;
-    }
-    
-    let mediaHtml = '';
-    if (msg.media_path) {
-        // Try to detect multi-file JSON (type 'file' with JSON array, or legacy 'multi')
-        let isMulti = false;
-        if (msg.message_type === 'file' || msg.message_type === 'multi') {
-            try {
-                const parsed = typeof msg.media_path === 'string' ? JSON.parse(msg.media_path) : msg.media_path;
-                if (Array.isArray(parsed)) {
-                    isMulti = true;
-                    mediaHtml = '<div class="message-media message-media-multi">';
-                    parsed.forEach(f => {
-                        if (f.type && f.type.startsWith('image/')) {
-                            mediaHtml += `<img src="${f.path}" alt="${escapeHtml(f.name).replace(/"/g, '&quot;')}" loading="lazy" onclick="openMediaViewer('${f.path}', 'image')">`;
-                        } else if (f.type && f.type.startsWith('video/')) {
-                            mediaHtml += `<video src="${f.path}" controls></video>`;
-                        } else if (f.type && f.type.startsWith('audio/')) {
-                            mediaHtml += `<audio src="${f.path}" controls></audio>`;
-                        } else {
-                            const ext = f.name ? f.name.split('.').pop().toUpperCase() : 'FILE';
-                            const icon = (f.type === 'application/pdf') ? '📄' : '📎';
-                            const size = f.size ? (f.size / 1024).toFixed(0) + 'KB' : '';
-                            mediaHtml += `<a href="${f.path}" target="_blank" rel="noopener" class="message-doc">${icon} <span>${escapeHtml(f.name)}</span><small>${escapeHtml(ext)} ${size}</small></a>`;
-                        }
-                    });
-                    mediaHtml += '</div>';
-                }
-            } catch (e) {
-                // Not JSON - fall through to single file handling below
-            }
-        }
+    const quote = msg.reply_to_message_id
+        ? `<button type="button" class="message-reply" data-quote="${msg.reply_to_message_id}" ${msg.reply_to_name ? '' : 'disabled'}>
+                <strong>${escapeHtml(msg.reply_to_name || 'Message unavailable')}</strong>
+                ${msg.reply_to_name ? escapeHtml(msg.reply_to_content || attachmentLabel(msg.reply_to_type)) : ''}
+            </button>`
+        : '';
 
-        if (!isMulti) {
-            if (msg.message_type === 'image') {
-                mediaHtml = `
-                    <div class="message-media">
-                        <img src="${msg.media_path}" alt="Image" loading="lazy" onclick="openMediaViewer('${msg.media_path}', 'image')">
-                    </div>
-                `;
-            } else if (msg.message_type === 'video') {
-                mediaHtml = `
-                    <div class="message-media">
-                        <video src="${msg.media_path}" controls onclick="openMediaViewer('${msg.media_path}', 'video')"></video>
-                    </div>
-                `;
-            } else if (msg.message_type === 'voice' || msg.message_type === 'audio') {
-                mediaHtml = `
-                    <div class="message-media">
-                        <audio src="${msg.media_path}" controls></audio>
-                    </div>
-                `;
-            } else if (msg.message_type === 'file' || msg.message_type === 'document') {
-                const fileName = msg.media_path.split('/').pop();
-                const ext = fileName.split('.').pop().toUpperCase();
-                const icon = ext === 'PDF' ? '📄' : '📎';
-                mediaHtml = `
-                    <div class="message-media">
-                        <a href="${msg.media_path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(fileName)}</span><small>${ext}</small></a>
-                    </div>
-                `;
-            } else {
-                // Fallback: detect type from file extension so media always renders
-                const path = msg.media_path.toLowerCase();
-                if (path.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/)) {
-                    mediaHtml = `
-                        <div class="message-media">
-                            <img src="${msg.media_path}" alt="Image" loading="lazy" onclick="openMediaViewer('${msg.media_path}', 'image')">
-                        </div>
-                    `;
-                } else if (path.match(/\.(mp4|mov|webm)(\?|$)/)) {
-                    mediaHtml = `
-                        <div class="message-media">
-                            <video src="${msg.media_path}" controls onclick="openMediaViewer('${msg.media_path}', 'video')"></video>
-                        </div>
-                    `;
-                } else if (path.match(/\.(mp3|ogg|wav)(\?|$)/)) {
-                    mediaHtml = `
-                        <div class="message-media">
-                            <audio src="${msg.media_path}" controls></audio>
-                        </div>
-                    `;
-                } else {
-                    const fileName = msg.media_path.split('/').pop();
-                    const ext = fileName.split('.').pop().toUpperCase();
-                    const icon = ext === 'PDF' ? '📄' : '📎';
-                    mediaHtml = `
-                        <div class="message-media">
-                            <a href="${msg.media_path}" target="_blank" class="message-doc">${icon} <span>${escapeHtml(fileName)}</span><small>${ext}</small></a>
-                        </div>
-                    `;
-                }
-            }
-        }
-    }
-    
     const actions = `
         <div class="message-actions">
             <button type="button" class="message-action-btn" data-reply-trigger aria-label="Reply" title="Reply">↩️</button>
@@ -406,8 +473,7 @@ function createMessageElement(msg) {
         </div>
     `;
     
-    const msgDate = new Date(msg.created_at.replace(' ', 'T'));
-    const time = msgDate.toLocaleTimeString([], {
+    const time = Number.isNaN(msgDate.getTime()) ? '' : msgDate.toLocaleTimeString([], {
         hour: 'numeric',
         minute: '2-digit'
     });
@@ -424,20 +490,99 @@ function createMessageElement(msg) {
                 </div>
             ` : ''}
             <div class="message-bubble">
-                ${replyHtml}
+                ${quote}
                 ${msg.content ? `<div class="message-text">${linkify(msg.content)}${editedIndicator}</div>` : ''}
-                ${mediaHtml}
                 ${actions}
                 <span class="message-time">${time}${isOwn ? ' <span title="Sent" aria-label="Sent">✓</span>' : ''}</span>
             </div>
         </div>
         ${isOwn ? avatar : ''}
     `;
-    div.querySelector('[data-reply-trigger]').addEventListener('click', () => replyToMessage(msg.id, msg.full_name, msg.content || ''));
+    div.querySelector('[data-quote]')?.addEventListener('click', () => scrollToMessage(msg.reply_to_message_id));
+    div.querySelector('[data-reply-trigger]').addEventListener('click', () => replyToMessage(
+        msg.id, msg.full_name, msg.content || attachmentLabel(msg.message_type)
+    ));
+    if (msg.attachments?.length) {
+        div.querySelector('.message-actions').before(renderAttachments(msg.attachments));
+    }
     div.querySelector('[data-reaction-trigger]').addEventListener('click', () => showReactionPicker(msg.id));
     if (hasReactions) div.querySelector('.message-content').append(buildReactions(msg.id, msg.reactions));
     
     return div;
+}
+
+function attachmentLabel(type) {
+    return { image: 'Photo', video: 'Video', voice: 'Voice message', audio: 'Audio', file: 'Attachment' }[type] || 'Message';
+}
+
+function attachmentUrl(path) {
+    if (typeof path !== 'string' || !path.startsWith('/messages/api/media.php?')) return null;
+    const url = new URL(path, location.origin);
+    return url.pathname === '/messages/api/media.php' && url.origin === location.origin ? url : null;
+}
+
+function formatBytes(bytes) {
+    if (bytes >= 1024 * 1024) return `${Number((bytes / (1024 * 1024)).toFixed(1))} MB`;
+    if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${bytes} B`;
+}
+
+function attachmentDownload(path, name, label) {
+    const link = document.createElement('a');
+    const url = new URL(path);
+    url.searchParams.set('download', '1');
+    link.href = url.href;
+    link.download = name;
+    if (label) link.textContent = label;
+    return link;
+}
+
+function renderAttachments(files) {
+    const gallery = document.createElement('div');
+    gallery.className = 'message-media' + (files.length > 1 ? ' message-media-multi' : '');
+    for (const file of files) {
+        const path = attachmentUrl(file.path);
+        if (!path) continue;
+        const kind = file.type.split('/')[0];
+        if (kind === 'image') {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'attachment-image';
+            button.setAttribute('aria-label', 'View ' + file.name);
+            const image = document.createElement('img');
+            const thumbnail = attachmentUrl(file.thumbnail);
+            image.src = thumbnail || path;
+            image.alt = '';
+            image.loading = 'lazy';
+            image.decoding = 'async';
+            if (thumbnail) image.dataset.fullImage = path.href;
+            if (file.width && file.height) {
+                image.width = file.width;
+                image.height = file.height;
+            }
+            button.append(image);
+            button.addEventListener('click', () => openMediaViewer(path, file.name));
+            gallery.append(button);
+        } else if (kind === 'video' || kind === 'audio') {
+            const player = document.createElement(kind);
+            player.src = path.href;
+            player.controls = true;
+            player.preload = 'none';
+            if (kind === 'video') player.playsInline = true;
+            player.setAttribute('aria-label', file.name);
+            gallery.append(player);
+        } else {
+            const link = attachmentDownload(path, file.name);
+            link.className = 'message-doc';
+            const name = document.createElement('span');
+            name.textContent = file.name;
+            const size = document.createElement('small');
+            size.textContent = file.size ? formatBytes(file.size) : '';
+            link.append(name, size);
+            gallery.append(link);
+        }
+    }
+    return gallery;
 }
 
 // ============================================
@@ -463,18 +608,22 @@ async function sendMessage() {
         if (MessageSystem.replyToMessageId === reply) cancelReply();
         if (MessageSystem.mediaFiles.length === media.length
             && MessageSystem.mediaFiles.every((file, index) => file === media[index])) cancelMedia();
-        scrollToBottom();
+        clearTimeout(MessageSystem.typingTimeout);
+        lastTypingPing = -Infinity;
+        if (navigator.onLine) setTyping(false);
+        if (timeline.hasNewer && navigator.onLine) openChatWindow(null);
+        else scrollToBottom();
     } catch {
         showError('Could not queue this message. Try again.');
     } finally {
-        button.disabled = false;
+        button.disabled = sessionExpired;
     }
 }
 
 function renderPendingMessages() {
     if (sessionExpired) return;
     const list = document.getElementById('messagesList');
-    const follow = isScrolledToBottom();
+    const follow = !timeline.hasNewer && isScrolledToBottom();
     list.querySelector('#pendingMessages')?.remove();
     if (chatOutbox.items.size) {
         list.querySelector(':scope > .empty-state')?.remove();
@@ -513,6 +662,7 @@ function renderPendingMessages() {
             queue.append(row);
         }
         list.append(queue);
+        updateScrollControls();
     } else if (MessageSystem.initialLoadComplete) {
         showEmptyConversation();
     }
@@ -538,37 +688,26 @@ function handleTyping() {
 
 function setTyping(typing) {
     fetch('/messages/api/typing.php', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': document.getElementById('sendBtn').dataset.csrf
+        },
         body: JSON.stringify({ typing }), signal: AbortSignal.timeout(3000)
     }).catch(() => {});
 }
 
-async function checkTypingStatus() {
-    if (!MessageSystem.initialLoadComplete || document.hidden || !navigator.onLine) return;
-
-    try {
-        const url = window.location.origin + '/messages/api/typing.php?t=' + Date.now();
-        
-        const response = await fetch(url, {
-            credentials: 'same-origin',
-            cache: 'no-store',
-            signal: AbortSignal.timeout(3000)
-        });
-        const data = await response.json();
-        
-        const indicator = document.getElementById('typingIndicator');
-        
-        if (data.typing && data.typing.length > 0) {
-            const names = data.typing.map(t => t.name).join(', ');
-            indicator.querySelector('.typing-text').textContent = 
-                `${names} ${data.typing.length === 1 ? 'is' : 'are'} typing...`;
-            indicator.style.display = 'flex';
-        } else {
-            indicator.style.display = 'none';
-        }
-    } catch (error) {
-        // Silently fail
+function updateTypingIndicator(members) {
+    const indicator = document.getElementById('typingIndicator');
+    if (!members.length) {
+        indicator.style.display = 'none';
+        return;
     }
+    const names = members.map(member => member.name).join(', ');
+    const message = `${names} ${members.length === 1 ? 'is' : 'are'} typing…`;
+    const label = indicator.querySelector('.typing-text');
+    if (label.textContent !== message) label.textContent = message;
+    indicator.style.display = 'flex';
 }
 
 // ============================================
@@ -746,7 +885,7 @@ function renderFilePreviews() {
         } else {
             const ext = file.name.split('.').pop().toUpperCase();
             const icon = file.type === 'application/pdf' ? '📄' : '📎';
-            item.innerHTML = `<div class="doc-preview">${icon}<span class="doc-name">${escapeHtml(file.name)}</span><span class="doc-size">${ext} · ${(file.size / 1024).toFixed(0)}KB</span></div>
+            item.innerHTML = `<div class="doc-preview">${icon}<span class="doc-name">${escapeHtml(file.name)}</span><span class="doc-size">${escapeHtml(ext)} · ${formatBytes(file.size)}</span></div>
                 <button class="remove-file-btn" onclick="removeFile(${i})">✕</button>`;
         }
         previewContent.appendChild(item);
@@ -754,22 +893,30 @@ function renderFilePreviews() {
 }
 
 function handleFileSelect(event) {
-    const files = Array.from(event.target.files);
-    if (!files.length) return;
+    const input = event.target;
+    const added = Array.from(input.files);
+    input.value = '';
+    if (!added.length) return;
 
-    // Max 10 files
-    const newFiles = files.slice(0, 10 - MessageSystem.mediaFiles.length);
-    if (newFiles.length === 0) {
-        showError('Maximum 10 files allowed');
+    const files = [...MessageSystem.mediaFiles, ...added];
+    const fileLimit = Number(input.dataset.maxFileBytes);
+    const requestLimit = Number(input.dataset.maxPostBytes);
+    if (files.length > 10) {
+        showError('Attach up to 10 files per message.');
         return;
     }
-    MessageSystem.mediaFiles.push(...newFiles);
-
+    const tooLarge = added.find(file => file.size > fileLimit);
+    if (tooLarge) {
+        showError(`${tooLarge.name} exceeds the ${formatBytes(fileLimit)} file limit.`);
+        return;
+    }
+    if (requestLimit && files.reduce((total, file) => total + file.size, 65536) > requestLimit) {
+        showError('These attachments are too large to send together.');
+        return;
+    }
+    MessageSystem.mediaFiles = files;
     renderFilePreviews();
-
     document.getElementById('mediaPreview').style.display = 'block';
-    // Reset input so same file can be re-selected
-    event.target.value = '';
 }
 
 function removeFile(index) {
@@ -796,92 +943,52 @@ function cancelMedia() {
 
 function showUnavailableAttachment(event) {
     const media = event.target;
+    if (!media.matches?.('img, video, audio')) return;
     const container = media.closest('.message-media, .media-viewer');
-    if (!container || !media.matches('img, video, audio')) return;
+    if (!container) return;
+    if (media.dataset.fullImage) {
+        media.src = media.dataset.fullImage;
+        delete media.dataset.fullImage;
+        return;
+    }
 
     const unavailable = document.createElement('p');
     unavailable.className = 'attachment-unavailable';
     unavailable.textContent = media.matches('img') ? 'Image unavailable' : 'Attachment unavailable';
-    media.replaceWith(unavailable);
+    (media.closest('.attachment-image') || media).replaceWith(unavailable);
     container.querySelector('.media-viewer-actions')?.remove();
 }
 
-function openMediaViewer(mediaPath, type) {
-    const viewer = document.createElement('div');
-    viewer.className = 'media-viewer-overlay';
+function openMediaViewer(path, name) {
+    const viewer = document.createElement('dialog');
+    viewer.className = 'media-viewer media-viewer-dialog';
+    viewer.setAttribute('aria-label', name);
     viewer.addEventListener('error', showUnavailableAttachment, true);
-    viewer.innerHTML = `
-        <div class="media-viewer">
-            <button onclick="this.parentElement.parentElement.remove()" class="media-viewer-close">✖️</button>
-            ${type === 'image' ?
-                `<img src="${mediaPath}" alt="Full size image">` :
-                `<video src="${mediaPath}" controls autoplay></video>`
-            }
-            <div class="media-viewer-actions">
-                <button onclick="downloadMedia('${mediaPath}')" class="media-action-btn">⬇️ Download</button>
-            </div>
-        </div>
-    `;
 
-    document.body.appendChild(viewer);
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'media-viewer-close';
+    close.textContent = '×';
+    close.setAttribute('aria-label', 'Close photo');
+    close.addEventListener('click', () => viewer.close());
 
-    viewer.addEventListener('click', function(e) {
-        if (e.target === viewer) {
-            viewer.remove();
-        }
-    });
-}
-
-// Download media function that works on mobile
-async function downloadMedia(url) {
-    try {
-        // Show loading state
-        const btn = document.querySelector('.media-viewer-actions .media-action-btn');
-        if (btn) {
-            btn.textContent = '⏳ Downloading...';
-            btn.disabled = true;
-        }
-
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Download failed');
-
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-
-        // Extract filename from URL
-        const filename = url.split('/').pop() || 'download';
-
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        // Cleanup blob URL after a delay
-        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
-
-        // Reset button
-        if (btn) {
-            btn.textContent = '✅ Downloaded';
-            setTimeout(() => {
-                btn.textContent = '⬇️ Download';
-                btn.disabled = false;
-            }, 2000);
-        }
-    } catch (error) {
-        console.error('Download error:', error);
-
-        // Fallback: open in new tab (mobile can then long-press to save)
-        window.open(url, '_blank');
-
-        const btn = document.querySelector('.media-viewer-actions .media-action-btn');
-        if (btn) {
-            btn.textContent = '⬇️ Download';
-            btn.disabled = false;
-        }
-    }
+    const image = document.createElement('img');
+    image.src = path.href;
+    image.alt = name;
+    const actions = document.createElement('div');
+    actions.className = 'media-viewer-actions';
+    const download = attachmentDownload(path, name, 'Download photo');
+    download.className = 'media-action-btn';
+    actions.append(download);
+    viewer.append(close, image, actions);
+    document.body.append(viewer);
+    viewer.addEventListener('close', () => {
+        viewer.remove();
+        updateNativeChatVisibility();
+        scheduleRead();
+    }, { once: true });
+    viewer.showModal();
+    updateNativeChatVisibility();
 }
 
 // ============================================
@@ -919,8 +1026,7 @@ async function deleteMessage() {
         const data = await response.json();
         
         if (data.success) {
-            var msgToRemove = document.querySelector('[data-message-id="' + MessageSystem.contextMessageId + '"]');
-            if (msgToRemove) msgToRemove.parentNode.removeChild(msgToRemove);
+            loadNewMessages();
         } else {
             showError(data.message || 'Failed to delete message');
         }
@@ -931,44 +1037,37 @@ async function deleteMessage() {
 }
 
 function copyMessage() {
-    var messageEl = document.querySelector('[data-message-id="' + MessageSystem.contextMessageId + '"]');
-    var textEl = messageEl ? messageEl.querySelector('.message-text') : null;
-    var text = textEl ? textEl.textContent : null;
-    if (text) {
-        // Try modern clipboard API first, then fallback to execCommand
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(function() {
-                showNotification('Message copied!');
-            }).catch(function() {
-                copyTextFallback(text);
-            });
-        } else {
-            copyTextFallback(text);
-        }
+    const row = messageRows.get(String(MessageSystem.contextMessageId));
+    const text = row?.querySelector('.message-text')?.textContent;
+    if (text) copyChatText(text, 'Message copied.');
+}
+
+function copyMessageLink() {
+    const id = String(MessageSystem.contextMessageId);
+    if (/^[1-9][0-9]*$/.test(id)) {
+        copyChatText(new URL('/messages/?message=' + id, location.origin).href, 'Link copied.');
     }
 }
 
-function copyTextFallback(text) {
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    ta.style.top = '0';
-    ta.setAttribute('readonly', '');
-    document.body.appendChild(ta);
-    ta.select();
-    ta.setSelectionRange(0, 99999);
-    var success = false;
+async function copyChatText(text, success) {
     try {
-        success = document.execCommand('copy');
-    } catch (e) {
-        success = false;
-    }
-    document.body.removeChild(ta);
-    if (success) {
-        showNotification('Message copied!');
-    } else {
-        showNotification('Could not copy message');
+        await navigator.clipboard.writeText(text);
+        showNotification(success);
+    } catch {
+        const field = document.createElement('textarea');
+        field.value = text;
+        field.setAttribute('readonly', '');
+        field.style.cssText = 'position:fixed;left:-9999px';
+        document.body.append(field);
+        field.select();
+        try {
+            if (!document.execCommand('copy')) throw new Error('Copy failed');
+            showNotification(success);
+        } catch {
+            showError('Could not copy to the clipboard.');
+        } finally {
+            field.remove();
+        }
     }
 }
 
@@ -1172,16 +1271,26 @@ function setupEventListeners() {
         scheduleRead();
     }, { root: list, threshold: 0.01 });
 
-    list.addEventListener('scroll', updateScrollControls, { passive: true });
+    let previousTop = list.scrollTop;
+    list.addEventListener('scroll', () => {
+        const top = list.scrollTop;
+        const movedUp = top < previousTop;
+        previousTop = top;
+        followViewport = !timeline.hasNewer && isScrolledToBottom();
+        updateScrollControls();
+        if (movedUp && top < 140) loadHistory('before');
+    }, { passive: true });
+
+    document.getElementById('earlierMessages').addEventListener('click', () => loadHistory('before'));
+    document.getElementById('newerMessages').addEventListener('click', () => loadHistory('after'));
     document.getElementById('latestMessages').addEventListener('click', () => {
         list.focus({ preventScroll: true });
-        scrollToBottom();
+        if (timeline.hasNewer) openChatWindow(null);
+        else scrollToBottom();
     });
 
-    let followLayout = true;
-    list.addEventListener('scroll', () => { followLayout = isScrolledToBottom(); }, { passive: true });
     new ResizeObserver(() => {
-        if (followLayout) scrollToBottom();
+        if (followViewport && !timeline.hasNewer && !timeline.jump) scrollToBottom();
         updateScrollControls();
     }).observe(list);
 
@@ -1203,11 +1312,11 @@ function setupEventListeners() {
             resumeChat();
         } else {
             clearTimeout(syncTimer);
-            clearInterval(MessageSystem.typingInterval);
-            MessageSystem.typingInterval = null;
+            updateTypingIndicator([]);
             updateNativeChatVisibility();
         }
     });
+    window.addEventListener('popstate', () => openChatWindow(linkedMessage(), false));
     window.addEventListener('online', resumeChat);
     window.addEventListener('relativesappresume', resumeChat);
     window.addEventListener('offline', () => updateConnectionStatus('Offline'));
@@ -1216,6 +1325,11 @@ function setupEventListeners() {
         loadNewMessages();
         updateNativeChatVisibility(true);
     });
+    navigator.serviceWorker?.addEventListener('message', event => {
+        if (event.data?.type === 'relatives-open-message' && openChatAlert(event.data.id)) {
+            event.ports[0]?.postMessage(true);
+        }
+    });
 }
 
 function resumeChat() {
@@ -1223,14 +1337,12 @@ function resumeChat() {
     loadNewMessages();
     chatOutbox.resume();
     scheduleRead();
-    if (!MessageSystem.typingInterval) {
-        MessageSystem.typingInterval = setInterval(checkTypingStatus, 4000);
-    }
 }
 
 function scrollToBottom() {
     const list = document.getElementById('messagesList');
     list.scrollTop = list.scrollHeight;
+    followViewport = !timeline.hasNewer;
     updateScrollControls();
 }
 
@@ -1240,8 +1352,15 @@ function isScrolledToBottom() {
 }
 
 function updateScrollControls() {
+    const earlier = document.getElementById('earlierMessages');
+    const newer = document.getElementById('newerMessages');
+    earlier.hidden = !timeline.hasOlder;
+    newer.hidden = !timeline.hasNewer;
+    earlier.disabled = Boolean(timeline.page || timeline.jump);
+    newer.disabled = earlier.disabled;
+
     const button = document.getElementById('latestMessages');
-    button.hidden = isScrolledToBottom();
+    button.hidden = !timeline.hasNewer && isScrolledToBottom();
     if (button.hidden) pendingMessageCount = 0;
     button.textContent = pendingMessageCount
         ? `${pendingMessageCount} new ${pendingMessageCount === 1 ? 'message' : 'messages'} ↓`
@@ -1249,26 +1368,41 @@ function updateScrollControls() {
     updateNativeChatVisibility();
 }
 
-function scrollToMessage(messageId, { navigate = true, behavior = 'smooth' } = {}) {
-    if (!/^\d+$/.test(String(messageId))) return;
-    const element = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!element) {
-        if (navigate) location.assign('/messages/?message=' + messageId);
-        else showError('This message is no longer available.');
-        return;
+function scrollToMessage(messageId) {
+    const id = String(messageId);
+    if (!/^[1-9][0-9]*$/.test(id)) return;
+    if (!revealMessage(id, matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth')) {
+        openChatWindow(id);
     }
-    element.scrollIntoView({ behavior, block: 'center' });
-    element.classList.add('highlight');
-    setTimeout(() => element.classList.remove('highlight'), 2000);
+}
+
+function openChatAlert(id) {
+    if (typeof id !== 'string' || !/^[1-9][0-9]{0,18}$/.test(id) || !MessageSystem.initialLoadComplete || sessionExpired) {
+        return false;
+    }
+    document.getElementById('searchModal')?.close();
+    document.querySelector('.media-viewer[open]')?.close();
+    scrollToMessage(id);
+    return true;
+}
+
+function revealMessage(id, behavior) {
+    const row = messageRows.get(String(id));
+    if (!row) return false;
+    followViewport = false;
+    row.scrollIntoView({ behavior, block: 'center' });
+    row.classList.add('highlight');
+    setTimeout(() => row.classList.remove('highlight'), 2000);
+    return true;
 }
 
 function chatObscured() {
     return document.hidden || document.getElementById('familyMembers').classList.contains('is-open')
-        || Boolean(document.querySelector('dialog[open], .modal-overlay.active'));
+        || Boolean(document.querySelector('dialog[open], #searchModal, .modal-overlay.active'));
 }
 
 function updateNativeChatVisibility(force = false) {
-    const visible = MessageSystem.initialLoadComplete && !chatObscured() && isScrolledToBottom()
+    const visible = MessageSystem.initialLoadComplete && !timeline.jump && !timeline.hasNewer && !chatObscured() && isScrolledToBottom()
         && document.getElementById('connectionStatus').style.display === 'none';
     if (force || visible !== nativeChatVisible) {
         window.RelativesNative?.postMessage(visible ? 'messages_visible' : 'messages_hidden');
@@ -1294,7 +1428,8 @@ async function reportVisibleMessages() {
         .filter(row => {
             if (!row.isConnected || confirmedReads.has(row.dataset.messageId)) return false;
             const bounds = row.getBoundingClientRect();
-            return bounds.bottom > viewport.top && bounds.top < viewport.bottom;
+            const visibleHeight = Math.min(bounds.bottom, viewport.bottom) - Math.max(bounds.top, viewport.top);
+            return visibleHeight >= Math.min(24, bounds.height * .45);
         })
         .slice(0, 100).map(row => row.dataset.messageId);
     if (!ids.length) return;
@@ -1428,7 +1563,9 @@ window.showMessageOptions = showMessageOptions;
 window.contextReplyMessage = contextReplyMessage;
 window.deleteMessage = deleteMessage;
 window.copyMessage = copyMessage;
+window.copyMessageLink = copyMessageLink;
 window.scrollToMessage = scrollToMessage;
+window.openChatAlert = openChatAlert;
 window.openMediaViewer = openMediaViewer;
 window.retryConnection = loadNewMessages;
 window.updateConnectionStatus = updateConnectionStatus;

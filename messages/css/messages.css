@@ -277,6 +277,21 @@
 }
 
 .messages-list:focus-visible { outline-offset: -2px; }
+.message-history {
+    align-self: center;
+    flex: none;
+    min-height: 44px;
+    padding: 7px 13px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-full);
+    background: var(--card);
+    color: var(--accent);
+    font-size: .8rem;
+    font-weight: 750;
+    cursor: pointer;
+}
+.message-history:hover { background: var(--app-soft); }
+.message-history:disabled { opacity: .65; cursor: wait; }
 .chat-sign-in { align-self: center; color: var(--accent); font-weight: 700; }
 .pending-messages { display: flex; flex-direction: column; gap: 8px; }
 .pending-message { align-self: flex-end; max-width: 85%; }
@@ -456,14 +471,17 @@
 
 /* Reply quote inside bubble */
 .message-reply {
+    width: 100%;
     padding: 6px 10px;
     margin-bottom: 6px;
+    border: 0;
     border-radius: 9px;
     border-left: 3px solid var(--accent);
     background: rgba(45, 81, 51, 0.08);
     color: var(--text-1);
     font-size: 0.72rem;
     font-weight: 600;
+    text-align: left;
     cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -471,16 +489,30 @@
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
 }
+.message-reply strong { display: block; overflow: hidden; text-overflow: ellipsis; color: var(--accent); }
+.message-reply:disabled { cursor: default; }
 
 /* Media inside bubble */
 .message-media { margin-top: 4px; }
 
 .message-media img,
 .message-media video {
+    width: auto;
+    height: auto;
     max-width: min(280px, 62vw);
     max-height: 300px;
     border-radius: 11px;
     display: block;
+    cursor: pointer;
+}
+
+.attachment-image {
+    display: block;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 11px;
+    background: transparent;
     cursor: pointer;
 }
 

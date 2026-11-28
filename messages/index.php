@@ -18,6 +18,7 @@ if (!isset($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../core/bootstrap.php';
 require_once __DIR__ . '/../core/CSRF.php';
+require_once __DIR__ . '/api/classes/MessageAttachments.php';
 
 // Get current user
 try {
@@ -151,17 +152,19 @@ require_once __DIR__ . '/../shared/components/header.php';
                 </div>
                 <div class="message-thread">
                     <div class="messages-list" id="messagesList" role="region" aria-label="Family conversation" tabindex="0">
+                        <button type="button" class="message-history" id="earlierMessages" hidden>Load earlier messages</button>
                         <div class="loading-messages">
                             <div class="spinner"></div>
                             <p>Loading messages…</p>
                         </div>
+                        <button type="button" class="message-history" id="newerMessages" hidden>Load newer messages</button>
                     </div>
                     <button type="button" class="latest-messages" id="latestMessages" hidden></button>
                     <span class="chat-announcement" id="chatAnnouncement" role="status"></span>
                 </div>
 
                 <!-- Typing Indicator -->
-                <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                <div class="typing-indicator" id="typingIndicator" style="display: none;" role="status">
                     <div class="typing-dots">
                         <span></span>
                         <span></span>
@@ -197,6 +200,8 @@ require_once __DIR__ . '/../shared/components/header.php';
                         </button>
 
                         <input type="file" id="fileInput" style="display: none;" multiple
+                               data-max-file-bytes="<?= MessageAttachments::maxFileBytes() ?>"
+                               data-max-post-bytes="<?= MessageAttachments::maxPostBytes() ?>"
                                accept="image/*,video/*,audio/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf"
                                onchange="handleFileSelect(event)">
 
@@ -271,7 +276,8 @@ require_once __DIR__ . '/../shared/components/header.php';
 <!-- Context Menu -->
 <div class="context-menu" id="contextMenu">
     <button onclick="contextReplyMessage()">↩️ Reply</button>
-    <button onclick="copyMessage()">📋 Copy</button>
+    <button onclick="copyMessage()">📋 Copy text</button>
+    <button onclick="copyMessageLink()">Copy link</button>
     <button onclick="deleteMessage()" class="danger">🗑️ Delete</button>
 </div>
 

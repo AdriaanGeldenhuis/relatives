@@ -18,6 +18,7 @@ import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -27,6 +28,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
@@ -43,9 +45,11 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.collect
 import androidx.lifecycle.withResumed
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import za.co.relatives.app.data.TrackingStore
+import za.co.relatives.app.network.ApiClient
 import za.co.relatives.app.network.NetworkClient
 import za.co.relatives.app.services.FcmRegistrationWorker
 import za.co.relatives.app.tracking.FamilyPoller
@@ -86,6 +90,11 @@ class MainActivity : ComponentActivity() {
         )
         private val MAP_PATHS = setOf("/tracking/app", "/tracking/app/", "/tracking/app/index.php")
         private val CHAT_PATHS = setOf("/messages", "/messages/", "/messages/index.php")
+        private val CHAT_ID = Regex("[1-9][0-9]{0,18}")
+        private const val CHAT_FILE_PATH = "/messages/api/media.php"
+        private const val STATE_CHAT_FILE = "chat_file"
+        private const val STATE_CHAT_BINDING = "chat_binding"
+        private val UTF8_FILENAME = Regex("filename\\*=UTF-8''([^;]+)", RegexOption.IGNORE_CASE)
     }
 
     // ── Core modules ────────────────────────────────────────────────────
@@ -109,11 +118,14 @@ class MainActivity : ComponentActivity() {
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var pendingMediaRequest: PermissionRequest? = null
+    private data class ChatDownload(val url: String, val binding: String)
+    private var chatDownload: ChatDownload? = null
 
     // ── Permission launchers (non-tracking, must be registered before onStart) ──
 
     private lateinit var microphoneLauncher: ActivityResultLauncher<String>
     private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
+    private lateinit var saveChatFileLauncher: ActivityResultLauncher<Intent>
 
     // ── Back press ──────────────────────────────────────────────────────
 
@@ -142,6 +154,13 @@ class MainActivity : ComponentActivity() {
 
         prefs = (application as? RelativesApplication)?.preferencesManager
             ?: PreferencesManager(this)
+        val savedBinding = savedInstanceState?.getString(STATE_CHAT_BINDING)
+        val savedFile = savedInstanceState?.getString(STATE_CHAT_FILE)
+        if (savedBinding != null && savedFile != null && savedBinding == prefs.sessionBinding()
+            && isChatAttachment(Uri.parse(savedFile))
+        ) {
+            chatDownload = ChatDownload(savedFile, savedBinding)
+        }
         trackingStore = TrackingStore(this)
         permissionGate = PermissionGate(this)
         familyPoller = FamilyPoller(this, trackingStore)
@@ -248,6 +267,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(STATE_OFFLINE_HOME, offlineHome?.visibility == View.VISIBLE)
+        chatDownload?.let {
+            outState.putString(STATE_CHAT_FILE, it.url)
+            outState.putString(STATE_CHAT_BINDING, it.binding)
+        }
         super.onSaveInstanceState(outState)
         if (::webView.isInitialized) {
             webView.saveState(outState)
@@ -629,6 +652,11 @@ class MainActivity : ComponentActivity() {
         }
 
         val configuredView = webView
+        configuredView.setDownloadListener { url, _, disposition, mimeType, _ ->
+            if (configuredView == webView && isMessagesPage(webView.url)) {
+                chooseChatAttachmentDestination(url, disposition, mimeType)
+            }
+        }
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
                 webView: WebView?,
@@ -756,6 +784,19 @@ class MainActivity : ComponentActivity() {
         val target = if (isTrustedUrl(uri)) uri.toString() else WEB_URL
         if (pendingRecreateUrl != null) {
             pendingRecreateUrl = target
+        } else if (isMessagesPage(target) && isMessagesPage(webView.url) &&
+            uri.host == webView.url?.let(Uri::parse)?.host
+        ) {
+            val message = uri.getQueryParameter("message")?.takeIf(CHAT_ID::matches)
+            if (message == null) {
+                webView.loadUrl(target)
+                return
+            }
+            val view = webView
+            val page = webPageLoad
+            view.evaluateJavascript("window.openChatAlert?.('$message') === true") { result ->
+                if (result != "true" && view == webView && page == webPageLoad) view.loadUrl(target)
+            }
         } else {
             webView.loadUrl(target)
         }
@@ -779,6 +820,9 @@ class MainActivity : ComponentActivity() {
 
     fun isMessagesPage(url: String?): Boolean =
         url?.let { Uri.parse(it).let { uri -> isTrustedUrl(uri) && uri.path in CHAT_PATHS } } == true
+
+    private fun isChatAttachment(uri: Uri): Boolean =
+        isTrustedUrl(uri) && uri.path == CHAT_FILE_PATH && uri.getQueryParameter("download") == "1"
 
     private fun isWeatherLocationPage(url: String?): Boolean =
         url?.let { Uri.parse(it).let { uri -> isTrustedUrl(uri) && uri.path in WEATHER_LOCATION_PATHS } } == true
@@ -821,6 +865,51 @@ class MainActivity : ComponentActivity() {
                 null
             }
             finishFileSelection(uris)
+        }
+
+        saveChatFileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val download = chatDownload
+            chatDownload = null
+            val destination = result.data?.data
+            if (result.resultCode != RESULT_OK || download == null || destination == null) return@registerForActivityResult
+            val cookie = prefs.sessionToken
+            if (cookie == null || prefs.sessionBinding() != download.binding) {
+                Toast.makeText(this, R.string.chat_attachment_failed, Toast.LENGTH_SHORT).show()
+                return@registerForActivityResult
+            }
+            lifecycleScope.launch {
+                val feedback = try {
+                    ApiClient(this@MainActivity).saveChatAttachment(download.url, destination, cookie)
+                    R.string.chat_attachment_saved
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    R.string.chat_attachment_failed
+                }
+                Toast.makeText(this@MainActivity, feedback, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun chooseChatAttachmentDestination(url: String, disposition: String?, mimeType: String?) {
+        if (chatDownload != null || !isChatAttachment(Uri.parse(url))) return
+        val binding = prefs.sessionBinding() ?: return
+        val type = mimeType?.substringBefore(';')?.takeIf { it.contains('/') } ?: "application/octet-stream"
+        val encodedName = disposition?.let { UTF8_FILENAME.find(it)?.groupValues?.get(1) }
+        val name = (encodedName?.let(Uri::decode) ?: URLUtil.guessFileName(url, disposition, type))
+            .map { if (it == '/' || it == '\\' || it.isISOControl()) '_' else it }
+            .joinToString("").trim().take(240).ifBlank { "Attachment" }
+        val picker = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            this.type = type
+            putExtra(Intent.EXTRA_TITLE, name)
+        }
+        chatDownload = ChatDownload(url, binding)
+        try {
+            saveChatFileLauncher.launch(picker)
+        } catch (_: ActivityNotFoundException) {
+            chatDownload = null
+            Toast.makeText(this, R.string.chat_attachment_failed, Toast.LENGTH_SHORT).show()
         }
     }
 

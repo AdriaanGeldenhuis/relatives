@@ -15,6 +15,7 @@
     RewriteRule ^(?:saves/(?:notes-private|[0-9]+/notes)|uploads/(?:notes|voice))(?:/|$) - [F,NC]
     RewriteRule ^(?:migrations|vendor|config|App[[:space:]]Files)(?:/|$) - [F,NC]
     RewriteRule ^(?:uploads|saves)/.*\.(?:php[0-9]*|phtml|phar|cgi|pl|shtml)(?:[./]|$) - [F,NC]
+    RewriteRule ^uploads/messages/ messages/api/media.php [END]
 </IfModule>
 
 # Manifest

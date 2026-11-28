@@ -5,6 +5,9 @@
     <string name="channel_chat_sound">Family Chat with sound</string>
     <string name="channel_chat_vibration">Family Chat with vibration</string>
     <string name="channel_chat_quiet">Silent Family Chat</string>
+    <string name="chat_mark_as_read">Mark as read</string>
+    <string name="chat_attachment_saved">Attachment saved</string>
+    <string name="chat_attachment_failed">Could not save the attachment</string>
 
     <string name="offline_home_title">Relatives Home</string>
     <string name="offline_home_message">You’re offline. Reconnect to see family activity and open apps.</string>

@@ -22,4 +22,22 @@ if (!is_string($receipt) || !preg_match('/^[a-f0-9]{32}$/D', $receipt)) {
 if (!PushOutbox::available($db)) {
     Response::error('push_unavailable', 503);
 }
-http_response_code((new PushOutbox($db))->receipt($receipt, (int) $user['id'], $hash) ? 204 : 404);
+$outbox = new PushOutbox($db);
+$userId = (int) $user['id'];
+if (($data['action'] ?? null) === 'mark_read') {
+    require_once __DIR__ . '/../../messages/api/classes/MessageChanges.php';
+    $messageId = $outbox->chatMessageForReceipt($receipt, $userId, $hash);
+    if (!$messageId) {
+        http_response_code(404);
+        exit;
+    }
+    try {
+        $read = MessageChanges::markRead($db, (int) $user['family_id'], $userId, [$messageId]);
+        http_response_code($read['message_ids'] ? 204 : 404);
+    } catch (Throwable $error) {
+        error_log('Chat alert action failed: ' . $error->getMessage());
+        Response::error('Could not mark the message read.', 500);
+    }
+    exit;
+}
+http_response_code($outbox->receipt($receipt, $userId, $hash) ? 204 : 404);

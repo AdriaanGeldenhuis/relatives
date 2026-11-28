@@ -103,11 +103,76 @@ delta recipient 1 | php -r '$r=json_decode(stream_get_contents(STDIN), true); ex
 sql -e "UPDATE messages SET deleted_at=NOW() WHERE id=$id"
 delta recipient 2 | php -r '$r=json_decode(stream_get_contents(STDIN), true); exit(count($r["removed"]) === 1 ? 0 : 1);'
 
+{
+    printf 'INSERT INTO messages (id,family_id,user_id,content) VALUES '
+    for entry in {1001..1140}; do
+        printf "(%s,1,1,'History %s')," "$entry" "$entry"
+    done
+    printf "(1141,2,3,'Another family');\n"
+} | sql
+history_page() {
+    curl -fsS -b "$smoke_root/recipient.cookie" "$base/messages/api/fetch.php?$1"
+}
+history_page 'message=1060' | php -r '
+    $r=json_decode(stream_get_contents(STDIN), true);
+    exit(array_column($r["messages"],"id") === range(1035,1085) && $r["has_older"] && $r["has_newer"] && $r["focused"] ? 0 : 1);'
+history_page 'before=1035' | php -r '
+    $r=json_decode(stream_get_contents(STDIN), true);
+    exit(array_column($r["messages"],"id") === range(1001,1034) && !$r["has_older"] ? 0 : 1);'
+history_page 'after=1085' | php -r '
+    $r=json_decode(stream_get_contents(STDIN), true);
+    exit(array_column($r["messages"],"id") === range(1086,1135) && $r["has_newer"] ? 0 : 1);'
+history_page 'message=1141' | php -r '
+    $r=json_decode(stream_get_contents(STDIN), true);
+    exit(!$r["focused"] && end($r["messages"])["id"] === 1140 ? 0 : 1);'
+
+printf 'fixture chat file\n' >"$smoke_root/chat-file.txt"
+receipt_id=1bdbe898-a1b4-418c-906c-c880ffd8dc07
+curl -fsS -b "$smoke_root/sender.cookie" -H "X-CSRF-Token: $csrf" \
+    -F "client_message_id=$receipt_id" -F "media[]=@$smoke_root/chat-file.txt;filename=Family trip plan.txt" \
+    "$base/messages/api/send.php" >"$smoke_root/chat-file.json"
+read -r attachment_message attachment_url < <(php -r '
+    $r=json_decode(file_get_contents($argv[1]), true); $file=$r["sent_message"]["attachments"][0] ?? [];
+    if (($file["name"] ?? "") !== "Family trip plan.txt") exit(1);
+    echo "$r[message_id] $file[path]\n";
+' "$smoke_root/chat-file.json")
+curl -fsS -b "$smoke_root/recipient.cookie" -D "$smoke_root/chat-file.headers" \
+    -H 'Range: bytes=1-4' "$base$attachment_url" >"$smoke_root/chat-file.range"
+grep -q ' 206 ' "$smoke_root/chat-file.headers"
+grep -qi 'filename="Family trip plan.txt"' "$smoke_root/chat-file.headers"
+[[ $(cat "$smoke_root/chat-file.range") == ixtu ]]
+[[ $(curl -sS -b "$smoke_root/other.cookie" -o /dev/null -w '%{http_code}' "$base$attachment_url") == 404 ]]
+[[ $(curl -sS -o /dev/null -w '%{http_code}' "$base$attachment_url") == 401 ]]
+curl -fsS -b "$smoke_root/sender.cookie" "$base/messages/api/fetch.php?pending=$receipt_id" |
+    php -r '$data=json_decode(stream_get_contents(STDIN), true); exit($data["acknowledged"]==[$argv[1]] ? 0 : 1);' "$receipt_id"
+history_page "pending=$receipt_id" |
+    php -r '$data=json_decode(stream_get_contents(STDIN), true); exit($data["acknowledged"]===[] ? 0 : 1);'
+curl -fsS -b "$smoke_root/recipient.cookie" -G --data-urlencode 'query=FAMILY TRIP' "$base/messages/api/search.php" |
+    php -r '$data=json_decode(stream_get_contents(STDIN), true); exit($data["total"]===1 && $data["results"][0]["id"]===$argv[1] ? 0 : 1);' "$attachment_message"
+sql -e 'UPDATE fcm_tokens SET wake_session_hash=(SELECT session_token FROM sessions WHERE user_id=2 ORDER BY id DESC LIMIT 1) WHERE user_id=2'
+alert_receipt=$(sql -Nse "SELECT d.receipt FROM push_deliveries d JOIN notifications n ON n.id=d.notification_id
+    WHERE n.user_id=2 AND n.action_url='/messages/?message=$attachment_message' AND d.channel='fcm'")
+[[ $alert_receipt =~ ^[a-f0-9]{32}$ ]]
+mark_alert() {
+    curl -sS -b "$smoke_root/$1.cookie" -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+        --data "{\"receipt\":\"$alert_receipt\",\"action\":\"mark_read\"}" "$base/api/push/receipt.php"
+}
+[[ $(mark_alert other) == 404 && $(mark_alert recipient) == 204 && $(mark_alert recipient) == 204 ]]
+[[ $(sql -Nse "SELECT is_read FROM notifications WHERE user_id=2 AND action_url='/messages/?message=$attachment_message'") == 1 ]]
+sql -e "UPDATE messages SET deleted_at=NOW() WHERE id=$attachment_message"
+[[ $(curl -sS -b "$smoke_root/recipient.cookie" -o /dev/null -w '%{http_code}' "$base$attachment_url") == 404 ]]
+
+curl -fsS -b "$smoke_root/sender.cookie" -H "X-CSRF-Token: $csrf" -H 'Content-Type: application/json' \
+    --data '{"typing":true}' "$base/messages/api/typing.php" >/dev/null
+history_page 'typing=1' | php -r '$data=json_decode(stream_get_contents(STDIN), true); exit($data["typing"][0]["id"] === 1 ? 0 : 1);'
+curl -fsS -b "$smoke_root/other.cookie" "$base/messages/api/fetch.php?typing=1" |
+    php -r '$data=json_decode(stream_get_contents(STDIN), true); exit($data["typing"]===[] ? 0 : 1);'
+
 php "$smoke_root/cron/notification-reminders.php"
 php "$smoke_root/cron/notification-reminders.php"
 [[ $(sql -Nse 'SELECT COUNT(*) FROM scheduled_deliveries') == 1 ]]
 [[ $(sql -Nse "SELECT COUNT(*) FROM notifications WHERE user_id=2 AND type='calendar'") == 1 ]]
-printf 'Authenticated chat, push queue and reminder checks passed.\n'
+printf 'Authenticated chat, history, attachments, typing, push queue and reminder checks passed.\n'
 
 # Use the legacy attachment column width to exercise the seven-photo save and reopen flow.
 base64 -d >"$smoke_root/fixture.png" <<'PNG'

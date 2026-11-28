@@ -122,6 +122,26 @@
     animation: rise 0.3s var(--ease-out) both;
 }
 
+#searchModal {
+    width: min(520px, calc(100% - 24px));
+    margin: auto;
+    color: var(--text-0);
+}
+#searchModal:not([open]) { display: none; }
+#searchModal::backdrop { background: #101b16a6; backdrop-filter: blur(4px); }
+.search-filters summary { font-weight: 750; cursor: pointer; }
+.search-filters[open] summary { margin-bottom: 8px; }
+.search-more {
+    min-height: 44px;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--card);
+    color: var(--accent);
+    font-weight: 700;
+    cursor: pointer;
+}
+
 .modal-header {
     display: flex;
     align-items: center;
@@ -220,12 +240,15 @@
 }
 
 .search-result-item {
+    display: block;
+    width: 100%;
     padding: 10px 12px;
     border-radius: 12px;
     background: rgba(45, 81, 51, 0.03);
     border: 1px solid var(--line);
     margin-bottom: 7px;
     cursor: pointer;
+    text-align: left;
     transition: background 0.2s ease, border-color 0.2s ease;
 }
 
@@ -257,7 +280,7 @@
 .result-content mark,
 .highlight {
     background: rgba(251, 191, 36, 0.3);
-    color: #fde68a;
+    color: inherit;
     border-radius: 3px;
     padding: 0 2px;
 }
@@ -346,27 +369,18 @@
    MEDIA VIEWER
    ============================================ */
 
-.media-viewer-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 9500;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(3, 4, 10, 0.92);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    padding: 20px;
-}
-
 .media-viewer {
-    position: relative;
+    position: fixed;
+    margin: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
     max-width: 92vw;
     max-height: 86vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    overflow: visible;
 }
+.media-viewer::backdrop { background: #101717ed; backdrop-filter: blur(6px); }
+.media-viewer .media-action-btn { display: inline-block; text-decoration: none; }
 
 .media-viewer img,
 .media-viewer video {

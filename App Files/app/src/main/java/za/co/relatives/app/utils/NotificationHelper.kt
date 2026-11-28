@@ -14,6 +14,7 @@ import androidx.core.app.Person
 import java.util.concurrent.atomic.AtomicInteger
 import za.co.relatives.app.MainActivity
 import za.co.relatives.app.R
+import za.co.relatives.app.services.ChatNotificationReceiver
 
 /**
  * Centralised helper for notification channels and notification construction.
@@ -44,6 +45,7 @@ object NotificationHelper {
     private const val CHAT_QUIET = "relatives_messages_quiet"
     private const val CHAT_SUMMARY_ID = 9003
     private const val EXTRA_MESSAGE_ID = "za.co.relatives.app.message_id"
+    private val CHAT_RECEIPT = Regex("[a-f0-9]{32}")
     private val recentReads = linkedSetOf<String>()
 
     // ── Channel creation ───────────────────────────────────────────────────
@@ -159,8 +161,10 @@ object NotificationHelper {
         messageId: String? = null,
         newMessage: Boolean = false,
         recipientId: String? = null,
+        receipt: String? = null,
     ): Boolean {
-        if (messageId != null && !PreferencesManager(context).isPushRecipient(recipientId)) return false
+        val preferences = PreferencesManager(context)
+        if (messageId != null && !preferences.isPushRecipient(recipientId)) return false
         if (newMessage && messageId in recentReads) return false
         val channel = if (messageId != null) when {
             silent && vibrate -> CHAT_VIBRATION
@@ -225,6 +229,20 @@ object NotificationHelper {
                 .addExtras(Bundle().apply { putString(EXTRA_MESSAGE_ID, messageId) })
                 .setGroup(CHAT_GROUP)
                 .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            val binding = preferences.sessionBinding()
+            if (receipt != null && CHAT_RECEIPT.matches(receipt) && binding != null) {
+                val markRead = Intent(context, ChatNotificationReceiver::class.java).apply {
+                    putExtra("receipt", receipt)
+                    putExtra("message_id", messageId)
+                    putExtra("binding", binding)
+                }
+                builder.addAction(NotificationCompat.Action.Builder(
+                    0, context.getString(R.string.chat_mark_as_read),
+                    PendingIntent.getBroadcast(context, notificationId, markRead,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE),
+                ).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+                    .setShowsUserInterface(false).build())
+            }
         }
 
         val manager =

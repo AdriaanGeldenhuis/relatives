@@ -1,102 +1,37 @@
 <?php
-/**
- * TYPING INDICATOR API
- * POST: {typing: true/false} - Set typing status
- * GET: - Get who is typing
- */
-
-require_once __DIR__ . '/../../core/session_boot.php';
-header('Content-Type: application/json');
-
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Not authenticated']);
-    exit;
-}
+declare(strict_types=1);
 
 require_once __DIR__ . '/../../core/bootstrap.php';
+require_once __DIR__ . '/../../core/CSRF.php';
+require_once __DIR__ . '/classes/ChatTyping.php';
+
+header('Cache-Control: private, no-store');
+$user = (new Auth($db))->getCurrentUser();
+if (!$user) {
+    Response::error('Not authenticated', 401);
+}
+$method = $_SERVER['REQUEST_METHOD'];
+if ($method === 'POST' && !CSRF::validate($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
+    Response::error('Reload Messages to continue.', 403);
+}
+session_write_close();
+$family = (int) $user['family_id'];
+$userId = (int) $user['id'];
 
 try {
-    $userId = $_SESSION['user_id'];
-
-    // Get user's family
-    $stmt = $db->prepare("SELECT family_id, full_name FROM users WHERE id = ?");
-    $stmt->execute([$userId]);
-    $user = $stmt->fetch();
-
-    if (!$user) {
-        throw new Exception('User not found');
+    if ($method === 'GET') {
+        Response::json(['success' => true, 'typing' => ChatTyping::members($db, $family, $userId)]);
     }
-
-    $familyId = $user['family_id'];
-
-    // typing_indicators table must exist via migration/schema
-    // Removed runtime CREATE TABLE - DDL on every request is expensive and unnecessary
-
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        // SET TYPING STATUS
-        $input = json_decode(file_get_contents('php://input'), true);
-        $isTyping = !empty($input['typing']);
-
-        if ($isTyping) {
-            // Insert or update typing indicator
-            $stmt = $db->prepare("
-                INSERT INTO typing_indicators (family_id, user_id, updated_at)
-                VALUES (?, ?, NOW())
-                ON DUPLICATE KEY UPDATE updated_at = NOW()
-            ");
-            $stmt->execute([$familyId, $userId]);
-        } else {
-            // Remove typing indicator
-            $stmt = $db->prepare("
-                DELETE FROM typing_indicators
-                WHERE family_id = ? AND user_id = ?
-            ");
-            $stmt->execute([$familyId, $userId]);
-        }
-
-        echo json_encode(['success' => true]);
-
-    } else {
-        // GET WHO IS TYPING
-
-        // Clean up old indicators (older than 5 seconds)
-        $stmt = $db->prepare("
-            DELETE FROM typing_indicators
-            WHERE family_id = ? AND updated_at < DATE_SUB(NOW(), INTERVAL 5 SECOND)
-        ");
-        $stmt->execute([$familyId]);
-
-        // Get current typers (exclude self)
-        $stmt = $db->prepare("
-            SELECT u.id, u.full_name as name
-            FROM typing_indicators ti
-            JOIN users u ON ti.user_id = u.id
-            WHERE ti.family_id = ? AND ti.user_id != ?
-            ORDER BY ti.updated_at DESC
-        ");
-        $stmt->execute([$familyId, $userId]);
-        $typing = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        echo json_encode([
-            'success' => true,
-            'typing' => $typing
-        ]);
+    if ($method !== 'POST') {
+        Response::error('Method not allowed.', 405);
     }
-
-} catch (Exception $e) {
-    error_log('Typing API error: ' . $e->getMessage());
-
-    // Typing is non-critical - return graceful response instead of 500
-    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        echo json_encode([
-            'success' => true,
-            'typing' => []
-        ]);
-    } else {
-        http_response_code(400);
-        echo json_encode([
-            'success' => false,
-            'message' => $e->getMessage()
-        ]);
+    $input = json_decode(file_get_contents('php://input', false, null, 0, 512), true);
+    if (!is_bool($input['typing'] ?? null)) {
+        Response::error('Invalid typing status.', 422);
     }
+    ChatTyping::update($db, $family, $userId, $input['typing']);
+    Response::json(['success' => true]);
+} catch (Throwable $error) {
+    error_log('Chat typing status could not be updated: ' . $error->getMessage());
+    Response::error('Typing status is unavailable.', 503);
 }

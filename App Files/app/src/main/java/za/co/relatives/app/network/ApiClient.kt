@@ -1,6 +1,7 @@
 package za.co.relatives.app.network
 
 import android.content.Context
+import android.net.Uri
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
@@ -89,14 +90,30 @@ class ApiClient(private val context: Context) {
         executeJson(request, pinnedSessionHttp)
     }
 
-    suspend fun acknowledgePush(receipt: String, sessionCookie: String): Int {
-        val body = JsonObject().apply { addProperty("receipt", receipt) }
+    suspend fun acknowledgePush(receipt: String, sessionCookie: String, markRead: Boolean = false): Int {
+        val body = JsonObject().apply {
+            addProperty("receipt", receipt)
+            if (markRead) addProperty("action", "mark_read")
+        }
         val request = Request.Builder()
             .url("${BASE_URL}push/receipt.php")
             .header("Cookie", "RELATIVES_SESSION=$sessionCookie")
             .post(gson.toJson(body).toRequestBody(JSON_MEDIA))
             .build()
         return pinnedSessionHttp.newCall(request).readTextResponse().first
+    }
+
+    suspend fun saveChatAttachment(url: String, destination: Uri, sessionCookie: String) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(url)
+            .header("Cookie", "RELATIVES_SESSION=$sessionCookie")
+            .build()
+        pinnedSessionHttp.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw ApiException(response.code, "Could not retrieve the attachment")
+            val body = response.body ?: error("Missing attachment")
+            val output = context.contentResolver.openOutputStream(destination, "w") ?: error("Could not open the destination")
+            output.use { target -> body.byteStream().use { it.copyTo(target) } }
+        }
     }
 
     // ------------------------------------------------------------------ //

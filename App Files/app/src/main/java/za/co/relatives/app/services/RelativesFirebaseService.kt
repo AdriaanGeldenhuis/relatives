@@ -108,6 +108,7 @@ class RelativesFirebaseService : FirebaseMessagingService() {
             messageId = messageId,
             newMessage = newMessage,
             recipientId = data["recipient_user_id"],
+            receipt = data["receipt"],
         )
         if (posted) data["receipt"]?.let { PushReceiptWorker.enqueue(this, it) }
         app?.notificationEvents?.tryEmit(Unit)

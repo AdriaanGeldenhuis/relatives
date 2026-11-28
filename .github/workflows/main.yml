@@ -210,6 +210,14 @@ jobs:
           for asset in "${assets[@]}"; do
             verify_asset "$asset" "${asset%%\?*}"
           done
+          for route in "messages/api/media.php?message=1&file=0&v=$version" "uploads/messages/deploy-access-check.txt?v=$version"; do
+            status=$(curl --silent --show-error --max-time 20 --retry 2 -o /dev/null -w '%{http_code}' "https://www.relatives.co.za/$route")
+            if [[ $status != 401 ]]; then
+              printf '::error::Chat attachment route %s returned HTTP %s for a signed-out request\n' "${route%%\?*}" "$status"
+              exit 1
+            fi
+          done
+          echo 'Verified sign-in requirements for current and legacy chat attachment links'
           for asset in calendar/js/calendar.js schedule/js/schedule.js schedule/timeline/js/timeline.js \
             holiday_traveling/assets/js/holiday.js holiday_traveling/assets/css/holiday.css \
             shopping/js/shopping.js messages/js/messages-enhanced.js collage/css/collage.css \

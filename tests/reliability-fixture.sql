@@ -31,6 +31,12 @@ CREATE TABLE message_reads (
     message_id BIGINT UNSIGNED NOT NULL, user_id BIGINT UNSIGNED NOT NULL,
     read_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY unique_read (message_id, user_id)
 ) ENGINE=InnoDB;
+CREATE TABLE typing_indicators (
+    family_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (family_id, user_id)
+) ENGINE=InnoDB;
 CREATE TABLE notes (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, family_id BIGINT UNSIGNED NOT NULL, user_id BIGINT UNSIGNED,
     type ENUM('text','voice') NOT NULL DEFAULT 'text', title VARCHAR(160), body TEXT, audio_path VARCHAR(255),

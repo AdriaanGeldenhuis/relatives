@@ -97,6 +97,9 @@
         <receiver
             android:name=".tracking.GeofenceReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".services.ChatNotificationReceiver"
+            android:exported="false" />
 
         <!-- Cancels any recurring watchdog alarm scheduled by an older APK. -->
         <receiver

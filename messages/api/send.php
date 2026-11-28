@@ -39,6 +39,10 @@ $user = (new Auth($db))->getCurrentUser();
 if (!$user) {
     Response::error('Not authenticated', 401);
 }
+$postLimit = MessageAttachments::maxPostBytes();
+if ($postLimit && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > $postLimit) {
+    Response::error('These attachments are too large to send together.', 413);
+}
 $userId = (int) $user['id'];
 $familyId = (int) $user['family_id'];
 $userName = $user['name'];
@@ -46,8 +50,7 @@ $clientId = $_POST['client_message_id'] ?? null;
 if (isset($_POST['family_id']) && (string) $familyId !== $_POST['family_id']) {
     Response::error('This chat has changed. Reopen Messages to continue.', 403);
 }
-if ($clientId !== null && (!is_string($clientId)
-    || !preg_match('/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/iD', $clientId))) {
+if ($clientId !== null && ($clientId = MessageChanges::clientId($clientId)) === null) {
     Response::error('Invalid message request.', 422);
 }
 if ($clientId !== null && !CSRF::validate($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
@@ -62,7 +65,6 @@ try {
         if (!MessageChanges::installed($db)) {
             Response::error('Chat is being updated. Please retry this message shortly.', 503);
         }
-        $clientId = strtolower($clientId);
         $lockName = 'chat:send:' . substr(hash('sha256', $userId . ':' . $clientId), 0, 50);
         $lock = $db->prepare('SELECT GET_LOCK(?, 4)');
         $lock->execute([$lockName]);
@@ -106,7 +108,11 @@ try {
         }
     }
     
-    $content = trim($_POST['content'] ?? '');
+    $content = $_POST['content'] ?? '';
+    if (!is_string($content)) {
+        Response::error('Invalid message text.', 422);
+    }
+    $content = trim($content);
     $replyToMessageId = !empty($_POST['reply_to_message_id']) ? (int)$_POST['reply_to_message_id'] : null;
     
     if ($content === '' && empty($_FILES['media'])) {
@@ -121,35 +127,8 @@ try {
     $mediaThumbnail = null;
     $messageType = 'text';
 
-    $allowedTypes = [
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-        'video/mp4', 'video/quicktime', 'video/webm',
-        'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav',
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.ms-powerpoint',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'text/plain', 'text/csv', 'application/rtf'
-    ];
-
-    $mimeToExt = [
-        'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp',
-        'video/mp4' => 'mp4', 'video/quicktime' => 'mov', 'video/webm' => 'webm',
-        'audio/webm' => 'webm', 'audio/ogg' => 'ogg', 'audio/mpeg' => 'mp3', 'audio/wav' => 'wav',
-        'application/pdf' => 'pdf', 'application/msword' => 'doc',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
-        'application/vnd.ms-excel' => 'xls',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
-        'application/vnd.ms-powerpoint' => 'ppt',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'pptx',
-        'text/plain' => 'txt', 'text/csv' => 'csv', 'application/rtf' => 'rtf'
-    ];
-
     // Handle multiple file uploads (media[])
-    if (!empty($_FILES['media']['name'][0])) {
+    if (isset($_FILES['media']['name'][0])) {
         $fileCount = count($_FILES['media']['name']);
         if ($fileCount > 10) {
             throw new Exception('Maximum 10 files allowed');
@@ -162,11 +141,15 @@ try {
             }
         }
 
-        $uploadedPaths = [];
-        $firstType = null;
+        $attachments = [];
+        $fileinfo = new finfo(FILEINFO_MIME_TYPE);
 
         for ($i = 0; $i < $fileCount; $i++) {
-            if ($_FILES['media']['error'][$i] !== UPLOAD_ERR_OK) {
+            $uploadError = $_FILES['media']['error'][$i];
+            if (in_array($uploadError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
+                throw new Exception('An attachment is too large.');
+            }
+            if ($uploadError !== UPLOAD_ERR_OK) {
                 throw new Exception('One of the attachments could not be uploaded.');
             }
 
@@ -174,17 +157,15 @@ try {
             $fileName = $_FILES['media']['name'][$i];
             $fileTmp  = $_FILES['media']['tmp_name'][$i];
 
-            // Server-side MIME validation (don't trust client-provided type)
-            $finfo = new finfo(FILEINFO_MIME_TYPE);
-            $fileType = $finfo->file($fileTmp);
-            if (!in_array($fileType, $allowedTypes)) {
+            $fileType = $fileinfo->file($fileTmp);
+            if (!isset(MessageAttachments::EXTENSIONS[$fileType])) {
                 throw new Exception('Invalid file type: ' . $fileName);
             }
-            if ($fileSize > 50 * 1024 * 1024) {
-                throw new Exception('File too large (max 50MB): ' . $fileName);
+            if ($fileSize > MessageAttachments::maxFileBytes()) {
+                throw new Exception('An attachment is too large.');
             }
 
-            $extension = $mimeToExt[$fileType];
+            $extension = MessageAttachments::EXTENSIONS[$fileType];
             $uniqueName = 'msg_' . bin2hex(random_bytes(16)) . '.' . $extension;
             $filepath = $uploadDir . $uniqueName;
 
@@ -194,54 +175,43 @@ try {
 
             $filesCreated[] = $filepath;
             $webPath = '/uploads/messages/' . date('Y/m/') . $uniqueName;
-            $uploadedPaths[] = ['path' => $webPath, 'name' => $fileName, 'type' => $fileType, 'size' => $fileSize];
+            $attachment = [
+                'path' => $webPath,
+                'name' => MessageAttachments::filename($fileName, $uniqueName),
+                'type' => $fileType,
+                'size' => $fileSize,
+            ];
 
-            if ($firstType === null) $firstType = $fileType;
-
-            // Generate thumbnail for first image
-            if ($i === 0 && strpos($fileType, 'image/') === 0) {
-                try {
-                    $thumbnailPath = $uploadDir . 'thumb_' . $uniqueName;
-                    $image = imagecreatefromstring(file_get_contents($filepath));
-                    if ($image) {
-                        $width = imagesx($image);
-                        $height = imagesy($image);
-                        $thumbWidth = 200;
-                        $thumbHeight = (int)(($height / $width) * $thumbWidth);
-                        $thumb = imagecreatetruecolor($thumbWidth, $thumbHeight);
-                        imagecopyresampled($thumb, $image, 0, 0, 0, 0, $thumbWidth, $thumbHeight, $width, $height);
-                        if ($extension === 'png') {
-                            imagepng($thumb, $thumbnailPath, 8);
-                        } elseif ($extension === 'webp' && function_exists('imagewebp')) {
-                            imagewebp($thumb, $thumbnailPath, 85);
-                        } else {
-                            imagejpeg($thumb, $thumbnailPath, 85);
+            if (str_starts_with($fileType, 'image/') && ($dimensions = @getimagesize($filepath))) {
+                [$attachment['width'], $attachment['height']] = $dimensions;
+                if ($i === 0 && $dimensions[0] * $dimensions[1] <= 12000000 && function_exists('imagewebp')) {
+                    $thumbnailName = 'thumb_' . pathinfo($uniqueName, PATHINFO_FILENAME) . '.webp';
+                    $thumbnailPath = $uploadDir . $thumbnailName;
+                    $image = @imagecreatefromstring(file_get_contents($filepath));
+                    if ($image && ($thumbnail = imagescale($image, min($dimensions[0], 420)))) {
+                        if (@imagewebp($thumbnail, $thumbnailPath, 82)) {
+                            $filesCreated[] = $thumbnailPath;
+                            $mediaThumbnail = '/uploads/messages/' . date('Y/m/') . $thumbnailName;
                         }
-                        imagedestroy($image);
-                        imagedestroy($thumb);
-                        $filesCreated[] = $thumbnailPath;
-                        $mediaThumbnail = '/uploads/messages/' . date('Y/m/') . 'thumb_' . $uniqueName;
                     }
-                } catch (Exception $e) {
-                    error_log('Thumbnail creation failed: ' . $e->getMessage());
                 }
             }
+            $attachments[] = $attachment;
         }
 
-        if (count($uploadedPaths) === 1) {
-            // Single file - store path directly for backward compatibility
-            $mediaPath = $uploadedPaths[0]['path'];
-            if (strpos($firstType, 'image/') === 0) $messageType = 'image';
-            elseif (strpos($firstType, 'video/') === 0) $messageType = 'video';
-            elseif (strpos($firstType, 'audio/') === 0) $messageType = 'voice';
-            else $messageType = 'file';
-        } elseif (count($uploadedPaths) > 1) {
-            // Multiple files - store as JSON array
-            $mediaPath = json_encode($uploadedPaths);
+        $mediaPath = json_encode($attachments, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        if (count($attachments) === 1) {
+            $messageType = match (explode('/', $attachments[0]['type'], 2)[0]) {
+                'image' => 'image',
+                'video' => 'video',
+                'audio' => 'voice',
+                default => 'file',
+            };
+        } else {
             $messageType = 'file';
         }
     }
-    
+
     if ($content === '' && $mediaPath === null) {
         throw new Exception('Message cannot be empty');
     }

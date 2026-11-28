@@ -7,6 +7,13 @@ require_once __DIR__ . '/LocationNotice.php';
 
 final class PushOutbox
 {
+    private const DEVICE_SESSION = "(
+        (d.channel = 'fcm' AND EXISTS (SELECT 1 FROM fcm_tokens t
+            WHERE t.id = d.device_id AND t.user_id = d.user_id AND t.wake_session_hash = ?))
+        OR (d.channel = 'web' AND EXISTS (SELECT 1 FROM web_push_subscriptions t
+            WHERE t.id = d.device_id AND t.user_id = d.user_id AND t.session_hash = ?))
+    )";
+
     private static ?WeakMap $availability = null;
     private array $immediate = [];
 
@@ -280,18 +287,28 @@ final class PushOutbox
     public function receipt(string $receipt, int $user, string $session): bool
     {
         $locationVisible = LocationNotice::visible($this->db);
+        $deviceMatches = self::DEVICE_SESSION;
         $stmt = $this->db->prepare("UPDATE push_deliveries d SET state = 'delivered', delivered_at = COALESCE(delivered_at, NOW()),
                 accepted_at = COALESCE(accepted_at, NOW()), lease_id = NULL, lease_until = NULL
             WHERE d.receipt = ? AND d.user_id = ? AND d.expires_at > NOW()
             AND EXISTS (SELECT 1 FROM notifications n
                 WHERE n.id = d.notification_id AND n.user_id = d.user_id AND $locationVisible
                 AND (n.type <> 'message' OR n.is_read = 0))
-            AND d.state IN ('pending', 'accepted', 'delivered') AND (
-                (d.channel = 'fcm' AND EXISTS (SELECT 1 FROM fcm_tokens t
-                    WHERE t.id = d.device_id AND t.user_id = d.user_id AND t.wake_session_hash = ?))
-                OR (d.channel = 'web' AND EXISTS (SELECT 1 FROM web_push_subscriptions t
-                    WHERE t.id = d.device_id AND t.user_id = d.user_id AND t.session_hash = ?)))");
+            AND d.state IN ('pending', 'accepted', 'delivered') AND $deviceMatches");
         $stmt->execute([$receipt, $user, $session, $session]);
         return $stmt->rowCount() > 0;
+    }
+
+    public function chatMessageForReceipt(string $receipt, int $user, string $session): ?int
+    {
+        $deviceMatches = self::DEVICE_SESSION;
+        $stmt = $this->db->prepare("SELECT n.action_url FROM push_deliveries d
+            JOIN notifications n ON n.id = d.notification_id AND n.user_id = d.user_id AND n.type = 'message'
+            WHERE d.receipt = ? AND d.user_id = ? AND d.expires_at > NOW()
+                AND d.state IN ('pending', 'accepted', 'delivered') AND $deviceMatches");
+        $stmt->execute([$receipt, $user, $session, $session]);
+        $url = $stmt->fetchColumn();
+        return is_string($url) && preg_match('~^/messages/\?message=([1-9][0-9]*)$~D', $url, $match)
+            ? (int) $match[1] : null;
     }
 }
