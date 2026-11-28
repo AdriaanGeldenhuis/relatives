@@ -115,15 +115,19 @@ final class FamilyLive
         if (!$row || $row['session_id'] !== $session || (int) $row['expires_ms'] <= $now) {
             return null;
         }
-        $check = $this->db->prepare("SELECT auth_session FROM tracking_live_phones WHERE family_id = ? AND user_id = ? AND device_id = ?");
+        $check = $this->db->prepare("SELECT p.auth_session, EXISTS (
+                SELECT 1 FROM sessions s WHERE s.user_id = p.user_id
+                    AND s.session_token = p.auth_session AND s.expires_at > NOW()
+            ) AS signed_in FROM tracking_live_phones p WHERE p.family_id = ? AND p.user_id = ? AND p.device_id = ?");
         $key = [$ctx->familyId, $ctx->userId, $device];
         $check->execute($key);
-        $bound = $check->fetchColumn();
-        if ($bound !== false && $bound !== $ctx->sessionHash()) {
+        $binding = $check->fetch();
+        if ($binding && $binding['auth_session'] !== $ctx->sessionHash() && (bool) $binding['signed_in']) {
             return null;
         }
         $this->db->prepare("INSERT INTO tracking_live_phones (family_id, user_id, device_id, auth_session, state, last_seen_ms)
-            VALUES (?, ?, ?, ?, 'live', ?) ON DUPLICATE KEY UPDATE state = 'live', last_seen_ms = VALUES(last_seen_ms)")
+            VALUES (?, ?, ?, ?, 'live', ?) ON DUPLICATE KEY UPDATE auth_session = VALUES(auth_session),
+                state = 'live', last_seen_ms = VALUES(last_seen_ms)")
             ->execute([...$key, $ctx->sessionHash(), $now]);
         return $this->lease($session, (int) $row['expires_ms']);
     }

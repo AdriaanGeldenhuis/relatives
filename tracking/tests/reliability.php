@@ -114,6 +114,12 @@ check($live->presence(1)[2]['state'] === 'open_required', 'The map can show an A
 $result = $ingest->process($recipient, [], $pulse);
 check($result['live_session']['id'] === $liveId && $result['stored'] === 0, 'A stationary phone can check in without a location');
 check($live->presence(1)[2]['state'] === 'live' && $live->presence(1)[2]['last_seen_ms'] > 0, 'Pulse timestamp is recorded separately');
+$browserLogin = account($db, 2, 'fixture-live-browser');
+$browserPulse = ['session_id' => $liveId, 'device_id' => TrackingWake::newId()];
+check($ingest->process($browserLogin, [], $browserPulse)['live_session']['id'] === $liveId, 'A sharing browser can join in the foreground');
+$db->prepare('DELETE FROM sessions WHERE session_token = ?')->execute([$browserLogin->sessionHash()]);
+check($ingest->process($recipient, [], $browserPulse)['live_session']['id'] === $liveId,
+    'A phone can rejoin from a new sign-in after its previous sign-in ends');
 check($live->view($sender, $viewerA, false)['session']['id'] === $liveId, 'Leaving preserves the other viewer');
 check($live->view($recipient, $viewerB, false)['session'] === null, 'Last viewer ends the family session');
 check($ingest->process($recipient, [], $pulse)['live_session'] === null && $live->presence(1) === [],
