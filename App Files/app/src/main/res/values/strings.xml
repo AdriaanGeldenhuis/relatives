@@ -44,6 +44,8 @@
     <!-- Notification channels -->
     <string name="channel_tracking_name">Location Tracking</string>
     <string name="channel_tracking_desc">Keeps location tracking running in the background</string>
+    <string name="tracking_live_notification">Family tracking is live</string>
+    <string name="tracking_live_join">Open Relatives to join.</string>
     <string name="channel_alerts_name">Alerts &amp; Messages</string>
     <string name="channel_alerts_sound">Alerts with sound</string>
     <string name="channel_alerts_vibration">Alerts with vibration</string>

@@ -123,8 +123,9 @@ jobs:
           REMOTE
           )
           tracking_evidence_sql=$(base64 -w0 tracking/migrations/004_tracking_evidence.sql)
+          tracking_live_sql=$(base64 -w0 tracking/migrations/005_family_live_sessions.sql)
           ssh -F "$temp/ssh_config" relatives-production \
-            "export RELATIVES_RELEASE_ROOT='${DEPLOY_PATH%/}' DEPLOY_PHP='$DEPLOY_PHP' RELATIVES_TRACKING_EVIDENCE_SQL='$tracking_evidence_sql'; $preflight" \
+            "export RELATIVES_RELEASE_ROOT='${DEPLOY_PATH%/}' DEPLOY_PHP='$DEPLOY_PHP' RELATIVES_TRACKING_EVIDENCE_SQL='$tracking_evidence_sql' RELATIVES_TRACKING_LIVE_SQL='$tracking_live_sql'; $preflight" \
             < maintenance/release-check.php
           mkdir "$temp/site"
           # Keep the SSH files private and stage web files with their normal read permissions.

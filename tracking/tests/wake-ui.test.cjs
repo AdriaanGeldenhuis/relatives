@@ -6,6 +6,7 @@ const vm = require('node:vm');
 
 const page = fs.readFileSync(new URL('../app/index.php', `file://${__filename}`), 'utf8');
 const handler = page.slice(page.indexOf('    var wakeFab ='), page.indexOf('    // ── TRACKING INTEGRATION'));
+const liveHandler = page.slice(page.indexOf('    function liveViewerOptions'), page.indexOf('    function startPolling()'));
 
 function harness(replies, { nativeMode = 'enabled', own = null } = {}) {
     let clock = 0;
@@ -89,4 +90,47 @@ test('a remote failure leaves the last shown location and ends quietly', async (
     assert.equal(ui.busy(), false);
     assert.equal(ui.localWakes(), 0);
     assert.equal(ui.mapReads(), 1);
+});
+
+test('a sharing stationary browser checks in every 30 seconds until the viewer lease expires', async () => {
+    let now = 0;
+    let pending;
+    const requests = [];
+    const viewer = { id: 'viewer', lease: { id: 'family-session', pulse_ms: 30_000 }, expiresAt: 75_000 };
+    const context = vm.createContext({
+        isNativeApp: false, document: { hidden: false }, liveViewer: viewer, browserWatchId: 1,
+        mapPolicy: { allowed: true }, browserDeviceId: 'web-device', latestPos: null, lastBrowserPulse: null,
+        performance: { now: () => now },
+        setTimeout(callback, delay) { pending = { callback, at: now + delay }; return pending; },
+        async wakeRequest(path, options) { requests.push([now, path, JSON.parse(options.body)]); },
+    });
+    vm.runInContext(liveHandler, context);
+    context.scheduleBrowserPulse(viewer);
+    context.scheduleBrowserPulse(viewer);
+    for (let i = 0; i < 4; i++) {
+        now = pending.at;
+        pending.callback();
+    }
+    assert.deepEqual(requests.map(request => request[0]), [0, 30_000, 60_000]);
+    assert.deepEqual(requests[0].slice(1), ['/batch.php', {
+        locations: [], live_pulse: { session_id: 'family-session', device_id: 'device' },
+    }]);
+});
+
+test('a delayed start response releases a viewer after the Tracking screen has closed', async () => {
+    const viewer = { id: 'viewer', lease: null };
+    let finish;
+    const requests = [];
+    const context = vm.createContext({
+        window: { TrackingConfig: { apiBase: '/tracking/api', wakeCsrf: 'csrf' } },
+        document: { hidden: false }, liveViewer: viewer,
+        wakeRequest: () => new Promise(resolve => { finish = resolve; }),
+        async fetch(path, options) { requests.push([path, JSON.parse(options.body), options.keepalive]); },
+    });
+    vm.runInContext(liveHandler, context);
+    const request = context.renewLiveViewer(viewer);
+    context.liveViewer = null;
+    finish({ session: { id: 'family-session' } });
+    await request;
+    assert.deepEqual(requests, [['/tracking/api/live_session.php', { viewer_id: 'viewer', action: 'leave' }, true]]);
 });

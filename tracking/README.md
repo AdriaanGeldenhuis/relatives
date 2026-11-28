@@ -5,6 +5,7 @@ Real-time family location tracking with geofences, alerts, and events.
 ## Features
 
 - **Live Location Tracking** - Real-time family member locations
+- **Family live sessions** - Opening Tracking starts a shared session. Participating phones check in every 30 seconds while a viewer stays on the map.
 - **Android tracking policy** with Off, Normal and Active. Normal and Active use movement-based tracking with low-power stationary check-ins.
 - **Geofences** - Define zones with enter/exit alerts
 - **Places** - Mark important locations (home, work, school)
@@ -38,6 +39,7 @@ Real-time family location tracking with geofences, alerts, and events.
 ## API Endpoints
 
 ### Sessions
+- `POST /api/live_session.php` - Start, renew, or leave a family session from a visible Tracking map
 - `POST /api/keepalive` - Keep live session active
 - `GET /api/session_status.php` - Read the Android tracking policy and legacy session state
 - `POST /api/wake_devices.php` - Request one fresh fix from eligible family installations
@@ -129,6 +131,14 @@ Native apps use the same session-based authentication as the web app:
 ### Android schedule
 
 Fetch `data.tracking_policy` from `session_status.php` on activation and reconnect. Upload acknowledgements include the same policy as `data.server_settings`. The policy provides `allowed`, `mode`, `moving_interval`, `idle_interval`, `min_accuracy_m`, and server time in milliseconds. Mode 0 suspends collection. Normal and Active use a single quiet ongoing foreground service notification, low-power stationary tracking, and faster sampling when driving or observing a nearby boundary.
+
+### Family live sessions
+
+Apply migration 005 before enabling the new map and phone protocol. A visible map renews its viewer lease every 30 seconds. Each viewer has its own lease. The server ends the session when the last viewer leaves or the last 75-second lease expires. The first viewer starts one session for the family and dispatches one start push to each eligible Android installation.
+
+Android 1.9.5 advertises support through FCM registration. On startup, reconnect, or a live start push, it validates the active lease in `session_status.php` and sends `live_pulse` with `session_id` and `device_id` through `batch.php` every 30 seconds. The `locations` array can be empty. The pulse response contains the current lease, and the next pulse or local lease expiry ends live reporting after the last viewer leaves. Phones using the website participate while their Tracking tab is visible and location sharing is enabled. Locked-screen iPhone participation requires a native iOS client.
+
+The map keeps a phone's last check-in and a fix's original capture time separately. Verify live start, stationary pulses, reconnect, and exit with two viewers and multiple physical phones, including Battery Saver and a phone with its location service stopped.
 
 ### Location and Wake acknowledgements
 

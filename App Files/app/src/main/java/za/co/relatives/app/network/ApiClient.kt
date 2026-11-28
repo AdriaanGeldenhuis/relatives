@@ -81,6 +81,7 @@ class ApiClient(private val context: Context) {
             addProperty("device_type", "android")
             addProperty("installation_id", installationId)
             addProperty("wake_capability", capability)
+            add("device_info", JsonObject().apply { addProperty("family_live", true) })
         }
         val request = Request.Builder()
             .url("${BASE_URL}fcm/register.php")

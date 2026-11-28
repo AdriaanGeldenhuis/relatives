@@ -12,8 +12,18 @@ session_write_close();
 
 $body = json_decode(file_get_contents('php://input'), true);
 $points = $body['locations'] ?? $body;
-if (!is_array($points) || $points === []) {
+$live = $body['live_pulse'] ?? null;
+if ($live !== null && (!is_array($live) || !TrackingWake::isId($live['session_id'] ?? null)
+        || !TrackingWake::isId($live['device_id'] ?? null))) {
+    Response::error('invalid_live_pulse', 422);
+}
+if ($live !== null && strtolower(trim(explode(';', $_SERVER['CONTENT_TYPE'] ?? '')[0])) !== 'application/json') {
+    Response::error('json_required', 415);
+}
+if (!is_array($points) || ($points === [] && $live === null)) {
     Response::error('locations array is required', 422);
 }
 $trackingCache = new TrackingCache($cache);
-LocationIngest::respond((new LocationIngest($db, $trackingCache))->process($ctx, array_values(array_slice($points, 0, 100))), false);
+LocationIngest::respond((new LocationIngest($db, $trackingCache))->process(
+    $ctx, array_values(array_slice($points, 0, 100)), $live
+), false);

@@ -22,8 +22,10 @@ final class TrackingWake
             . '-' . dechex(8 | (hexdec($hex[16]) & 3)) . substr($hex, 17, 3) . '-' . substr($hex, 20);
     }
 
-    public function devices(SiteContext $ctx, bool $automatic, bool $refreshingLocal, array $policy): array
+    public function devices(SiteContext $ctx, bool $automatic, bool $refreshingLocal, array $policy, bool $legacyOnly = false): array
     {
+        $legacy = $legacyOnly ? "AND COALESCE(CASE WHEN JSON_VALID(ft.device_info)
+            THEN JSON_UNQUOTE(JSON_EXTRACT(ft.device_info, '$.family_live')) END, '') <> 'true'" : '';
         $stmt = $this->db->prepare("
             SELECT ft.id AS token_id, ft.token, u.id AS user_id, ft.installation_id, ft.wake_capability
             FROM users u JOIN fcm_tokens ft ON ft.user_id = u.id AND ft.device_type = 'android'
@@ -32,6 +34,7 @@ final class TrackingWake
             AND NOT (u.id = ? AND ft.wake_session_hash = ? AND ? = 1)
             AND EXISTS (SELECT 1 FROM sessions s
                 WHERE s.user_id = u.id AND s.session_token = ft.wake_session_hash AND s.expires_at > NOW())
+            $legacy
             ORDER BY ft.updated_at DESC, ft.id DESC
         ");
         $stmt->execute([$ctx->familyId, self::SILENT_READY, $ctx->userId, $ctx->sessionHash(), (int) $refreshingLocal]);

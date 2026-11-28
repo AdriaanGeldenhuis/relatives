@@ -57,7 +57,7 @@ CREATE TABLE notification_preferences (
 ) ENGINE=InnoDB;
 CREATE TABLE fcm_tokens (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL, token VARCHAR(255),
-    device_type VARCHAR(20) NOT NULL DEFAULT 'android', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    device_type VARCHAR(20) NOT NULL DEFAULT 'android', device_info TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 CREATE TABLE user_privacy_settings (
     user_id BIGINT UNSIGNED PRIMARY KEY, allow_messages TINYINT DEFAULT 1, show_online_status TINYINT DEFAULT 1,

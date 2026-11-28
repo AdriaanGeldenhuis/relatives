@@ -1,11 +1,19 @@
 package za.co.relatives.app.services
 
 import android.util.Log
+import android.app.PendingIntent
+import android.content.Intent
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import za.co.relatives.app.R
+import za.co.relatives.app.MainActivity
 import za.co.relatives.app.RelativesApplication
 import za.co.relatives.app.tracking.FamilyWake
+import za.co.relatives.app.tracking.TrackingClock
+import za.co.relatives.app.tracking.TrackingService
+import za.co.relatives.app.tracking.WakeReceiptWorker
 import za.co.relatives.app.utils.NotificationHelper
 import za.co.relatives.app.utils.PreferencesManager
 
@@ -24,6 +32,7 @@ class RelativesFirebaseService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "RelativesFCM"
+        private val LIVE_ID = Regex("[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}")
     }
 
     // ------------------------------------------------------------------ //
@@ -60,8 +69,42 @@ class RelativesFirebaseService : FirebaseMessagingService() {
 
         when (type) {
             "wake_tracking" -> FamilyWake.receive(this, data)
+            "family_live_start" -> handleFamilyLive(message, data)
             else -> handleVisibleNotification(type, data, message.notification)
         }
+    }
+
+    private fun handleFamilyLive(message: RemoteMessage, data: Map<String, String>) {
+        val prefs = PreferencesManager(this)
+        val id = data["session_id"]?.takeIf(LIVE_ID::matches) ?: return
+        val expiry = data["expires_at_ms"]?.toLongOrNull() ?: return
+        if (data["installation_id"] != prefs.deviceUuid || prefs.trackingConsent() == null) return
+        if (TrackingService.wakeCapability(this) != "silent_ready") return
+        val remaining = (expiry - TrackingClock.now()).coerceIn(0, 75_000)
+        if (remaining == 0L) return
+        val running = TrackingService.isRunning
+        val starting = TrackingService.joinFamilyLive(this, message.priority == RemoteMessage.PRIORITY_HIGH)
+        if (starting && running) return
+
+        if (!starting) WakeReceiptWorker.enqueue(this, id, "open_required", expiry, live = true)
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("action_url", "https://www.relatives.co.za/tracking/app/")
+        }
+        val action = PendingIntent.getActivity(this, TrackingService.LIVE_JOIN_NOTIFICATION_ID, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val channel = TrackingService.ensureTrackingChannel(this)
+        val notification = NotificationCompat.Builder(this, channel)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(getString(R.string.tracking_live_notification))
+            .setContentText(getString(R.string.tracking_live_join))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setContentIntent(action)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .setTimeoutAfter(remaining)
+            .build()
+        runCatching { NotificationManagerCompat.from(this).notify(TrackingService.LIVE_JOIN_NOTIFICATION_ID, notification) }
     }
 
     // ------------------------------------------------------------------ //

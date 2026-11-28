@@ -78,11 +78,11 @@ internal data class FamilyWake(val id: String, val scope: String, val expiresAtM
 
 class WakeReceiptWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     companion object {
-        internal fun enqueue(context: Context, id: String, state: String, expiresAtMs: Long) {
+        internal fun enqueue(context: Context, id: String, state: String, expiresAtMs: Long, live: Boolean = false) {
             val prefs = PreferencesManager(context)
             val binding = prefs.sessionBinding() ?: return
             val builder = OneTimeWorkRequestBuilder<WakeReceiptWorker>()
-                .setInputData(workDataOf("id" to id, "state" to state, "expires" to expiresAtMs, "binding" to binding))
+                .setInputData(workDataOf("id" to id, "state" to state, "expires" to expiresAtMs, "binding" to binding, "live" to live))
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             WorkManager.getInstance(context).enqueueUniqueWork("wake_receipt_$id", ExistingWorkPolicy.KEEP, builder.build())
@@ -95,7 +95,19 @@ class WakeReceiptWorker(context: Context, params: WorkerParameters) : CoroutineW
         val prefs = PreferencesManager(applicationContext)
         val cookie = prefs.sessionToken ?: return Result.success()
         if (prefs.sessionBinding() != inputData.getString("binding")) return Result.success()
-        val reply = FamilyWake.acknowledge(applicationContext, cookie, id, state)
+        val reply = if (inputData.getBoolean("live", false)) {
+            try {
+                TrackingTransport(applicationContext).call("live_session.php", cookie, JsonObject().apply {
+                    addProperty("action", state)
+                    addProperty("session_id", id)
+                    addProperty("device_id", prefs.deviceUuid)
+                })
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+        } else FamilyWake.acknowledge(applicationContext, cookie, id, state)
         if ((reply == null || reply.code >= 500) && runAttemptCount < 2 &&
             TrackingClock.now() < inputData.getLong("expires", 0L)
         ) return Result.retry()

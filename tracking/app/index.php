@@ -235,6 +235,7 @@ requestAnimationFrame(function() {
         alertRules: <?php echo json_encode($alertRules); ?>,
         apiBase: '/tracking/api',
         wakeCsrf: <?php echo json_encode($wakeCsrf); ?>,
+        liveAvailable: <?php echo json_encode(FamilyLive::available($db)); ?>,
         isAdmin: <?php echo json_encode(in_array($user['role'], ['owner', 'admin'])); ?>
     };
 </script>
@@ -498,7 +499,7 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         members.forEach(function(m) {
             var initial = (m.name || 'U').charAt(0).toUpperCase();
             var hasLoc = m.has_location && m.lat !== null;
-            var statusClass = hasLoc ? getStatusClass(m) : 'offline';
+            var statusClass = getStatusClass(m);
             var timeAgo = hasLoc ? liveAgeMarkup(m)
                 : (m.location_sharing === false ? 'Sharing off' : 'No location yet');
             var speed = hasLoc ? formatSpeed(m.speed_mps) : '';
@@ -521,6 +522,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 html += '      <span class="member-speed' + (parseFloat(m.speed_mps) > 1 ? ' moving' : '') + '">' + speed + '</span>';
             }
             html += '    </div>';
+            var phoneStatus = livePhoneText(m);
+            if (phoneStatus) html += '<div class="member-meta" data-phone-status="' + m.user_id + '">' + phoneStatus + '</div>';
             html += '  </div>';
             if (hasLoc) {
                 html += '  <div class="member-actions">';
@@ -642,6 +645,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function getStatusClass(m) {
+        if (liveViewer?.lease && m.location_sharing) {
+            var seen = m.live_phone?.last_seen_ms;
+            if (seen) return serverNow() - seen < 60000 ? 'online' : 'offline';
+            return m.live_phone?.state === 'starting' ? 'idle' : 'offline';
+        }
+        if (!m.has_location) return 'offline';
         var ageSecs = (serverNow() - captureTime(m)) / 1000;
         var expect = mapPolicy && (m.motion_state === 'moving' ? mapPolicy.moving_interval : mapPolicy.idle_interval);
         if (ageSecs <= Math.max(m.motion_state === 'moving' ? 60 : 180, 2 * (expect || 0))) {
@@ -664,8 +673,25 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     function memberAgeText(member) {
-        return (getStatusClass(member) === 'offline' ? 'Last known · ' : '') + formatTimeAgo(captureTime(member))
+        return (liveViewer?.lease ? 'Location ' : (getStatusClass(member) === 'offline' ? 'Last known · ' : '')) + formatTimeAgo(captureTime(member))
             + (member.approximate ? ' · Approximate' : '');
+    }
+
+    function livePhoneText(member) {
+        if (!liveViewer?.lease || !member.location_sharing) return '';
+        var phone = member.live_phone;
+        if (phone?.last_seen_ms) {
+            var live = serverNow() - phone.last_seen_ms < 60000;
+            var status = live ? 'Live' : 'Delayed';
+            if (live && Number.isInteger(phone.phones) && Number.isInteger(phone.live_phones) && phone.phones > 1) {
+                status += ' (' + phone.live_phones + ' of ' + phone.phones + ' phones)';
+            }
+            return status +
+                ' · Phone checked in ' + formatTimeAgo(phone.last_seen_ms);
+        }
+        if (phone?.state === 'open_required') return 'Open app to join';
+        if (phone?.state === 'starting' && performance.now() - liveViewer.started < 60000) return 'Starting';
+        return phone ? 'Waiting for phone' : 'Open Tracking to join';
     }
 
     function updateLocationAges() {
@@ -673,6 +699,14 @@ require_once __DIR__ . '/../../shared/components/footer.php';
             var member = _members.find(function(item) { return String(item.user_id) === element.dataset.locationAge; });
             if (!member) return;
             var label = memberAgeText(member);
+            if (element.textContent !== label) element.textContent = label;
+            var dot = element.closest('.member-item')?.querySelector('.member-status-dot');
+            if (dot) dot.className = 'member-status-dot ' + getStatusClass(member);
+        });
+        document.querySelectorAll('[data-phone-status]').forEach(function(element) {
+            var member = _members.find(function(item) { return String(item.user_id) === element.dataset.phoneStatus; });
+            if (!member) return;
+            var label = livePhoneText(member);
             if (element.textContent !== label) element.textContent = label;
             var dot = element.closest('.member-item')?.querySelector('.member-status-dot');
             if (dot) dot.className = 'member-status-dot ' + getStatusClass(member);
@@ -1271,7 +1305,9 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var now = serverNow();
         var staleAfter = own?.motion_state === 'moving'
             ? 1000 * Math.min(45, Math.max(15, mapPolicy?.moving_interval || 30)) : 90000;
-        if (!round.localUntil && (manual || !own?.has_location || own.approximate || now - captureTime(own) > staleAfter)
+        var legacyOnly = !manual && window.TrackingConfig.liveAvailable === true;
+        var localUsesLive = legacyOnly && (!isNativeApp || typeof nativeBridge?.joinLiveTracking === 'function');
+        if (!localUsesLive && !round.localUntil && (manual || !own?.has_location || own.approximate || now - captureTime(own) > staleAfter)
             && refreshOwnPhone()) {
             round.localAfter = now;
             round.localUntil = performance.now() + 28000;
@@ -1280,8 +1316,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         var status = await wakeRequest('/wake_devices.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.TrackingConfig.wakeCsrf },
-            body: JSON.stringify({ client_request_id: makeWakeId(), mode: mode,
-                refreshing_local: !!round.localUntil && !!nativeBridge })
+            body: JSON.stringify(Object.assign({ client_request_id: makeWakeId(), mode: mode,
+                refreshing_local: !!round.localUntil && !!nativeBridge }, legacyOnly ? { legacy_only: true } : {}))
         });
         if (wakeRound !== round) return;
         round.posting = false;
@@ -1336,6 +1372,8 @@ require_once __DIR__ . '/../../shared/components/footer.php';
     }
 
     var lastUploadTime = 0;
+    var liveViewer = null;
+    var lastBrowserPulse = null;
     var uploadTimer = null;
     var latestPos = null;
     var browserWatchId = null;
@@ -1539,6 +1577,10 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         // discarded every newer one, so a moving user uploaded a stale point.
         if (pos && (!latestPos || pos.timestamp >= latestPos.timestamp)) latestPos = pos;
         if (!latestPos) return;
+        if (window.TrackingConfig.liveAvailable) {
+            if (liveViewer) scheduleBrowserPulse(liveViewer);
+            return;
+        }
         var now = Date.now();
         if (now - lastUploadTime < 10000) {
             if (uploadTimer === null) {
@@ -1614,11 +1656,16 @@ require_once __DIR__ . '/../../shared/components/footer.php';
                 stopBrowserTracking();
             }
             // TIMEOUT / POSITION_UNAVAILABLE: keep the watch, it may recover.
-        }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 });
+        }, { enableHighAccuracy: !window.TrackingConfig.liveAvailable, timeout: 30000, maximumAge: 10000 });
+        if (liveViewer) scheduleBrowserPulse(liveViewer);
         updateBrowserShareButton();
     }
 
     function stopBrowserTracking() {
+        if (liveViewer) {
+            clearTimeout(liveViewer.browserTimer);
+            liveViewer.browserTimer = null;
+        }
         if (browserWatchId !== null) {
             navigator.geolocation.clearWatch(browserWatchId);
             browserWatchId = null;
@@ -1694,10 +1741,97 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         }
     }
 
+    function liveViewerOptions(viewer, action) {
+        return {
+            method: 'POST', keepalive: action === 'leave',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.TrackingConfig.wakeCsrf },
+            body: JSON.stringify({ viewer_id: viewer.id, action: action })
+        };
+    }
+
+    function leaveLiveViewer(viewer) {
+        fetch(window.TrackingConfig.apiBase + '/live_session.php', Object.assign({
+            credentials: 'same-origin'
+        }, liveViewerOptions(viewer, 'leave'))).catch(function() {});
+    }
+
+    async function pulseBrowser(viewer) {
+        if (isNativeApp || document.hidden || browserWatchId === null || !mapPolicy?.allowed ||
+            !viewer.lease || !browserDeviceId.startsWith('web-')) return;
+        var id = viewer.lease.id;
+        var now = performance.now();
+        var previous = lastBrowserPulse?.session === id ? lastBrowserPulse : null;
+        var pulse = { session: id, sentAt: now, fixAt: previous?.fixAt || 0 };
+        lastBrowserPulse = pulse;
+        var fix = latestPos;
+        var locations = [];
+        if (fix && fix.timestamp > pulse.fixAt && Date.now() - fix.timestamp < 60000) {
+            locations.push({
+                lat: fix.coords.latitude, lng: fix.coords.longitude, accuracy_m: fix.coords.accuracy,
+                speed_mps: fix.coords.speed, bearing_deg: fix.coords.heading, altitude_m: fix.coords.altitude,
+                recorded_at_ms: fix.timestamp, platform: 'web', device_id: browserDeviceId,
+                consent_scope: browserShareScope
+            });
+        }
+        var reply = await wakeRequest('/batch.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ locations: locations,
+                live_pulse: { session_id: id, device_id: browserDeviceId.slice(4) } })
+        });
+        if (reply?.results?.[0]?.status === 'stored' && lastBrowserPulse === pulse) pulse.fixAt = fix.timestamp;
+    }
+
+    function scheduleBrowserPulse(viewer) {
+        if (isNativeApp || liveViewer !== viewer || document.hidden || browserWatchId === null ||
+            !mapPolicy?.allowed || !browserDeviceId.startsWith('web-') || !viewer.lease ||
+            viewer.browserTimer != null) return;
+        var now = performance.now();
+        var last = lastBrowserPulse?.session === viewer.lease.id ? lastBrowserPulse.sentAt : -Infinity;
+        viewer.browserTimer = setTimeout(function() {
+            viewer.browserTimer = null;
+            if (liveViewer !== viewer || performance.now() >= viewer.expiresAt) return;
+            pulseBrowser(viewer);
+            scheduleBrowserPulse(viewer);
+        }, Math.max(0, last + viewer.lease.pulse_ms - now));
+    }
+
+    async function renewLiveViewer(viewer) {
+        if (liveViewer !== viewer || document.hidden || viewer.pending) return;
+        viewer.pending = true;
+        var data = await wakeRequest('/live_session.php', liveViewerOptions(viewer, 'view'));
+        viewer.pending = false;
+        if (liveViewer !== viewer || document.hidden) {
+            leaveLiveViewer(viewer);
+            return;
+        }
+        if (data && data.session?.id !== viewer.lease?.id) {
+            viewer.started = performance.now();
+            viewer.lease = data.session;
+            renderMembers(_members);
+            fetchMembers(true);
+        } else if (data?.session) {
+            viewer.lease = data.session;
+        }
+        if (data?.session) {
+            viewer.expiresAt = performance.now() + data.session.remaining_ms;
+            scheduleBrowserPulse(viewer);
+            if (typeof nativeBridge?.joinLiveTracking === 'function' && viewer.nativeSession !== data.session.id) {
+                viewer.nativeSession = data.session.id;
+                nativeBridge.joinLiveTracking();
+            }
+        }
+    }
+
     function startPolling() {
-        stopPolling();
+        stopPolling(true);
         if (document.hidden) return;
         automaticWakePending = true;
+        if (!liveViewer && window.TrackingConfig.liveAvailable && window.crypto?.getRandomValues) {
+            var viewer = { id: makeWakeId(), lease: null };
+            liveViewer = viewer;
+            viewer.timer = setInterval(function() { renewLiveViewer(viewer); }, 30000);
+            renewLiveViewer(viewer);
+        }
         if (!webPollOwner && nativeCacheAllowed) {
             nativeActivationAt = Date.now();
             readBridgeCache();
@@ -1721,7 +1855,14 @@ require_once __DIR__ . '/../../shared/components/footer.php';
         }, recentMovement ? 5000 : 15000);
     }
 
-    function stopPolling() {
+    function stopPolling(restarting) {
+        if (!restarting && liveViewer) {
+            var viewer = liveViewer;
+            liveViewer = null;
+            clearInterval(viewer.timer);
+            clearTimeout(viewer.browserTimer);
+            leaveLiveViewer(viewer);
+        }
         clearInterval(ageTimer);
         if (memberPollTimer) { clearTimeout(memberPollTimer); memberPollTimer = null; }
         if (bridgeCacheTimer) { clearInterval(bridgeCacheTimer); bridgeCacheTimer = null; }
@@ -1744,10 +1885,12 @@ require_once __DIR__ . '/../../shared/components/footer.php';
 
     window.addEventListener('online', function() {
         if (document.hidden) return;
+        if (liveViewer) renewLiveViewer(liveViewer);
         fetchMembers(true);
         if (wakeRound) checkWakeStatus();
     });
     window.addEventListener('pagehide', function(event) {
+        stopPolling();
         stopBrowserTracking();
         if (event.persisted) clearFamilySnapshot();
     });

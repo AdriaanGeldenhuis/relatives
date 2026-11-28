@@ -27,6 +27,7 @@
     <!-- Service Permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Microphone for voice input -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

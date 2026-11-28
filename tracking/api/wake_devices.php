@@ -28,7 +28,8 @@ if (!$policy['allowed']) {
 }
 
 $wake = new TrackingWake($db);
-$devices = $wake->devices($ctx, $mode === 'automatic', ($body['refreshing_local'] ?? null) === true, $policy);
+$devices = $wake->devices($ctx, $mode === 'automatic', ($body['refreshing_local'] ?? null) === true, $policy,
+    $mode === 'automatic' && ($body['legacy_only'] ?? null) === true);
 $existing = $wake->findRequest($ctx, $clientId);
 if (!$devices && $existing === null) {
     Response::success(['complete' => true]);

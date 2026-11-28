@@ -95,6 +95,7 @@ class TrackingService : Service() {
         const val ACTION_MOTION_STOPPED = "za.co.relatives.app.tracking.MOTION_STOPPED"
         private const val ACTION_WAKE = "za.co.relatives.app.tracking.WAKE"
         private const val ACTION_FAMILY_WAKE = "za.co.relatives.app.tracking.FAMILY_WAKE"
+        private const val ACTION_FAMILY_LIVE = "za.co.relatives.app.tracking.FAMILY_LIVE"
         private const val ACTION_BOUNDARY = "za.co.relatives.app.tracking.BOUNDARY"
         private const val ACTION_DRIVING = "za.co.relatives.app.tracking.DRIVING"
         private const val ACTION_MOTION_PERMISSION = "za.co.relatives.app.tracking.MOTION_PERMISSION"
@@ -102,11 +103,13 @@ class TrackingService : Service() {
 
         private const val CHANNEL_ID = "tracking_channel"
         private const val NOTIFICATION_ID = 9001
+        internal const val LIVE_JOIN_NOTIFICATION_ID = 9002
 
         private const val GEOFENCE_RADIUS_M = 200f
         private const val GEOFENCE_ID = "idle_geofence"
 
         private const val WAKE_COOLDOWN_MS = 18_000L
+        private const val LIVE_PULSE_MS = 30_000L
         @Volatile
         private var activeService: TrackingService? = null
 
@@ -143,6 +146,21 @@ class TrackingService : Service() {
                 }
             }
             return appVisible && safeStart(context, ACTION_FAMILY_WAKE, wake)
+        }
+
+        internal fun joinFamilyLive(context: Context, highPriorityPush: Boolean = false): Boolean {
+            val consent = PreferencesManager(context).trackingConsent() ?: return false
+            if (wakeCapability(context) != "silent_ready") return false
+            val service = activeService
+            if (isRunning && service != null && service.started) {
+                return service.handler.post {
+                    if (service === activeService) service.serviceScope.launch {
+                        refreshServerPolicy(service, consent.sessionCookie)
+                    }
+                }
+            }
+            return (appVisible || (highPriorityPush && hasBackgroundLocation(context))) &&
+                safeStart(context, ACTION_FAMILY_LIVE)
         }
 
         fun wakeCapability(context: Context): String = when {
@@ -202,6 +220,12 @@ class TrackingService : Service() {
                     val data = reply.data ?: return
                     val policy = data.getAsJsonObject("tracking_policy") ?: data
                     applyServerPolicy(context, cookie, policy)
+                    if (data.has("live_session")) {
+                        val lease = data.get("live_session")?.takeIf { it.isJsonObject }?.asJsonObject
+                        activeService?.let { service ->
+                            service.handler.post { service.followLiveSession(cookie, lease) }
+                        }
+                    }
                 }
             }
         }
@@ -210,7 +234,7 @@ class TrackingService : Service() {
             if (isRunning) safeStart(context, ACTION_MOTION_PERMISSION)
         }
 
-        private fun createTrackingChannel(context: Context) {
+        internal fun ensureTrackingChannel(context: Context): String {
             val channel = NotificationChannel(
                 CHANNEL_ID, context.getString(R.string.channel_tracking_name), NotificationManager.IMPORTANCE_LOW,
             ).apply {
@@ -219,6 +243,7 @@ class TrackingService : Service() {
                 setSound(null, null)
             }
             context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
+            return CHANNEL_ID
         }
 
         /**
@@ -368,6 +393,10 @@ class TrackingService : Service() {
     private var requireFirstFix = false
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var networkRecovery: Job? = null
+    private var livePulse: Job? = null
+    private var liveSessionId: String? = null
+    private var liveUntil = 0L
+    private var liveWakeLock: PowerManager.WakeLock? = null
     private val uploadSignals = Channel<Unit>(Channel.CONFLATED)
     private var policy = TrackingPolicy()
     private var captureSequence = 0
@@ -445,7 +474,7 @@ class TrackingService : Service() {
         activeService = this
         try {
             // Channel first: foreground promotion depends on it.
-            createTrackingChannel(this)
+            ensureTrackingChannel(this)
             hasGms = GmsSupport.available(this)
             if (hasGms) {
                 fusedClient = LocationServices.getFusedLocationProviderClient(this)
@@ -502,8 +531,10 @@ class TrackingService : Service() {
             captureWakeFix()
             return START_NOT_STICKY
         }
+        val alreadyStarted = started
         doStart()
         when (intent?.action) {
+            ACTION_FAMILY_LIVE -> if (alreadyStarted) joinFamilyLive(this)
             ACTION_MOTION_STARTED -> recordMovement(SystemClock.elapsedRealtime())
             ACTION_DRIVING -> recordDriving(SystemClock.elapsedRealtime())
             ACTION_BOUNDARY -> captureBoundary(null)
@@ -525,6 +556,7 @@ class TrackingService : Service() {
 
         handler.removeCallbacks(idleTimeout)
         serviceScope.cancel()
+        setLiveDeadline(0)
         stopLocationUpdates()
         unregisterBatteryReceiver()
         unregisterProvidersChangedReceiver()
@@ -585,6 +617,10 @@ class TrackingService : Service() {
         handler.removeCallbacks(idleTimeout)
         wakeFix?.cancel()
         wakeFix = null
+        livePulse?.cancel()
+        livePulse = null
+        liveSessionId = null
+        setLiveDeadline(0)
         boundaryProbe?.cancel()
         monitoredRegions?.cancel()
         stopLocationUpdates()
@@ -646,7 +682,7 @@ class TrackingService : Service() {
         serviceScope.launch {
             for (signal in uploadSignals) {
                 delay(2000)
-                if (!connected()) continue
+                if (!connected() || liveSessionId != null) continue
                 val activeConsent = prefs.trackingConsent() ?: continue
                 when (LocationUploader.send(this@TrackingService, activeConsent)) {
                     UploadResult.RETRY, UploadResult.SENT -> LocationUploadWorker.enqueue(this@TrackingService)
@@ -666,6 +702,70 @@ class TrackingService : Service() {
             shutdown()
         } else if (sampling) {
             applyMode(currentMode, force = true)
+        }
+    }
+
+    private fun followLiveSession(cookie: String, lease: JsonObject?) {
+        val prefs = PreferencesManager(this)
+        val consent = prefs.trackingConsent()?.takeIf { it.sessionCookie == cookie } ?: return
+        if (!started || !canCapture(consent)) return
+        val id = lease?.text("id")
+        val remaining = lease?.number("remaining_ms")?.coerceIn(0, 75_000) ?: 0
+        if (id == null && liveSessionId == null) return
+        if (id != null && remaining > 0 && id == liveSessionId && livePulse?.isActive == true) {
+            setLiveDeadline(remaining)
+            return
+        }
+        livePulse?.cancel()
+        livePulse = null
+        liveSessionId = null
+        if (id == null || remaining == 0L) {
+            setLiveDeadline(0)
+            updateTrackingNotification()
+            uploadSignals.trySend(Unit)
+            return
+        }
+        liveSessionId = id
+        setLiveDeadline(remaining)
+        getSystemService(NotificationManager::class.java)?.cancel(LIVE_JOIN_NOTIFICATION_ID)
+        updateTrackingNotification()
+        if (sampling && (lastLocation?.let { TrackingFix.ageMs(it) > LIVE_PULSE_MS } != false)) captureWakeFix()
+        livePulse = serviceScope.launch {
+            var next = SystemClock.elapsedRealtime()
+            while (isActive && canCapture(consent)) {
+                val now = SystemClock.elapsedRealtime()
+                if (now >= liveUntil) break
+                if (next > now) delay(minOf(next, liveUntil) - now)
+                if (SystemClock.elapsedRealtime() >= liveUntil || !canCapture(consent)) break
+                next = SystemClock.elapsedRealtime() + LIVE_PULSE_MS
+                if (connected()) {
+                    LocationUploader.send(this@TrackingService, consent, liveSessionId = id) { updated ->
+                        val left = updated?.number("remaining_ms")?.coerceIn(0, 75_000) ?: 0
+                        setLiveDeadline(left)
+                    }
+                }
+            }
+            if (liveSessionId == id) {
+                liveSessionId = null
+                livePulse = null
+                setLiveDeadline(0)
+                updateTrackingNotification()
+                uploadSignals.trySend(Unit)
+            }
+        }
+    }
+
+    private fun setLiveDeadline(remainingMs: Long) {
+        liveUntil = SystemClock.elapsedRealtime() + remainingMs
+        // Keep the 30-second timer runnable only while a viewer lease is valid.
+        if (remainingMs > 0) {
+            val lock = liveWakeLock ?: getSystemService(PowerManager::class.java)
+                ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Relatives:FamilyLive")
+                ?.apply { setReferenceCounted(false) }
+                ?.also { liveWakeLock = it }
+            lock?.acquire(remainingMs)
+        } else {
+            liveWakeLock?.takeIf { it.isHeld }?.release()
         }
     }
 
@@ -1214,9 +1314,9 @@ class TrackingService : Service() {
                 if (urgent && connected()) {
                     LocationUploadWorker.enqueue(this@TrackingService, 10)
                     LocationUploader.send(this@TrackingService, consent, entity.clientEventId)
-                } else if (connected()) {
+                } else if (connected() && liveSessionId == null) {
                     uploadSignals.trySend(Unit)
-                } else {
+                } else if (!connected()) {
                     LocationUploadWorker.enqueue(this@TrackingService)
                 }
             } else if (lastQueuedFixNanos == location.elapsedRealtimeNanos) {
@@ -1303,13 +1403,18 @@ class TrackingService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
-            .setContentText(getString(R.string.tracking_notif_idle))
+            .setContentText(getString(if (liveSessionId == null) R.string.tracking_notif_idle else R.string.tracking_live_notification))
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .addAction(0, getString(R.string.tracking_notif_stop), stopPending)
             .build()
+    }
+
+    private fun updateTrackingNotification() {
+        if (!isForeground) return
+        runCatching { getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification()) }
     }
 
 }

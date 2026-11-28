@@ -67,6 +67,7 @@ internal class TrackingBridge(private val activity: MainActivity) {
                 sendState(reply)
             }
             "refresh_device" -> activity.wakeAllDevices()
+            "join_live_tracking" -> TrackingService.joinFamilyLive(activity)
             "web_family_polling" -> activity.claimFamilyPolling()
             "refresh_tracking_policy" -> activity.refreshVisibleTrackingPolicy()
             "map_visible" -> {

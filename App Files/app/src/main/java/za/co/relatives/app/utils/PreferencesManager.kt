@@ -100,12 +100,12 @@ class PreferencesManager(context: Context) {
     internal fun sessionBinding(): String? = sessionToken?.let(::fingerprint)
 
     internal fun registrationMatches(cookie: String, token: String, capability: String): Boolean =
-        prefs.getString(KEY_FCM_REGISTRATION, null) == fingerprint("$cookie:$token:$capability") &&
+        prefs.getString(KEY_FCM_REGISTRATION, null) == fingerprint("$cookie:$token:$capability:family-live") &&
             System.currentTimeMillis() - prefs.getLong(KEY_FCM_REGISTERED_AT, 0) in 0L..86_400_000L
 
     internal fun recordRegistration(cookie: String, token: String, capability: String) {
         if (sessionToken == cookie && fcmToken == token) {
-            prefs.edit().putString(KEY_FCM_REGISTRATION, fingerprint("$cookie:$token:$capability"))
+            prefs.edit().putString(KEY_FCM_REGISTRATION, fingerprint("$cookie:$token:$capability:family-live"))
                 .putLong(KEY_FCM_REGISTERED_AT, System.currentTimeMillis()).apply()
         }
     }

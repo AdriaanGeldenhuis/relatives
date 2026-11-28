@@ -25,4 +25,6 @@ $sessionGate = new SessionGate(
 $status = $sessionGate->getStatus($ctx->familyId, $settings);
 
 $status['tracking_policy'] = TrackingPolicy::native($settings, $ctx->locationSharing);
+$status['live_session'] = $status['tracking_policy']['allowed'] && FamilyLive::available($db)
+    ? (new FamilyLive($db))->active($ctx->familyId) : null;
 Response::success($status);

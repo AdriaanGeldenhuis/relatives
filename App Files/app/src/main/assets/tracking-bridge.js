@@ -82,6 +82,7 @@
         stopTracking: function () { send('stop'); },
         wakeAllDevices: function () { send('refresh_device'); },
         refreshMyLocation: function () { send('refresh_device'); },
+        joinLiveTracking: function () { send('join_live_tracking'); },
         hasRemoteWake: function () { return snapshot.remoteWake; },
         claimFamilyPolling: function () { send('web_family_polling'); },
         requestTrackingHealth: function () { send('tracking_health'); },

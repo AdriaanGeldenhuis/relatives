@@ -15,6 +15,7 @@ $trackingCache = new TrackingCache($cache);
 $locationRepo = new LocationRepo($db, $trackingCache);
 $policy = TrackingPolicy::native((new SettingsRepo($db, $trackingCache))->get($ctx->familyId), $ctx->locationSharing);
 $quality = TrackingPolicy::locationQuality($db);
+$presence = $policy['mode'] !== 0 && FamilyLive::available($db) ? (new FamilyLive($db))->presence($ctx->familyId) : [];
 
 $locations = $locationRepo->getFamilyCurrentLocations(
     $ctx->familyId, TrackingPolicy::hasColumn($db, 'tracking_current', 'recorded_ms'), $policy
@@ -42,6 +43,7 @@ foreach ($locations as $row) {
         'recorded_at_ms' => $hasLocation ? (int) ($row['recorded_ms'] ?? Time::captureMs($row['recorded_at'])) : null,
         'received_at_ms' => isset($row['received_at_unix']) && $hasLocation ? (int) $row['received_at_unix'] * 1000 : null,
         'location_sharing' => (bool) $row['location_sharing'],
+        'live_phone' => $presence[(int) $row['user_id']] ?? null,
         'approximate' => $hasLocation && ($quality ? !LocationQuality::reliable($row, $policy)
             : ($row['accuracy_m'] === null || (float) $row['accuracy_m'] > $policy['min_accuracy_m'])),
     ];

@@ -5,7 +5,7 @@ final class LocationIngest
 {
     public function __construct(private PDO $db, private TrackingCache $cache) {}
 
-    public function process(SiteContext $ctx, array $inputs): array
+    public function process(SiteContext $ctx, array $inputs, ?array $livePulse = null): array
     {
         $db = $this->db;
         $settingsRepo = new SettingsRepo($db, $this->cache);
@@ -52,8 +52,10 @@ final class LocationIngest
                 return ['blocked' => $access === 'allowed' ? 'tracking_disabled' : $access];
             }
             $policy = TrackingPolicy::native($settings, true);
+            $liveSession = $livePulse !== null && FamilyLive::available($db)
+                ? (new FamilyLive($db))->pulse($ctx, $livePulse['session_id'], $livePulse['device_id']) : null;
             $cutoff = TrackingPolicy::cutoff($db, $ctx->familyId, $ctx->userId);
-            $current = $repo->currentForWrite($ctx->userId, $ctx->familyId, $preciseTime, $quality);
+            $current = $pending ? $repo->currentForWrite($ctx->userId, $ctx->familyId, $preciseTime, $quality) : null;
             $motion = new MotionGate((float) $settings['speed_threshold_mps'], (float) $settings['distance_threshold_m']);
             $previous = null;
             foreach ($pending as $index => $fix) {
@@ -143,6 +145,7 @@ final class LocationIngest
             'processed' => count($inputs), 'stored' => $stored,
             'results' => array_values($results), 'server_settings' => $policy,
             'pending_wake' => $wakeDevice && !$wakeFixes ? $wake?->pending($ctx, $wakeDevice) : null,
+            'live_session' => $liveSession,
         ];
     }
 

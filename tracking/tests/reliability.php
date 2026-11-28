@@ -21,6 +21,7 @@ $db->setAttribute(PDO::ATTR_EMULATE_PREPARES, true);
 foreach (['tests/reliability-fixture.sql', 'tracking/migrations/001_tracking_tables.sql', 'tracking/migrations/002_place_state.sql',
     'tracking/migrations/003_tracking_reliability.sql', 'tracking/migrations/003_tracking_reliability.sql',
     'tracking/migrations/004_tracking_evidence.sql', 'tracking/migrations/004_tracking_evidence.sql',
+    'tracking/migrations/005_family_live_sessions.sql', 'tracking/migrations/005_family_live_sessions.sql',
     'migrations/app-reliability-v1.sql'] as $migration) {
     // The shared migration's stored trigger section requires the mysql CLI.
     // The push tables used by this fixture precede the delimiter.
@@ -38,7 +39,7 @@ $db->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
 foreach (['core/Cache.php', 'core/GeoUtils.php', 'tracking/core/SiteContext.php', 'tracking/core/Time.php',
     'tracking/core/Validator.php', 'tracking/core/services/TrackingCache.php', 'tracking/core/services/TrackingPolicy.php',
     'tracking/core/services/LocationQuality.php',
-    'tracking/core/services/TrackingWake.php', 'tracking/core/services/LocationIngest.php',
+    'tracking/core/services/TrackingWake.php', 'tracking/core/services/FamilyLive.php', 'tracking/core/services/LocationIngest.php',
     'tracking/core/services/MotionGate.php', 'tracking/core/services/GeofenceEngine.php',
     'tracking/core/services/AlertsEngine.php', 'tracking/core/repos/AlertsRepo.php', 'tracking/core/repos/EventsRepo.php',
     'tracking/core/repos/GeofenceRepo.php', 'tracking/core/repos/PlacesRepo.php', 'tracking/core/repos/SettingsRepo.php',
@@ -93,6 +94,34 @@ check($wake->admit($sender, $key, $devices) === ['request_id' => $id], 'Idempote
 check($wake->admit($recipient, TrackingWake::newId(), $devices)['request_id'] === $id, 'Concurrent family viewers share a request');
 check($wake->status($other, $id) === null, 'Wake status requester isolation');
 check($wake->status($recipient, $id) === null && $wake->status($recipient, $id, true, true) !== null, 'Shared status remains family scoped');
+
+$live = new FamilyLive($db);
+$db->prepare('UPDATE fcm_tokens SET device_info = ? WHERE user_id = ?')->execute(['{"family_live":true}', 2]);
+$viewerA = TrackingWake::newId();
+$viewerB = TrackingWake::newId();
+$started = $live->view($sender, $viewerA, true);
+$liveId = $started['session']['id'];
+check($started['session']['pulse_ms'] === 30000 && count($started['targets']) === 2,
+    'Opening Tracking schedules one 30-second session for every eligible phone');
+$joined = $live->view($recipient, $viewerB, true);
+check($joined['session']['id'] === $liveId && $joined['targets'] === [], 'Second viewer joins without a second start push');
+$pulse = ['session_id' => $liveId, 'device_id' => $deviceId];
+check($ingest->process($other, [], $pulse)['live_session'] === null, 'A foreign family cannot pulse');
+check($ingest->process($otherSession, [], $pulse)['live_session'] === null, 'An installation is bound to its sign-in');
+$live->requireOpen($recipient, $liveId, $deviceId);
+$db->prepare("DELETE FROM tracking_live_phones WHERE device_id = ?")->execute([$secondDevice]);
+check($live->presence(1)[2]['state'] === 'open_required', 'The map can show an Android startup fallback');
+$result = $ingest->process($recipient, [], $pulse);
+check($result['live_session']['id'] === $liveId && $result['stored'] === 0, 'A stationary phone can check in without a location');
+check($live->presence(1)[2]['state'] === 'live' && $live->presence(1)[2]['last_seen_ms'] > 0, 'Pulse timestamp is recorded separately');
+check($live->view($sender, $viewerA, false)['session']['id'] === $liveId, 'Leaving preserves the other viewer');
+check($live->view($recipient, $viewerB, false)['session'] === null, 'Last viewer ends the family session');
+check($ingest->process($recipient, [], $pulse)['live_session'] === null && $live->presence(1) === [],
+    'An ended session rejects old pulses and clears live presence');
+$newSession = $live->view($sender, $viewerA, true);
+check($newSession['session']['id'] !== $liveId, 'Reopening after expiry creates a new session');
+$db->exec('UPDATE tracking_live_sessions SET expires_ms = 0 WHERE family_id = 1');
+check($live->active(1) === null, 'Lease expires when all viewers disappear');
 
 $db->beginTransaction();
 check($wake->acknowledge($otherSession, $id, $deviceId, 'received') === null, 'Session is bound to installation');

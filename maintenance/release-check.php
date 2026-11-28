@@ -94,12 +94,15 @@ try {
         }
     }
     echo "Notes photo storage column is ready.\n";
-    $trackingSql = getenv('RELATIVES_TRACKING_EVIDENCE_SQL');
-    if ($trackingSql !== false) {
+    foreach (['004' => 'RELATIVES_TRACKING_EVIDENCE_SQL', '005' => 'RELATIVES_TRACKING_LIVE_SQL'] as $number => $variable) {
+        $trackingSql = getenv($variable);
+        if ($trackingSql === false) {
+            continue;
+        }
         try {
             $migration = base64_decode($trackingSql, true);
             if ($migration === false) {
-                $fail('Could not read the tracking evidence migration.');
+                $fail("Could not read tracking migration $number.");
             }
             $db->exec('SET SESSION lock_wait_timeout = 10');
             $statement = $db->query($migration);
@@ -108,7 +111,7 @@ try {
             }
             $statement->closeCursor();
         } catch (Throwable) {
-            $fail('Could not apply tracking migration 004. Check database permissions and schema locks.');
+            $fail("Could not apply tracking migration $number. Check database permissions and schema locks.");
         }
     }
     foreach ([
@@ -116,13 +119,16 @@ try {
         'tracking_geofence_state' => ['observed_ms', 'definition_hash'],
         'tracking_place_state' => ['observed_ms', 'definition_hash'],
         'tracking_geofences' => ['revision_ms'],
+        'tracking_live_sessions' => ['session_id', 'expires_ms'],
+        'tracking_live_viewers' => ['viewer_id', 'expires_ms'],
+        'tracking_live_phones' => ['device_id', 'last_seen_ms'],
     ] as $table => $columns) {
         $lookup->execute([$table]);
         if (array_diff($columns, $lookup->fetchAll(PDO::FETCH_COLUMN))) {
-            $fail("Apply tracking migration 004 for $table.");
+            $fail("Apply the tracking schema migrations for $table.");
         }
     }
-    echo "Tracking accuracy and geofence schema is ready.\n";
+    echo "Tracking accuracy, geofence and live session schema is ready.\n";
 } catch (Throwable) {
     $fail("Could not verify the release database.");
 }

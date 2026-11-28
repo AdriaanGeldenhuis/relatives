@@ -17,3 +17,7 @@ if (TrackingPolicy::hasTable($db, 'tracking_wake_requests')) {
     $stmt = $db->prepare('DELETE FROM tracking_wake_requests WHERE expires_ms < ?');
     $stmt->execute([Time::nowMs() - 86400000]);
 }
+if (FamilyLive::available($db)) {
+    $stmt = $db->prepare('DELETE FROM tracking_live_sessions WHERE expires_ms < ?');
+    $stmt->execute([Time::nowMs() - 86400000]);
+}

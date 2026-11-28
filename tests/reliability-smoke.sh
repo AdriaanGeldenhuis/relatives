@@ -16,7 +16,7 @@ sql() {
     docker exec -i -e MYSQL_PWD=release-fixture "$db_container" mariadb -uroot relatives_release_ci "$@"
 }
 sql < tests/reliability-fixture.sql
-for migration in 001_tracking_tables 002_place_state 003_tracking_reliability 004_tracking_evidence; do
+for migration in 001_tracking_tables 002_place_state 003_tracking_reliability 004_tracking_evidence 005_family_live_sessions; do
     sql < "tracking/migrations/$migration.sql"
 done
 sql < migrations/app-reliability-v1.sql
@@ -240,3 +240,31 @@ curl -fsS -b "$smoke_root/sender.cookie" "$base/tracking/app/events.php?event=$e
 grep -q 'Fixture Home' "$smoke_root/location-event.html"
 [[ $(curl -sS -b "$smoke_root/other.cookie" -o /dev/null -w '%{http_code}' "$base/tracking/app/events.php?event=$event") == 404 ]]
 printf 'Authenticated silent Wake, pin quality and named geofence event checks passed.\n'
+
+viewer=ebf030bb-f838-4b8e-9ceb-b99062e0bbef
+live_view() {
+    curl -fsS -b "$smoke_root/sender.cookie" -H "X-CSRF-Token: $csrf" -H 'Content-Type: application/json' \
+        --data "{\"action\":\"$1\",\"viewer_id\":\"$viewer\"}" "$base/tracking/api/live_session.php"
+}
+live_session=$(live_view view |
+    php -r '$r=json_decode(stream_get_contents(STDIN), true); echo $r["data"]["session"]["id"] ?? "";')
+[[ $live_session =~ ^[a-f0-9-]{36}$ ]]
+[[ $(curl -sS -b "$smoke_root/sender.cookie" -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+    --data "{\"action\":\"view\",\"viewer_id\":\"$viewer\"}" "$base/tracking/api/live_session.php") == 403 ]]
+curl -fsS -b "$smoke_root/recipient.cookie" "$base/tracking/api/session_status.php" |
+    php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["data"]["live_session"]["id"] === $argv[1] ? 0 : 1);' "$live_session"
+live_pulse() {
+    curl -fsS -b "$smoke_root/recipient.cookie" -H 'Content-Type: application/json' \
+        --data "{\"locations\":[],\"live_pulse\":{\"session_id\":\"$live_session\",\"device_id\":\"$phone\"}}" \
+        "$base/tracking/api/batch.php"
+}
+live_pulse | php -r '
+    $r=json_decode(stream_get_contents(STDIN), true)["data"];
+    exit($r["live_session"]["pulse_ms"] === 30000 && $r["stored"] === 0 ? 0 : 1);'
+curl -fsS -b "$smoke_root/sender.cookie" "$base/tracking/api/current.php" | php -r '
+    $r=json_decode(stream_get_contents(STDIN), true);
+    foreach ($r["data"] as $m) if ($m["user_id"] === 2) exit($m["live_phone"]["state"] === "live" && $m["has_location"] ? 0 : 1);
+    exit(1);'
+live_view leave >/dev/null
+live_pulse | php -r '$r=json_decode(stream_get_contents(STDIN), true); exit($r["data"]["live_session"] === null ? 0 : 1);'
+printf 'Authenticated family live start, pulse, presence and leave checks passed.\n'

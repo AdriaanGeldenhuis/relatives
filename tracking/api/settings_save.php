@@ -33,6 +33,9 @@ try {
     if ($saved && isset($input['mode']) && ((int) $input['mode'] === 0) !== ((int) $previous['mode'] === 0)) {
         TrackingPolicy::setCutoff($db, 'family', $ctx->familyId);
         $db->prepare('DELETE FROM tracking_current WHERE family_id = ?')->execute([$ctx->familyId]);
+        if ((int) $input['mode'] === 0 && FamilyLive::available($db)) {
+            (new FamilyLive($db))->end($ctx->familyId);
+        }
     }
     $db->commit();
 } catch (Throwable $error) {

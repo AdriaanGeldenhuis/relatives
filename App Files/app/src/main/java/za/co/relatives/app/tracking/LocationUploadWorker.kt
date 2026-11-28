@@ -63,7 +63,10 @@ internal object LocationUploader {
     private val gate = Mutex()
     private val gson = Gson()
 
-    suspend fun send(context: Context, consent: PreferencesManager.TrackingConsent, urgentId: String? = null): UploadResult =
+    suspend fun send(
+        context: Context, consent: PreferencesManager.TrackingConsent, urgentId: String? = null,
+        liveSessionId: String? = null, onLiveLease: (JsonObject?) -> Unit = {},
+    ): UploadResult =
         gate.withLock {
             val prefs = PreferencesManager(context)
             if (prefs.trackingConsent()?.scope != consent.scope || !prefs.trackingPolicy().canCollect ||
@@ -74,11 +77,16 @@ internal object LocationUploader {
             store.expireWake(TrackingClock.now())
             val fixes = if (urgentId == null) store.getUnsentLocations(consent.scope)
                 else listOfNotNull(store.getUnsentLocation(consent.scope, urgentId))
-            if (fixes.isEmpty()) return@withLock UploadResult.EMPTY
+            if (fixes.isEmpty() && liveSessionId == null) return@withLock UploadResult.EMPTY
             if (prefs.trackingConsent()?.scope != consent.scope) return@withLock UploadResult.BLOCKED
 
             try {
-                val reply = TrackingTransport(context).call("batch.php", consent.sessionCookie, payload(fixes, prefs.deviceUuid))
+                val body = payload(fixes, prefs.deviceUuid)
+                if (liveSessionId != null) body.add("live_pulse", JsonObject().apply {
+                    addProperty("session_id", liveSessionId)
+                    addProperty("device_id", prefs.deviceUuid)
+                })
+                val reply = TrackingTransport(context).call("batch.php", consent.sessionCookie, body)
                 if (prefs.trackingConsent()?.scope != consent.scope) return@withLock UploadResult.BLOCKED
                 when {
                     reply.code == 401 -> {
@@ -98,6 +106,9 @@ internal object LocationUploader {
                     reply.success -> {
                         val settings = reply.data?.getAsJsonObject("server_settings")
                         if (settings != null) TrackingService.applyServerPolicy(context, consent.sessionCookie, settings)
+                        if (liveSessionId != null) {
+                            onLiveLease(reply.data?.get("live_session")?.takeIf { it.isJsonObject }?.asJsonObject)
+                        }
                         FamilyWake.pending(context, consent, reply.data?.get("pending_wake")
                             ?.takeIf { it.isJsonObject }?.asJsonObject)
                         val results = reply.data?.getAsJsonArray("results")

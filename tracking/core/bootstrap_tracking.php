@@ -51,4 +51,5 @@ require_once $reposDir . '/AlertsRepo.php';
 require_once $servicesDir . '/TrackingPolicy.php';
 require_once $servicesDir . '/LocationQuality.php';
 require_once $servicesDir . '/TrackingWake.php';
+require_once $servicesDir . '/FamilyLive.php';
 require_once $servicesDir . '/LocationIngest.php';
