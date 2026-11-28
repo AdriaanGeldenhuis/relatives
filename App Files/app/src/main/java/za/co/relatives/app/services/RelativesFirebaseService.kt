@@ -1,8 +1,11 @@
 package za.co.relatives.app.services
 
-import android.util.Log
+import android.Manifest
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -87,6 +90,9 @@ class RelativesFirebaseService : FirebaseMessagingService() {
         if (starting && running) return
 
         if (!starting) WakeReceiptWorker.enqueue(this, id, "open_required", expiry, live = true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("action_url", "https://www.relatives.co.za/tracking/app/")
